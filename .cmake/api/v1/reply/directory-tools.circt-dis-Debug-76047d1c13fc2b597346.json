@@ -1,0 +1,53 @@
+{
+	"backtraceGraph" : 
+	{
+		"commands" : 
+		[
+			"install",
+			"add_circt_tool"
+		],
+		"files" : 
+		[
+			"cmake/modules/AddCIRCT.cmake",
+			"tools/circt-dis/CMakeLists.txt"
+		],
+		"nodes" : 
+		[
+			{
+				"file" : 1
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 18,
+				"parent" : 0
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 104,
+				"parent" : 1
+			}
+		]
+	},
+	"installers" : 
+	[
+		{
+			"backtrace" : 2,
+			"component" : "circt-dis",
+			"destination" : "bin",
+			"paths" : 
+			[
+				"bin/circt-dis"
+			],
+			"targetId" : "circt-dis::@75edcc58158508394c95",
+			"targetIndex" : 652,
+			"type" : "target"
+		}
+	],
+	"paths" : 
+	{
+		"build" : "tools/circt-dis",
+		"source" : "tools/circt-dis"
+	}
+}

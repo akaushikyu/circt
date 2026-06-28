@@ -1,4 +1,8 @@
-machsuite/spmv_crs.mlir:5:5: error: unsupported operation 
+### machsuite/spmv_crs.mlir  top=spmv rule=single
+### truth=0 hist_pred=hls-est error: unsupported operation decision_estimate= source=baseline passes_applied=no mode=base(reused)
+### exit=1 elapsed=0.0s status=FAIL
+----- stderr -----
+/home/peter/circt/test/hls-est/Estimation/machsuite/spmv_crs.mlir:5:5: error: unsupported operation 
 %8 = "scf.for"(%7, %6, %0, %1) ({
 ^bb0(%arg6: index, %arg7: f64):
   %9 = "memref.load"(%arg0, %arg6) : (memref<1666xf64>, index) -> f64
@@ -11,7 +15,7 @@ machsuite/spmv_crs.mlir:5:5: error: unsupported operation
 }) : (index, index, index, f64) -> f64
     affine.for %arg5 = 0 to 494 {
     ^
-machsuite/spmv_crs.mlir:5:5: note: see current operation: 
+/home/peter/circt/test/hls-est/Estimation/machsuite/spmv_crs.mlir:5:5: note: see current operation: 
 "affine.for"() <{lowerBoundMap = affine_map<() -> (0)>, operandSegmentSizes = array<i32: 0, 0, 0>, step = 1 : index, upperBoundMap = affine_map<() -> (494)>}> ({
 ^bb0(%arg5: index):
   %2 = "memref.load"(%arg2, %arg5) <{nontemporal = false}> : (memref<495xi32>, index) -> i32
@@ -33,3 +37,4 @@ machsuite/spmv_crs.mlir:5:5: note: see current operation:
   "memref.store"(%8, %arg4, %arg5) <{nontemporal = false}> : (f64, memref<494xf64>, index) -> ()
   "affine.yield"() : () -> ()
 }) : () -> ()
+----- stdout -----

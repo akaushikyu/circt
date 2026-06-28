@@ -1,0 +1,53 @@
+{
+	"backtraceGraph" : 
+	{
+		"commands" : 
+		[
+			"install",
+			"add_circt_tool"
+		],
+		"files" : 
+		[
+			"cmake/modules/AddCIRCT.cmake",
+			"tools/arcilator/CMakeLists.txt"
+		],
+		"nodes" : 
+		[
+			{
+				"file" : 1
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 45,
+				"parent" : 0
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 104,
+				"parent" : 1
+			}
+		]
+	},
+	"installers" : 
+	[
+		{
+			"backtrace" : 2,
+			"component" : "arcilator",
+			"destination" : "bin",
+			"paths" : 
+			[
+				"bin/arcilator"
+			],
+			"targetId" : "arcilator::@15791f3ad9b0214dde09",
+			"targetIndex" : 414,
+			"type" : "target"
+		}
+	],
+	"paths" : 
+	{
+		"build" : "tools/arcilator",
+		"source" : "tools/arcilator"
+	}
+}

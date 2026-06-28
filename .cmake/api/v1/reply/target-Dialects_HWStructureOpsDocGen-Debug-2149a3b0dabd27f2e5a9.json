@@ -1,0 +1,88 @@
+{
+	"backtrace" : 2,
+	"backtraceGraph" : 
+	{
+		"commands" : 
+		[
+			"add_custom_target",
+			"add_circt_doc"
+		],
+		"files" : 
+		[
+			"cmake/modules/AddCIRCT.cmake",
+			"include/circt/Dialect/HW/CMakeLists.txt"
+		],
+		"nodes" : 
+		[
+			{
+				"file" : 1
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 42,
+				"parent" : 0
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 75,
+				"parent" : 1
+			}
+		]
+	},
+	"id" : "Dialects_HWStructureOpsDocGen::@99dd4989ec2dfffb3406",
+	"name" : "Dialects_HWStructureOpsDocGen",
+	"paths" : 
+	{
+		"build" : "include/circt/Dialect/HW",
+		"source" : "include/circt/Dialect/HW"
+	},
+	"sourceGroups" : 
+	[
+		{
+			"name" : "",
+			"sourceIndexes" : 
+			[
+				0
+			]
+		},
+		{
+			"name" : "CMake Rules",
+			"sourceIndexes" : 
+			[
+				1,
+				2,
+				3
+			]
+		}
+	],
+	"sources" : 
+	[
+		{
+			"backtrace" : 2,
+			"isGenerated" : true,
+			"path" : "include/circt/Dialect/HW/CMakeFiles/Dialects_HWStructureOpsDocGen",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 0,
+			"isGenerated" : true,
+			"path" : "include/circt/Dialect/HW/CMakeFiles/Dialects_HWStructureOpsDocGen.rule",
+			"sourceGroupIndex" : 1
+		},
+		{
+			"backtrace" : 0,
+			"isGenerated" : true,
+			"path" : "docs/Dialects/HWStructureOps.md.rule",
+			"sourceGroupIndex" : 1
+		},
+		{
+			"backtrace" : 0,
+			"isGenerated" : true,
+			"path" : "include/circt/Dialect/HW/Dialects_HWStructureOps.md.rule",
+			"sourceGroupIndex" : 1
+		}
+	],
+	"type" : "UTILITY"
+}

@@ -1,0 +1,114 @@
+{
+	"backtrace" : 5,
+	"backtraceGraph" : 
+	{
+		"commands" : 
+		[
+			"add_custom_target",
+			"add_llvm_install_targets",
+			"add_circt_library_install",
+			"add_circt_library",
+			"add_circt_conversion_library",
+			"add_dependencies"
+		],
+		"files" : 
+		[
+			"llvm/build/lib/cmake/llvm/AddLLVM.cmake",
+			"cmake/modules/AddCIRCT.cmake",
+			"lib/Conversion/FIRRTLToHW/CMakeLists.txt"
+		],
+		"nodes" : 
+		[
+			{
+				"file" : 2
+			},
+			{
+				"command" : 4,
+				"file" : 2,
+				"line" : 1,
+				"parent" : 0
+			},
+			{
+				"command" : 3,
+				"file" : 1,
+				"line" : 152,
+				"parent" : 1
+			},
+			{
+				"command" : 2,
+				"file" : 1,
+				"line" : 87,
+				"parent" : 2
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 136,
+				"parent" : 3
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 947,
+				"parent" : 4
+			},
+			{
+				"command" : 5,
+				"file" : 0,
+				"line" : 965,
+				"parent" : 4
+			}
+		]
+	},
+	"dependencies" : 
+	[
+		{
+			"backtrace" : 6,
+			"id" : "CIRCTFIRRTLToHW::@a25b4d65c6077d7938e5"
+		}
+	],
+	"folder" : 
+	{
+		"name" : "LLVM/Installation"
+	},
+	"id" : "install-CIRCTFIRRTLToHW::@a25b4d65c6077d7938e5",
+	"name" : "install-CIRCTFIRRTLToHW",
+	"paths" : 
+	{
+		"build" : "lib/Conversion/FIRRTLToHW",
+		"source" : "lib/Conversion/FIRRTLToHW"
+	},
+	"sourceGroups" : 
+	[
+		{
+			"name" : "",
+			"sourceIndexes" : 
+			[
+				0
+			]
+		},
+		{
+			"name" : "CMake Rules",
+			"sourceIndexes" : 
+			[
+				1
+			]
+		}
+	],
+	"sources" : 
+	[
+		{
+			"backtrace" : 5,
+			"isGenerated" : true,
+			"path" : "lib/Conversion/FIRRTLToHW/CMakeFiles/install-CIRCTFIRRTLToHW",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 0,
+			"isGenerated" : true,
+			"path" : "lib/Conversion/FIRRTLToHW/CMakeFiles/install-CIRCTFIRRTLToHW.rule",
+			"sourceGroupIndex" : 1
+		}
+	],
+	"type" : "UTILITY"
+}

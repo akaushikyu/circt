@@ -1,0 +1,458 @@
+{
+	"artifacts" : 
+	[
+		{
+			"path" : "lib/Dialect/Resource/Passes/CMakeFiles/obj.HLSPasses.dir/./BRAMAnalysis.cpp.o"
+		},
+		{
+			"path" : "lib/Dialect/Resource/Passes/CMakeFiles/obj.HLSPasses.dir/./AffineToLoopScheduleModified.cpp.o"
+		},
+		{
+			"path" : "lib/Dialect/Resource/Passes/CMakeFiles/obj.HLSPasses.dir/./MergeConditionalStores.cpp.o"
+		},
+		{
+			"path" : "lib/Dialect/Resource/Passes/CMakeFiles/obj.HLSPasses.dir/./MemrefBankClassification.cpp.o"
+		},
+		{
+			"path" : "lib/Dialect/Resource/Passes/CMakeFiles/obj.HLSPasses.dir/./MemoryBankModified.cpp.o"
+		},
+		{
+			"path" : "lib/Dialect/Resource/Passes/CMakeFiles/obj.HLSPasses.dir/./CyclicSchedulingAnalysisModified.cpp.o"
+		},
+		{
+			"path" : "lib/Dialect/Resource/Passes/CMakeFiles/obj.HLSPasses.dir/./AutoPipelineUnroll.cpp.o"
+		},
+		{
+			"path" : "lib/Dialect/Resource/Passes/CMakeFiles/obj.HLSPasses.dir/./DebugUnroll.cpp.o"
+		},
+		{
+			"path" : "lib/Dialect/Resource/Passes/CMakeFiles/obj.HLSPasses.dir/./InferVitisSplitArray.cpp.o"
+		}
+	],
+	"backtrace" : 3,
+	"backtraceGraph" : 
+	{
+		"commands" : 
+		[
+			"add_library",
+			"llvm_add_library",
+			"add_mlir_library",
+			"add_dependencies",
+			"add_compile_options",
+			"include",
+			"target_compile_options",
+			"llvm_update_compile_flags",
+			"add_definitions",
+			"add_compile_definitions",
+			"include_directories"
+		],
+		"files" : 
+		[
+			"llvm/build/lib/cmake/llvm/AddLLVM.cmake",
+			"llvm/build/lib/cmake/mlir/AddMLIR.cmake",
+			"lib/Dialect/Resource/Passes/CMakeLists.txt",
+			"llvm/build/lib/cmake/llvm/HandleLLVMOptions.cmake",
+			"CMakeLists.txt"
+		],
+		"nodes" : 
+		[
+			{
+				"file" : 2
+			},
+			{
+				"command" : 2,
+				"file" : 2,
+				"line" : 1,
+				"parent" : 0
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 412,
+				"parent" : 1
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 647,
+				"parent" : 2
+			},
+			{
+				"command" : 3,
+				"file" : 0,
+				"line" : 675,
+				"parent" : 2
+			},
+			{
+				"command" : 3,
+				"file" : 0,
+				"line" : 693,
+				"parent" : 2
+			},
+			{
+				"command" : 3,
+				"file" : 0,
+				"line" : 693,
+				"parent" : 2
+			},
+			{
+				"command" : 3,
+				"file" : 0,
+				"line" : 693,
+				"parent" : 2
+			},
+			{
+				"command" : 3,
+				"file" : 0,
+				"line" : 693,
+				"parent" : 2
+			},
+			{
+				"command" : 3,
+				"file" : 0,
+				"line" : 693,
+				"parent" : 2
+			},
+			{
+				"file" : 4
+			},
+			{
+				"command" : 5,
+				"file" : 4,
+				"line" : 63,
+				"parent" : 10
+			},
+			{
+				"file" : 3,
+				"parent" : 11
+			},
+			{
+				"command" : 4,
+				"file" : 3,
+				"line" : 1148,
+				"parent" : 12
+			},
+			{
+				"command" : 7,
+				"file" : 0,
+				"line" : 650,
+				"parent" : 2
+			},
+			{
+				"command" : 6,
+				"file" : 0,
+				"line" : 78,
+				"parent" : 14
+			},
+			{
+				"command" : 8,
+				"file" : 4,
+				"line" : 770,
+				"parent" : 10
+			},
+			{
+				"command" : 9,
+				"file" : 3,
+				"line" : 116,
+				"parent" : 12
+			},
+			{
+				"command" : 9,
+				"file" : 3,
+				"line" : 137,
+				"parent" : 12
+			},
+			{
+				"command" : 9,
+				"file" : 3,
+				"line" : 202,
+				"parent" : 12
+			},
+			{
+				"command" : 9,
+				"file" : 3,
+				"line" : 153,
+				"parent" : 12
+			},
+			{
+				"command" : 9,
+				"file" : 3,
+				"line" : 1156,
+				"parent" : 12
+			},
+			{
+				"command" : 9,
+				"file" : 3,
+				"line" : 1157,
+				"parent" : 12
+			},
+			{
+				"command" : 9,
+				"file" : 3,
+				"line" : 1158,
+				"parent" : 12
+			},
+			{
+				"command" : 10,
+				"file" : 4,
+				"line" : 191,
+				"parent" : 10
+			},
+			{
+				"command" : 10,
+				"file" : 4,
+				"line" : 192,
+				"parent" : 10
+			},
+			{
+				"command" : 10,
+				"file" : 4,
+				"line" : 195,
+				"parent" : 10
+			}
+		]
+	},
+	"compileGroups" : 
+	[
+		{
+			"compileCommandFragments" : 
+			[
+				{
+					"fragment" : " -fno-exceptions -fno-rtti -fPIC -fno-semantic-interposition -fvisibility-inlines-hidden -Werror=date-time -Wall -Wextra -Wno-unused-parameter -Wwrite-strings -Wcast-qual -Wno-missing-field-initializers -Wimplicit-fallthrough -Wno-nonnull -Wno-class-memaccess -Wno-redundant-move -Wno-pessimizing-move -Wno-array-bounds -Wno-stringop-overread -Wno-noexcept-type -Wdelete-non-virtual-dtor -Wsuggest-override -Wno-comment -Wno-misleading-indentation -Wctad-maybe-unsupported -fdiagnostics-color -g"
+				},
+				{
+					"backtrace" : 13,
+					"fragment" : "-gsplit-dwarf"
+				},
+				{
+					"backtrace" : 15,
+					"fragment" : "-fno-exceptions"
+				},
+				{
+					"backtrace" : 15,
+					"fragment" : "-funwind-tables"
+				},
+				{
+					"backtrace" : 15,
+					"fragment" : "-fno-rtti"
+				},
+				{
+					"fragment" : "-std=gnu++17"
+				}
+			],
+			"defines" : 
+			[
+				{
+					"backtrace" : 16,
+					"define" : "CIRCT_INCLUDE_TESTS"
+				},
+				{
+					"backtrace" : 17,
+					"define" : "_DEBUG"
+				},
+				{
+					"backtrace" : 18,
+					"define" : "_GLIBCXX_ASSERTIONS"
+				},
+				{
+					"backtrace" : 19,
+					"define" : "_GLIBCXX_USE_CXX11_ABI=1"
+				},
+				{
+					"backtrace" : 20,
+					"define" : "_LIBCPP_HARDENING_MODE=_LIBCPP_HARDENING_MODE_EXTENSIVE"
+				},
+				{
+					"backtrace" : 21,
+					"define" : "__STDC_CONSTANT_MACROS"
+				},
+				{
+					"backtrace" : 22,
+					"define" : "__STDC_FORMAT_MACROS"
+				},
+				{
+					"backtrace" : 23,
+					"define" : "__STDC_LIMIT_MACROS"
+				}
+			],
+			"includes" : 
+			[
+				{
+					"backtrace" : 24,
+					"path" : "/home/peter/circt/llvm/llvm/include"
+				},
+				{
+					"backtrace" : 24,
+					"path" : "/home/peter/circt/llvm/build/include"
+				},
+				{
+					"backtrace" : 25,
+					"path" : "/home/peter/circt/llvm/mlir/include"
+				},
+				{
+					"backtrace" : 25,
+					"path" : "/home/peter/circt/llvm/build/tools/mlir/include"
+				},
+				{
+					"backtrace" : 26,
+					"path" : "/home/peter/circt/include"
+				}
+			],
+			"language" : "CXX",
+			"languageStandard" : 
+			{
+				"backtraces" : 
+				[
+					3
+				],
+				"standard" : "17"
+			},
+			"sourceIndexes" : 
+			[
+				0,
+				1,
+				2,
+				3,
+				4,
+				5,
+				6,
+				7,
+				8
+			]
+		}
+	],
+	"dependencies" : 
+	[
+		{
+			"backtrace" : 4,
+			"id" : "mlir-generic-headers::@6890427a1f51a3e7e1df"
+		},
+		{
+			"backtrace" : 4,
+			"id" : "CIRCTConversionPassIncGen::@8d54cd15e967a4ad2d73"
+		},
+		{
+			"backtrace" : 4,
+			"id" : "MemoryInterfaceIncGen::@b687f2141f9b4223c681"
+		},
+		{
+			"backtrace" : 4,
+			"id" : "BRAMTransformsIncGen::@5fc925a34406d7db6187"
+		},
+		{
+			"backtrace" : 4,
+			"id" : "CIRCTHLSIncGen::@d588e0bd28b4d8e25604"
+		},
+		{
+			"backtrace" : 4,
+			"id" : "CIRCTTransformsPassIncGen::@b0cd4f6f4787d9027f45"
+		},
+		{
+			"backtrace" : 5,
+			"id" : "CIRCTSchedulingAnalysis::@a8ea8fd451b56fad3c5d"
+		},
+		{
+			"backtrace" : 6,
+			"id" : "CIRCTLoopSchedule::@be1ed2a55b582065bd39"
+		},
+		{
+			"backtrace" : 7,
+			"id" : "HLSInterfaces::@9350a8e9a804367abf4a"
+		},
+		{
+			"backtrace" : 8,
+			"id" : "CIRCTHLS::@b598dbefb81413109978"
+		},
+		{
+			"backtrace" : 9,
+			"id" : "CIRCTScheduling::@764a92007f41422b337a"
+		}
+	],
+	"folder" : 
+	{
+		"name" : "LLVM/Object Libraries"
+	},
+	"id" : "obj.HLSPasses::@b3c606c8a380158365b8",
+	"name" : "obj.HLSPasses",
+	"paths" : 
+	{
+		"build" : "lib/Dialect/Resource/Passes",
+		"source" : "lib/Dialect/Resource/Passes"
+	},
+	"sourceGroups" : 
+	[
+		{
+			"name" : "Source Files",
+			"sourceIndexes" : 
+			[
+				0,
+				1,
+				2,
+				3,
+				4,
+				5,
+				6,
+				7,
+				8
+			]
+		}
+	],
+	"sources" : 
+	[
+		{
+			"backtrace" : 3,
+			"compileGroupIndex" : 0,
+			"path" : "lib/Dialect/Resource/Passes/BRAMAnalysis.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 3,
+			"compileGroupIndex" : 0,
+			"path" : "lib/Dialect/Resource/Passes/AffineToLoopScheduleModified.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 3,
+			"compileGroupIndex" : 0,
+			"path" : "lib/Dialect/Resource/Passes/MergeConditionalStores.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 3,
+			"compileGroupIndex" : 0,
+			"path" : "lib/Dialect/Resource/Passes/MemrefBankClassification.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 3,
+			"compileGroupIndex" : 0,
+			"path" : "lib/Dialect/Resource/Passes/MemoryBankModified.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 3,
+			"compileGroupIndex" : 0,
+			"path" : "lib/Dialect/Resource/Passes/CyclicSchedulingAnalysisModified.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 3,
+			"compileGroupIndex" : 0,
+			"path" : "lib/Dialect/Resource/Passes/AutoPipelineUnroll.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 3,
+			"compileGroupIndex" : 0,
+			"path" : "lib/Dialect/Resource/Passes/DebugUnroll.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 3,
+			"compileGroupIndex" : 0,
+			"path" : "lib/Dialect/Resource/Passes/InferVitisSplitArray.cpp",
+			"sourceGroupIndex" : 0
+		}
+	],
+	"type" : "OBJECT_LIBRARY"
+}

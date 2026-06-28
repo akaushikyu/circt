@@ -1,0 +1,60 @@
+{
+	"backtraceGraph" : 
+	{
+		"commands" : 
+		[
+			"install",
+			"add_circt_library_install",
+			"add_circt_library"
+		],
+		"files" : 
+		[
+			"cmake/modules/AddCIRCT.cmake",
+			"lib/Scheduling/CMakeLists.txt"
+		],
+		"nodes" : 
+		[
+			{
+				"file" : 1
+			},
+			{
+				"command" : 2,
+				"file" : 1,
+				"line" : 30,
+				"parent" : 0
+			},
+			{
+				"command" : 1,
+				"file" : 0,
+				"line" : 87,
+				"parent" : 1
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 123,
+				"parent" : 2
+			}
+		]
+	},
+	"installers" : 
+	[
+		{
+			"backtrace" : 3,
+			"component" : "CIRCTScheduling",
+			"destination" : "lib",
+			"paths" : 
+			[
+				"lib/libCIRCTScheduling.a"
+			],
+			"targetId" : "CIRCTScheduling::@764a92007f41422b337a",
+			"targetIndex" : 218,
+			"type" : "target"
+		}
+	],
+	"paths" : 
+	{
+		"build" : "lib/Scheduling",
+		"source" : "lib/Scheduling"
+	}
+}

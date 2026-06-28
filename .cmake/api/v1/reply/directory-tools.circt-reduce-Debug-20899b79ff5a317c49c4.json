@@ -1,0 +1,53 @@
+{
+	"backtraceGraph" : 
+	{
+		"commands" : 
+		[
+			"install",
+			"add_circt_tool"
+		],
+		"files" : 
+		[
+			"cmake/modules/AddCIRCT.cmake",
+			"tools/circt-reduce/CMakeLists.txt"
+		],
+		"nodes" : 
+		[
+			{
+				"file" : 1
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 28,
+				"parent" : 0
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 104,
+				"parent" : 1
+			}
+		]
+	},
+	"installers" : 
+	[
+		{
+			"backtrace" : 2,
+			"component" : "circt-reduce",
+			"destination" : "bin",
+			"paths" : 
+			[
+				"bin/circt-reduce"
+			],
+			"targetId" : "circt-reduce::@93b324f57353e591ecbc",
+			"targetIndex" : 659,
+			"type" : "target"
+		}
+	],
+	"paths" : 
+	{
+		"build" : "tools/circt-reduce",
+		"source" : "tools/circt-reduce"
+	}
+}

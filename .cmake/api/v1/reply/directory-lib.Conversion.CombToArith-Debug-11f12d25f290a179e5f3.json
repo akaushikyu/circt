@@ -1,0 +1,67 @@
+{
+	"backtraceGraph" : 
+	{
+		"commands" : 
+		[
+			"install",
+			"add_circt_library_install",
+			"add_circt_library",
+			"add_circt_conversion_library"
+		],
+		"files" : 
+		[
+			"cmake/modules/AddCIRCT.cmake",
+			"lib/Conversion/CombToArith/CMakeLists.txt"
+		],
+		"nodes" : 
+		[
+			{
+				"file" : 1
+			},
+			{
+				"command" : 3,
+				"file" : 1,
+				"line" : 1,
+				"parent" : 0
+			},
+			{
+				"command" : 2,
+				"file" : 0,
+				"line" : 152,
+				"parent" : 1
+			},
+			{
+				"command" : 1,
+				"file" : 0,
+				"line" : 87,
+				"parent" : 2
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 123,
+				"parent" : 3
+			}
+		]
+	},
+	"installers" : 
+	[
+		{
+			"backtrace" : 4,
+			"component" : "CIRCTCombToArith",
+			"destination" : "lib",
+			"paths" : 
+			[
+				"lib/libCIRCTCombToArith.a"
+			],
+			"targetId" : "CIRCTCombToArith::@1c425dab04d22fac1dc0",
+			"targetIndex" : 64,
+			"type" : "target"
+		}
+	],
+	"paths" : 
+	{
+		"build" : "lib/Conversion/CombToArith",
+		"source" : "lib/Conversion/CombToArith"
+	}
+}

@@ -1,0 +1,97 @@
+{
+	"backtraceGraph" : 
+	{
+		"commands" : 
+		[
+			"install",
+			"add_circt_library_install",
+			"add_circt_library",
+			"add_circt_dialect_library"
+		],
+		"files" : 
+		[
+			"cmake/modules/AddCIRCT.cmake",
+			"lib/Dialect/Emit/CMakeLists.txt"
+		],
+		"nodes" : 
+		[
+			{
+				"file" : 1
+			},
+			{
+				"command" : 3,
+				"file" : 1,
+				"line" : 20,
+				"parent" : 0
+			},
+			{
+				"command" : 2,
+				"file" : 0,
+				"line" : 147,
+				"parent" : 1
+			},
+			{
+				"command" : 1,
+				"file" : 0,
+				"line" : 87,
+				"parent" : 2
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 123,
+				"parent" : 3
+			},
+			{
+				"command" : 2,
+				"file" : 1,
+				"line" : 39,
+				"parent" : 0
+			},
+			{
+				"command" : 1,
+				"file" : 0,
+				"line" : 87,
+				"parent" : 5
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 123,
+				"parent" : 6
+			}
+		]
+	},
+	"installers" : 
+	[
+		{
+			"backtrace" : 4,
+			"component" : "CIRCTEmit",
+			"destination" : "lib",
+			"paths" : 
+			[
+				"lib/libCIRCTEmit.a"
+			],
+			"targetId" : "CIRCTEmit::@5f41b88247717fbc71e5",
+			"targetIndex" : 90,
+			"type" : "target"
+		},
+		{
+			"backtrace" : 7,
+			"component" : "CIRCTEmitReductions",
+			"destination" : "lib",
+			"paths" : 
+			[
+				"lib/libCIRCTEmitReductions.a"
+			],
+			"targetId" : "CIRCTEmitReductions::@5f41b88247717fbc71e5",
+			"targetIndex" : 92,
+			"type" : "target"
+		}
+	],
+	"paths" : 
+	{
+		"build" : "lib/Dialect/Emit",
+		"source" : "lib/Dialect/Emit"
+	}
+}

@@ -1,0 +1,157 @@
+{
+	"backtrace" : 5,
+	"backtraceGraph" : 
+	{
+		"commands" : 
+		[
+			"add_custom_target",
+			"add_public_tablegen_target",
+			"add_mlir_generic_tablegen_target",
+			"add_mlir_interface",
+			"add_circt_interface",
+			"add_dependencies"
+		],
+		"files" : 
+		[
+			"llvm/build/lib/cmake/llvm/TableGen.cmake",
+			"llvm/build/lib/cmake/mlir/AddMLIR.cmake",
+			"cmake/modules/AddCIRCT.cmake",
+			"include/circt/Dialect/OM/CMakeLists.txt"
+		],
+		"nodes" : 
+		[
+			{
+				"file" : 3
+			},
+			{
+				"command" : 4,
+				"file" : 3,
+				"line" : 21,
+				"parent" : 0
+			},
+			{
+				"command" : 3,
+				"file" : 2,
+				"line" : 50,
+				"parent" : 1
+			},
+			{
+				"command" : 2,
+				"file" : 1,
+				"line" : 201,
+				"parent" : 2
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 215,
+				"parent" : 3
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 172,
+				"parent" : 4
+			},
+			{
+				"command" : 5,
+				"file" : 0,
+				"line" : 175,
+				"parent" : 4
+			}
+		]
+	},
+	"dependencies" : 
+	[
+		{
+			"backtrace" : 6,
+			"id" : "MLIROMAttrIncGen::@4a9cf1b1025f29747f81"
+		}
+	],
+	"folder" : 
+	{
+		"name" : "LLVM/Tablegenning"
+	},
+	"id" : "MLIROMOpInterfacesIncGen::@4a9cf1b1025f29747f81",
+	"name" : "MLIROMOpInterfacesIncGen",
+	"paths" : 
+	{
+		"build" : "include/circt/Dialect/OM",
+		"source" : "include/circt/Dialect/OM"
+	},
+	"sourceGroups" : 
+	[
+		{
+			"name" : "",
+			"sourceIndexes" : 
+			[
+				0
+			]
+		},
+		{
+			"name" : "CMake Rules",
+			"sourceIndexes" : 
+			[
+				1,
+				2,
+				3,
+				4,
+				5,
+				6,
+				7
+			]
+		}
+	],
+	"sources" : 
+	[
+		{
+			"backtrace" : 5,
+			"isGenerated" : true,
+			"path" : "include/circt/Dialect/OM/CMakeFiles/MLIROMOpInterfacesIncGen",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 0,
+			"isGenerated" : true,
+			"path" : "include/circt/Dialect/OM/CMakeFiles/MLIROMOpInterfacesIncGen.rule",
+			"sourceGroupIndex" : 1
+		},
+		{
+			"backtrace" : 0,
+			"isGenerated" : true,
+			"path" : "include/circt/Dialect/OM/OMAttributes.cpp.inc.rule",
+			"sourceGroupIndex" : 1
+		},
+		{
+			"backtrace" : 0,
+			"isGenerated" : true,
+			"path" : "include/circt/Dialect/OM/OMAttributes.h.inc.rule",
+			"sourceGroupIndex" : 1
+		},
+		{
+			"backtrace" : 0,
+			"isGenerated" : true,
+			"path" : "include/circt/Dialect/OM/OMEnums.cpp.inc.rule",
+			"sourceGroupIndex" : 1
+		},
+		{
+			"backtrace" : 0,
+			"isGenerated" : true,
+			"path" : "include/circt/Dialect/OM/OMEnums.h.inc.rule",
+			"sourceGroupIndex" : 1
+		},
+		{
+			"backtrace" : 0,
+			"isGenerated" : true,
+			"path" : "include/circt/Dialect/OM/OMOpInterfaces.cpp.inc.rule",
+			"sourceGroupIndex" : 1
+		},
+		{
+			"backtrace" : 0,
+			"isGenerated" : true,
+			"path" : "include/circt/Dialect/OM/OMOpInterfaces.h.inc.rule",
+			"sourceGroupIndex" : 1
+		}
+	],
+	"type" : "UTILITY"
+}

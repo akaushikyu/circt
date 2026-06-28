@@ -1,0 +1,87 @@
+{
+	"backtraceGraph" : 
+	{
+		"commands" : 
+		[
+			"install",
+			"add_circt_library_install",
+			"add_circt_public_c_api_library"
+		],
+		"files" : 
+		[
+			"cmake/modules/AddCIRCT.cmake",
+			"lib/CAPI/ExportLLVM/CMakeLists.txt"
+		],
+		"nodes" : 
+		[
+			{
+				"file" : 1
+			},
+			{
+				"command" : 2,
+				"file" : 1,
+				"line" : 1,
+				"parent" : 0
+			},
+			{
+				"command" : 1,
+				"file" : 0,
+				"line" : 57,
+				"parent" : 1
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 123,
+				"parent" : 2
+			},
+			{
+				"command" : 1,
+				"file" : 0,
+				"line" : 59,
+				"parent" : 1
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 123,
+				"parent" : 4
+			}
+		]
+	},
+	"installers" : 
+	[
+		{
+			"backtrace" : 3,
+			"component" : "CIRCTCAPIExportLLVM",
+			"destination" : "lib",
+			"paths" : 
+			[
+				"lib/libCIRCTCAPIExportLLVM.a"
+			],
+			"targetId" : "CIRCTCAPIExportLLVM::@5ebbbda20b31e84006de",
+			"targetIndex" : 31,
+			"type" : "target"
+		},
+		{
+			"backtrace" : 5,
+			"component" : "obj.CIRCTCAPIExportLLVM",
+			"destination" : "lib",
+			"paths" : 
+			[
+				{
+					"from" : "lib/CAPI/ExportLLVM/CMakeFiles/obj.CIRCTCAPIExportLLVM.dir/.//ExportLLVM.cpp.o",
+					"to" : "objects-Debug/obj.CIRCTCAPIExportLLVM/ExportLLVM.cpp.o"
+				}
+			],
+			"targetId" : "obj.CIRCTCAPIExportLLVM::@5ebbbda20b31e84006de",
+			"targetIndex" : 1151,
+			"type" : "target"
+		}
+	],
+	"paths" : 
+	{
+		"build" : "lib/CAPI/ExportLLVM",
+		"source" : "lib/CAPI/ExportLLVM"
+	}
+}

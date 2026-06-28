@@ -1,0 +1,114 @@
+{
+	"backtrace" : 5,
+	"backtraceGraph" : 
+	{
+		"commands" : 
+		[
+			"add_custom_target",
+			"add_llvm_install_targets",
+			"add_circt_library_install",
+			"add_circt_library",
+			"add_circt_dialect_library",
+			"add_dependencies"
+		],
+		"files" : 
+		[
+			"llvm/build/lib/cmake/llvm/AddLLVM.cmake",
+			"cmake/modules/AddCIRCT.cmake",
+			"lib/Dialect/LTL/CMakeLists.txt"
+		],
+		"nodes" : 
+		[
+			{
+				"file" : 2
+			},
+			{
+				"command" : 4,
+				"file" : 2,
+				"line" : 1,
+				"parent" : 0
+			},
+			{
+				"command" : 3,
+				"file" : 1,
+				"line" : 147,
+				"parent" : 1
+			},
+			{
+				"command" : 2,
+				"file" : 1,
+				"line" : 87,
+				"parent" : 2
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 136,
+				"parent" : 3
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 947,
+				"parent" : 4
+			},
+			{
+				"command" : 5,
+				"file" : 0,
+				"line" : 965,
+				"parent" : 4
+			}
+		]
+	},
+	"dependencies" : 
+	[
+		{
+			"backtrace" : 6,
+			"id" : "CIRCTLTL::@19b58e42b50b75e51ffc"
+		}
+	],
+	"folder" : 
+	{
+		"name" : "LLVM/Installation"
+	},
+	"id" : "install-CIRCTLTL::@19b58e42b50b75e51ffc",
+	"name" : "install-CIRCTLTL",
+	"paths" : 
+	{
+		"build" : "lib/Dialect/LTL",
+		"source" : "lib/Dialect/LTL"
+	},
+	"sourceGroups" : 
+	[
+		{
+			"name" : "",
+			"sourceIndexes" : 
+			[
+				0
+			]
+		},
+		{
+			"name" : "CMake Rules",
+			"sourceIndexes" : 
+			[
+				1
+			]
+		}
+	],
+	"sources" : 
+	[
+		{
+			"backtrace" : 5,
+			"isGenerated" : true,
+			"path" : "lib/Dialect/LTL/CMakeFiles/install-CIRCTLTL",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 0,
+			"isGenerated" : true,
+			"path" : "lib/Dialect/LTL/CMakeFiles/install-CIRCTLTL.rule",
+			"sourceGroupIndex" : 1
+		}
+	],
+	"type" : "UTILITY"
+}

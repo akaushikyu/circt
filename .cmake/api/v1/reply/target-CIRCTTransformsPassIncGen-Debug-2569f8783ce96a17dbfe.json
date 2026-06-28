@@ -1,0 +1,99 @@
+{
+	"backtrace" : 2,
+	"backtraceGraph" : 
+	{
+		"commands" : 
+		[
+			"add_custom_target",
+			"add_public_tablegen_target"
+		],
+		"files" : 
+		[
+			"llvm/build/lib/cmake/llvm/TableGen.cmake",
+			"include/circt/Transforms/CMakeLists.txt"
+		],
+		"nodes" : 
+		[
+			{
+				"file" : 1
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 6,
+				"parent" : 0
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 172,
+				"parent" : 1
+			}
+		]
+	},
+	"folder" : 
+	{
+		"name" : "LLVM/Tablegenning"
+	},
+	"id" : "CIRCTTransformsPassIncGen::@b0cd4f6f4787d9027f45",
+	"name" : "CIRCTTransformsPassIncGen",
+	"paths" : 
+	{
+		"build" : "include/circt/Transforms",
+		"source" : "include/circt/Transforms"
+	},
+	"sourceGroups" : 
+	[
+		{
+			"name" : "",
+			"sourceIndexes" : 
+			[
+				0
+			]
+		},
+		{
+			"name" : "CMake Rules",
+			"sourceIndexes" : 
+			[
+				1,
+				2,
+				3,
+				4
+			]
+		}
+	],
+	"sources" : 
+	[
+		{
+			"backtrace" : 2,
+			"isGenerated" : true,
+			"path" : "include/circt/Transforms/CMakeFiles/CIRCTTransformsPassIncGen",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 0,
+			"isGenerated" : true,
+			"path" : "include/circt/Transforms/CMakeFiles/CIRCTTransformsPassIncGen.rule",
+			"sourceGroupIndex" : 1
+		},
+		{
+			"backtrace" : 0,
+			"isGenerated" : true,
+			"path" : "include/circt/Transforms/Passes.h.inc.rule",
+			"sourceGroupIndex" : 1
+		},
+		{
+			"backtrace" : 0,
+			"isGenerated" : true,
+			"path" : "include/circt/Transforms/Transforms.capi.cpp.inc.rule",
+			"sourceGroupIndex" : 1
+		},
+		{
+			"backtrace" : 0,
+			"isGenerated" : true,
+			"path" : "include/circt/Transforms/Transforms.capi.h.inc.rule",
+			"sourceGroupIndex" : 1
+		}
+	],
+	"type" : "UTILITY"
+}

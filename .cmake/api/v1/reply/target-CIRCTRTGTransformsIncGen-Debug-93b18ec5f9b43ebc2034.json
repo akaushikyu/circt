@@ -1,0 +1,99 @@
+{
+	"backtrace" : 2,
+	"backtraceGraph" : 
+	{
+		"commands" : 
+		[
+			"add_custom_target",
+			"add_public_tablegen_target"
+		],
+		"files" : 
+		[
+			"llvm/build/lib/cmake/llvm/TableGen.cmake",
+			"include/circt/Dialect/RTG/Transforms/CMakeLists.txt"
+		],
+		"nodes" : 
+		[
+			{
+				"file" : 1
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 5,
+				"parent" : 0
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 172,
+				"parent" : 1
+			}
+		]
+	},
+	"folder" : 
+	{
+		"name" : "LLVM/Tablegenning"
+	},
+	"id" : "CIRCTRTGTransformsIncGen::@211196032bd8409258c2",
+	"name" : "CIRCTRTGTransformsIncGen",
+	"paths" : 
+	{
+		"build" : "include/circt/Dialect/RTG/Transforms",
+		"source" : "include/circt/Dialect/RTG/Transforms"
+	},
+	"sourceGroups" : 
+	[
+		{
+			"name" : "",
+			"sourceIndexes" : 
+			[
+				0
+			]
+		},
+		{
+			"name" : "CMake Rules",
+			"sourceIndexes" : 
+			[
+				1,
+				2,
+				3,
+				4
+			]
+		}
+	],
+	"sources" : 
+	[
+		{
+			"backtrace" : 2,
+			"isGenerated" : true,
+			"path" : "include/circt/Dialect/RTG/Transforms/CMakeFiles/CIRCTRTGTransformsIncGen",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 0,
+			"isGenerated" : true,
+			"path" : "include/circt/Dialect/RTG/Transforms/CMakeFiles/CIRCTRTGTransformsIncGen.rule",
+			"sourceGroupIndex" : 1
+		},
+		{
+			"backtrace" : 0,
+			"isGenerated" : true,
+			"path" : "include/circt/Dialect/RTG/Transforms/RTGPasses.capi.cpp.inc.rule",
+			"sourceGroupIndex" : 1
+		},
+		{
+			"backtrace" : 0,
+			"isGenerated" : true,
+			"path" : "include/circt/Dialect/RTG/Transforms/RTGPasses.capi.h.inc.rule",
+			"sourceGroupIndex" : 1
+		},
+		{
+			"backtrace" : 0,
+			"isGenerated" : true,
+			"path" : "include/circt/Dialect/RTG/Transforms/RTGPasses.h.inc.rule",
+			"sourceGroupIndex" : 1
+		}
+	],
+	"type" : "UTILITY"
+}

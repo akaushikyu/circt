@@ -1,0 +1,85 @@
+{
+	"backtrace" : 2,
+	"backtraceGraph" : 
+	{
+		"commands" : 
+		[
+			"add_custom_target",
+			"add_public_tablegen_target"
+		],
+		"files" : 
+		[
+			"llvm/build/lib/cmake/llvm/TableGen.cmake",
+			"include/circt/Dialect/DC/CMakeLists.txt"
+		],
+		"nodes" : 
+		[
+			{
+				"file" : 1
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 7,
+				"parent" : 0
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 172,
+				"parent" : 1
+			}
+		]
+	},
+	"folder" : 
+	{
+		"name" : "LLVM/Tablegenning"
+	},
+	"id" : "CIRCTDCTransformsIncGen::@2e1898c3c99b6e43eb0e",
+	"name" : "CIRCTDCTransformsIncGen",
+	"paths" : 
+	{
+		"build" : "include/circt/Dialect/DC",
+		"source" : "include/circt/Dialect/DC"
+	},
+	"sourceGroups" : 
+	[
+		{
+			"name" : "",
+			"sourceIndexes" : 
+			[
+				0
+			]
+		},
+		{
+			"name" : "CMake Rules",
+			"sourceIndexes" : 
+			[
+				1,
+				2
+			]
+		}
+	],
+	"sources" : 
+	[
+		{
+			"backtrace" : 2,
+			"isGenerated" : true,
+			"path" : "include/circt/Dialect/DC/CMakeFiles/CIRCTDCTransformsIncGen",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 0,
+			"isGenerated" : true,
+			"path" : "include/circt/Dialect/DC/CMakeFiles/CIRCTDCTransformsIncGen.rule",
+			"sourceGroupIndex" : 1
+		},
+		{
+			"backtrace" : 0,
+			"isGenerated" : true,
+			"path" : "include/circt/Dialect/DC/DCPasses.h.inc.rule",
+			"sourceGroupIndex" : 1
+		}
+	],
+	"type" : "UTILITY"
+}

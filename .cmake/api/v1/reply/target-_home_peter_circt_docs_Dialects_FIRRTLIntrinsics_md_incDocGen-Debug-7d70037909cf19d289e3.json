@@ -1,0 +1,110 @@
+{
+	"backtrace" : 2,
+	"backtraceGraph" : 
+	{
+		"commands" : 
+		[
+			"add_custom_target",
+			"circt_tablegen",
+			"add_custom_command",
+			"tablegen"
+		],
+		"files" : 
+		[
+			"cmake/modules/AddCIRCT.cmake",
+			"lib/Dialect/FIRRTL/CMakeLists.txt",
+			"llvm/build/lib/cmake/llvm/TableGen.cmake"
+		],
+		"nodes" : 
+		[
+			{
+				"file" : 1
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 3,
+				"parent" : 0
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 32,
+				"parent" : 1
+			},
+			{
+				"command" : 3,
+				"file" : 0,
+				"line" : 15,
+				"parent" : 1
+			},
+			{
+				"command" : 2,
+				"file" : 2,
+				"line" : 141,
+				"parent" : 3
+			}
+		]
+	},
+	"dependencies" : 
+	[
+		{
+			"backtrace" : 4,
+			"id" : "circt-tblgen::@c2d3eb9f815615c5bfca"
+		}
+	],
+	"id" : "_home_peter_circt_docs_Dialects_FIRRTLIntrinsics_md_incDocGen::@6fc32187941aba669bc1",
+	"name" : "_home_peter_circt_docs_Dialects_FIRRTLIntrinsics_md_incDocGen",
+	"paths" : 
+	{
+		"build" : "lib/Dialect/FIRRTL",
+		"source" : "lib/Dialect/FIRRTL"
+	},
+	"sourceGroups" : 
+	[
+		{
+			"name" : "",
+			"sourceIndexes" : 
+			[
+				0
+			]
+		},
+		{
+			"name" : "CMake Rules",
+			"sourceIndexes" : 
+			[
+				1,
+				2,
+				3
+			]
+		}
+	],
+	"sources" : 
+	[
+		{
+			"backtrace" : 2,
+			"isGenerated" : true,
+			"path" : "lib/Dialect/FIRRTL/CMakeFiles/_home_peter_circt_docs_Dialects_FIRRTLIntrinsics_md_incDocGen",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 0,
+			"isGenerated" : true,
+			"path" : "lib/Dialect/FIRRTL/CMakeFiles/_home_peter_circt_docs_Dialects_FIRRTLIntrinsics_md_incDocGen.rule",
+			"sourceGroupIndex" : 1
+		},
+		{
+			"backtrace" : 0,
+			"isGenerated" : true,
+			"path" : "docs/Dialects/FIRRTLIntrinsics.md.inc.rule",
+			"sourceGroupIndex" : 1
+		},
+		{
+			"backtrace" : 0,
+			"isGenerated" : true,
+			"path" : "lib/Dialect/FIRRTL/_home_peter_circt_docs_Dialects_FIRRTLIntrinsics_md_inc.rule",
+			"sourceGroupIndex" : 1
+		}
+	],
+	"type" : "UTILITY"
+}

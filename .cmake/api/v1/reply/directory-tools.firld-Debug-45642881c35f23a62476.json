@@ -1,0 +1,53 @@
+{
+	"backtraceGraph" : 
+	{
+		"commands" : 
+		[
+			"install",
+			"add_circt_tool"
+		],
+		"files" : 
+		[
+			"cmake/modules/AddCIRCT.cmake",
+			"tools/firld/CMakeLists.txt"
+		],
+		"nodes" : 
+		[
+			{
+				"file" : 1
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 19,
+				"parent" : 0
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 104,
+				"parent" : 1
+			}
+		]
+	},
+	"installers" : 
+	[
+		{
+			"backtrace" : 2,
+			"component" : "firld",
+			"destination" : "bin",
+			"paths" : 
+			[
+				"bin/firld"
+			],
+			"targetId" : "firld::@1494e368e11d565939ec",
+			"targetIndex" : 670,
+			"type" : "target"
+		}
+	],
+	"paths" : 
+	{
+		"build" : "tools/firld",
+		"source" : "tools/firld"
+	}
+}

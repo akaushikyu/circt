@@ -1,0 +1,256 @@
+{
+	"archive" : {},
+	"artifacts" : 
+	[
+		{
+			"path" : "lib/libCIRCTHWToLLVM.a"
+		}
+	],
+	"backtrace" : 5,
+	"backtraceGraph" : 
+	{
+		"commands" : 
+		[
+			"add_library",
+			"llvm_add_library",
+			"add_mlir_library",
+			"add_circt_library",
+			"add_circt_conversion_library",
+			"install",
+			"add_circt_library_install",
+			"add_dependencies",
+			"target_link_libraries",
+			"add_compile_options",
+			"include",
+			"add_definitions",
+			"add_compile_definitions",
+			"include_directories"
+		],
+		"files" : 
+		[
+			"llvm/build/lib/cmake/llvm/AddLLVM.cmake",
+			"llvm/build/lib/cmake/mlir/AddMLIR.cmake",
+			"cmake/modules/AddCIRCT.cmake",
+			"lib/Conversion/HWToLLVM/CMakeLists.txt",
+			"llvm/build/lib/cmake/llvm/HandleLLVMOptions.cmake",
+			"CMakeLists.txt"
+		],
+		"nodes" : 
+		[
+			{
+				"file" : 3
+			},
+			{
+				"command" : 4,
+				"file" : 3,
+				"line" : 1,
+				"parent" : 0
+			},
+			{
+				"command" : 3,
+				"file" : 2,
+				"line" : 152,
+				"parent" : 1
+			},
+			{
+				"command" : 2,
+				"file" : 2,
+				"line" : 86,
+				"parent" : 2
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 412,
+				"parent" : 3
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 732,
+				"parent" : 4
+			},
+			{
+				"command" : 6,
+				"file" : 2,
+				"line" : 87,
+				"parent" : 2
+			},
+			{
+				"command" : 5,
+				"file" : 2,
+				"line" : 123,
+				"parent" : 6
+			},
+			{
+				"command" : 7,
+				"file" : 0,
+				"line" : 898,
+				"parent" : 4
+			},
+			{
+				"command" : 8,
+				"file" : 0,
+				"line" : 891,
+				"parent" : 4
+			},
+			{
+				"file" : 5
+			},
+			{
+				"command" : 10,
+				"file" : 5,
+				"line" : 63,
+				"parent" : 10
+			},
+			{
+				"file" : 4,
+				"parent" : 11
+			},
+			{
+				"command" : 9,
+				"file" : 4,
+				"line" : 1148,
+				"parent" : 12
+			},
+			{
+				"command" : 11,
+				"file" : 5,
+				"line" : 770,
+				"parent" : 10
+			},
+			{
+				"command" : 12,
+				"file" : 4,
+				"line" : 116,
+				"parent" : 12
+			},
+			{
+				"command" : 12,
+				"file" : 4,
+				"line" : 137,
+				"parent" : 12
+			},
+			{
+				"command" : 12,
+				"file" : 4,
+				"line" : 202,
+				"parent" : 12
+			},
+			{
+				"command" : 12,
+				"file" : 4,
+				"line" : 153,
+				"parent" : 12
+			},
+			{
+				"command" : 12,
+				"file" : 4,
+				"line" : 1156,
+				"parent" : 12
+			},
+			{
+				"command" : 12,
+				"file" : 4,
+				"line" : 1157,
+				"parent" : 12
+			},
+			{
+				"command" : 12,
+				"file" : 4,
+				"line" : 1158,
+				"parent" : 12
+			},
+			{
+				"command" : 13,
+				"file" : 5,
+				"line" : 191,
+				"parent" : 10
+			},
+			{
+				"command" : 13,
+				"file" : 5,
+				"line" : 192,
+				"parent" : 10
+			},
+			{
+				"command" : 13,
+				"file" : 5,
+				"line" : 195,
+				"parent" : 10
+			}
+		]
+	},
+	"dependencies" : 
+	[
+		{
+			"backtrace" : 8,
+			"id" : "mlir-generic-headers::@6890427a1f51a3e7e1df"
+		},
+		{
+			"backtrace" : 8,
+			"id" : "circt-headers::@6890427a1f51a3e7e1df"
+		},
+		{
+			"backtrace" : 8,
+			"id" : "CIRCTConversionPassIncGen::@8d54cd15e967a4ad2d73"
+		},
+		{
+			"id" : "obj.CIRCTHWToLLVM::@bca353539ea52c24065a"
+		},
+		{
+			"backtrace" : 9,
+			"id" : "CIRCTHW::@fb78e03df547fa00c765"
+		},
+		{
+			"backtrace" : 9,
+			"id" : "CIRCTSupport::@928d1708d80fe1f55e59"
+		}
+	],
+	"folder" : 
+	{
+		"name" : "MLIR/Libraries"
+	},
+	"id" : "CIRCTHWToLLVM::@bca353539ea52c24065a",
+	"install" : 
+	{
+		"destinations" : 
+		[
+			{
+				"backtrace" : 7,
+				"path" : "lib"
+			}
+		],
+		"prefix" : 
+		{
+			"path" : "/usr/local"
+		}
+	},
+	"name" : "CIRCTHWToLLVM",
+	"nameOnDisk" : "libCIRCTHWToLLVM.a",
+	"paths" : 
+	{
+		"build" : "lib/Conversion/HWToLLVM",
+		"source" : "lib/Conversion/HWToLLVM"
+	},
+	"sourceGroups" : 
+	[
+		{
+			"name" : "Object Libraries",
+			"sourceIndexes" : 
+			[
+				0
+			]
+		}
+	],
+	"sources" : 
+	[
+		{
+			"backtrace" : 5,
+			"isGenerated" : true,
+			"path" : "lib/Conversion/HWToLLVM/CMakeFiles/obj.CIRCTHWToLLVM.dir/HWToLLVM.cpp.o",
+			"sourceGroupIndex" : 0
+		}
+	],
+	"type" : "STATIC_LIBRARY"
+}

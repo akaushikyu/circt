@@ -1,0 +1,145 @@
+{
+	"backtrace" : 2,
+	"backtraceGraph" : 
+	{
+		"commands" : 
+		[
+			"add_custom_target",
+			"add_public_tablegen_target",
+			"add_dependencies"
+		],
+		"files" : 
+		[
+			"llvm/build/lib/cmake/llvm/TableGen.cmake",
+			"include/circt/Dialect/Kanagawa/CMakeLists.txt"
+		],
+		"nodes" : 
+		[
+			{
+				"file" : 1
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 20,
+				"parent" : 0
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 172,
+				"parent" : 1
+			},
+			{
+				"command" : 2,
+				"file" : 0,
+				"line" : 175,
+				"parent" : 1
+			}
+		]
+	},
+	"dependencies" : 
+	[
+		{
+			"backtrace" : 3,
+			"id" : "CIRCTKanagawaTransformsIncGen::@ec569b9f570677422075"
+		},
+		{
+			"backtrace" : 3,
+			"id" : "MLIRKanagawaInterfacKanagawancGen::@ec569b9f570677422075"
+		}
+	],
+	"folder" : 
+	{
+		"name" : "LLVM/Tablegenning"
+	},
+	"id" : "MLIRKanagawaEnumsIncGen::@ec569b9f570677422075",
+	"name" : "MLIRKanagawaEnumsIncGen",
+	"paths" : 
+	{
+		"build" : "include/circt/Dialect/Kanagawa",
+		"source" : "include/circt/Dialect/Kanagawa"
+	},
+	"sourceGroups" : 
+	[
+		{
+			"name" : "",
+			"sourceIndexes" : 
+			[
+				0
+			]
+		},
+		{
+			"name" : "CMake Rules",
+			"sourceIndexes" : 
+			[
+				1,
+				2,
+				3,
+				4,
+				5,
+				6,
+				7,
+				8
+			]
+		}
+	],
+	"sources" : 
+	[
+		{
+			"backtrace" : 2,
+			"isGenerated" : true,
+			"path" : "include/circt/Dialect/Kanagawa/CMakeFiles/MLIRKanagawaEnumsIncGen",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 0,
+			"isGenerated" : true,
+			"path" : "include/circt/Dialect/Kanagawa/CMakeFiles/MLIRKanagawaEnumsIncGen.rule",
+			"sourceGroupIndex" : 1
+		},
+		{
+			"backtrace" : 0,
+			"isGenerated" : true,
+			"path" : "include/circt/Dialect/Kanagawa/KanagawaAttributes.cpp.inc.rule",
+			"sourceGroupIndex" : 1
+		},
+		{
+			"backtrace" : 0,
+			"isGenerated" : true,
+			"path" : "include/circt/Dialect/Kanagawa/KanagawaAttributes.h.inc.rule",
+			"sourceGroupIndex" : 1
+		},
+		{
+			"backtrace" : 0,
+			"isGenerated" : true,
+			"path" : "include/circt/Dialect/Kanagawa/KanagawaEnums.cpp.inc.rule",
+			"sourceGroupIndex" : 1
+		},
+		{
+			"backtrace" : 0,
+			"isGenerated" : true,
+			"path" : "include/circt/Dialect/Kanagawa/KanagawaEnums.h.inc.rule",
+			"sourceGroupIndex" : 1
+		},
+		{
+			"backtrace" : 0,
+			"isGenerated" : true,
+			"path" : "include/circt/Dialect/Kanagawa/KanagawaInterfaces.cpp.inc.rule",
+			"sourceGroupIndex" : 1
+		},
+		{
+			"backtrace" : 0,
+			"isGenerated" : true,
+			"path" : "include/circt/Dialect/Kanagawa/KanagawaInterfaces.h.inc.rule",
+			"sourceGroupIndex" : 1
+		},
+		{
+			"backtrace" : 0,
+			"isGenerated" : true,
+			"path" : "include/circt/Dialect/Kanagawa/KanagawaPasses.h.inc.rule",
+			"sourceGroupIndex" : 1
+		}
+	],
+	"type" : "UTILITY"
+}

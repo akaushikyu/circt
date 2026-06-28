@@ -1,0 +1,60 @@
+{
+	"backtraceGraph" : 
+	{
+		"commands" : 
+		[
+			"install",
+			"add_circt_library_install",
+			"add_circt_library"
+		],
+		"files" : 
+		[
+			"cmake/modules/AddCIRCT.cmake",
+			"lib/Dialect/OM/Evaluator/CMakeLists.txt"
+		],
+		"nodes" : 
+		[
+			{
+				"file" : 1
+			},
+			{
+				"command" : 2,
+				"file" : 1,
+				"line" : 1,
+				"parent" : 0
+			},
+			{
+				"command" : 1,
+				"file" : 0,
+				"line" : 87,
+				"parent" : 1
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 123,
+				"parent" : 2
+			}
+		]
+	},
+	"installers" : 
+	[
+		{
+			"backtrace" : 3,
+			"component" : "CIRCTOMEvaluator",
+			"destination" : "lib",
+			"paths" : 
+			[
+				"lib/libCIRCTOMEvaluator.a"
+			],
+			"targetId" : "CIRCTOMEvaluator::@a3e51c7907505d5dadf8",
+			"targetIndex" : 179,
+			"type" : "target"
+		}
+	],
+	"paths" : 
+	{
+		"build" : "lib/Dialect/OM/Evaluator",
+		"source" : "lib/Dialect/OM/Evaluator"
+	}
+}

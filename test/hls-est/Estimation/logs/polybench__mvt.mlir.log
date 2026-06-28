@@ -1,16 +1,21 @@
-memref.alloca @ loc("polybench/mvt.mlir":7:15)
+### polybench/mvt.mlir  top=mvt rule=single
+### truth=14 hist_pred=14 decision_estimate=14 source=hist passes_applied=no mode=base
+### exit=0 elapsed=0.0s status=OK
+----- stderr -----
+----- stdout -----
+memref.alloca @ loc("/home/peter/circt/test/hls-est/Estimation/polybench/mvt.mlir":7:15)
   kind=RAM_1P  bram=1
     64x32b -> RAM_1P (x32/block) = 1 BRAM_18K
-memref.alloca @ loc("polybench/mvt.mlir":8:17)
+memref.alloca @ loc("/home/peter/circt/test/hls-est/Estimation/polybench/mvt.mlir":8:17)
   kind=RAM_1P  bram=1
     64x32b -> RAM_1P (x32/block) = 1 BRAM_18K
-memref.alloca @ loc("polybench/mvt.mlir":9:17)
+memref.alloca @ loc("/home/peter/circt/test/hls-est/Estimation/polybench/mvt.mlir":9:17)
   kind=RAM_1P  bram=1
     64x32b -> RAM_1P (x32/block) = 1 BRAM_18K
-memref.alloca @ loc("polybench/mvt.mlir":10:17)
+memref.alloca @ loc("/home/peter/circt/test/hls-est/Estimation/polybench/mvt.mlir":10:17)
   kind=RAM_1P  bram=1
     64x32b -> RAM_1P (x32/block) = 1 BRAM_18K
-memref.alloca @ loc("polybench/mvt.mlir":11:17)
+memref.alloca @ loc("/home/peter/circt/test/hls-est/Estimation/polybench/mvt.mlir":11:17)
   kind=RAM_1P  bram=8
     4096x32b -> RAM_1P (x32/block) = 8 BRAM_18K
 Total BRAM: 12

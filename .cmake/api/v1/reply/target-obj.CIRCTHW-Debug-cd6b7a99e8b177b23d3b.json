@@ -1,0 +1,777 @@
+{
+	"artifacts" : 
+	[
+		{
+			"path" : "lib/Dialect/HW/CMakeFiles/obj.CIRCTHW.dir/./ConversionPatterns.cpp.o"
+		},
+		{
+			"path" : "lib/Dialect/HW/CMakeFiles/obj.CIRCTHW.dir/./CustomDirectiveImpl.cpp.o"
+		},
+		{
+			"path" : "lib/Dialect/HW/CMakeFiles/obj.CIRCTHW.dir/./HierPathCache.cpp.o"
+		},
+		{
+			"path" : "lib/Dialect/HW/CMakeFiles/obj.CIRCTHW.dir/./HWAttributes.cpp.o"
+		},
+		{
+			"path" : "lib/Dialect/HW/CMakeFiles/obj.CIRCTHW.dir/./HWEnums.cpp.o"
+		},
+		{
+			"path" : "lib/Dialect/HW/CMakeFiles/obj.CIRCTHW.dir/./HWDialect.cpp.o"
+		},
+		{
+			"path" : "lib/Dialect/HW/CMakeFiles/obj.CIRCTHW.dir/./HWInstanceGraph.cpp.o"
+		},
+		{
+			"path" : "lib/Dialect/HW/CMakeFiles/obj.CIRCTHW.dir/./HWInstanceImplementation.cpp.o"
+		},
+		{
+			"path" : "lib/Dialect/HW/CMakeFiles/obj.CIRCTHW.dir/./HWModuleOpInterface.cpp.o"
+		},
+		{
+			"path" : "lib/Dialect/HW/CMakeFiles/obj.CIRCTHW.dir/./HWOpInterfaces.cpp.o"
+		},
+		{
+			"path" : "lib/Dialect/HW/CMakeFiles/obj.CIRCTHW.dir/./HWOps.cpp.o"
+		},
+		{
+			"path" : "lib/Dialect/HW/CMakeFiles/obj.CIRCTHW.dir/./HWTypeInterfaces.cpp.o"
+		},
+		{
+			"path" : "lib/Dialect/HW/CMakeFiles/obj.CIRCTHW.dir/./HWTypes.cpp.o"
+		},
+		{
+			"path" : "lib/Dialect/HW/CMakeFiles/obj.CIRCTHW.dir/./ModuleImplementation.cpp.o"
+		},
+		{
+			"path" : "lib/Dialect/HW/CMakeFiles/obj.CIRCTHW.dir/./InnerSymbolTable.cpp.o"
+		},
+		{
+			"path" : "lib/Dialect/HW/CMakeFiles/obj.CIRCTHW.dir/./PortConverter.cpp.o"
+		},
+		{
+			"path" : "lib/Dialect/HW/CMakeFiles/obj.CIRCTHW.dir/./InferIntRangeInterfaceImpls.cpp.o"
+		}
+	],
+	"backtrace" : 5,
+	"backtraceGraph" : 
+	{
+		"commands" : 
+		[
+			"add_library",
+			"llvm_add_library",
+			"add_mlir_library",
+			"add_circt_library",
+			"add_circt_dialect_library",
+			"add_dependencies",
+			"add_compile_options",
+			"include",
+			"target_compile_options",
+			"llvm_update_compile_flags",
+			"add_definitions",
+			"add_compile_definitions",
+			"include_directories"
+		],
+		"files" : 
+		[
+			"llvm/build/lib/cmake/llvm/AddLLVM.cmake",
+			"llvm/build/lib/cmake/mlir/AddMLIR.cmake",
+			"cmake/modules/AddCIRCT.cmake",
+			"lib/Dialect/HW/CMakeLists.txt",
+			"llvm/build/lib/cmake/llvm/HandleLLVMOptions.cmake",
+			"CMakeLists.txt"
+		],
+		"nodes" : 
+		[
+			{
+				"file" : 3
+			},
+			{
+				"command" : 4,
+				"file" : 3,
+				"line" : 26,
+				"parent" : 0
+			},
+			{
+				"command" : 3,
+				"file" : 2,
+				"line" : 147,
+				"parent" : 1
+			},
+			{
+				"command" : 2,
+				"file" : 2,
+				"line" : 86,
+				"parent" : 2
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 412,
+				"parent" : 3
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 647,
+				"parent" : 4
+			},
+			{
+				"command" : 5,
+				"file" : 0,
+				"line" : 675,
+				"parent" : 4
+			},
+			{
+				"command" : 5,
+				"file" : 0,
+				"line" : 693,
+				"parent" : 4
+			},
+			{
+				"file" : 5
+			},
+			{
+				"command" : 7,
+				"file" : 5,
+				"line" : 63,
+				"parent" : 8
+			},
+			{
+				"file" : 4,
+				"parent" : 9
+			},
+			{
+				"command" : 6,
+				"file" : 4,
+				"line" : 1148,
+				"parent" : 10
+			},
+			{
+				"command" : 9,
+				"file" : 0,
+				"line" : 650,
+				"parent" : 4
+			},
+			{
+				"command" : 8,
+				"file" : 0,
+				"line" : 78,
+				"parent" : 12
+			},
+			{
+				"command" : 10,
+				"file" : 5,
+				"line" : 770,
+				"parent" : 8
+			},
+			{
+				"command" : 11,
+				"file" : 4,
+				"line" : 116,
+				"parent" : 10
+			},
+			{
+				"command" : 11,
+				"file" : 4,
+				"line" : 137,
+				"parent" : 10
+			},
+			{
+				"command" : 11,
+				"file" : 4,
+				"line" : 202,
+				"parent" : 10
+			},
+			{
+				"command" : 11,
+				"file" : 4,
+				"line" : 153,
+				"parent" : 10
+			},
+			{
+				"command" : 11,
+				"file" : 4,
+				"line" : 1156,
+				"parent" : 10
+			},
+			{
+				"command" : 11,
+				"file" : 4,
+				"line" : 1157,
+				"parent" : 10
+			},
+			{
+				"command" : 11,
+				"file" : 4,
+				"line" : 1158,
+				"parent" : 10
+			},
+			{
+				"command" : 12,
+				"file" : 5,
+				"line" : 191,
+				"parent" : 8
+			},
+			{
+				"command" : 12,
+				"file" : 5,
+				"line" : 192,
+				"parent" : 8
+			},
+			{
+				"command" : 12,
+				"file" : 5,
+				"line" : 195,
+				"parent" : 8
+			}
+		]
+	},
+	"compileGroups" : 
+	[
+		{
+			"compileCommandFragments" : 
+			[
+				{
+					"fragment" : " -fno-exceptions -fno-rtti -fPIC -fno-semantic-interposition -fvisibility-inlines-hidden -Werror=date-time -Wall -Wextra -Wno-unused-parameter -Wwrite-strings -Wcast-qual -Wno-missing-field-initializers -Wimplicit-fallthrough -Wno-nonnull -Wno-class-memaccess -Wno-redundant-move -Wno-pessimizing-move -Wno-array-bounds -Wno-stringop-overread -Wno-noexcept-type -Wdelete-non-virtual-dtor -Wsuggest-override -Wno-comment -Wno-misleading-indentation -Wctad-maybe-unsupported -fdiagnostics-color -g"
+				},
+				{
+					"backtrace" : 11,
+					"fragment" : "-gsplit-dwarf"
+				},
+				{
+					"backtrace" : 13,
+					"fragment" : "-fno-exceptions"
+				},
+				{
+					"backtrace" : 13,
+					"fragment" : "-funwind-tables"
+				},
+				{
+					"backtrace" : 13,
+					"fragment" : "-fno-rtti"
+				},
+				{
+					"fragment" : "-std=gnu++17"
+				}
+			],
+			"defines" : 
+			[
+				{
+					"backtrace" : 14,
+					"define" : "CIRCT_INCLUDE_TESTS"
+				},
+				{
+					"backtrace" : 15,
+					"define" : "_DEBUG"
+				},
+				{
+					"backtrace" : 16,
+					"define" : "_GLIBCXX_ASSERTIONS"
+				},
+				{
+					"backtrace" : 17,
+					"define" : "_GLIBCXX_USE_CXX11_ABI=1"
+				},
+				{
+					"backtrace" : 18,
+					"define" : "_LIBCPP_HARDENING_MODE=_LIBCPP_HARDENING_MODE_EXTENSIVE"
+				},
+				{
+					"backtrace" : 19,
+					"define" : "__STDC_CONSTANT_MACROS"
+				},
+				{
+					"backtrace" : 20,
+					"define" : "__STDC_FORMAT_MACROS"
+				},
+				{
+					"backtrace" : 21,
+					"define" : "__STDC_LIMIT_MACROS"
+				}
+			],
+			"includes" : 
+			[
+				{
+					"backtrace" : 22,
+					"path" : "/home/peter/circt/llvm/llvm/include"
+				},
+				{
+					"backtrace" : 22,
+					"path" : "/home/peter/circt/llvm/build/include"
+				},
+				{
+					"backtrace" : 23,
+					"path" : "/home/peter/circt/llvm/mlir/include"
+				},
+				{
+					"backtrace" : 23,
+					"path" : "/home/peter/circt/llvm/build/tools/mlir/include"
+				},
+				{
+					"backtrace" : 24,
+					"path" : "/home/peter/circt/include"
+				}
+			],
+			"language" : "CXX",
+			"languageStandard" : 
+			{
+				"backtraces" : 
+				[
+					5
+				],
+				"standard" : "17"
+			},
+			"sourceIndexes" : 
+			[
+				0,
+				1,
+				2,
+				3,
+				4,
+				5,
+				6,
+				7,
+				8,
+				9,
+				10,
+				11,
+				12,
+				13,
+				14,
+				15,
+				16
+			]
+		}
+	],
+	"dependencies" : 
+	[
+		{
+			"backtrace" : 6,
+			"id" : "mlir-generic-headers::@6890427a1f51a3e7e1df"
+		},
+		{
+			"backtrace" : 6,
+			"id" : "circt-headers::@6890427a1f51a3e7e1df"
+		},
+		{
+			"backtrace" : 6,
+			"id" : "MLIRHWIncGen::@99dd4989ec2dfffb3406"
+		},
+		{
+			"backtrace" : 6,
+			"id" : "CIRCTHWAttrIncGen::@99dd4989ec2dfffb3406"
+		},
+		{
+			"backtrace" : 6,
+			"id" : "CIRCTHWEnumsIncGen::@99dd4989ec2dfffb3406"
+		},
+		{
+			"backtrace" : 6,
+			"id" : "CIRCTHWCanonicalizationIncGen::@99dd4989ec2dfffb3406"
+		},
+		{
+			"backtrace" : 7,
+			"id" : "CIRCTSupport::@928d1708d80fe1f55e59"
+		}
+	],
+	"folder" : 
+	{
+		"name" : "LLVM/Object Libraries"
+	},
+	"id" : "obj.CIRCTHW::@fb78e03df547fa00c765",
+	"name" : "obj.CIRCTHW",
+	"paths" : 
+	{
+		"build" : "lib/Dialect/HW",
+		"source" : "lib/Dialect/HW"
+	},
+	"sourceGroups" : 
+	[
+		{
+			"name" : "Source Files",
+			"sourceIndexes" : 
+			[
+				0,
+				1,
+				2,
+				3,
+				4,
+				5,
+				6,
+				7,
+				8,
+				9,
+				10,
+				11,
+				12,
+				13,
+				14,
+				15,
+				16
+			]
+		},
+		{
+			"name" : "Header Files",
+			"sourceIndexes" : 
+			[
+				17,
+				18,
+				19,
+				20,
+				21,
+				22,
+				23,
+				24,
+				25,
+				26,
+				27,
+				28,
+				29,
+				30,
+				31,
+				32,
+				33,
+				34,
+				35,
+				36,
+				37,
+				38
+			]
+		},
+		{
+			"name" : "",
+			"sourceIndexes" : 
+			[
+				39,
+				40,
+				41,
+				42,
+				43,
+				44,
+				45,
+				46,
+				47,
+				48,
+				49,
+				50,
+				51,
+				52,
+				53,
+				54
+			]
+		}
+	],
+	"sources" : 
+	[
+		{
+			"backtrace" : 5,
+			"compileGroupIndex" : 0,
+			"path" : "lib/Dialect/HW/ConversionPatterns.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 5,
+			"compileGroupIndex" : 0,
+			"path" : "lib/Dialect/HW/CustomDirectiveImpl.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 5,
+			"compileGroupIndex" : 0,
+			"path" : "lib/Dialect/HW/HierPathCache.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 5,
+			"compileGroupIndex" : 0,
+			"path" : "lib/Dialect/HW/HWAttributes.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 5,
+			"compileGroupIndex" : 0,
+			"path" : "lib/Dialect/HW/HWEnums.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 5,
+			"compileGroupIndex" : 0,
+			"path" : "lib/Dialect/HW/HWDialect.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 5,
+			"compileGroupIndex" : 0,
+			"path" : "lib/Dialect/HW/HWInstanceGraph.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 5,
+			"compileGroupIndex" : 0,
+			"path" : "lib/Dialect/HW/HWInstanceImplementation.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 5,
+			"compileGroupIndex" : 0,
+			"path" : "lib/Dialect/HW/HWModuleOpInterface.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 5,
+			"compileGroupIndex" : 0,
+			"path" : "lib/Dialect/HW/HWOpInterfaces.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 5,
+			"compileGroupIndex" : 0,
+			"path" : "lib/Dialect/HW/HWOps.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 5,
+			"compileGroupIndex" : 0,
+			"path" : "lib/Dialect/HW/HWTypeInterfaces.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 5,
+			"compileGroupIndex" : 0,
+			"path" : "lib/Dialect/HW/HWTypes.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 5,
+			"compileGroupIndex" : 0,
+			"path" : "lib/Dialect/HW/ModuleImplementation.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 5,
+			"compileGroupIndex" : 0,
+			"path" : "lib/Dialect/HW/InnerSymbolTable.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 5,
+			"compileGroupIndex" : 0,
+			"path" : "lib/Dialect/HW/PortConverter.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 5,
+			"compileGroupIndex" : 0,
+			"path" : "lib/Dialect/HW/InferIntRangeInterfaceImpls.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 5,
+			"path" : "include/circt/Dialect/HW/ConversionPatterns.h",
+			"sourceGroupIndex" : 1
+		},
+		{
+			"backtrace" : 5,
+			"path" : "include/circt/Dialect/HW/CustomDirectiveImpl.h",
+			"sourceGroupIndex" : 1
+		},
+		{
+			"backtrace" : 5,
+			"path" : "include/circt/Dialect/HW/HWAttributes.h",
+			"sourceGroupIndex" : 1
+		},
+		{
+			"backtrace" : 5,
+			"path" : "include/circt/Dialect/HW/HWDialect.h",
+			"sourceGroupIndex" : 1
+		},
+		{
+			"backtrace" : 5,
+			"path" : "include/circt/Dialect/HW/HWEnums.h",
+			"sourceGroupIndex" : 1
+		},
+		{
+			"backtrace" : 5,
+			"path" : "include/circt/Dialect/HW/HWInstanceGraph.h",
+			"sourceGroupIndex" : 1
+		},
+		{
+			"backtrace" : 5,
+			"path" : "include/circt/Dialect/HW/HWInstanceImplementation.h",
+			"sourceGroupIndex" : 1
+		},
+		{
+			"backtrace" : 5,
+			"path" : "include/circt/Dialect/HW/HWModuleGraph.h",
+			"sourceGroupIndex" : 1
+		},
+		{
+			"backtrace" : 5,
+			"path" : "include/circt/Dialect/HW/HWOpInterfaces.h",
+			"sourceGroupIndex" : 1
+		},
+		{
+			"backtrace" : 5,
+			"path" : "include/circt/Dialect/HW/HWOps.h",
+			"sourceGroupIndex" : 1
+		},
+		{
+			"backtrace" : 5,
+			"path" : "include/circt/Dialect/HW/HWPasses.h",
+			"sourceGroupIndex" : 1
+		},
+		{
+			"backtrace" : 5,
+			"path" : "include/circt/Dialect/HW/HWReductions.h",
+			"sourceGroupIndex" : 1
+		},
+		{
+			"backtrace" : 5,
+			"path" : "include/circt/Dialect/HW/HWSymCache.h",
+			"sourceGroupIndex" : 1
+		},
+		{
+			"backtrace" : 5,
+			"path" : "include/circt/Dialect/HW/HWTypeInterfaces.h",
+			"sourceGroupIndex" : 1
+		},
+		{
+			"backtrace" : 5,
+			"path" : "include/circt/Dialect/HW/HWTypes.h",
+			"sourceGroupIndex" : 1
+		},
+		{
+			"backtrace" : 5,
+			"path" : "include/circt/Dialect/HW/HWVisitors.h",
+			"sourceGroupIndex" : 1
+		},
+		{
+			"backtrace" : 5,
+			"path" : "include/circt/Dialect/HW/HierPathCache.h",
+			"sourceGroupIndex" : 1
+		},
+		{
+			"backtrace" : 5,
+			"path" : "include/circt/Dialect/HW/InnerSymbolNamespace.h",
+			"sourceGroupIndex" : 1
+		},
+		{
+			"backtrace" : 5,
+			"path" : "include/circt/Dialect/HW/InnerSymbolTable.h",
+			"sourceGroupIndex" : 1
+		},
+		{
+			"backtrace" : 5,
+			"path" : "include/circt/Dialect/HW/ModuleImplementation.h",
+			"sourceGroupIndex" : 1
+		},
+		{
+			"backtrace" : 5,
+			"path" : "include/circt/Dialect/HW/PortConverter.h",
+			"sourceGroupIndex" : 1
+		},
+		{
+			"backtrace" : 5,
+			"path" : "include/circt/Dialect/HW/PortImplementation.h",
+			"sourceGroupIndex" : 1
+		},
+		{
+			"backtrace" : 5,
+			"isGenerated" : true,
+			"path" : "include/circt/Dialect/HW/HW.cpp.inc",
+			"sourceGroupIndex" : 2
+		},
+		{
+			"backtrace" : 5,
+			"isGenerated" : true,
+			"path" : "include/circt/Dialect/HW/HW.h.inc",
+			"sourceGroupIndex" : 2
+		},
+		{
+			"backtrace" : 5,
+			"isGenerated" : true,
+			"path" : "include/circt/Dialect/HW/HWAttributes.cpp.inc",
+			"sourceGroupIndex" : 2
+		},
+		{
+			"backtrace" : 5,
+			"isGenerated" : true,
+			"path" : "include/circt/Dialect/HW/HWAttributes.h.inc",
+			"sourceGroupIndex" : 2
+		},
+		{
+			"backtrace" : 5,
+			"isGenerated" : true,
+			"path" : "include/circt/Dialect/HW/HWCanonicalization.cpp.inc",
+			"sourceGroupIndex" : 2
+		},
+		{
+			"backtrace" : 5,
+			"isGenerated" : true,
+			"path" : "include/circt/Dialect/HW/HWDialect.cpp.inc",
+			"sourceGroupIndex" : 2
+		},
+		{
+			"backtrace" : 5,
+			"isGenerated" : true,
+			"path" : "include/circt/Dialect/HW/HWDialect.h.inc",
+			"sourceGroupIndex" : 2
+		},
+		{
+			"backtrace" : 5,
+			"isGenerated" : true,
+			"path" : "include/circt/Dialect/HW/HWEnums.cpp.inc",
+			"sourceGroupIndex" : 2
+		},
+		{
+			"backtrace" : 5,
+			"isGenerated" : true,
+			"path" : "include/circt/Dialect/HW/HWEnums.h.inc",
+			"sourceGroupIndex" : 2
+		},
+		{
+			"backtrace" : 5,
+			"isGenerated" : true,
+			"path" : "include/circt/Dialect/HW/HWOpInterfaces.cpp.inc",
+			"sourceGroupIndex" : 2
+		},
+		{
+			"backtrace" : 5,
+			"isGenerated" : true,
+			"path" : "include/circt/Dialect/HW/HWOpInterfaces.h.inc",
+			"sourceGroupIndex" : 2
+		},
+		{
+			"backtrace" : 5,
+			"isGenerated" : true,
+			"path" : "include/circt/Dialect/HW/HWTypeInterfaces.cpp.inc",
+			"sourceGroupIndex" : 2
+		},
+		{
+			"backtrace" : 5,
+			"isGenerated" : true,
+			"path" : "include/circt/Dialect/HW/HWTypeInterfaces.h.inc",
+			"sourceGroupIndex" : 2
+		},
+		{
+			"backtrace" : 5,
+			"isGenerated" : true,
+			"path" : "include/circt/Dialect/HW/HWTypes.cpp.inc",
+			"sourceGroupIndex" : 2
+		},
+		{
+			"backtrace" : 5,
+			"isGenerated" : true,
+			"path" : "include/circt/Dialect/HW/HWTypes.h.inc",
+			"sourceGroupIndex" : 2
+		},
+		{
+			"backtrace" : 5,
+			"isGenerated" : true,
+			"path" : "include/circt/Dialect/HW/Passes.h.inc",
+			"sourceGroupIndex" : 2
+		}
+	],
+	"type" : "OBJECT_LIBRARY"
+}

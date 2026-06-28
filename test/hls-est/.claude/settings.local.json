@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(wsl -e bash -lc 'ls -d /mnt/d/HLS/circt/test/hls-est/Estimation 2>&1; echo ---; find /mnt/d/HLS/circt/test/hls-est/Estimation -name \"*.mlir\" | head -20; echo ---; find /mnt/d/HLS/circt/test/hls-est/Estimation -name \"*.mlir\" | wc -l')",
+      "Bash(wsl -e bash -lc '/mnt/d/HLS/circt/build-clion-v2/bin/hls-est --help 2>&1 | grep -iE \"split|vitis|bank|bram|pipeline|unroll|normalize|loopschedule|privatize|dce|analysis\"')",
+      "Bash(wsl -e bash -lc '/mnt/d/HLS/circt/build-clion-v2/bin/hls-est --help 2>&1 | grep -iE \"infer|array|split\" ')",
+      "Bash(wsl *)"
+    ]
+  }
+}

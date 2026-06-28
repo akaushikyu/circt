@@ -1,3 +1,8 @@
+### machsuite/gemm_blocked.mlir  top=bbgemm rule=single
+### truth=0 hist_pred=0 decision_estimate=0 source=hist passes_applied=no mode=base
+### exit=0 elapsed=0.0s status=OK
+----- stderr -----
+----- stdout -----
 Total BRAM: 0
 module {
   func.func @bbgemm(%arg0: memref<4096xf64>, %arg1: memref<4096xf64>, %arg2: memref<4096xf64>) {

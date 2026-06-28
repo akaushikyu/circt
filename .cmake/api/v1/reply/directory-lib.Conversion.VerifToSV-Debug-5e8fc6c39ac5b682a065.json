@@ -1,0 +1,67 @@
+{
+	"backtraceGraph" : 
+	{
+		"commands" : 
+		[
+			"install",
+			"add_circt_library_install",
+			"add_circt_library",
+			"add_circt_conversion_library"
+		],
+		"files" : 
+		[
+			"cmake/modules/AddCIRCT.cmake",
+			"lib/Conversion/VerifToSV/CMakeLists.txt"
+		],
+		"nodes" : 
+		[
+			{
+				"file" : 1
+			},
+			{
+				"command" : 3,
+				"file" : 1,
+				"line" : 1,
+				"parent" : 0
+			},
+			{
+				"command" : 2,
+				"file" : 0,
+				"line" : 152,
+				"parent" : 1
+			},
+			{
+				"command" : 1,
+				"file" : 0,
+				"line" : 87,
+				"parent" : 2
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 123,
+				"parent" : 3
+			}
+		]
+	},
+	"installers" : 
+	[
+		{
+			"backtrace" : 4,
+			"component" : "CIRCTVerifToSV",
+			"destination" : "lib",
+			"paths" : 
+			[
+				"lib/libCIRCTVerifToSV.a"
+			],
+			"targetId" : "CIRCTVerifToSV::@0d1cbeaa3b7cb2bbae1e",
+			"targetIndex" : 254,
+			"type" : "target"
+		}
+	],
+	"paths" : 
+	{
+		"build" : "lib/Conversion/VerifToSV",
+		"source" : "lib/Conversion/VerifToSV"
+	}
+}

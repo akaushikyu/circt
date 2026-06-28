@@ -1,0 +1,203 @@
+{
+	"backtrace" : 3,
+	"backtraceGraph" : 
+	{
+		"commands" : 
+		[
+			"add_custom_target",
+			"add_lit_target",
+			"add_lit_testsuites",
+			"add_dependencies"
+		],
+		"files" : 
+		[
+			"llvm/build/lib/cmake/llvm/AddLLVM.cmake",
+			"test/CMakeLists.txt"
+		],
+		"nodes" : 
+		[
+			{
+				"file" : 1
+			},
+			{
+				"command" : 2,
+				"file" : 1,
+				"line" : 63,
+				"parent" : 0
+			},
+			{
+				"command" : 1,
+				"file" : 0,
+				"line" : 2382,
+				"parent" : 1
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 2245,
+				"parent" : 2
+			},
+			{
+				"command" : 3,
+				"file" : 0,
+				"line" : 2259,
+				"parent" : 2
+			}
+		]
+	},
+	"dependencies" : 
+	[
+		{
+			"backtrace" : 4,
+			"id" : "arcilator::@15791f3ad9b0214dde09"
+		},
+		{
+			"backtrace" : 4,
+			"id" : "circt-as::@81b1c13677109005c9e1"
+		},
+		{
+			"backtrace" : 4,
+			"id" : "circt-bmc::@845a32e6f2164d5bcd38"
+		},
+		{
+			"backtrace" : 4,
+			"id" : "circt-dis::@75edcc58158508394c95"
+		},
+		{
+			"backtrace" : 4,
+			"id" : "circt-lec::@6c49907cdc8d0b19529e"
+		},
+		{
+			"backtrace" : 4,
+			"id" : "circt-opt::@c773d94dbbd9e416c070"
+		},
+		{
+			"backtrace" : 4,
+			"id" : "circt-reduce::@93b324f57353e591ecbc"
+		},
+		{
+			"backtrace" : 4,
+			"id" : "circt-synth::@0f2754114d96e459caad"
+		},
+		{
+			"backtrace" : 4,
+			"id" : "circt-test::@1a57416fb6989a2129d3"
+		},
+		{
+			"backtrace" : 4,
+			"id" : "circt-translate::@574f4963f43bdae23fb6"
+		},
+		{
+			"backtrace" : 4,
+			"id" : "domaintool::@8e14f6767187978ab0f1"
+		},
+		{
+			"backtrace" : 4,
+			"id" : "firld::@1494e368e11d565939ec"
+		},
+		{
+			"backtrace" : 4,
+			"id" : "firtool::@7d2f7adc934a499a958a"
+		},
+		{
+			"backtrace" : 4,
+			"id" : "handshake-runner::@2a4d96bf746320d12c2f"
+		},
+		{
+			"backtrace" : 4,
+			"id" : "hlstool::@b23bc5b1578347089554"
+		},
+		{
+			"backtrace" : 4,
+			"id" : "kanagawatool::@26454f62cfb3e8bd7f42"
+		},
+		{
+			"backtrace" : 4,
+			"id" : "om-linker::@8181677ae6f8619b90f9"
+		},
+		{
+			"backtrace" : 4,
+			"id" : "hls-est::@b23c5db3f5c6aae43da3"
+		},
+		{
+			"backtrace" : 4,
+			"id" : "CIRCTUnitTests::@42060a6318a19e21b55a"
+		},
+		{
+			"backtrace" : 4,
+			"id" : "circt-capi-ir-test::@3364550168840727c706"
+		},
+		{
+			"backtrace" : 4,
+			"id" : "circt-capi-om-test::@3364550168840727c706"
+		},
+		{
+			"backtrace" : 4,
+			"id" : "circt-capi-firrtl-test::@3364550168840727c706"
+		},
+		{
+			"backtrace" : 4,
+			"id" : "circt-capi-firtool-test::@3364550168840727c706"
+		},
+		{
+			"backtrace" : 4,
+			"id" : "circt-capi-rtg-test::@3364550168840727c706"
+		},
+		{
+			"backtrace" : 4,
+			"id" : "circt-capi-rtgtest-test::@3364550168840727c706"
+		},
+		{
+			"backtrace" : 4,
+			"id" : "circt-capi-synth-test::@3364550168840727c706"
+		},
+		{
+			"backtrace" : 4,
+			"id" : "circt-capi-support-test::@3364550168840727c706"
+		}
+	],
+	"folder" : 
+	{
+		"name" : "LLVM/Tests/LIT Testsuites"
+	},
+	"id" : "check-circt-dialect-emit-reduction::@36f028580bb02cc8272a",
+	"name" : "check-circt-dialect-emit-reduction",
+	"paths" : 
+	{
+		"build" : "test",
+		"source" : "test"
+	},
+	"sourceGroups" : 
+	[
+		{
+			"name" : "",
+			"sourceIndexes" : 
+			[
+				0
+			]
+		},
+		{
+			"name" : "CMake Rules",
+			"sourceIndexes" : 
+			[
+				1
+			]
+		}
+	],
+	"sources" : 
+	[
+		{
+			"backtrace" : 3,
+			"isGenerated" : true,
+			"path" : "test/CMakeFiles/check-circt-dialect-emit-reduction",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 0,
+			"isGenerated" : true,
+			"path" : "test/CMakeFiles/check-circt-dialect-emit-reduction.rule",
+			"sourceGroupIndex" : 1
+		}
+	],
+	"type" : "UTILITY"
+}

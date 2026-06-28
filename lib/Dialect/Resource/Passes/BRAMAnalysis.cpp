@@ -68,6 +68,7 @@ struct PortDemand {
 };
 
 
+
 //===----------------------------------------------------------------------===//
 // Port demand: per temporal scope, then combined across scopes.
 //===----------------------------------------------------------------------===//
@@ -79,7 +80,7 @@ PortDemand scopeDemand(ArrayRef<const AccessSummary *> group) {
   PortDemand d;
   if (group.empty())
     return d;
-
+  
   unsigned ii = group.front()->ii;
   assert(llvm::all_of(group, [&](auto *a) { return a->ii == ii; }) &&
          "scopeDemand requires a single-II group; bucket by scope first");

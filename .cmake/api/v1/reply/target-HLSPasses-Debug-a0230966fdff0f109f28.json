@@ -1,0 +1,325 @@
+{
+	"archive" : {},
+	"artifacts" : 
+	[
+		{
+			"path" : "lib/libHLSPasses.a"
+		}
+	],
+	"backtrace" : 3,
+	"backtraceGraph" : 
+	{
+		"commands" : 
+		[
+			"add_library",
+			"llvm_add_library",
+			"add_mlir_library",
+			"install",
+			"add_mlir_library_install",
+			"add_dependencies",
+			"target_link_libraries",
+			"add_compile_options",
+			"include",
+			"add_definitions",
+			"add_compile_definitions",
+			"include_directories"
+		],
+		"files" : 
+		[
+			"llvm/build/lib/cmake/llvm/AddLLVM.cmake",
+			"llvm/build/lib/cmake/mlir/AddMLIR.cmake",
+			"lib/Dialect/Resource/Passes/CMakeLists.txt",
+			"llvm/build/lib/cmake/llvm/HandleLLVMOptions.cmake",
+			"CMakeLists.txt"
+		],
+		"nodes" : 
+		[
+			{
+				"file" : 2
+			},
+			{
+				"command" : 2,
+				"file" : 2,
+				"line" : 1,
+				"parent" : 0
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 412,
+				"parent" : 1
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 732,
+				"parent" : 2
+			},
+			{
+				"command" : 4,
+				"file" : 1,
+				"line" : 420,
+				"parent" : 1
+			},
+			{
+				"command" : 3,
+				"file" : 1,
+				"line" : 651,
+				"parent" : 4
+			},
+			{
+				"command" : 5,
+				"file" : 0,
+				"line" : 898,
+				"parent" : 2
+			},
+			{
+				"command" : 6,
+				"file" : 0,
+				"line" : 891,
+				"parent" : 2
+			},
+			{
+				"file" : 4
+			},
+			{
+				"command" : 8,
+				"file" : 4,
+				"line" : 63,
+				"parent" : 8
+			},
+			{
+				"file" : 3,
+				"parent" : 9
+			},
+			{
+				"command" : 7,
+				"file" : 3,
+				"line" : 1148,
+				"parent" : 10
+			},
+			{
+				"command" : 9,
+				"file" : 4,
+				"line" : 770,
+				"parent" : 8
+			},
+			{
+				"command" : 10,
+				"file" : 3,
+				"line" : 116,
+				"parent" : 10
+			},
+			{
+				"command" : 10,
+				"file" : 3,
+				"line" : 137,
+				"parent" : 10
+			},
+			{
+				"command" : 10,
+				"file" : 3,
+				"line" : 202,
+				"parent" : 10
+			},
+			{
+				"command" : 10,
+				"file" : 3,
+				"line" : 153,
+				"parent" : 10
+			},
+			{
+				"command" : 10,
+				"file" : 3,
+				"line" : 1156,
+				"parent" : 10
+			},
+			{
+				"command" : 10,
+				"file" : 3,
+				"line" : 1157,
+				"parent" : 10
+			},
+			{
+				"command" : 10,
+				"file" : 3,
+				"line" : 1158,
+				"parent" : 10
+			},
+			{
+				"command" : 11,
+				"file" : 4,
+				"line" : 191,
+				"parent" : 8
+			},
+			{
+				"command" : 11,
+				"file" : 4,
+				"line" : 192,
+				"parent" : 8
+			},
+			{
+				"command" : 11,
+				"file" : 4,
+				"line" : 195,
+				"parent" : 8
+			}
+		]
+	},
+	"dependencies" : 
+	[
+		{
+			"backtrace" : 6,
+			"id" : "mlir-generic-headers::@6890427a1f51a3e7e1df"
+		},
+		{
+			"backtrace" : 6,
+			"id" : "CIRCTConversionPassIncGen::@8d54cd15e967a4ad2d73"
+		},
+		{
+			"backtrace" : 6,
+			"id" : "MemoryInterfaceIncGen::@b687f2141f9b4223c681"
+		},
+		{
+			"backtrace" : 6,
+			"id" : "BRAMTransformsIncGen::@5fc925a34406d7db6187"
+		},
+		{
+			"backtrace" : 6,
+			"id" : "CIRCTHLSIncGen::@d588e0bd28b4d8e25604"
+		},
+		{
+			"backtrace" : 6,
+			"id" : "CIRCTTransformsPassIncGen::@b0cd4f6f4787d9027f45"
+		},
+		{
+			"backtrace" : 7,
+			"id" : "CIRCTDependenceAnalysis::@a8ea8fd451b56fad3c5d"
+		},
+		{
+			"backtrace" : 7,
+			"id" : "CIRCTSchedulingAnalysis::@a8ea8fd451b56fad3c5d"
+		},
+		{
+			"backtrace" : 7,
+			"id" : "CIRCTLoopSchedule::@be1ed2a55b582065bd39"
+		},
+		{
+			"backtrace" : 7,
+			"id" : "HLSInterfaces::@9350a8e9a804367abf4a"
+		},
+		{
+			"id" : "obj.HLSPasses::@b3c606c8a380158365b8"
+		},
+		{
+			"backtrace" : 7,
+			"id" : "CIRCTHLS::@b598dbefb81413109978"
+		},
+		{
+			"backtrace" : 7,
+			"id" : "CIRCTScheduling::@764a92007f41422b337a"
+		}
+	],
+	"folder" : 
+	{
+		"name" : "MLIR/Libraries"
+	},
+	"id" : "HLSPasses::@b3c606c8a380158365b8",
+	"install" : 
+	{
+		"destinations" : 
+		[
+			{
+				"backtrace" : 5,
+				"path" : "lib"
+			}
+		],
+		"prefix" : 
+		{
+			"path" : "/usr/local"
+		}
+	},
+	"name" : "HLSPasses",
+	"nameOnDisk" : "libHLSPasses.a",
+	"paths" : 
+	{
+		"build" : "lib/Dialect/Resource/Passes",
+		"source" : "lib/Dialect/Resource/Passes"
+	},
+	"sourceGroups" : 
+	[
+		{
+			"name" : "Object Libraries",
+			"sourceIndexes" : 
+			[
+				0,
+				1,
+				2,
+				3,
+				4,
+				5,
+				6,
+				7,
+				8
+			]
+		}
+	],
+	"sources" : 
+	[
+		{
+			"backtrace" : 3,
+			"isGenerated" : true,
+			"path" : "lib/Dialect/Resource/Passes/CMakeFiles/obj.HLSPasses.dir/BRAMAnalysis.cpp.o",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 3,
+			"isGenerated" : true,
+			"path" : "lib/Dialect/Resource/Passes/CMakeFiles/obj.HLSPasses.dir/AffineToLoopScheduleModified.cpp.o",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 3,
+			"isGenerated" : true,
+			"path" : "lib/Dialect/Resource/Passes/CMakeFiles/obj.HLSPasses.dir/MergeConditionalStores.cpp.o",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 3,
+			"isGenerated" : true,
+			"path" : "lib/Dialect/Resource/Passes/CMakeFiles/obj.HLSPasses.dir/MemrefBankClassification.cpp.o",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 3,
+			"isGenerated" : true,
+			"path" : "lib/Dialect/Resource/Passes/CMakeFiles/obj.HLSPasses.dir/MemoryBankModified.cpp.o",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 3,
+			"isGenerated" : true,
+			"path" : "lib/Dialect/Resource/Passes/CMakeFiles/obj.HLSPasses.dir/CyclicSchedulingAnalysisModified.cpp.o",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 3,
+			"isGenerated" : true,
+			"path" : "lib/Dialect/Resource/Passes/CMakeFiles/obj.HLSPasses.dir/AutoPipelineUnroll.cpp.o",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 3,
+			"isGenerated" : true,
+			"path" : "lib/Dialect/Resource/Passes/CMakeFiles/obj.HLSPasses.dir/DebugUnroll.cpp.o",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 3,
+			"isGenerated" : true,
+			"path" : "lib/Dialect/Resource/Passes/CMakeFiles/obj.HLSPasses.dir/InferVitisSplitArray.cpp.o",
+			"sourceGroupIndex" : 0
+		}
+	],
+	"type" : "STATIC_LIBRARY"
+}

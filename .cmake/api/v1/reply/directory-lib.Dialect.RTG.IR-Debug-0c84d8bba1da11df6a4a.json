@@ -1,0 +1,67 @@
+{
+	"backtraceGraph" : 
+	{
+		"commands" : 
+		[
+			"install",
+			"add_circt_library_install",
+			"add_circt_library",
+			"add_circt_dialect_library"
+		],
+		"files" : 
+		[
+			"cmake/modules/AddCIRCT.cmake",
+			"lib/Dialect/RTG/IR/CMakeLists.txt"
+		],
+		"nodes" : 
+		[
+			{
+				"file" : 1
+			},
+			{
+				"command" : 3,
+				"file" : 1,
+				"line" : 1,
+				"parent" : 0
+			},
+			{
+				"command" : 2,
+				"file" : 0,
+				"line" : 147,
+				"parent" : 1
+			},
+			{
+				"command" : 1,
+				"file" : 0,
+				"line" : 87,
+				"parent" : 2
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 123,
+				"parent" : 3
+			}
+		]
+	},
+	"installers" : 
+	[
+		{
+			"backtrace" : 4,
+			"component" : "CIRCTRTGDialect",
+			"destination" : "lib",
+			"paths" : 
+			[
+				"lib/libCIRCTRTGDialect.a"
+			],
+			"targetId" : "CIRCTRTGDialect::@81f663f457e2676f8d9e",
+			"targetIndex" : 191,
+			"type" : "target"
+		}
+	],
+	"paths" : 
+	{
+		"build" : "lib/Dialect/RTG/IR",
+		"source" : "lib/Dialect/RTG/IR"
+	}
+}

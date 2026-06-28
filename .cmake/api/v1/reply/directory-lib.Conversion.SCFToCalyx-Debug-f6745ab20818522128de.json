@@ -1,0 +1,67 @@
+{
+	"backtraceGraph" : 
+	{
+		"commands" : 
+		[
+			"install",
+			"add_circt_library_install",
+			"add_circt_library",
+			"add_circt_conversion_library"
+		],
+		"files" : 
+		[
+			"cmake/modules/AddCIRCT.cmake",
+			"lib/Conversion/SCFToCalyx/CMakeLists.txt"
+		],
+		"nodes" : 
+		[
+			{
+				"file" : 1
+			},
+			{
+				"command" : 3,
+				"file" : 1,
+				"line" : 1,
+				"parent" : 0
+			},
+			{
+				"command" : 2,
+				"file" : 0,
+				"line" : 152,
+				"parent" : 1
+			},
+			{
+				"command" : 1,
+				"file" : 0,
+				"line" : 87,
+				"parent" : 2
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 123,
+				"parent" : 3
+			}
+		]
+	},
+	"installers" : 
+	[
+		{
+			"backtrace" : 4,
+			"component" : "CIRCTSCFToCalyx",
+			"destination" : "lib",
+			"paths" : 
+			[
+				"lib/libCIRCTSCFToCalyx.a"
+			],
+			"targetId" : "CIRCTSCFToCalyx::@200e01c534356ce3b03b",
+			"targetIndex" : 208,
+			"type" : "target"
+		}
+	],
+	"paths" : 
+	{
+		"build" : "lib/Conversion/SCFToCalyx",
+		"source" : "lib/Conversion/SCFToCalyx"
+	}
+}

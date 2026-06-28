@@ -1,0 +1,53 @@
+{
+	"backtraceGraph" : 
+	{
+		"commands" : 
+		[
+			"install",
+			"add_circt_tool"
+		],
+		"files" : 
+		[
+			"cmake/modules/AddCIRCT.cmake",
+			"tools/circt-translate/CMakeLists.txt"
+		],
+		"nodes" : 
+		[
+			{
+				"file" : 1
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 12,
+				"parent" : 0
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 104,
+				"parent" : 1
+			}
+		]
+	},
+	"installers" : 
+	[
+		{
+			"backtrace" : 2,
+			"component" : "circt-translate",
+			"destination" : "bin",
+			"paths" : 
+			[
+				"bin/circt-translate"
+			],
+			"targetId" : "circt-translate::@574f4963f43bdae23fb6",
+			"targetIndex" : 668,
+			"type" : "target"
+		}
+	],
+	"paths" : 
+	{
+		"build" : "tools/circt-translate",
+		"source" : "tools/circt-translate"
+	}
+}

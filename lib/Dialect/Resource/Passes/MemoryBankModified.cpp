@@ -29,7 +29,7 @@
 #include "mlir/IR/OperationSupport.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Support/LLVM.h"
-#include "mlir/Transforms/GreedyPatternRewriteDriver.h"
+#include "mlir/Transforms/WalkPatternRewriteDriver.h"
 #include "mlir/Dialect/Utils/StaticValueUtils.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/FormatVariadic.h"
@@ -730,7 +730,9 @@ struct BankAffineStorePattern
       AffineExpr be = ba.bankMap.getResult(0);  // bank index expr = idx mod f
       unsigned nDims = ba.bankMap.getNumDims();
       unsigned nSyms = ba.bankMap.getNumSymbols();
-
+      assert(val && "null stored value");
+      for (Value v : operands) assert(v && "null map operand");
+      assert(banks.size() == factor && "bank count != factor");
       for (unsigned k = 0; k < factor; ++k) {
         // Guard set:  (be - k) == 0   over the SAME operands the maps use.
         IntegerSet cond = IntegerSet::get(nDims, nSyms,
@@ -896,29 +898,29 @@ LogicalResult MemoryBankingPass::applyMemoryBanking(Operation *operation,
   patterns.add<BankMemRefStorePattern>(ctx, memoryToBanks, opsToErase,
                                        processedOps, oldMemRefVals);
 
-  GreedyRewriteConfig config;
-  config.setStrictness(GreedyRewriteStrictness::ExistingOps);
-  if (failed(applyPatternsGreedily(operation, std::move(patterns), config)))
-    return failure();
+  // One pass over the existing ops. Unlike the greedy driver this never
+  // erases "dead" ops, so bank allocas that have no users yet stay alive.
+  walkAndApplyPatterns(operation, std::move(patterns));
 
   if (failed(cleanUpOldMemRefs(oldMemRefVals, opsToErase)))
     return failure();
 
-
-  // Composition folded operand-defining affine.apply ops (e.g. 2*j) into the
-  // banked access maps, leaving them dead. ExistingOps strictness means the
-  // greedy driver won't reap them; do it here so they don't survive as
-  // disconnected sinks for the downstream scheduler.
-  {
+  // Composition leaves operand-defining affine.apply ops dead. Sweep until
+  // nothing changes, because an apply that fed only another dead apply
+  // becomes dead one round later.
+  bool erased = true;
+  while (erased) {
+    erased = false;
     SmallVector<Operation *> dead;
     operation->walk([&](affine::AffineApplyOp ap) {
       if (isOpTriviallyDead(ap))
         dead.push_back(ap);
     });
-    for (Operation *op : llvm::reverse(dead))
+    for (Operation *op : dead) {
       op->erase();
+      erased = true;
+    }
   }
-  
   return success();
 }
 

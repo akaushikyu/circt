@@ -1,0 +1,53 @@
+{
+	"backtraceGraph" : 
+	{
+		"commands" : 
+		[
+			"install",
+			"add_circt_tool"
+		],
+		"files" : 
+		[
+			"cmake/modules/AddCIRCT.cmake",
+			"tools/circt-lec/CMakeLists.txt"
+		],
+		"nodes" : 
+		[
+			{
+				"file" : 1
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 12,
+				"parent" : 0
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 104,
+				"parent" : 1
+			}
+		]
+	},
+	"installers" : 
+	[
+		{
+			"backtrace" : 2,
+			"component" : "circt-lec",
+			"destination" : "bin",
+			"paths" : 
+			[
+				"bin/circt-lec"
+			],
+			"targetId" : "circt-lec::@6c49907cdc8d0b19529e",
+			"targetIndex" : 655,
+			"type" : "target"
+		}
+	],
+	"paths" : 
+	{
+		"build" : "tools/circt-lec",
+		"source" : "tools/circt-lec"
+	}
+}

@@ -1,0 +1,14 @@
+{
+	"backtraceGraph" : 
+	{
+		"commands" : [],
+		"files" : [],
+		"nodes" : []
+	},
+	"installers" : [],
+	"paths" : 
+	{
+		"build" : "include/circt/Tools/circt-bmc",
+		"source" : "include/circt/Tools/circt-bmc"
+	}
+}

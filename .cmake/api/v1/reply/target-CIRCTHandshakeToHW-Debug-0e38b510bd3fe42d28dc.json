@@ -1,0 +1,292 @@
+{
+	"archive" : {},
+	"artifacts" : 
+	[
+		{
+			"path" : "lib/libCIRCTHandshakeToHW.a"
+		}
+	],
+	"backtrace" : 5,
+	"backtraceGraph" : 
+	{
+		"commands" : 
+		[
+			"add_library",
+			"llvm_add_library",
+			"add_mlir_library",
+			"add_circt_library",
+			"add_circt_conversion_library",
+			"install",
+			"add_circt_library_install",
+			"add_dependencies",
+			"target_link_libraries",
+			"add_compile_options",
+			"include",
+			"add_definitions",
+			"add_compile_definitions",
+			"include_directories"
+		],
+		"files" : 
+		[
+			"llvm/build/lib/cmake/llvm/AddLLVM.cmake",
+			"llvm/build/lib/cmake/mlir/AddMLIR.cmake",
+			"cmake/modules/AddCIRCT.cmake",
+			"lib/Conversion/HandshakeToHW/CMakeLists.txt",
+			"llvm/build/lib/cmake/llvm/HandleLLVMOptions.cmake",
+			"CMakeLists.txt"
+		],
+		"nodes" : 
+		[
+			{
+				"file" : 3
+			},
+			{
+				"command" : 4,
+				"file" : 3,
+				"line" : 1,
+				"parent" : 0
+			},
+			{
+				"command" : 3,
+				"file" : 2,
+				"line" : 152,
+				"parent" : 1
+			},
+			{
+				"command" : 2,
+				"file" : 2,
+				"line" : 86,
+				"parent" : 2
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 412,
+				"parent" : 3
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 732,
+				"parent" : 4
+			},
+			{
+				"command" : 6,
+				"file" : 2,
+				"line" : 87,
+				"parent" : 2
+			},
+			{
+				"command" : 5,
+				"file" : 2,
+				"line" : 123,
+				"parent" : 6
+			},
+			{
+				"command" : 7,
+				"file" : 0,
+				"line" : 898,
+				"parent" : 4
+			},
+			{
+				"command" : 8,
+				"file" : 0,
+				"line" : 891,
+				"parent" : 4
+			},
+			{
+				"file" : 5
+			},
+			{
+				"command" : 10,
+				"file" : 5,
+				"line" : 63,
+				"parent" : 10
+			},
+			{
+				"file" : 4,
+				"parent" : 11
+			},
+			{
+				"command" : 9,
+				"file" : 4,
+				"line" : 1148,
+				"parent" : 12
+			},
+			{
+				"command" : 11,
+				"file" : 5,
+				"line" : 770,
+				"parent" : 10
+			},
+			{
+				"command" : 12,
+				"file" : 4,
+				"line" : 116,
+				"parent" : 12
+			},
+			{
+				"command" : 12,
+				"file" : 4,
+				"line" : 137,
+				"parent" : 12
+			},
+			{
+				"command" : 12,
+				"file" : 4,
+				"line" : 202,
+				"parent" : 12
+			},
+			{
+				"command" : 12,
+				"file" : 4,
+				"line" : 153,
+				"parent" : 12
+			},
+			{
+				"command" : 12,
+				"file" : 4,
+				"line" : 1156,
+				"parent" : 12
+			},
+			{
+				"command" : 12,
+				"file" : 4,
+				"line" : 1157,
+				"parent" : 12
+			},
+			{
+				"command" : 12,
+				"file" : 4,
+				"line" : 1158,
+				"parent" : 12
+			},
+			{
+				"command" : 13,
+				"file" : 5,
+				"line" : 191,
+				"parent" : 10
+			},
+			{
+				"command" : 13,
+				"file" : 5,
+				"line" : 192,
+				"parent" : 10
+			},
+			{
+				"command" : 13,
+				"file" : 5,
+				"line" : 195,
+				"parent" : 10
+			}
+		]
+	},
+	"dependencies" : 
+	[
+		{
+			"backtrace" : 8,
+			"id" : "mlir-generic-headers::@6890427a1f51a3e7e1df"
+		},
+		{
+			"backtrace" : 8,
+			"id" : "circt-headers::@6890427a1f51a3e7e1df"
+		},
+		{
+			"backtrace" : 8,
+			"id" : "CIRCTConversionPassIncGen::@8d54cd15e967a4ad2d73"
+		},
+		{
+			"id" : "obj.CIRCTHandshakeToHW::@5baf537ee665b99ea9ab"
+		},
+		{
+			"backtrace" : 9,
+			"id" : "CIRCTComb::@9f8309afd0b4436ce587"
+		},
+		{
+			"backtrace" : 9,
+			"id" : "CIRCTEmit::@5f41b88247717fbc71e5"
+		},
+		{
+			"backtrace" : 9,
+			"id" : "CIRCTESI::@6578a3cc87dc50dde364"
+		},
+		{
+			"backtrace" : 9,
+			"id" : "CIRCTHandshake::@5cebe1489425801839b8"
+		},
+		{
+			"backtrace" : 9,
+			"id" : "CIRCTHW::@fb78e03df547fa00c765"
+		},
+		{
+			"backtrace" : 9,
+			"id" : "CIRCTLTL::@19b58e42b50b75e51ffc"
+		},
+		{
+			"backtrace" : 9,
+			"id" : "CIRCTMSFT::@f76220843795c9c5713f"
+		},
+		{
+			"backtrace" : 9,
+			"id" : "CIRCTMSFTTransforms::@c026475484f345a9280d"
+		},
+		{
+			"backtrace" : 9,
+			"id" : "CIRCTSeq::@ee5f8074bb9378930ee6"
+		},
+		{
+			"backtrace" : 9,
+			"id" : "CIRCTSV::@f72040a876ecc1cb9f6e"
+		},
+		{
+			"backtrace" : 9,
+			"id" : "CIRCTSupport::@928d1708d80fe1f55e59"
+		}
+	],
+	"folder" : 
+	{
+		"name" : "MLIR/Libraries"
+	},
+	"id" : "CIRCTHandshakeToHW::@5baf537ee665b99ea9ab",
+	"install" : 
+	{
+		"destinations" : 
+		[
+			{
+				"backtrace" : 7,
+				"path" : "lib"
+			}
+		],
+		"prefix" : 
+		{
+			"path" : "/usr/local"
+		}
+	},
+	"name" : "CIRCTHandshakeToHW",
+	"nameOnDisk" : "libCIRCTHandshakeToHW.a",
+	"paths" : 
+	{
+		"build" : "lib/Conversion/HandshakeToHW",
+		"source" : "lib/Conversion/HandshakeToHW"
+	},
+	"sourceGroups" : 
+	[
+		{
+			"name" : "Object Libraries",
+			"sourceIndexes" : 
+			[
+				0
+			]
+		}
+	],
+	"sources" : 
+	[
+		{
+			"backtrace" : 5,
+			"isGenerated" : true,
+			"path" : "lib/Conversion/HandshakeToHW/CMakeFiles/obj.CIRCTHandshakeToHW.dir/HandshakeToHW.cpp.o",
+			"sourceGroupIndex" : 0
+		}
+	],
+	"type" : "STATIC_LIBRARY"
+}

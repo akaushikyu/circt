@@ -5,6 +5,7 @@
 #include "circt/Dialect/Resource/Passes/MergeConditionalStores.h"
 #include "circt/Dialect/Resource/Passes/MemoryBankModified.h"
 #include "circt/Dialect/Resource/Passes/AutoPipelineUnroll.h"
+#include "circt/Dialect/Resource/Passes/InferVitisSplitArray.h"
 #include "circt/Dialect/Resource/Passes/DebugUnroll.h"
 #include "mlir/IR/DialectRegistry.h"
 #include "mlir/Tools/mlir-opt/MlirOptMain.h"
@@ -20,6 +21,7 @@
 #include "mlir/Dialect/Affine/Transforms/Passes.h"     // affine-loop-normalize et al.
 
 // CIRCT dialects
+
 #include "circt/Dialect/HW/HWDialect.h"                // hw::HWDialect
 #include "circt/Dialect/Comb/CombDialect.h"            // comb::CombDialect
 #include "circt/Dialect/Seq/SeqDialect.h"              // seq::SeqDialect
@@ -57,6 +59,7 @@ int main(int argc, char **argv) {
   circt::hls_analysis::registerMemoryBankingPassModified();
   circt::hls_analysis::registerAutoPipelineUnrollPass();
   circt::hls_analysis::registerDebugUnrollPass();
+  circt::hls_analysis::registerInferVitisSplitArray();
   // Upstream affine passes (gives you -affine-loop-normalize, -affine-loop-unroll,
   // -affine-loop-coalescing, etc. on the command line).
   mlir::affine::registerAffinePasses();

@@ -1,0 +1,340 @@
+{
+	"archive" : {},
+	"artifacts" : 
+	[
+		{
+			"path" : "lib/libCIRCTRTGDialect.a"
+		}
+	],
+	"backtrace" : 5,
+	"backtraceGraph" : 
+	{
+		"commands" : 
+		[
+			"add_library",
+			"llvm_add_library",
+			"add_mlir_library",
+			"add_circt_library",
+			"add_circt_dialect_library",
+			"install",
+			"add_circt_library_install",
+			"add_dependencies",
+			"add_compile_options",
+			"include",
+			"add_definitions",
+			"add_compile_definitions",
+			"include_directories"
+		],
+		"files" : 
+		[
+			"llvm/build/lib/cmake/llvm/AddLLVM.cmake",
+			"llvm/build/lib/cmake/mlir/AddMLIR.cmake",
+			"cmake/modules/AddCIRCT.cmake",
+			"lib/Dialect/RTG/IR/CMakeLists.txt",
+			"llvm/build/lib/cmake/llvm/HandleLLVMOptions.cmake",
+			"CMakeLists.txt"
+		],
+		"nodes" : 
+		[
+			{
+				"file" : 3
+			},
+			{
+				"command" : 4,
+				"file" : 3,
+				"line" : 1,
+				"parent" : 0
+			},
+			{
+				"command" : 3,
+				"file" : 2,
+				"line" : 147,
+				"parent" : 1
+			},
+			{
+				"command" : 2,
+				"file" : 2,
+				"line" : 86,
+				"parent" : 2
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 412,
+				"parent" : 3
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 732,
+				"parent" : 4
+			},
+			{
+				"command" : 6,
+				"file" : 2,
+				"line" : 87,
+				"parent" : 2
+			},
+			{
+				"command" : 5,
+				"file" : 2,
+				"line" : 123,
+				"parent" : 6
+			},
+			{
+				"command" : 7,
+				"file" : 0,
+				"line" : 898,
+				"parent" : 4
+			},
+			{
+				"file" : 5
+			},
+			{
+				"command" : 9,
+				"file" : 5,
+				"line" : 63,
+				"parent" : 9
+			},
+			{
+				"file" : 4,
+				"parent" : 10
+			},
+			{
+				"command" : 8,
+				"file" : 4,
+				"line" : 1148,
+				"parent" : 11
+			},
+			{
+				"command" : 10,
+				"file" : 5,
+				"line" : 770,
+				"parent" : 9
+			},
+			{
+				"command" : 11,
+				"file" : 4,
+				"line" : 116,
+				"parent" : 11
+			},
+			{
+				"command" : 11,
+				"file" : 4,
+				"line" : 137,
+				"parent" : 11
+			},
+			{
+				"command" : 11,
+				"file" : 4,
+				"line" : 202,
+				"parent" : 11
+			},
+			{
+				"command" : 11,
+				"file" : 4,
+				"line" : 153,
+				"parent" : 11
+			},
+			{
+				"command" : 11,
+				"file" : 4,
+				"line" : 1156,
+				"parent" : 11
+			},
+			{
+				"command" : 11,
+				"file" : 4,
+				"line" : 1157,
+				"parent" : 11
+			},
+			{
+				"command" : 11,
+				"file" : 4,
+				"line" : 1158,
+				"parent" : 11
+			},
+			{
+				"command" : 12,
+				"file" : 5,
+				"line" : 191,
+				"parent" : 9
+			},
+			{
+				"command" : 12,
+				"file" : 5,
+				"line" : 192,
+				"parent" : 9
+			},
+			{
+				"command" : 12,
+				"file" : 5,
+				"line" : 195,
+				"parent" : 9
+			}
+		]
+	},
+	"dependencies" : 
+	[
+		{
+			"backtrace" : 8,
+			"id" : "mlir-generic-headers::@6890427a1f51a3e7e1df"
+		},
+		{
+			"backtrace" : 8,
+			"id" : "circt-headers::@6890427a1f51a3e7e1df"
+		},
+		{
+			"backtrace" : 8,
+			"id" : "MLIRRTGIncGen::@853334e8480de9cb9660"
+		},
+		{
+			"backtrace" : 8,
+			"id" : "CIRCTRTGEnumsIncGen::@853334e8480de9cb9660"
+		},
+		{
+			"backtrace" : 8,
+			"id" : "CIRCTRTGOpInterfacesIncGen::@853334e8480de9cb9660"
+		},
+		{
+			"backtrace" : 8,
+			"id" : "CIRCTRTGTypeInterfacesIncGen::@853334e8480de9cb9660"
+		},
+		{
+			"backtrace" : 8,
+			"id" : "CIRCTRTGAttrInterfacesIncGen::@853334e8480de9cb9660"
+		},
+		{
+			"backtrace" : 8,
+			"id" : "CIRCTRTGISAAssemblyAttrInterfacesIncGen::@853334e8480de9cb9660"
+		},
+		{
+			"backtrace" : 8,
+			"id" : "CIRCTRTGISAAssemblyTypeInterfacesIncGen::@853334e8480de9cb9660"
+		},
+		{
+			"backtrace" : 8,
+			"id" : "CIRCTRTGISAAssemblyOpInterfacesIncGen::@853334e8480de9cb9660"
+		},
+		{
+			"backtrace" : 8,
+			"id" : "CIRCTRTGAttributeIncGen::@853334e8480de9cb9660"
+		},
+		{
+			"id" : "obj.CIRCTRTGDialect::@81f663f457e2676f8d9e"
+		},
+		{
+			"backtrace" : 8,
+			"id" : "CIRCTSupport::@928d1708d80fe1f55e59"
+		}
+	],
+	"folder" : 
+	{
+		"name" : "MLIR/Libraries"
+	},
+	"id" : "CIRCTRTGDialect::@81f663f457e2676f8d9e",
+	"install" : 
+	{
+		"destinations" : 
+		[
+			{
+				"backtrace" : 7,
+				"path" : "lib"
+			}
+		],
+		"prefix" : 
+		{
+			"path" : "/usr/local"
+		}
+	},
+	"name" : "CIRCTRTGDialect",
+	"nameOnDisk" : "libCIRCTRTGDialect.a",
+	"paths" : 
+	{
+		"build" : "lib/Dialect/RTG/IR",
+		"source" : "lib/Dialect/RTG/IR"
+	},
+	"sourceGroups" : 
+	[
+		{
+			"name" : "Object Libraries",
+			"sourceIndexes" : 
+			[
+				0,
+				1,
+				2,
+				3,
+				4,
+				5,
+				6,
+				7,
+				8,
+				9
+			]
+		}
+	],
+	"sources" : 
+	[
+		{
+			"backtrace" : 5,
+			"isGenerated" : true,
+			"path" : "lib/Dialect/RTG/IR/CMakeFiles/obj.CIRCTRTGDialect.dir/RTGAttributes.cpp.o",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 5,
+			"isGenerated" : true,
+			"path" : "lib/Dialect/RTG/IR/CMakeFiles/obj.CIRCTRTGDialect.dir/RTGAttrInterfaces.cpp.o",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 5,
+			"isGenerated" : true,
+			"path" : "lib/Dialect/RTG/IR/CMakeFiles/obj.CIRCTRTGDialect.dir/RTGDialect.cpp.o",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 5,
+			"isGenerated" : true,
+			"path" : "lib/Dialect/RTG/IR/CMakeFiles/obj.CIRCTRTGDialect.dir/RTGISAAssemblyAttrInterfaces.cpp.o",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 5,
+			"isGenerated" : true,
+			"path" : "lib/Dialect/RTG/IR/CMakeFiles/obj.CIRCTRTGDialect.dir/RTGISAAssemblyTypeInterfaces.cpp.o",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 5,
+			"isGenerated" : true,
+			"path" : "lib/Dialect/RTG/IR/CMakeFiles/obj.CIRCTRTGDialect.dir/RTGISAAssemblyOpInterfaces.cpp.o",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 5,
+			"isGenerated" : true,
+			"path" : "lib/Dialect/RTG/IR/CMakeFiles/obj.CIRCTRTGDialect.dir/RTGOpInterfaces.cpp.o",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 5,
+			"isGenerated" : true,
+			"path" : "lib/Dialect/RTG/IR/CMakeFiles/obj.CIRCTRTGDialect.dir/RTGOps.cpp.o",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 5,
+			"isGenerated" : true,
+			"path" : "lib/Dialect/RTG/IR/CMakeFiles/obj.CIRCTRTGDialect.dir/RTGTypeInterfaces.cpp.o",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 5,
+			"isGenerated" : true,
+			"path" : "lib/Dialect/RTG/IR/CMakeFiles/obj.CIRCTRTGDialect.dir/RTGTypes.cpp.o",
+			"sourceGroupIndex" : 0
+		}
+	],
+	"type" : "STATIC_LIBRARY"
+}

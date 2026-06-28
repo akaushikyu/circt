@@ -1,0 +1,53 @@
+{
+	"backtraceGraph" : 
+	{
+		"commands" : 
+		[
+			"install",
+			"add_circt_tool"
+		],
+		"files" : 
+		[
+			"cmake/modules/AddCIRCT.cmake",
+			"tools/hls-est/CMakeLists.txt"
+		],
+		"nodes" : 
+		[
+			{
+				"file" : 1
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 1,
+				"parent" : 0
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 104,
+				"parent" : 1
+			}
+		]
+	},
+	"installers" : 
+	[
+		{
+			"backtrace" : 2,
+			"component" : "hls-est",
+			"destination" : "bin",
+			"paths" : 
+			[
+				"bin/hls-est"
+			],
+			"targetId" : "hls-est::@b23c5db3f5c6aae43da3",
+			"targetIndex" : 673,
+			"type" : "target"
+		}
+	],
+	"paths" : 
+	{
+		"build" : "tools/hls-est",
+		"source" : "tools/hls-est"
+	}
+}

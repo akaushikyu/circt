@@ -7,7 +7,8 @@ add_mlir_library(HLSPasses
         CyclicSchedulingAnalysisModified.cpp
         AutoPipelineUnroll.cpp
         DebugUnroll.cpp
-
+        InferVitisSplitArray.cpp
+        
         DEPENDS
         CIRCTTransformsPassIncGen
         CIRCTConversionPassIncGen

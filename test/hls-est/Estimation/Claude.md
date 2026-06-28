@@ -7,19 +7,21 @@ estimation pipeline on each one, and dump the results into a CSV.
 
 ## Paths
 
-- Tool binary: `/mnt/d/HLS/circt/build-clion-v2/bin/hls-est`
-- Test root: `/mnt/d/HLS/circt/test/hls-est/Estimation/`
+- Tool binary: `~/circt/bin/hls-est`
+- Test root: `~/circt/test/hls-est/Estimation/`
 - Test cases: every `*.mlir` file under the test root, **recursively**
   (there are subdirectories, e.g. `forgebench/activation_op1.mlir`).
-- Output: `/mnt/d/HLS/circt/test/hls-est/Estimation/results.csv`
-- Raw logs: `/mnt/d/HLS/circt/test/hls-est/Estimation/logs/<test>.log`
+- Output: `~/circt/test/hls-est/Estimation/results.csv`
+- Raw logs: `~/circt/test/hls-est/Estimation/logs/<test>.log`
   (mirror the relative path of the test, replacing `/` with `__`)
 
 ## Command to run per test
 
 ```
-/mnt/d/HLS/circt/build-clion-v2/bin/hls-est <test>.mlir \
+~/circt/bin/hls-est <test>.mlir \
   --affine-loop-normalize \
+  --auto-pipeline-unroll \ 
+  --infer-vitis-split-array \
   --memory-banking-bram \
   --convert-affine-to-loopschedule \
   --symbol-privatize=exclude=<top-func> \

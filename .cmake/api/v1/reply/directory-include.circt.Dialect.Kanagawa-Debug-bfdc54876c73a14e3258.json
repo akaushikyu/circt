@@ -1,0 +1,14 @@
+{
+	"backtraceGraph" : 
+	{
+		"commands" : [],
+		"files" : [],
+		"nodes" : []
+	},
+	"installers" : [],
+	"paths" : 
+	{
+		"build" : "include/circt/Dialect/Kanagawa",
+		"source" : "include/circt/Dialect/Kanagawa"
+	}
+}

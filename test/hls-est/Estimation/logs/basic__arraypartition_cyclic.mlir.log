@@ -1,7 +1,12 @@
-memref.alloca @ loc("basic/arraypartition_cyclic.mlir":9:15)
+### basic/arraypartition_cyclic.mlir  top=kernel rule=name
+### truth= hist_pred= decision_estimate= source=none passes_applied=no mode=base
+### exit=0 elapsed=0.0s status=OK
+----- stderr -----
+----- stdout -----
+memref.alloca @ loc("/home/peter/circt/test/hls-est/Estimation/basic/arraypartition_cyclic.mlir":9:15)
   kind=RAM_1P  bram=1
     512x32b -> RAM_1P (x32/block) = 1 BRAM_18K
-memref.alloca @ loc("basic/arraypartition_cyclic.mlir":9:15)
+memref.alloca @ loc("/home/peter/circt/test/hls-est/Estimation/basic/arraypartition_cyclic.mlir":9:15)
   kind=RAM_1P  bram=1
     512x32b -> RAM_1P (x32/block) = 1 BRAM_18K
 Total BRAM: 2

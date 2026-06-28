@@ -1,0 +1,1889 @@
+{
+	"backtrace" : 1,
+	"backtraceGraph" : 
+	{
+		"commands" : 
+		[
+			"add_custom_target",
+			"add_dependencies",
+			"add_circt_doc",
+			"add_circt_dialect_doc",
+			"circt_tablegen"
+		],
+		"files" : 
+		[
+			"CMakeLists.txt",
+			"cmake/modules/AddCIRCT.cmake",
+			"include/circt/Conversion/CMakeLists.txt",
+			"include/circt/Dialect/Arc/CMakeLists.txt",
+			"include/circt/Dialect/Calyx/CMakeLists.txt",
+			"include/circt/Dialect/Comb/CMakeLists.txt",
+			"include/circt/Dialect/Datapath/CMakeLists.txt",
+			"include/circt/Dialect/DC/CMakeLists.txt",
+			"include/circt/Dialect/Debug/CMakeLists.txt",
+			"include/circt/Dialect/Emit/CMakeLists.txt",
+			"include/circt/Dialect/ESI/CMakeLists.txt",
+			"include/circt/Dialect/FIRRTL/CMakeLists.txt",
+			"include/circt/Dialect/FSM/CMakeLists.txt",
+			"include/circt/Dialect/Handshake/CMakeLists.txt",
+			"include/circt/Dialect/HW/CMakeLists.txt",
+			"include/circt/Dialect/HWArith/CMakeLists.txt",
+			"include/circt/Dialect/Interop/CMakeLists.txt",
+			"include/circt/Dialect/LLHD/CMakeLists.txt",
+			"include/circt/Dialect/LoopSchedule/CMakeLists.txt",
+			"include/circt/Dialect/LTL/CMakeLists.txt",
+			"include/circt/Dialect/Moore/CMakeLists.txt",
+			"include/circt/Dialect/MSFT/CMakeLists.txt",
+			"include/circt/Dialect/OM/CMakeLists.txt",
+			"include/circt/Dialect/Pipeline/CMakeLists.txt",
+			"include/circt/Dialect/Kanagawa/CMakeLists.txt",
+			"include/circt/Dialect/RTG/IR/CMakeLists.txt",
+			"include/circt/Dialect/RTG/Transforms/CMakeLists.txt",
+			"include/circt/Dialect/RTGTest/IR/CMakeLists.txt",
+			"include/circt/Dialect/Seq/CMakeLists.txt",
+			"include/circt/Dialect/Sim/CMakeLists.txt",
+			"include/circt/Dialect/SSP/CMakeLists.txt",
+			"include/circt/Dialect/SV/CMakeLists.txt",
+			"include/circt/Dialect/Synth/CMakeLists.txt",
+			"include/circt/Dialect/Synth/Transforms/CMakeLists.txt",
+			"include/circt/Dialect/SystemC/CMakeLists.txt",
+			"include/circt/Dialect/Verif/CMakeLists.txt",
+			"include/circt/Dialect/Resource/HLS/CMakeLists.txt",
+			"include/circt/Tools/circt-bmc/CMakeLists.txt",
+			"include/circt/Tools/circt-lec/CMakeLists.txt",
+			"include/circt/Transforms/CMakeLists.txt",
+			"lib/Dialect/FIRRTL/CMakeLists.txt"
+		],
+		"nodes" : 
+		[
+			{
+				"file" : 0
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 185,
+				"parent" : 0
+			},
+			{
+				"file" : 2
+			},
+			{
+				"command" : 2,
+				"file" : 2,
+				"line" : 7,
+				"parent" : 2
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 76,
+				"parent" : 3
+			},
+			{
+				"file" : 3
+			},
+			{
+				"command" : 2,
+				"file" : 3,
+				"line" : 2,
+				"parent" : 5
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 76,
+				"parent" : 6
+			},
+			{
+				"command" : 2,
+				"file" : 3,
+				"line" : 3,
+				"parent" : 5
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 76,
+				"parent" : 8
+			},
+			{
+				"command" : 2,
+				"file" : 3,
+				"line" : 4,
+				"parent" : 5
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 76,
+				"parent" : 10
+			},
+			{
+				"command" : 2,
+				"file" : 3,
+				"line" : 5,
+				"parent" : 5
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 76,
+				"parent" : 12
+			},
+			{
+				"command" : 2,
+				"file" : 3,
+				"line" : 6,
+				"parent" : 5
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 76,
+				"parent" : 14
+			},
+			{
+				"command" : 2,
+				"file" : 3,
+				"line" : 13,
+				"parent" : 5
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 76,
+				"parent" : 16
+			},
+			{
+				"file" : 4
+			},
+			{
+				"command" : 3,
+				"file" : 4,
+				"line" : 2,
+				"parent" : 18
+			},
+			{
+				"command" : 2,
+				"file" : 1,
+				"line" : 80,
+				"parent" : 19
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 76,
+				"parent" : 20
+			},
+			{
+				"command" : 2,
+				"file" : 4,
+				"line" : 20,
+				"parent" : 18
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 76,
+				"parent" : 22
+			},
+			{
+				"file" : 5
+			},
+			{
+				"command" : 3,
+				"file" : 5,
+				"line" : 2,
+				"parent" : 24
+			},
+			{
+				"command" : 2,
+				"file" : 1,
+				"line" : 80,
+				"parent" : 25
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 76,
+				"parent" : 26
+			},
+			{
+				"command" : 2,
+				"file" : 5,
+				"line" : 14,
+				"parent" : 24
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 76,
+				"parent" : 28
+			},
+			{
+				"file" : 6
+			},
+			{
+				"command" : 3,
+				"file" : 6,
+				"line" : 2,
+				"parent" : 30
+			},
+			{
+				"command" : 2,
+				"file" : 1,
+				"line" : 80,
+				"parent" : 31
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 76,
+				"parent" : 32
+			},
+			{
+				"command" : 2,
+				"file" : 6,
+				"line" : 10,
+				"parent" : 30
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 76,
+				"parent" : 34
+			},
+			{
+				"file" : 7
+			},
+			{
+				"command" : 3,
+				"file" : 7,
+				"line" : 2,
+				"parent" : 36
+			},
+			{
+				"command" : 2,
+				"file" : 1,
+				"line" : 80,
+				"parent" : 37
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 76,
+				"parent" : 38
+			},
+			{
+				"command" : 2,
+				"file" : 7,
+				"line" : 8,
+				"parent" : 36
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 76,
+				"parent" : 40
+			},
+			{
+				"file" : 8
+			},
+			{
+				"command" : 2,
+				"file" : 8,
+				"line" : 2,
+				"parent" : 42
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 76,
+				"parent" : 43
+			},
+			{
+				"command" : 2,
+				"file" : 8,
+				"line" : 3,
+				"parent" : 42
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 76,
+				"parent" : 45
+			},
+			{
+				"file" : 9
+			},
+			{
+				"command" : 3,
+				"file" : 9,
+				"line" : 10,
+				"parent" : 47
+			},
+			{
+				"command" : 2,
+				"file" : 1,
+				"line" : 80,
+				"parent" : 48
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 76,
+				"parent" : 49
+			},
+			{
+				"command" : 2,
+				"file" : 9,
+				"line" : 22,
+				"parent" : 47
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 76,
+				"parent" : 51
+			},
+			{
+				"file" : 10
+			},
+			{
+				"command" : 2,
+				"file" : 10,
+				"line" : 6,
+				"parent" : 53
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 76,
+				"parent" : 54
+			},
+			{
+				"command" : 2,
+				"file" : 10,
+				"line" : 25,
+				"parent" : 53
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 76,
+				"parent" : 56
+			},
+			{
+				"command" : 2,
+				"file" : 10,
+				"line" : 26,
+				"parent" : 53
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 76,
+				"parent" : 58
+			},
+			{
+				"command" : 2,
+				"file" : 10,
+				"line" : 27,
+				"parent" : 53
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 76,
+				"parent" : 60
+			},
+			{
+				"command" : 2,
+				"file" : 10,
+				"line" : 28,
+				"parent" : 53
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 76,
+				"parent" : 62
+			},
+			{
+				"command" : 2,
+				"file" : 10,
+				"line" : 29,
+				"parent" : 53
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 76,
+				"parent" : 64
+			},
+			{
+				"command" : 2,
+				"file" : 10,
+				"line" : 30,
+				"parent" : 53
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 76,
+				"parent" : 66
+			},
+			{
+				"command" : 2,
+				"file" : 10,
+				"line" : 32,
+				"parent" : 53
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 76,
+				"parent" : 68
+			},
+			{
+				"command" : 2,
+				"file" : 10,
+				"line" : 33,
+				"parent" : 53
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 76,
+				"parent" : 70
+			},
+			{
+				"file" : 11
+			},
+			{
+				"command" : 2,
+				"file" : 11,
+				"line" : 35,
+				"parent" : 72
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 76,
+				"parent" : 73
+			},
+			{
+				"command" : 2,
+				"file" : 11,
+				"line" : 36,
+				"parent" : 72
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 76,
+				"parent" : 75
+			},
+			{
+				"command" : 2,
+				"file" : 11,
+				"line" : 37,
+				"parent" : 72
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 76,
+				"parent" : 77
+			},
+			{
+				"command" : 2,
+				"file" : 11,
+				"line" : 38,
+				"parent" : 72
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 76,
+				"parent" : 79
+			},
+			{
+				"command" : 2,
+				"file" : 11,
+				"line" : 39,
+				"parent" : 72
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 76,
+				"parent" : 81
+			},
+			{
+				"command" : 2,
+				"file" : 11,
+				"line" : 40,
+				"parent" : 72
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 76,
+				"parent" : 83
+			},
+			{
+				"command" : 2,
+				"file" : 11,
+				"line" : 41,
+				"parent" : 72
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 76,
+				"parent" : 85
+			},
+			{
+				"command" : 2,
+				"file" : 11,
+				"line" : 42,
+				"parent" : 72
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 76,
+				"parent" : 87
+			},
+			{
+				"command" : 2,
+				"file" : 11,
+				"line" : 43,
+				"parent" : 72
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 76,
+				"parent" : 89
+			},
+			{
+				"command" : 4,
+				"file" : 11,
+				"line" : 49,
+				"parent" : 72
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 34,
+				"parent" : 91
+			},
+			{
+				"command" : 2,
+				"file" : 11,
+				"line" : 52,
+				"parent" : 72
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 76,
+				"parent" : 93
+			},
+			{
+				"command" : 3,
+				"file" : 11,
+				"line" : 56,
+				"parent" : 72
+			},
+			{
+				"command" : 2,
+				"file" : 1,
+				"line" : 80,
+				"parent" : 95
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 76,
+				"parent" : 96
+			},
+			{
+				"file" : 12
+			},
+			{
+				"command" : 3,
+				"file" : 12,
+				"line" : 2,
+				"parent" : 98
+			},
+			{
+				"command" : 2,
+				"file" : 1,
+				"line" : 80,
+				"parent" : 99
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 76,
+				"parent" : 100
+			},
+			{
+				"command" : 2,
+				"file" : 12,
+				"line" : 7,
+				"parent" : 98
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 76,
+				"parent" : 102
+			},
+			{
+				"file" : 13
+			},
+			{
+				"command" : 3,
+				"file" : 13,
+				"line" : 2,
+				"parent" : 104
+			},
+			{
+				"command" : 2,
+				"file" : 1,
+				"line" : 80,
+				"parent" : 105
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 76,
+				"parent" : 106
+			},
+			{
+				"command" : 2,
+				"file" : 13,
+				"line" : 25,
+				"parent" : 104
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 76,
+				"parent" : 108
+			},
+			{
+				"file" : 14
+			},
+			{
+				"command" : 2,
+				"file" : 14,
+				"line" : 37,
+				"parent" : 110
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 76,
+				"parent" : 111
+			},
+			{
+				"command" : 2,
+				"file" : 14,
+				"line" : 38,
+				"parent" : 110
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 76,
+				"parent" : 113
+			},
+			{
+				"command" : 2,
+				"file" : 14,
+				"line" : 39,
+				"parent" : 110
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 76,
+				"parent" : 115
+			},
+			{
+				"command" : 2,
+				"file" : 14,
+				"line" : 40,
+				"parent" : 110
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 76,
+				"parent" : 117
+			},
+			{
+				"command" : 2,
+				"file" : 14,
+				"line" : 41,
+				"parent" : 110
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 76,
+				"parent" : 119
+			},
+			{
+				"command" : 2,
+				"file" : 14,
+				"line" : 42,
+				"parent" : 110
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 76,
+				"parent" : 121
+			},
+			{
+				"command" : 2,
+				"file" : 14,
+				"line" : 43,
+				"parent" : 110
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 76,
+				"parent" : 123
+			},
+			{
+				"command" : 2,
+				"file" : 14,
+				"line" : 44,
+				"parent" : 110
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 76,
+				"parent" : 125
+			},
+			{
+				"command" : 2,
+				"file" : 14,
+				"line" : 45,
+				"parent" : 110
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 76,
+				"parent" : 127
+			},
+			{
+				"command" : 2,
+				"file" : 14,
+				"line" : 46,
+				"parent" : 110
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 76,
+				"parent" : 129
+			},
+			{
+				"command" : 2,
+				"file" : 14,
+				"line" : 49,
+				"parent" : 110
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 76,
+				"parent" : 131
+			},
+			{
+				"file" : 15
+			},
+			{
+				"command" : 3,
+				"file" : 15,
+				"line" : 2,
+				"parent" : 133
+			},
+			{
+				"command" : 2,
+				"file" : 1,
+				"line" : 80,
+				"parent" : 134
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 76,
+				"parent" : 135
+			},
+			{
+				"file" : 16
+			},
+			{
+				"command" : 3,
+				"file" : 16,
+				"line" : 2,
+				"parent" : 137
+			},
+			{
+				"command" : 2,
+				"file" : 1,
+				"line" : 80,
+				"parent" : 138
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 76,
+				"parent" : 139
+			},
+			{
+				"file" : 17
+			},
+			{
+				"command" : 3,
+				"file" : 17,
+				"line" : 2,
+				"parent" : 141
+			},
+			{
+				"command" : 2,
+				"file" : 1,
+				"line" : 80,
+				"parent" : 142
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 76,
+				"parent" : 143
+			},
+			{
+				"command" : 2,
+				"file" : 17,
+				"line" : 3,
+				"parent" : 141
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 76,
+				"parent" : 145
+			},
+			{
+				"command" : 2,
+				"file" : 17,
+				"line" : 4,
+				"parent" : 141
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 76,
+				"parent" : 147
+			},
+			{
+				"command" : 2,
+				"file" : 17,
+				"line" : 5,
+				"parent" : 141
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 76,
+				"parent" : 149
+			},
+			{
+				"command" : 2,
+				"file" : 17,
+				"line" : 6,
+				"parent" : 141
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 76,
+				"parent" : 151
+			},
+			{
+				"file" : 18
+			},
+			{
+				"command" : 3,
+				"file" : 18,
+				"line" : 2,
+				"parent" : 153
+			},
+			{
+				"command" : 2,
+				"file" : 1,
+				"line" : 80,
+				"parent" : 154
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 76,
+				"parent" : 155
+			},
+			{
+				"file" : 19
+			},
+			{
+				"command" : 2,
+				"file" : 19,
+				"line" : 2,
+				"parent" : 157
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 76,
+				"parent" : 158
+			},
+			{
+				"command" : 2,
+				"file" : 19,
+				"line" : 3,
+				"parent" : 157
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 76,
+				"parent" : 160
+			},
+			{
+				"file" : 20
+			},
+			{
+				"command" : 2,
+				"file" : 20,
+				"line" : 2,
+				"parent" : 162
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 76,
+				"parent" : 163
+			},
+			{
+				"command" : 2,
+				"file" : 20,
+				"line" : 3,
+				"parent" : 162
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 76,
+				"parent" : 165
+			},
+			{
+				"file" : 21
+			},
+			{
+				"command" : 3,
+				"file" : 21,
+				"line" : 10,
+				"parent" : 167
+			},
+			{
+				"command" : 2,
+				"file" : 1,
+				"line" : 80,
+				"parent" : 168
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 76,
+				"parent" : 169
+			},
+			{
+				"command" : 2,
+				"file" : 21,
+				"line" : 27,
+				"parent" : 167
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 76,
+				"parent" : 171
+			},
+			{
+				"file" : 22
+			},
+			{
+				"command" : 3,
+				"file" : 22,
+				"line" : 10,
+				"parent" : 173
+			},
+			{
+				"command" : 2,
+				"file" : 1,
+				"line" : 80,
+				"parent" : 174
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 76,
+				"parent" : 175
+			},
+			{
+				"command" : 2,
+				"file" : 22,
+				"line" : 26,
+				"parent" : 173
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 76,
+				"parent" : 177
+			},
+			{
+				"file" : 23
+			},
+			{
+				"command" : 3,
+				"file" : 23,
+				"line" : 2,
+				"parent" : 179
+			},
+			{
+				"command" : 2,
+				"file" : 1,
+				"line" : 80,
+				"parent" : 180
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 76,
+				"parent" : 181
+			},
+			{
+				"command" : 2,
+				"file" : 23,
+				"line" : 9,
+				"parent" : 179
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 76,
+				"parent" : 183
+			},
+			{
+				"file" : 24
+			},
+			{
+				"command" : 3,
+				"file" : 24,
+				"line" : 2,
+				"parent" : 185
+			},
+			{
+				"command" : 2,
+				"file" : 1,
+				"line" : 80,
+				"parent" : 186
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 76,
+				"parent" : 187
+			},
+			{
+				"command" : 2,
+				"file" : 24,
+				"line" : 7,
+				"parent" : 185
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 76,
+				"parent" : 189
+			},
+			{
+				"file" : 25
+			},
+			{
+				"command" : 2,
+				"file" : 25,
+				"line" : 2,
+				"parent" : 191
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 76,
+				"parent" : 192
+			},
+			{
+				"command" : 2,
+				"file" : 25,
+				"line" : 3,
+				"parent" : 191
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 76,
+				"parent" : 194
+			},
+			{
+				"file" : 26
+			},
+			{
+				"command" : 2,
+				"file" : 26,
+				"line" : 8,
+				"parent" : 196
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 76,
+				"parent" : 197
+			},
+			{
+				"file" : 27
+			},
+			{
+				"command" : 3,
+				"file" : 27,
+				"line" : 5,
+				"parent" : 199
+			},
+			{
+				"command" : 2,
+				"file" : 1,
+				"line" : 80,
+				"parent" : 200
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 76,
+				"parent" : 201
+			},
+			{
+				"file" : 28
+			},
+			{
+				"command" : 3,
+				"file" : 28,
+				"line" : 13,
+				"parent" : 203
+			},
+			{
+				"command" : 2,
+				"file" : 1,
+				"line" : 80,
+				"parent" : 204
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 76,
+				"parent" : 205
+			},
+			{
+				"command" : 2,
+				"file" : 28,
+				"line" : 31,
+				"parent" : 203
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 76,
+				"parent" : 207
+			},
+			{
+				"file" : 29
+			},
+			{
+				"command" : 2,
+				"file" : 29,
+				"line" : 2,
+				"parent" : 209
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 76,
+				"parent" : 210
+			},
+			{
+				"command" : 2,
+				"file" : 29,
+				"line" : 3,
+				"parent" : 209
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 76,
+				"parent" : 212
+			},
+			{
+				"file" : 30
+			},
+			{
+				"command" : 3,
+				"file" : 30,
+				"line" : 2,
+				"parent" : 214
+			},
+			{
+				"command" : 2,
+				"file" : 1,
+				"line" : 80,
+				"parent" : 215
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 76,
+				"parent" : 216
+			},
+			{
+				"command" : 2,
+				"file" : 30,
+				"line" : 15,
+				"parent" : 214
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 76,
+				"parent" : 218
+			},
+			{
+				"file" : 31
+			},
+			{
+				"command" : 3,
+				"file" : 31,
+				"line" : 2,
+				"parent" : 220
+			},
+			{
+				"command" : 2,
+				"file" : 1,
+				"line" : 80,
+				"parent" : 221
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 76,
+				"parent" : 222
+			},
+			{
+				"command" : 2,
+				"file" : 31,
+				"line" : 19,
+				"parent" : 220
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 76,
+				"parent" : 224
+			},
+			{
+				"file" : 32
+			},
+			{
+				"command" : 3,
+				"file" : 32,
+				"line" : 10,
+				"parent" : 226
+			},
+			{
+				"command" : 2,
+				"file" : 1,
+				"line" : 80,
+				"parent" : 227
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 76,
+				"parent" : 228
+			},
+			{
+				"file" : 33
+			},
+			{
+				"command" : 2,
+				"file" : 33,
+				"line" : 6,
+				"parent" : 230
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 76,
+				"parent" : 231
+			},
+			{
+				"file" : 34
+			},
+			{
+				"command" : 3,
+				"file" : 34,
+				"line" : 2,
+				"parent" : 233
+			},
+			{
+				"command" : 2,
+				"file" : 1,
+				"line" : 80,
+				"parent" : 234
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 76,
+				"parent" : 235
+			},
+			{
+				"command" : 2,
+				"file" : 34,
+				"line" : 25,
+				"parent" : 233
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 76,
+				"parent" : 237
+			},
+			{
+				"file" : 35
+			},
+			{
+				"command" : 2,
+				"file" : 35,
+				"line" : 2,
+				"parent" : 239
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 76,
+				"parent" : 240
+			},
+			{
+				"file" : 36
+			},
+			{
+				"command" : 3,
+				"file" : 36,
+				"line" : 1,
+				"parent" : 242
+			},
+			{
+				"command" : 2,
+				"file" : 1,
+				"line" : 80,
+				"parent" : 243
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 76,
+				"parent" : 244
+			},
+			{
+				"file" : 37
+			},
+			{
+				"command" : 2,
+				"file" : 37,
+				"line" : 7,
+				"parent" : 246
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 76,
+				"parent" : 247
+			},
+			{
+				"file" : 38
+			},
+			{
+				"command" : 2,
+				"file" : 38,
+				"line" : 7,
+				"parent" : 249
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 76,
+				"parent" : 250
+			},
+			{
+				"file" : 39
+			},
+			{
+				"command" : 2,
+				"file" : 39,
+				"line" : 8,
+				"parent" : 252
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 76,
+				"parent" : 253
+			},
+			{
+				"file" : 40
+			},
+			{
+				"command" : 4,
+				"file" : 40,
+				"line" : 3,
+				"parent" : 255
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 34,
+				"parent" : 256
+			}
+		]
+	},
+	"dependencies" : 
+	[
+		{
+			"backtrace" : 4,
+			"id" : "CIRCTConversionPassesDocGen::@8d54cd15e967a4ad2d73"
+		},
+		{
+			"backtrace" : 7,
+			"id" : "Dialects_ArcOpsDocGen::@47d10873ee923290ca24"
+		},
+		{
+			"backtrace" : 9,
+			"id" : "Dialects_ArcTypesDocGen::@47d10873ee923290ca24"
+		},
+		{
+			"backtrace" : 11,
+			"id" : "Dialects_ArcAttributesDocGen::@47d10873ee923290ca24"
+		},
+		{
+			"backtrace" : 13,
+			"id" : "Dialects_ArcEnumsDocGen::@47d10873ee923290ca24"
+		},
+		{
+			"backtrace" : 15,
+			"id" : "Dialects_ArcInterfacesDocGen::@47d10873ee923290ca24"
+		},
+		{
+			"backtrace" : 17,
+			"id" : "ArcPassesDocGen::@47d10873ee923290ca24"
+		},
+		{
+			"backtrace" : 21,
+			"id" : "Dialects_CalyxDocGen::@dcaa5cc47b8bd339ec55"
+		},
+		{
+			"backtrace" : 23,
+			"id" : "CalyxPassesDocGen::@dcaa5cc47b8bd339ec55"
+		},
+		{
+			"backtrace" : 27,
+			"id" : "Dialects_CombDocGen::@ad661a7c3c6628ef23af"
+		},
+		{
+			"backtrace" : 29,
+			"id" : "CombPassesDocGen::@ad661a7c3c6628ef23af"
+		},
+		{
+			"backtrace" : 33,
+			"id" : "Dialects_DatapathDocGen::@d953c93baba486c0e85b"
+		},
+		{
+			"backtrace" : 35,
+			"id" : "DatapathPassesDocGen::@d953c93baba486c0e85b"
+		},
+		{
+			"backtrace" : 39,
+			"id" : "Dialects_DCDocGen::@2e1898c3c99b6e43eb0e"
+		},
+		{
+			"backtrace" : 41,
+			"id" : "DCPassesDocGen::@2e1898c3c99b6e43eb0e"
+		},
+		{
+			"backtrace" : 44,
+			"id" : "Dialects_DebugOpsDocGen::@96458d187d8597988d85"
+		},
+		{
+			"backtrace" : 46,
+			"id" : "Dialects_DebugTypesDocGen::@96458d187d8597988d85"
+		},
+		{
+			"backtrace" : 50,
+			"id" : "Dialects_EmitDocGen::@c0d6489e7f330f2b7833"
+		},
+		{
+			"backtrace" : 52,
+			"id" : "EmitPassesDocGen::@c0d6489e7f330f2b7833"
+		},
+		{
+			"backtrace" : 55,
+			"id" : "ESIPassesDocGen::@7dfd09bbb9e7aaa0966a"
+		},
+		{
+			"backtrace" : 57,
+			"id" : "Dialects_ESIAppIDDocGen::@7dfd09bbb9e7aaa0966a"
+		},
+		{
+			"backtrace" : 59,
+			"id" : "Dialects_ESIChannelsDocGen::@7dfd09bbb9e7aaa0966a"
+		},
+		{
+			"backtrace" : 61,
+			"id" : "Dialects_ESIChannelTypesDocGen::@7dfd09bbb9e7aaa0966a"
+		},
+		{
+			"backtrace" : 63,
+			"id" : "Dialects_ESIServicesDocGen::@7dfd09bbb9e7aaa0966a"
+		},
+		{
+			"backtrace" : 65,
+			"id" : "Dialects_ESIStdServicesDocGen::@7dfd09bbb9e7aaa0966a"
+		},
+		{
+			"backtrace" : 67,
+			"id" : "Dialects_ESIStructureDocGen::@7dfd09bbb9e7aaa0966a"
+		},
+		{
+			"backtrace" : 69,
+			"id" : "Dialects_ESIInterfacesDocGen::@7dfd09bbb9e7aaa0966a"
+		},
+		{
+			"backtrace" : 71,
+			"id" : "Dialects_ESITypesDocGen::@7dfd09bbb9e7aaa0966a"
+		},
+		{
+			"backtrace" : 74,
+			"id" : "Dialects_FIRRTLAttributesDocGen::@214cc8a0aa594d0d18a2"
+		},
+		{
+			"backtrace" : 76,
+			"id" : "Dialects_FIRRTLStructureOpsDocGen::@214cc8a0aa594d0d18a2"
+		},
+		{
+			"backtrace" : 78,
+			"id" : "Dialects_FIRRTLDeclarationOpsDocGen::@214cc8a0aa594d0d18a2"
+		},
+		{
+			"backtrace" : 80,
+			"id" : "Dialects_FIRRTLStatementOpsDocGen::@214cc8a0aa594d0d18a2"
+		},
+		{
+			"backtrace" : 82,
+			"id" : "Dialects_FIRRTLExpressionOpsDocGen::@214cc8a0aa594d0d18a2"
+		},
+		{
+			"backtrace" : 84,
+			"id" : "Dialects_FIRRTLIntrinsicOpsDocGen::@214cc8a0aa594d0d18a2"
+		},
+		{
+			"backtrace" : 86,
+			"id" : "Dialects_FIRRTLTypesDocGen::@214cc8a0aa594d0d18a2"
+		},
+		{
+			"backtrace" : 88,
+			"id" : "Dialects_FIRRTLTypesImplDocGen::@214cc8a0aa594d0d18a2"
+		},
+		{
+			"backtrace" : 90,
+			"id" : "Dialects_FIRRTLOpInterfacesDocGen::@214cc8a0aa594d0d18a2"
+		},
+		{
+			"backtrace" : 92,
+			"id" : "_home_peter_circt_docs_Dialects_FIRRTLAnnotations_mdDocGen::@214cc8a0aa594d0d18a2"
+		},
+		{
+			"backtrace" : 94,
+			"id" : "FIRRTLPassesDocGen::@214cc8a0aa594d0d18a2"
+		},
+		{
+			"backtrace" : 97,
+			"id" : "Dialects_CHIRRTLDocGen::@214cc8a0aa594d0d18a2"
+		},
+		{
+			"backtrace" : 101,
+			"id" : "Dialects_FSMDocGen::@2c9a7447208e48a2ac44"
+		},
+		{
+			"backtrace" : 103,
+			"id" : "FSMPassesDocGen::@2c9a7447208e48a2ac44"
+		},
+		{
+			"backtrace" : 107,
+			"id" : "Dialects_HandshakeDocGen::@550417e32f2fc8c7ae9f"
+		},
+		{
+			"backtrace" : 109,
+			"id" : "HandshakePassesDocGen::@550417e32f2fc8c7ae9f"
+		},
+		{
+			"backtrace" : 112,
+			"id" : "Dialects_HWAggregateOpsDocGen::@99dd4989ec2dfffb3406"
+		},
+		{
+			"backtrace" : 114,
+			"id" : "Dialects_HWAttributesDocGen::@99dd4989ec2dfffb3406"
+		},
+		{
+			"backtrace" : 116,
+			"id" : "Dialects_HWAttributesNamingDocGen::@99dd4989ec2dfffb3406"
+		},
+		{
+			"backtrace" : 118,
+			"id" : "Dialects_HWMiscOpsDocGen::@99dd4989ec2dfffb3406"
+		},
+		{
+			"backtrace" : 120,
+			"id" : "Dialects_HWOpInterfacesDocGen::@99dd4989ec2dfffb3406"
+		},
+		{
+			"backtrace" : 122,
+			"id" : "Dialects_HWStructureOpsDocGen::@99dd4989ec2dfffb3406"
+		},
+		{
+			"backtrace" : 124,
+			"id" : "Dialects_HWTypeDeclsOpsDocGen::@99dd4989ec2dfffb3406"
+		},
+		{
+			"backtrace" : 126,
+			"id" : "Dialects_HWTypeInterfacesDocGen::@99dd4989ec2dfffb3406"
+		},
+		{
+			"backtrace" : 128,
+			"id" : "Dialects_HWTypesDocGen::@99dd4989ec2dfffb3406"
+		},
+		{
+			"backtrace" : 130,
+			"id" : "Dialects_HWTypesImplDocGen::@99dd4989ec2dfffb3406"
+		},
+		{
+			"backtrace" : 132,
+			"id" : "HWPassesDocGen::@99dd4989ec2dfffb3406"
+		},
+		{
+			"backtrace" : 136,
+			"id" : "Dialects_HWArithDocGen::@81bd3caec593b466b973"
+		},
+		{
+			"backtrace" : 140,
+			"id" : "Dialects_InteropDocGen::@dc362ce613364f06cf0b"
+		},
+		{
+			"backtrace" : 144,
+			"id" : "Dialects_LLHDDocGen::@623c1b3374717a8dcbbb"
+		},
+		{
+			"backtrace" : 146,
+			"id" : "Dialects_LLHDOpsDocGen::@623c1b3374717a8dcbbb"
+		},
+		{
+			"backtrace" : 148,
+			"id" : "Dialects_LLHDTypesDocGen::@623c1b3374717a8dcbbb"
+		},
+		{
+			"backtrace" : 150,
+			"id" : "Dialects_LLHDAttributesDocGen::@623c1b3374717a8dcbbb"
+		},
+		{
+			"backtrace" : 152,
+			"id" : "LLHDPassesDocGen::@623c1b3374717a8dcbbb"
+		},
+		{
+			"backtrace" : 156,
+			"id" : "Dialects_LoopScheduleDocGen::@7909c85113ff576cb159"
+		},
+		{
+			"backtrace" : 159,
+			"id" : "Dialects_LTLOpsDocGen::@60a3039898e050236218"
+		},
+		{
+			"backtrace" : 161,
+			"id" : "Dialects_LTLTypesDocGen::@60a3039898e050236218"
+		},
+		{
+			"backtrace" : 164,
+			"id" : "Dialects_MooreOpsDocGen::@a420d132c96c064014f7"
+		},
+		{
+			"backtrace" : 166,
+			"id" : "Dialects_MooreTypesDocGen::@a420d132c96c064014f7"
+		},
+		{
+			"backtrace" : 170,
+			"id" : "Dialects_MSFTDocGen::@943c99bc4a1636c6f789"
+		},
+		{
+			"backtrace" : 172,
+			"id" : "MSFTPassesDocGen::@943c99bc4a1636c6f789"
+		},
+		{
+			"backtrace" : 176,
+			"id" : "Dialects_OMDocGen::@4a9cf1b1025f29747f81"
+		},
+		{
+			"backtrace" : 178,
+			"id" : "OMPassesDocGen::@4a9cf1b1025f29747f81"
+		},
+		{
+			"backtrace" : 182,
+			"id" : "Dialects_PipelineDocGen::@dfcf1201bc88462a0ac8"
+		},
+		{
+			"backtrace" : 184,
+			"id" : "PipelinePassesDocGen::@dfcf1201bc88462a0ac8"
+		},
+		{
+			"backtrace" : 188,
+			"id" : "Dialects_KanagawaDocGen::@ec569b9f570677422075"
+		},
+		{
+			"backtrace" : 190,
+			"id" : "KanagawaPassesDocGen::@ec569b9f570677422075"
+		},
+		{
+			"backtrace" : 193,
+			"id" : "Dialects_RTGOpsDocGen::@853334e8480de9cb9660"
+		},
+		{
+			"backtrace" : 195,
+			"id" : "Dialects_RTGTypesDocGen::@853334e8480de9cb9660"
+		},
+		{
+			"backtrace" : 198,
+			"id" : "RTGPassesDocGen::@211196032bd8409258c2"
+		},
+		{
+			"backtrace" : 202,
+			"id" : "Dialects_RTGTestDocGen::@c479ea6f7190147e9295"
+		},
+		{
+			"backtrace" : 206,
+			"id" : "Dialects_SeqDocGen::@268fbdf8482054a77c3a"
+		},
+		{
+			"backtrace" : 208,
+			"id" : "SeqPassesDocGen::@268fbdf8482054a77c3a"
+		},
+		{
+			"backtrace" : 211,
+			"id" : "Dialects_SimOpsDocGen::@ce604b5b2890e4c6d047"
+		},
+		{
+			"backtrace" : 213,
+			"id" : "Dialects_SimTypesDocGen::@ce604b5b2890e4c6d047"
+		},
+		{
+			"backtrace" : 217,
+			"id" : "Dialects_SSPDocGen::@53ef0e11bfe5da990797"
+		},
+		{
+			"backtrace" : 219,
+			"id" : "SSPPassesDocGen::@53ef0e11bfe5da990797"
+		},
+		{
+			"backtrace" : 223,
+			"id" : "Dialects_SVDocGen::@2d605807b5b909e61525"
+		},
+		{
+			"backtrace" : 225,
+			"id" : "SVPassesDocGen::@2d605807b5b909e61525"
+		},
+		{
+			"backtrace" : 229,
+			"id" : "Dialects_SynthDocGen::@22da055d0af25df999ad"
+		},
+		{
+			"backtrace" : 232,
+			"id" : "SynthPassesDocGen::@04c09f0a0a5a3144b96b"
+		},
+		{
+			"backtrace" : 236,
+			"id" : "Dialects_SystemCDocGen::@447284bd49d8032765fa"
+		},
+		{
+			"backtrace" : 238,
+			"id" : "SystemCPassesDocGen::@447284bd49d8032765fa"
+		},
+		{
+			"backtrace" : 241,
+			"id" : "Dialects_VerifOpsDocGen::@e7a373ba96f9db916a67"
+		},
+		{
+			"backtrace" : 245,
+			"id" : "Dialects_HLSDocGen::@d588e0bd28b4d8e25604"
+		},
+		{
+			"backtrace" : 248,
+			"id" : "CIRCTBMCPassesDocGen::@3fe1a21e16d2aaad062c"
+		},
+		{
+			"backtrace" : 251,
+			"id" : "CIRCTLECPassesDocGen::@bbcd4b9e7605c3e4b022"
+		},
+		{
+			"backtrace" : 254,
+			"id" : "CIRCTGeneralPassesDocGen::@b0cd4f6f4787d9027f45"
+		},
+		{
+			"backtrace" : 257,
+			"id" : "_home_peter_circt_docs_Dialects_FIRRTLIntrinsics_md_incDocGen::@6fc32187941aba669bc1"
+		}
+	],
+	"id" : "circt-doc::@6890427a1f51a3e7e1df",
+	"name" : "circt-doc",
+	"paths" : 
+	{
+		"build" : ".",
+		"source" : "."
+	},
+	"sources" : [],
+	"type" : "UTILITY"
+}

@@ -1,0 +1,87 @@
+{
+	"backtraceGraph" : 
+	{
+		"commands" : 
+		[
+			"install",
+			"add_circt_library_install",
+			"add_circt_public_c_api_library"
+		],
+		"files" : 
+		[
+			"cmake/modules/AddCIRCT.cmake",
+			"lib/CAPI/ExportFIRRTL/CMakeLists.txt"
+		],
+		"nodes" : 
+		[
+			{
+				"file" : 1
+			},
+			{
+				"command" : 2,
+				"file" : 1,
+				"line" : 1,
+				"parent" : 0
+			},
+			{
+				"command" : 1,
+				"file" : 0,
+				"line" : 57,
+				"parent" : 1
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 123,
+				"parent" : 2
+			},
+			{
+				"command" : 1,
+				"file" : 0,
+				"line" : 59,
+				"parent" : 1
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 123,
+				"parent" : 4
+			}
+		]
+	},
+	"installers" : 
+	[
+		{
+			"backtrace" : 3,
+			"component" : "CIRCTCAPIExportFIRRTL",
+			"destination" : "lib",
+			"paths" : 
+			[
+				"lib/libCIRCTCAPIExportFIRRTL.a"
+			],
+			"targetId" : "CIRCTCAPIExportFIRRTL::@2395a9ada99a919b8d56",
+			"targetIndex" : 30,
+			"type" : "target"
+		},
+		{
+			"backtrace" : 5,
+			"component" : "obj.CIRCTCAPIExportFIRRTL",
+			"destination" : "lib",
+			"paths" : 
+			[
+				{
+					"from" : "lib/CAPI/ExportFIRRTL/CMakeFiles/obj.CIRCTCAPIExportFIRRTL.dir/.//ExportFIRRTL.cpp.o",
+					"to" : "objects-Debug/obj.CIRCTCAPIExportFIRRTL/ExportFIRRTL.cpp.o"
+				}
+			],
+			"targetId" : "obj.CIRCTCAPIExportFIRRTL::@2395a9ada99a919b8d56",
+			"targetIndex" : 1150,
+			"type" : "target"
+		}
+	],
+	"paths" : 
+	{
+		"build" : "lib/CAPI/ExportFIRRTL",
+		"source" : "lib/CAPI/ExportFIRRTL"
+	}
+}

@@ -1,0 +1,601 @@
+{
+	"backtrace" : 1,
+	"backtraceGraph" : 
+	{
+		"commands" : 
+		[
+			"add_custom_target",
+			"add_dependencies",
+			"add_circt_public_c_api_library"
+		],
+		"files" : 
+		[
+			"CMakeLists.txt",
+			"cmake/modules/AddCIRCT.cmake",
+			"lib/CAPI/Conversion/CMakeLists.txt",
+			"lib/CAPI/ExportFIRRTL/CMakeLists.txt",
+			"lib/CAPI/ExportLLVM/CMakeLists.txt",
+			"lib/CAPI/ExportVerilog/CMakeLists.txt",
+			"lib/CAPI/Dialect/CMakeLists.txt",
+			"lib/CAPI/Firtool/CMakeLists.txt",
+			"lib/CAPI/Support/CMakeLists.txt",
+			"lib/CAPI/Transforms/CMakeLists.txt"
+		],
+		"nodes" : 
+		[
+			{
+				"file" : 0
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 188,
+				"parent" : 0
+			},
+			{
+				"file" : 2
+			},
+			{
+				"command" : 2,
+				"file" : 2,
+				"line" : 1,
+				"parent" : 2
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 56,
+				"parent" : 3
+			},
+			{
+				"file" : 3
+			},
+			{
+				"command" : 2,
+				"file" : 3,
+				"line" : 1,
+				"parent" : 5
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 56,
+				"parent" : 6
+			},
+			{
+				"file" : 4
+			},
+			{
+				"command" : 2,
+				"file" : 4,
+				"line" : 1,
+				"parent" : 8
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 56,
+				"parent" : 9
+			},
+			{
+				"file" : 5
+			},
+			{
+				"command" : 2,
+				"file" : 5,
+				"line" : 1,
+				"parent" : 11
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 56,
+				"parent" : 12
+			},
+			{
+				"file" : 6
+			},
+			{
+				"command" : 2,
+				"file" : 6,
+				"line" : 33,
+				"parent" : 14
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 56,
+				"parent" : 15
+			},
+			{
+				"command" : 2,
+				"file" : 6,
+				"line" : 42,
+				"parent" : 14
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 56,
+				"parent" : 17
+			},
+			{
+				"command" : 2,
+				"file" : 6,
+				"line" : 51,
+				"parent" : 14
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 56,
+				"parent" : 19
+			},
+			{
+				"command" : 2,
+				"file" : 6,
+				"line" : 60,
+				"parent" : 14
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 56,
+				"parent" : 21
+			},
+			{
+				"command" : 2,
+				"file" : 6,
+				"line" : 68,
+				"parent" : 14
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 56,
+				"parent" : 23
+			},
+			{
+				"command" : 2,
+				"file" : 6,
+				"line" : 76,
+				"parent" : 14
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 56,
+				"parent" : 25
+			},
+			{
+				"command" : 2,
+				"file" : 6,
+				"line" : 85,
+				"parent" : 14
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 56,
+				"parent" : 27
+			},
+			{
+				"command" : 2,
+				"file" : 6,
+				"line" : 93,
+				"parent" : 14
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 56,
+				"parent" : 29
+			},
+			{
+				"command" : 2,
+				"file" : 6,
+				"line" : 106,
+				"parent" : 14
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 56,
+				"parent" : 31
+			},
+			{
+				"command" : 2,
+				"file" : 6,
+				"line" : 115,
+				"parent" : 14
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 56,
+				"parent" : 33
+			},
+			{
+				"command" : 2,
+				"file" : 6,
+				"line" : 123,
+				"parent" : 14
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 56,
+				"parent" : 35
+			},
+			{
+				"command" : 2,
+				"file" : 6,
+				"line" : 131,
+				"parent" : 14
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 56,
+				"parent" : 37
+			},
+			{
+				"command" : 2,
+				"file" : 6,
+				"line" : 140,
+				"parent" : 14
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 56,
+				"parent" : 39
+			},
+			{
+				"command" : 2,
+				"file" : 6,
+				"line" : 149,
+				"parent" : 14
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 56,
+				"parent" : 41
+			},
+			{
+				"command" : 2,
+				"file" : 6,
+				"line" : 158,
+				"parent" : 14
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 56,
+				"parent" : 43
+			},
+			{
+				"command" : 2,
+				"file" : 6,
+				"line" : 168,
+				"parent" : 14
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 56,
+				"parent" : 45
+			},
+			{
+				"command" : 2,
+				"file" : 6,
+				"line" : 177,
+				"parent" : 14
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 56,
+				"parent" : 47
+			},
+			{
+				"command" : 2,
+				"file" : 6,
+				"line" : 186,
+				"parent" : 14
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 56,
+				"parent" : 49
+			},
+			{
+				"command" : 2,
+				"file" : 6,
+				"line" : 195,
+				"parent" : 14
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 56,
+				"parent" : 51
+			},
+			{
+				"command" : 2,
+				"file" : 6,
+				"line" : 211,
+				"parent" : 14
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 56,
+				"parent" : 53
+			},
+			{
+				"command" : 2,
+				"file" : 6,
+				"line" : 222,
+				"parent" : 14
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 56,
+				"parent" : 55
+			},
+			{
+				"command" : 2,
+				"file" : 6,
+				"line" : 231,
+				"parent" : 14
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 56,
+				"parent" : 57
+			},
+			{
+				"command" : 2,
+				"file" : 6,
+				"line" : 240,
+				"parent" : 14
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 56,
+				"parent" : 59
+			},
+			{
+				"command" : 2,
+				"file" : 6,
+				"line" : 248,
+				"parent" : 14
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 56,
+				"parent" : 61
+			},
+			{
+				"command" : 2,
+				"file" : 6,
+				"line" : 256,
+				"parent" : 14
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 56,
+				"parent" : 63
+			},
+			{
+				"command" : 2,
+				"file" : 6,
+				"line" : 267,
+				"parent" : 14
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 56,
+				"parent" : 65
+			},
+			{
+				"file" : 7
+			},
+			{
+				"command" : 2,
+				"file" : 7,
+				"line" : 1,
+				"parent" : 67
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 56,
+				"parent" : 68
+			},
+			{
+				"file" : 8
+			},
+			{
+				"command" : 2,
+				"file" : 8,
+				"line" : 1,
+				"parent" : 70
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 56,
+				"parent" : 71
+			},
+			{
+				"file" : 9
+			},
+			{
+				"command" : 2,
+				"file" : 9,
+				"line" : 1,
+				"parent" : 73
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 56,
+				"parent" : 74
+			}
+		]
+	},
+	"dependencies" : 
+	[
+		{
+			"backtrace" : 4,
+			"id" : "CIRCTCAPIConversion::@fe25017cc212bc6663b0"
+		},
+		{
+			"backtrace" : 7,
+			"id" : "CIRCTCAPIExportFIRRTL::@2395a9ada99a919b8d56"
+		},
+		{
+			"backtrace" : 10,
+			"id" : "CIRCTCAPIExportLLVM::@5ebbbda20b31e84006de"
+		},
+		{
+			"backtrace" : 13,
+			"id" : "CIRCTCAPIExportVerilog::@844560edf80a92c0df54"
+		},
+		{
+			"backtrace" : 16,
+			"id" : "CIRCTCAPIArc::@5150296781fac11fddd5"
+		},
+		{
+			"backtrace" : 18,
+			"id" : "CIRCTCAPIComb::@5150296781fac11fddd5"
+		},
+		{
+			"backtrace" : 20,
+			"id" : "CIRCTCAPIDC::@5150296781fac11fddd5"
+		},
+		{
+			"backtrace" : 22,
+			"id" : "CIRCTCAPIDebug::@5150296781fac11fddd5"
+		},
+		{
+			"backtrace" : 24,
+			"id" : "CIRCTCAPIESI::@5150296781fac11fddd5"
+		},
+		{
+			"backtrace" : 26,
+			"id" : "CIRCTCAPIFIRRTL::@5150296781fac11fddd5"
+		},
+		{
+			"backtrace" : 28,
+			"id" : "CIRCTCAPICHIRRTL::@5150296781fac11fddd5"
+		},
+		{
+			"backtrace" : 30,
+			"id" : "CIRCTCAPIMSFT::@5150296781fac11fddd5"
+		},
+		{
+			"backtrace" : 32,
+			"id" : "CIRCTCAPIHW::@5150296781fac11fddd5"
+		},
+		{
+			"backtrace" : 34,
+			"id" : "CIRCTCAPILLHD::@5150296781fac11fddd5"
+		},
+		{
+			"backtrace" : 36,
+			"id" : "CIRCTCAPIMoore::@5150296781fac11fddd5"
+		},
+		{
+			"backtrace" : 38,
+			"id" : "CIRCTCAPIOM::@5150296781fac11fddd5"
+		},
+		{
+			"backtrace" : 40,
+			"id" : "CIRCTCAPIKanagawa::@5150296781fac11fddd5"
+		},
+		{
+			"backtrace" : 42,
+			"id" : "CIRCTCAPIPipeline::@5150296781fac11fddd5"
+		},
+		{
+			"backtrace" : 44,
+			"id" : "CIRCTCAPIRTG::@5150296781fac11fddd5"
+		},
+		{
+			"backtrace" : 46,
+			"id" : "CIRCTCAPIRTGTest::@5150296781fac11fddd5"
+		},
+		{
+			"backtrace" : 48,
+			"id" : "CIRCTCAPISeq::@5150296781fac11fddd5"
+		},
+		{
+			"backtrace" : 50,
+			"id" : "CIRCTCAPISV::@5150296781fac11fddd5"
+		},
+		{
+			"backtrace" : 52,
+			"id" : "CIRCTCAPIFSM::@5150296781fac11fddd5"
+		},
+		{
+			"backtrace" : 54,
+			"id" : "CIRCTCAPIHandshake::@5150296781fac11fddd5"
+		},
+		{
+			"backtrace" : 56,
+			"id" : "CIRCTCAPIHWArith::@5150296781fac11fddd5"
+		},
+		{
+			"backtrace" : 58,
+			"id" : "CIRCTCAPIVerif::@5150296781fac11fddd5"
+		},
+		{
+			"backtrace" : 60,
+			"id" : "CIRCTCAPILTL::@5150296781fac11fddd5"
+		},
+		{
+			"backtrace" : 62,
+			"id" : "CIRCTCAPIEmit::@5150296781fac11fddd5"
+		},
+		{
+			"backtrace" : 64,
+			"id" : "CIRCTCAPISynth::@5150296781fac11fddd5"
+		},
+		{
+			"backtrace" : 66,
+			"id" : "CIRCTCAPISim::@5150296781fac11fddd5"
+		},
+		{
+			"backtrace" : 69,
+			"id" : "CIRCTCAPIFirtool::@ae9a8dbf07df30d4f1ff"
+		},
+		{
+			"backtrace" : 72,
+			"id" : "CIRCTCAPISupport::@a99b913ced76266f4bea"
+		},
+		{
+			"backtrace" : 75,
+			"id" : "CIRCTCAPITransforms::@9c851d30475647396864"
+		}
+	],
+	"id" : "circt-capi::@6890427a1f51a3e7e1df",
+	"name" : "circt-capi",
+	"paths" : 
+	{
+		"build" : ".",
+		"source" : "."
+	},
+	"sources" : [],
+	"type" : "UTILITY"
+}
