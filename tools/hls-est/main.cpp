@@ -27,7 +27,9 @@
 #include "circt/Dialect/Seq/SeqDialect.h"              // seq::SeqDialect
 #include "circt/Dialect/Calyx/CalyxDialect.h"          // calyx::CalyxDialect
 #include "circt/Dialect/Resource/HLS/HLSOps.h"         // custom dialect
-#include "mlir/Dialect/Math/IR/Math.h"    
+#include "mlir/Dialect/Math/IR/Math.h"
+#include "mlir/Dialect/DLTI/DLTI.h"              // dlti.dl_spec module attribute emitted by cgeist
+#include "mlir/Dialect/LLVMIR/LLVMDialect.h"    // llvm.linkage attrs / llvm.* ops emitted by cgeist
 
 int main(int argc, char **argv) {
   mlir::DialectRegistry registry;
@@ -42,6 +44,8 @@ int main(int argc, char **argv) {
       mlir::cf::ControlFlowDialect,
       mlir::index::IndexDialect,
       mlir::math::MathDialect,
+      mlir::DLTIDialect,
+      mlir::LLVM::LLVMDialect,
       // CIRCT
       circt::loopschedule::LoopScheduleDialect,
       circt::hw::HWDialect,
