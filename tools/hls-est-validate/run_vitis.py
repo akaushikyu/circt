@@ -44,6 +44,9 @@ def design_files(d):
     return files
 
 
+EXTRA_CFG = list(C.EXTRA_HLS_CFG)   # overridden by --td
+
+
 def cflags_for(d):
     flags = []
     for inc in d.get("includes", []):
@@ -56,7 +59,7 @@ def cflags_for(d):
 
 def cache_key(d):
     extra = "|".join([d["top"], C.PART, C.CLOCK, C.VITIS_VERSION, C.FLOW_TARGET,
-                      " ".join(cflags_for(d)), " ".join(d["sources"]), " ".join(C.EXTRA_HLS_CFG), "cfg-v2"])
+                      " ".join(cflags_for(d)), " ".join(d["sources"]), " ".join(EXTRA_CFG), "cfg-v2"])
     return C.sha256_of_files(design_files(d), extra)[:16]
 
 
@@ -74,14 +77,17 @@ def make_cfg(d, work_win):
             lines.append(f"syn.file_cflags={sp},{flags}")
     lines.append(f"syn.top={d['top']}")
     lines.append(f"clock={C.CLOCK}")
-    lines += C.EXTRA_HLS_CFG
+    lines += EXTRA_CFG
     return "\n".join(lines) + "\n"
 
 
 def kill_windows_tree(marker):
-    """Kill every Windows process whose command line mentions `marker` (the work dir)."""
+    """Kill every Windows process whose command line mentions `marker` (the work dir).
+    Vitis children (vitis_hls.exe) spell the path with forward slashes while v++
+    gets backslashes, so match the path with '?' in place of every separator."""
+    pat = re.sub(r"[\/]", "?", marker)
     ps = ("Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like '*%s*' } | "
-          "ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }") % marker
+          "ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }") % pat
     try:
         subprocess.run([C.POWERSHELL_EXE, "-NoProfile", "-Command", ps], timeout=120,
                        capture_output=True)
@@ -159,8 +165,9 @@ def run_one(d, args):
     if args.dry_run:
         return {"dataset": d["dataset"], "benchmark": d["benchmark"], "status": "dry-run", "key": key}
 
-    work_wsl = f"{C.WORK_WSL_ROOT}/{d['dataset']}/{d['benchmark']}"
-    work_win = f"{C.WORK_WIN_ROOT}/{d['dataset']}/{d['benchmark']}"
+    tag = "" if EXTRA_CFG == list(C.EXTRA_HLS_CFG) else "td-" + EXTRA_CFG[-1].split("=")[-1] + "/"
+    work_wsl = f"{C.WORK_WSL_ROOT}/{tag}{d['dataset']}/{d['benchmark']}"
+    work_win = f"{C.WORK_WIN_ROOT}/{tag}{d['dataset']}/{d['benchmark']}"
     shutil.rmtree(work_wsl, ignore_errors=True)
     Path(work_wsl).mkdir(parents=True, exist_ok=True)
     cfg_wsl = Path(work_wsl) / "hls_config.cfg"
@@ -221,7 +228,12 @@ def main():
     ap.add_argument("--keep-work", action="store_true")
     ap.add_argument("--list", action="store_true")
     ap.add_argument("--out", default=str(C.RESULTS_DIR / "vitis.json"))
+    ap.add_argument("--td", default="off", choices=["off", "auto"],
+                    help="syn.array_partition.throughput_driven (ground truth uses 'off')")
     args = ap.parse_args()
+    global EXTRA_CFG
+    EXTRA_CFG = [l for l in C.EXTRA_HLS_CFG if not l.startswith("syn.array_partition.throughput_driven")]
+    EXTRA_CFG.append(f"syn.array_partition.throughput_driven={args.td}")
 
     designs = [d for d in D.load_designs() if d.get("sources")]
     if args.datasets:
