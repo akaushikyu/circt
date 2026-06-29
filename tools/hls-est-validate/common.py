@@ -37,6 +37,7 @@ POWERSHELL_EXE = "/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe"
 # llvm-dis able to read the 2025.1 bitcode (clang-3.9 based csynth LLVM).
 # The 2026.1 Linux one works once its private libs are on LD_LIBRARY_PATH.
 LLVM_DIS_CANDIDATES = [
+    ("/mnt/a/Vitis/2025.1/tps/lnx64/clang-14.0.0/bin/llvm-dis", {}),   # reads every stage (3.9 and 7.0 producers)
     ("/home/peter/2026.1/lnx64/tools/clang-3.9-csynth/bin/llvm-dis",
      {"LD_LIBRARY_PATH": "/home/peter/2026.1/Model_Composer/lib/lnx64.o:"
                          "/home/peter/2026.1/lib/lnx64.o:"

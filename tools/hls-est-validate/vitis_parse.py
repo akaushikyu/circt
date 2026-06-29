@@ -205,8 +205,38 @@ LOG_PATTERNS = {
     "reshape": re.compile(r"\[HLS 214-\d+\] .*array_reshape.*?'([^']*)'"),
     "removed": re.compile(r"\[(?:HLS|XFORM) [\d-]+\] (?:Removing|removing|Deleting|Eliminating) .*"),
     "ii_violation": re.compile(r"\[HLS 200-885\] (.*)"),
+    "replicate": re.compile(r"\[HLS 200-2167\] Implementing memory '([^']*)' using auto RAMs with (\d+) copies"),
+    "storage_inferred": re.compile(r"\[HLS 200-1457\] Automatically inferring inferring (\S+) storage type for array '([^']*)'"),
+    "memory_impl": re.compile(r"\[RTMG 210-278\] Implementing memory '([^']*)' using (.*)\."),
+    "partition_const_index": re.compile(r"\[HLS 214-449\] Automatically partitioning array '([^']+)' dimension (\d+) completely based on constant index\. \(([^)]+)\)"),
+    "partition_small": re.compile(r"\[HLS 214-421\] Automatically partitioning small array '([^']+)' completely based on array size"),
+    "pipelining_result": re.compile(r"\[HLS 200-1470\] Pipelining result : Target II = (NA|\d+), Final II = (\d+), Depth = (\d+), loop '([^']+)'"),
+    "ii_violation_ports": re.compile(r"\[HLS 200-885\] The II Violation in module '([^']+)' \(loop '([^']+)'\): Unable to schedule '(\w+)' operation (\d+) bit \('([^']+)', ([^)]+)\) on array '([^']+)' due to limited memory ports \(II = (\d+)\)"),
+    "auto_inline": re.compile(r"\[HLS 214-364\] Automatically inlining function '([^']+)'|\[XFORM 203-602\] Inlining function '([^']+)' into '([^']+)'"),
+    "perfect_nest": re.compile(r"\[HLS 200-2061\] Successfully converted nested loops '([^']+)'\([^)]*\) and '([^']+)'\([^)]*\) in function '([^']+)' into perfectly nested loops"),
+    "flatten_disabled": re.compile(r"\[HLS 214-437\] Automatically disabling loop flattening for loop '([^']+)'|\[HLS 200-960\] Cannot flatten loop '([^']+)'"),
+    "fifo_impl": re.compile(r"\[RTMG 210-285\] Implementing FIFO '([^']+)'"),
     "error": re.compile(r"^ERROR: (.*)"),
 }
+
+
+def parse_bind_nodes(csynth_xml_path):
+    """csynth.xml ModuleInformation/Module/BindNodes: VARIABLE -> RTLNAME/SOURCE/OPTYPE per module
+    (bind-stage; the BRAM attribute there is pre-replication, so only use it for names)."""
+    out = []
+    try:
+        root = ET.parse(csynth_xml_path).getroot()
+    except Exception:
+        return out
+    for mod in root.findall("ModuleInformation/Module"):
+        mname = (mod.findtext("Name") or "").strip()
+        for bn in mod.findall("BindNodes/BindNode"):
+            if bn.get("BINDTYPE") != "storage":
+                continue
+            out.append({"module": mname, "variable": bn.get("VARIABLE"), "rtlname": bn.get("RTLNAME"),
+                        "optype": bn.get("OPTYPE"), "impl": bn.get("IMPL"), "source": bn.get("SOURCE"),
+                        "storagesize": bn.get("STORAGESIZE"), "bind_bram": bn.get("BRAM")})
+    return out
 
 
 def parse_compile_log(text):
@@ -251,6 +281,29 @@ def parse_work_dir(work_wsl, top):
     log = W / "logs" / "hls_compile.log"
     if log.exists():
         out["log"] = parse_compile_log(log.read_text(errors="replace"))
+    cx = rep / "csynth.xml"
+    if cx.exists():
+        out["bind_nodes"] = parse_bind_nodes(cx)
+        # Resolve partition banks and Vitis-created copies to source variables.
+        by_rtl = {}
+        for b in out["bind_nodes"]:
+            by_rtl[(b["module"], b["rtlname"])] = b
+        for m in out["memories"]:
+            b = by_rtl.get((m.get("module"), m.get("Memory"))) or next(
+                (x for x in out["bind_nodes"] if x["rtlname"] == m.get("Memory")), None)
+            if b:
+                m["variable"] = b["variable"]
+                m["source"] = b["source"]
+                m["optype"] = b["optype"]
+                # Bank instances carry VARIABLE="V_1" (the bank name), so the
+                # bind node only helps when the heuristic found no bank.
+                if b["variable"] and m.get("bank") is None and b["variable"] != m.get("array"):
+                    inst = str(m.get("Memory", ""))[:-2]
+                    mb = re.match(r"^" + re.escape(b["variable"]) + r"_(\d+)$", inst)
+                    if mb:
+                        m["array"], m["bank"] = b["variable"], int(mb.group(1))
+                    elif inst == b["variable"]:
+                        m["array"] = b["variable"]
     return out
 
 

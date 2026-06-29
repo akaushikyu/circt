@@ -71,7 +71,7 @@ def source_hash(d, shim):
         if p.is_file():
             files.append(p)
     extra = "|".join([d["top"], " ".join(d.get("includes", [])), " ".join(d.get("defines", [])),
-                      str(shim), "cgeist-v2"])
+                      str(shim), "cgeist-v3"])
     return C.sha256_of_files(files, extra)[:16]
 
 
@@ -90,7 +90,9 @@ def run_cgeist(d, shim, force=False):
     out.parent.mkdir(parents=True, exist_ok=True)
     log = out.with_suffix(".cgeist.log")
     status, note = "ok", ""
-    for func in (d["top"], "*"):
+    # The HLSFactory lit tests were generated with --function='*'; a C++ top
+    # given by name can silently produce an empty module.  Try '*' first.
+    for func in ("*", d["top"]):
         cmd = cgeist_cmd(d, shim, out, func)
         try:
             p = subprocess.run(cmd, cwd=d["dir"], capture_output=True, text=True, errors="replace",
@@ -99,20 +101,21 @@ def run_cgeist(d, shim, force=False):
             status, note = "cgeist timeout", f"{CGEIST_TIMEOUT}s"
             break
         log.write_text(" ".join(cmd) + "\n\n" + p.stdout + "\n--- stderr ---\n" + p.stderr)
-        if p.returncode == 0 and out.exists() and out.stat().st_size > 0:
+        if p.returncode == 0 and out.exists() and out.stat().st_size > 0                 and re.search(r"func\.func\s", out.read_text(errors="replace")):
             sanitize_mlir(out)
             status, note = "ok", f"--function={func}"
             break
+        if p.returncode == 0:
+            status, note = "cgeist error: empty module (no functions emitted)", f"--function={func}"
+            continue
         if p.returncode < 0 or "Stack dump" in p.stderr or "PLEASE submit a bug report" in p.stderr:
             status = "cgeist crash"
         else:
             errs = [l for l in p.stderr.splitlines() if "error:" in l]
             status = "cgeist error: " + (errs[0].strip()[:200] if errs else f"exit {p.returncode}")
         note = f"--function={func}"
-        if func == d["top"] and "function" in status and "not" in status:
-            continue          # try all functions
-        if status.startswith("cgeist error") and func == d["top"]:
-            continue
+        if func == "*":
+            continue          # retry with the top function by name
         break
     meta.write_text(status)
     if status != "ok" and out.exists():
