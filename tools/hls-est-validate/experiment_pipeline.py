@@ -107,7 +107,7 @@ def main():
     ap.add_argument("--ablation", action="store_true")
     ap.add_argument("--datasets", default="")
     ap.add_argument("--vitis", default=str(C.RESULTS_DIR / "vitis.json"))
-    ap.add_argument("--shim", default="polygeist")
+    ap.add_argument("--shim", default="scalar")
     ap.add_argument("-j", type=int, default=8)
     ap.add_argument("--timeout", type=int, default=C.HLSEST_TIMEOUT)
     ap.add_argument("--tag", default="")

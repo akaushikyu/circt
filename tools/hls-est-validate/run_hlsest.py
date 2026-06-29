@@ -268,7 +268,7 @@ def main():
     ap.add_argument("-j", type=int, default=8)
     ap.add_argument("--timeout", type=int, default=C.HLSEST_TIMEOUT)
     ap.add_argument("--pipeline", default=C.DEFAULT_PIPELINE)
-    ap.add_argument("--shim", default="polygeist")
+    ap.add_argument("--shim", default="scalar")
     ap.add_argument("--out", default=str(C.RESULTS_DIR / "hlsest.json"))
     ap.add_argument("--run-id", default=None)
     ap.add_argument("--force-cgeist", action="store_true")
