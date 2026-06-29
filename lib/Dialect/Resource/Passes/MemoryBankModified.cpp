@@ -291,7 +291,7 @@ static SmallVector<Value, 4>
 handleGetGlobalOp(memref::GetGlobalOp getGlobalOp, uint64_t bankingFactor,
                   unsigned bankingDimension, PartitionSpec::Kind kind,
                   MemRefType newMemRefType, OpBuilder &builder,
-                  DictionaryAttr remainingAttrs) {
+                  llvm::function_ref<DictionaryAttr(unsigned)> bankAttrs) {
   SmallVector<Value, 4> banks;
   auto memTy = cast<MemRefType>(getGlobalOp.getType());
   ArrayRef<int64_t> originalShape = memTy.getShape();
@@ -338,13 +338,18 @@ handleGetGlobalOp(memref::GetGlobalOp getGlobalOp, uint64_t bankingFactor,
         builder, globalOp.getLoc(), builder.getStringAttr(newName),
         globalOp.getSymVisibilityAttr(), newTypeAttr, newInitValue,
         globalOp.getConstantAttr(), globalOp.getAlignmentAttr());
+    // Provenance (see createBanks) goes on the declaration, which is what
+    // --bram-analysis costs, and on the use for symmetry with the alloca path.
+    DictionaryAttr provenance = bankAttrs(static_cast<unsigned>(bankCnt));
+    for (NamedAttribute attr : provenance)
+      newGlobalOp->setAttr(attr.getName(), attr.getValue());
     builder.setInsertionPointAfter(newGlobalOp);
     globalOpsInsertPt = builder.saveInsertionPoint();
 
     builder.restoreInsertionPoint(getGlobalOpsInsertPt);
     auto newGetGlobalOp = memref::GetGlobalOp::create(
         builder, getGlobalOp.getLoc(), newMemRefTy, newGlobalOp.getName());
-    newGetGlobalOp->setAttrs(remainingAttrs);
+    newGetGlobalOp->setAttrs(provenance);
     builder.setInsertionPointAfter(newGetGlobalOp);
     getGlobalOpsInsertPt = builder.saveInsertionPoint();
 
@@ -371,9 +376,9 @@ static void updateFuncOpArgumentTypes(func::FuncOp funcOp, unsigned argIndex,
       FunctionType::get(funcOp.getContext(), updatedArgTypes, resultTypes));
 }
 
-static void updateFuncOpArgAttrs(func::FuncOp funcOp, unsigned argIndex,
-                                 unsigned numInsertedArgs,
-                                 DictionaryAttr remainingAttrs) {
+static void updateFuncOpArgAttrs(
+    func::FuncOp funcOp, unsigned argIndex, unsigned numInsertedArgs,
+    llvm::function_ref<DictionaryAttr(unsigned)> bankAttrs) {
   ArrayAttr existingArgAttrs = funcOp->getAttrOfType<ArrayAttr>("arg_attrs");
   SmallVector<Attribute, 4> updatedArgAttrs;
   unsigned numArguments = funcOp.getNumArguments();
@@ -387,7 +392,7 @@ static void updateFuncOpArgAttrs(func::FuncOp funcOp, unsigned argIndex,
                                     : DictionaryAttr::get(funcOp.getContext());
   }
   for (unsigned i = 0; i < numInsertedArgs; ++i)
-    updatedArgAttrs[argIndex + 1 + i] = remainingAttrs;
+    updatedArgAttrs[argIndex + 1 + i] = bankAttrs(i);
 
   funcOp->setAttr("arg_attrs",
                   ArrayAttr::get(funcOp.getContext(), updatedArgAttrs));
@@ -398,7 +403,6 @@ SmallVector<Value, 4> MemoryBankingPass::createBanks(OpBuilder &builder,
 
   SmallVector<Value, 4> banks;
   MemRefType originalMemRefType = cast<MemRefType>(originalMem.getType());
-  MLIRContext *context = builder.getContext();
 
   PartitionSpec spec;
   auto iface = dyn_cast_or_null<MemoryResourceOpInterface>(originalMem.getDefiningOp());
@@ -413,8 +417,85 @@ SmallVector<Value, 4> MemoryBankingPass::createBanks(OpBuilder &builder,
   unsigned currDimension = spec.dim;
   verifyBankingConfigurations(currFactor, currDimension, originalMemRefType);
 
-  // One spec per array: the new banks carry no partition attribute.
-  DictionaryAttr emptyAttrs = DictionaryAttr::get(context);
+  // One spec per array: the new banks carry no `hls.array_partition`, so they
+  // are never banked again. What they do carry is provenance for the debug
+  // report (--bram-debug): which array each bank came from (`hls.bank_of`),
+  // its index and count, and the spec that produced it (`hls.partition`, the
+  // original pragma entry's fields with `source = "pragma"` when the entry
+  // names none). `polygeist.varname`, `hls.preserve` and
+  // `hls.partition_reason` are copied over from the original. No analysis
+  // reads any of these attributes.
+  Operation *origDef = originalMem.getDefiningOp();
+  func::FuncOp argFunc;
+  unsigned argNo = 0;
+  if (auto blockArg = dyn_cast<BlockArgument>(originalMem)) {
+    argFunc = dyn_cast<func::FuncOp>(blockArg.getOwner()->getParentOp());
+    argNo = blockArg.getArgNumber();
+  }
+  auto origAttr = [&](StringRef name) -> Attribute {
+    if (origDef)
+      return origDef->getAttr(name);
+    if (argFunc)
+      return argFunc.getArgAttr(argNo, name);
+    return Attribute();
+  };
+  DictionaryAttr origEntry;
+  if (auto arr = dyn_cast_or_null<ArrayAttr>(origAttr("hls.array_partition")))
+    if (!arr.empty())
+      origEntry = dyn_cast<DictionaryAttr>(arr[0]);
+  auto varName = dyn_cast_or_null<StringAttr>(origAttr("polygeist.varname"));
+  std::string bankOf;
+  if (varName)
+    bankOf = varName.getValue().str();
+  else if (auto getGlobal = dyn_cast_or_null<memref::GetGlobalOp>(origDef))
+    bankOf = getGlobal.getName().str();
+  else if (argFunc)
+    bankOf = "arg" + std::to_string(argNo);
+
+  const char *specKind = spec.kind == PartitionSpec::Complete ? "complete"
+                         : spec.kind == PartitionSpec::Block  ? "block"
+                                                              : "cyclic";
+  auto field = [&](StringRef name, Attribute fallback) -> Attribute {
+    if (origEntry)
+      if (Attribute a = origEntry.get(name))
+        return a;
+    return fallback;
+  };
+  DictionaryAttr partitionAttr = builder.getDictionaryAttr({
+      builder.getNamedAttr("kind",
+                           field("kind", builder.getStringAttr(specKind))),
+      builder.getNamedAttr(
+          "factor",
+          field("factor", builder.getI32IntegerAttr(
+                              static_cast<int32_t>(currFactor)))),
+      // Vitis numbers dimensions from 1; the pragma value is copied as written.
+      builder.getNamedAttr(
+          "dim", field("dim", builder.getI32IntegerAttr(
+                                  static_cast<int32_t>(currDimension + 1)))),
+      builder.getNamedAttr("source",
+                           field("source", builder.getStringAttr("pragma"))),
+  });
+  auto bankAttrs = [&](unsigned bankIdx) -> DictionaryAttr {
+    SmallVector<NamedAttribute, 8> attrs;
+    if (varName)
+      attrs.push_back(builder.getNamedAttr("polygeist.varname", varName));
+    if (Attribute preserve = origAttr("hls.preserve"))
+      attrs.push_back(builder.getNamedAttr("hls.preserve", preserve));
+    if (!bankOf.empty())
+      attrs.push_back(
+          builder.getNamedAttr("hls.bank_of", builder.getStringAttr(bankOf)));
+    attrs.push_back(builder.getNamedAttr(
+        "hls.bank_index",
+        builder.getI32IntegerAttr(static_cast<int32_t>(bankIdx))));
+    attrs.push_back(builder.getNamedAttr(
+        "hls.bank_count",
+        builder.getI32IntegerAttr(static_cast<int32_t>(currFactor))));
+    attrs.push_back(builder.getNamedAttr("hls.partition", partitionAttr));
+    if (auto reason =
+            dyn_cast_or_null<StringAttr>(origAttr("hls.partition_reason")))
+      attrs.push_back(builder.getNamedAttr("hls.partition_reason", reason));
+    return builder.getDictionaryAttr(attrs);
+  };
 
   MemRefType newMemRefType =
       computeBankedMemRefType(originalMemRefType, currFactor, currDimension);
@@ -434,7 +515,7 @@ SmallVector<Value, 4> MemoryBankingPass::createBanks(OpBuilder &builder,
     auto funcOp = dyn_cast<func::FuncOp>(block->getParentOp());
     assert(funcOp && "BlockArgument is not part of a FuncOp");
     updateFuncOpArgumentTypes(funcOp, blockArgNum, newMemRefType, currFactor);
-    updateFuncOpArgAttrs(funcOp, blockArgNum, currFactor, emptyAttrs);
+    updateFuncOpArgAttrs(funcOp, blockArgNum, currFactor, bankAttrs);
   } else {
     Operation *originalDef = originalMem.getDefiningOp();
     Location loc = originalDef->getLoc();
@@ -444,7 +525,7 @@ SmallVector<Value, 4> MemoryBankingPass::createBanks(OpBuilder &builder,
           for (uint64_t b = 0; b < currFactor; ++b) {
             auto bankAllocOp =
                 memref::AllocOp::create(builder, loc, newMemRefType);
-            bankAllocOp->setAttrs(emptyAttrs);
+            bankAllocOp->setAttrs(bankAttrs(static_cast<unsigned>(b)));
             banks.push_back(bankAllocOp);
           }
         })
@@ -452,14 +533,14 @@ SmallVector<Value, 4> MemoryBankingPass::createBanks(OpBuilder &builder,
           for (uint64_t b = 0; b < currFactor; ++b) {
             auto bankAllocaOp =
                 memref::AllocaOp::create(builder, loc, newMemRefType);
-            bankAllocaOp->setAttrs(emptyAttrs);
+            bankAllocaOp->setAttrs(bankAttrs(static_cast<unsigned>(b)));
             banks.push_back(bankAllocaOp);
           }
         })
         .Case<memref::GetGlobalOp>([&](memref::GetGlobalOp getGlobalOp) {
           auto newBanks =
               handleGetGlobalOp(getGlobalOp, currFactor, currDimension,
-                                spec.kind, newMemRefType, builder, emptyAttrs);
+                                spec.kind, newMemRefType, builder, bankAttrs);
           banks.append(newBanks.begin(), newBanks.end());
         })
         .Default([](Operation *) {

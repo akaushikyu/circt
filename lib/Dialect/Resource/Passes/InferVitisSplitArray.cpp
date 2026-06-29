@@ -81,6 +81,9 @@ namespace {
 //   [{dim = 1 : i32, factor = 2 : i32, kind = "cyclic", variable = "buf"}]
 constexpr StringLiteral kPartitionAttr = "hls.array_partition";
 constexpr StringLiteral kPressureAttr = "hls.port_pressure";
+/// Why a partition was inferred, for the --bram-debug report (string; memory
+/// banking copies it onto every bank). Informational only.
+constexpr StringLiteral kReasonAttr = "hls.partition_reason";
 constexpr StringLiteral kPipelineAttr = "hls.pipeline";
 constexpr StringLiteral kPipelineOffAttr = "hls.pipeline_off";
 constexpr StringLiteral kVarNameAttr = "polygeist.varname";
@@ -643,6 +646,39 @@ static ArrayAttr buildPartitionAttr(Builder &b, ArrayRef<PartitionChoice> parts,
   return b.getArrayAttr(entries);
 }
 
+/// One line for `hls.partition_reason`: the loop whose port demand drove the
+/// decision, its per-iteration access counts, the target II and the factor.
+static std::string describePartitionReason(const PartitionPlan &plan,
+                                           const PipelineRegion &region,
+                                           ArrayRef<int64_t> shape) {
+  std::string s;
+  llvm::raw_string_ostream os(s);
+  AffineForOp loop = region.loop;
+  os << "pipelined loop";
+  if (loop.hasConstantBounds())
+    os << " [" << loop.getConstantLowerBound() << ".."
+       << loop.getConstantUpperBound() << " step " << loop.getStepAsInt()
+       << ")";
+  os << " @ ";
+  if (auto fileLoc = dyn_cast<FileLineColLoc>(loop.getLoc()))
+    os << fileLoc.getFilename().getValue() << ":" << fileLoc.getLine() << ":"
+       << fileLoc.getColumn();
+  else
+    loop.getLoc().print(os);
+  os << ": " << region.reads << " reads/" << region.writes
+     << " writes per iteration, target II " << region.targetII << ", factor ";
+  llvm::interleave(
+      plan.parts, os,
+      [&](const PartitionChoice &part) {
+        os << part.factor << " (" << kindName(part, shape) << ", dim "
+           << part.dim + 1 << ")";
+      },
+      " x ");
+  os << " (port-limited II " << plan.before.mii << " -> " << plan.after.mii
+     << ")";
+  return s;
+}
+
 static ArrayAttr buildPressureAttr(Builder &b,
                                    ArrayRef<PipelineRegion> regions) {
   SmallVector<Attribute, 2> entries;
@@ -870,6 +906,17 @@ struct InferVitisSplitArray
         else
           func.setArgAttr(arg.getArgNumber(), kPartitionAttr, spec);
         ++numPartitioned;
+
+        // Record why, for the debug report: the loop the ports held back the
+        // most before partitioning is the one that drove the factor.
+        if (plan.before.region) {
+          StringAttr reason = builder.getStringAttr(
+              describePartitionReason(plan, *plan.before.region, shape));
+          if (def)
+            def->setAttr(kReasonAttr, reason);
+          else
+            func.setArgAttr(arg.getArgNumber(), kReasonAttr, reason);
+        }
 
         for (const PartitionChoice &part : plan.parts) {
           LLVM_DEBUG(llvm::dbgs()
