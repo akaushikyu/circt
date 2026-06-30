@@ -105,15 +105,11 @@ std::optional<PartitionSpec> parsePartitionSpec(Operation *op) {
 }
 
 /// Whether an array of `sizeInBits` is large enough that a tool would map it
-/// to block RAM rather than leaving it in registers/LUTRAM.
-///
-/// TODO: most tools have a configurable threshold for BRAM promotion. This
-///       number is a placeholder; make it parameterizable, either in a .td
-///       file or from a device/target specification.
+/// to block RAM rather than leaving it in registers/LUTRAM. The threshold is
+/// `kBRAMPromotionBits` (MemoryDS.h), shared with the --bram-debug explanation
+/// so the number it quotes is the one applied here.
 bool meetsBRAMPromotionThreshold(int64_t sizeInBits) {
-  // Assume 32 entries x 32-bit data as the promotion point for now.
-  constexpr int64_t kBRAMPromotionBits = 32 * 32;
-  return sizeInBits > kBRAMPromotionBits;
+  return sizeInBits > circt::hls_analysis::kBRAMPromotionBits;
 }
 
 /// Shared cost opt-out: an allocation explicitly annotated as not BRAM-backed

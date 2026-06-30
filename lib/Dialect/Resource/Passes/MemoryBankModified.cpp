@@ -398,6 +398,46 @@ static void updateFuncOpArgAttrs(
                   ArrayAttr::get(funcOp.getContext(), updatedArgAttrs));
 }
 
+static FileLineColLoc findFileLineColLoc(Location loc) {
+  if (auto f = dyn_cast<FileLineColLoc>(loc))
+    return f;
+  if (auto n = dyn_cast<NameLoc>(loc))
+    return findFileLineColLoc(n.getChildLoc());
+  if (auto c = dyn_cast<CallSiteLoc>(loc))
+    return findFileLineColLoc(c.getCallee());
+  if (auto fu = dyn_cast<FusedLoc>(loc))
+    for (Location l : fu.getLocations())
+      if (auto f = findFileLineColLoc(l))
+        return f;
+  if (auto o = dyn_cast<OpaqueLoc>(loc))
+    return findFileLineColLoc(o.getFallbackLocation());
+  return {};
+}
+
+// `hls.bank_of` for a partitioned array that has no `polygeist.varname`
+// (hand-written IR, or a temporary the front end did not name). The banks of
+// one array must still share a name so the debug report can add them up:
+// use the source location when there is one, otherwise the array's
+// program-order position among the function's storage declarations (banks
+// inserted earlier in this pass are skipped; they carry `hls.partition`).
+static std::string unnamedBankOf(Value mem) {
+  if (auto f = findFileLineColLoc(mem.getLoc()))
+    return "<unnamed@" + f.getFilename().str() + ":" +
+           std::to_string(f.getLine()) + ":" + std::to_string(f.getColumn()) +
+           ">";
+  unsigned ordinal = 0;
+  if (Operation *def = mem.getDefiningOp())
+    if (auto fn = def->getParentOfType<func::FuncOp>())
+      fn.walk([&](Operation *op) {
+        if (op == def)
+          return WalkResult::interrupt();
+        if (isa<MemoryResourceOpInterface>(op) && !op->hasAttr("hls.partition"))
+          ++ordinal;
+        return WalkResult::advance();
+      });
+  return "<unnamed#" + std::to_string(ordinal) + ">";
+}
+
 SmallVector<Value, 4> MemoryBankingPass::createBanks(OpBuilder &builder,
                                                      Value originalMem) {
 
@@ -420,11 +460,11 @@ SmallVector<Value, 4> MemoryBankingPass::createBanks(OpBuilder &builder,
   // One spec per array: the new banks carry no `hls.array_partition`, so they
   // are never banked again. What they do carry is provenance for the debug
   // report (--bram-debug): which array each bank came from (`hls.bank_of`),
-  // its index and count, and the spec that produced it (`hls.partition`, the
-  // original pragma entry's fields with `source = "pragma"` when the entry
-  // names none). `polygeist.varname`, `hls.preserve` and
-  // `hls.partition_reason` are copied over from the original. No analysis
-  // reads any of these attributes.
+  // its index and count, and the split that produced it (`hls.partition`:
+  // the effective kind, factor and 1-based dimension, plus the entry's
+  // `source`, "pragma" when it names none). `polygeist.varname`,
+  // `hls.preserve` and `hls.partition_reason` are copied over from the
+  // original. No analysis reads any of these attributes.
   Operation *origDef = originalMem.getDefiningOp();
   func::FuncOp argFunc;
   unsigned argNo = 0;
@@ -451,29 +491,29 @@ SmallVector<Value, 4> MemoryBankingPass::createBanks(OpBuilder &builder,
     bankOf = getGlobal.getName().str();
   else if (argFunc)
     bankOf = "arg" + std::to_string(argNo);
+  else
+    bankOf = unnamedBankOf(originalMem);
 
   const char *specKind = spec.kind == PartitionSpec::Complete ? "complete"
                          : spec.kind == PartitionSpec::Block  ? "block"
                                                               : "cyclic";
-  auto field = [&](StringRef name, Attribute fallback) -> Attribute {
-    if (origEntry)
-      if (Attribute a = origEntry.get(name))
-        return a;
-    return fallback;
-  };
+  // `kind`, `factor` and `dim` are what banking applied, not the pragma text:
+  // a `complete` entry without a factor gets the dimension extent, and a
+  // Vitis `dim = 0` (all dimensions) or missing `dim` is banked along the
+  // first dimension, so its banks say `dim = 1`. `dim` is 1-based like the
+  // pragma. Only `source` is copied from the entry (default "pragma").
+  Attribute sourceAttr;
+  if (origEntry)
+    sourceAttr = origEntry.get("source");
+  if (!sourceAttr)
+    sourceAttr = builder.getStringAttr("pragma");
   DictionaryAttr partitionAttr = builder.getDictionaryAttr({
-      builder.getNamedAttr("kind",
-                           field("kind", builder.getStringAttr(specKind))),
-      builder.getNamedAttr(
-          "factor",
-          field("factor", builder.getI32IntegerAttr(
-                              static_cast<int32_t>(currFactor)))),
-      // Vitis numbers dimensions from 1; the pragma value is copied as written.
-      builder.getNamedAttr(
-          "dim", field("dim", builder.getI32IntegerAttr(
-                                  static_cast<int32_t>(currDimension + 1)))),
-      builder.getNamedAttr("source",
-                           field("source", builder.getStringAttr("pragma"))),
+      builder.getNamedAttr("kind", builder.getStringAttr(specKind)),
+      builder.getNamedAttr("factor", builder.getI32IntegerAttr(
+                                         static_cast<int32_t>(currFactor))),
+      builder.getNamedAttr("dim", builder.getI32IntegerAttr(
+                                      static_cast<int32_t>(currDimension + 1))),
+      builder.getNamedAttr("source", sourceAttr),
   });
   auto bankAttrs = [&](unsigned bankIdx) -> DictionaryAttr {
     SmallVector<NamedAttribute, 8> attrs;

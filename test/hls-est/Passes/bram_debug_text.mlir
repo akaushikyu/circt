@@ -79,7 +79,7 @@ module {
 
 // CHECK:      [kernel#4] small (alloca) @ kernel.cpp:14:5
 // CHECK-NEXT:   shape [8] x i32 (32 bits) = 8 words
-// CHECK-NEXT:   status: excluded_small -- size 256 bits <= 1024-bit BRAM promotion threshold (32 words x 32 bits); kept in LUTRAM/FFs
+// CHECK-NEXT:   status: excluded_small -- size 256 bits <= 1024-bit BRAM promotion threshold; kept in LUTRAM/FFs
 // CHECK:        ram type: RAM_1P -- not selected: excluded from BRAM accounting (LUTRAM / stream / zero-size)
 // CHECK-NEXT:   bram: 0
 

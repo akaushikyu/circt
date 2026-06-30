@@ -4,7 +4,17 @@
 #include "mlir/IR/AffineMap.h"
 #include "mlir/IR/Operation.h"
 
+#include <cstdint>
+
 namespace circt::hls_analysis {
+
+    /// Size above which an array is assumed to be mapped to block RAM rather
+    /// than kept in registers/LUTRAM: 32 words x 32 bits. The cost interface
+    /// (contributesToBRAMCost) applies it and the --bram-debug explanation
+    /// quotes it, so the two cannot drift apart.
+    /// TODO: most tools expose this as a configurable threshold; make it a
+    ///       target/device parameter instead of a constant.
+    inline constexpr int64_t kBRAMPromotionBits = 32 * 32;
 
     enum class StorageKind {
       RAM_1P,

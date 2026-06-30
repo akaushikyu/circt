@@ -123,6 +123,8 @@ struct PartitionRecord {
   bool present = false;
   bool applied = false; // banks exist (hls.partition) vs. spec still unbanked
   std::string kind, source;
+  // On a bank (`applied`): the factor and 1-based dimension banking actually
+  // used. On an unbanked memref: the pragma entry's fields as written.
   int64_t factor = 0, dim = 0;
   std::optional<int64_t> bankIndex, bankCount;
   std::optional<std::string> reason; // hls.partition_reason
@@ -683,15 +685,19 @@ static BRAMCost estimateBRAM(MemoryResourceOpInterface iface,
     if (pragmaKind && *pragmaKind == StorageKind::LUTRAM) {
       rec.status = "excluded_small";
       rec.excludeReason = "pragma storage kind LUTRAM; not BRAM-backed";
+    } else if (bits == 0 && !rec.words) {
+      // A dynamic extent makes the static size 0, which the cost interface
+      // treats as "does not contribute"; report it as what it is.
+      rec.status = "dynamic_shape";
+      rec.excludeReason = "dynamic shape; static size unknown; not estimated";
     } else if (bits == 0) {
       rec.status = "zero_size";
-      rec.excludeReason = rec.words ? "zero-size array (0 bits)"
-                                    : "dynamic shape; static size unknown (0 bits)";
+      rec.excludeReason = "zero-size array (0 bits)";
     } else {
       rec.status = "excluded_small";
-      rec.excludeReason = "size " + std::to_string(bits) +
-                          " bits <= 1024-bit BRAM promotion threshold (32 words"
-                          " x 32 bits); kept in LUTRAM/FFs";
+      rec.excludeReason = "size " + std::to_string(bits) + " bits <= " +
+                          std::to_string(kBRAMPromotionBits) +
+                          "-bit BRAM promotion threshold; kept in LUTRAM/FFs";
     }
     // Still describe the accesses: useful when diagnosing a Vitis mismatch on
     // a small array, and it does not touch the estimate.
@@ -988,8 +994,9 @@ static llvm::json::Object toJson(const MemrefRecord &r) {
   return o;
 }
 
-static void writeDebugJson(ArrayRef<MemrefRecord> records, int64_t total,
-                           StringRef path) {
+// Returns the error code of the failed open, or a default (success) code.
+static std::error_code writeDebugJson(ArrayRef<MemrefRecord> records,
+                                      int64_t total, StringRef path) {
   llvm::json::Object root;
   root["version"] = 1;
   root["total_bram"] = total;
@@ -1020,12 +1027,10 @@ static void writeDebugJson(ArrayRef<MemrefRecord> records, int64_t total,
 
   std::error_code ec;
   llvm::raw_fd_ostream os(path, ec, llvm::sys::fs::OF_Text);
-  if (ec) {
-    llvm::errs() << "bram-debug-json: cannot write '" << path
-                 << "': " << ec.message() << "\n";
-    return;
-  }
+  if (ec)
+    return ec;
   os << llvm::formatv("{0:2}", llvm::json::Value(std::move(root))) << "\n";
+  return std::error_code();
 }
 
 //===----------------------------------------------------------------------===//
@@ -1063,11 +1068,21 @@ struct BRAMAnalysisLoopSchedule
     });
     llvm::outs() << "Total BRAM: " << total << "\n";
 
-    // Debug output only; nothing above depends on these flags.
+    // Debug output only; nothing above depends on these flags. The estimate
+    // and the stdout report are complete by now; a JSON path that cannot be
+    // opened is still an error (non-zero exit), so a harness that asked for
+    // the file never mistakes its absence for an empty result.
     if (bramDebugOpt)
       printDebugText(records, total, llvm::errs());
     if (!bramDebugJsonOpt.empty())
-      writeDebugJson(records, total, bramDebugJsonOpt);
+      if (std::error_code ec =
+              writeDebugJson(records, total, bramDebugJsonOpt)) {
+        // Location-based emitError: no "see current operation" module dump.
+        mlir::emitError(getOperation().getLoc(),
+                        "bram-debug-json: cannot write '")
+            << bramDebugJsonOpt << "': " << ec.message();
+        signalPassFailure();
+      }
   }
 };
 
