@@ -9,6 +9,18 @@
 // This file implements methods that perform analysis involving memory access
 // dependences.
 //
+// MODIFIED for hls-est (performance; the recorded dependences are the same):
+//   * accesses are grouped by memref before pairs are enumerated;
+//   * pairs whose index along some dimension is a different constant skip the
+//     dependence test (it can only report NoDependence for them);
+//   * the dependence test is memoized on the facts it depends on, so the
+//     thousands of identical accesses an unrolled body leaves (`acc[i][j] +=
+//     ...` 64 times) cost one Fourier-Motzkin test instead of one per pair;
+//   * only actual dependences are recorded (every consumer filters on
+//     hasDependence());
+//   * replaceOp() re-keys the destination properly and retargets sources
+//     through an inverted index instead of rescanning every list.
+//
 //===----------------------------------------------------------------------===//
 
 #include "circt/Analysis/DependenceAnalysis.h"
@@ -17,114 +29,288 @@
 #include "mlir/Dialect/Affine/Analysis/Utils.h"
 #include "mlir/Dialect/Affine/IR/AffineMemoryOpInterfaces.h"
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
+#include "mlir/Dialect/Affine/IR/AffineValueMap.h"
 #include "mlir/Dialect/Affine/LoopUtils.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/BuiltinOps.h"
+#include "llvm/ADT/Hashing.h"
+#include "llvm/ADT/MapVector.h"
+#include "llvm/Support/Debug.h"
+
+#include <chrono>
+
+#define DEBUG_TYPE "memory-dependence-analysis"
 
 using namespace mlir;
 using namespace mlir::affine;
 using namespace circt::analysis;
 
+namespace {
+
+/// Everything the dependence test between two accesses depends on: their
+/// composed access maps and operands, the blocks they live in (which fix the
+/// iteration domains and the loops in common), the requested depth, and their
+/// program order (which decides same-iteration dependences). Two pairs with
+/// equal keys get equal results.
+struct PairKey {
+  Block *srcBlock = nullptr;
+  Block *dstBlock = nullptr;
+  AffineMap srcMap, dstMap;
+  SmallVector<Value, 4> srcOperands, dstOperands;
+  unsigned depth = 0;
+  bool srcBeforeDst = false;
+
+  bool operator==(const PairKey &o) const {
+    return srcBlock == o.srcBlock && dstBlock == o.dstBlock &&
+           srcMap == o.srcMap && dstMap == o.dstMap &&
+           srcOperands == o.srcOperands && dstOperands == o.dstOperands &&
+           depth == o.depth && srcBeforeDst == o.srcBeforeDst;
+  }
+};
+
+struct PairKeyInfo {
+  static PairKey getEmptyKey() {
+    PairKey k;
+    k.depth = ~0u;
+    return k;
+  }
+  static PairKey getTombstoneKey() {
+    PairKey k;
+    k.depth = ~0u - 1;
+    return k;
+  }
+  static unsigned getHashValue(const PairKey &k) {
+    return llvm::hash_combine(
+        k.srcBlock, k.dstBlock, k.srcMap.getAsOpaquePointer(),
+        k.dstMap.getAsOpaquePointer(),
+        llvm::hash_combine_range(k.srcOperands.begin(), k.srcOperands.end()),
+        llvm::hash_combine_range(k.dstOperands.begin(), k.dstOperands.end()),
+        k.depth, k.srcBeforeDst);
+  }
+  static bool isEqual(const PairKey &a, const PairKey &b) { return a == b; }
+};
+
+/// The memoized outcome of one (source, destination, depth) test.
+struct PairResult {
+  bool skipped = false; // depth exceeds the loops the pair has in common
+  DependenceResult::ResultEnum value = DependenceResult::NoDependence;
+  SmallVector<DependenceComponent, 2> comps;
+  bool sameElement = false; // the two accesses provably address one element
+};
+
+} // namespace
+
+/// True if `a` comes before `b` in their lowest common block (what the
+/// dependence test consults for same-iteration dependences).
+static bool appearsBefore(Operation *a, Operation *b) {
+  for (Operation *cur = a; cur; cur = cur->getParentOp()) {
+    Block *block = cur->getBlock();
+    if (!block)
+      break;
+    if (Operation *anc = block->findAncestorOpInBlock(*b))
+      return cur != anc && cur->isBeforeInBlock(anc);
+  }
+  return false;
+}
+
+/// Two accesses whose index along some dimension is a different constant can
+/// never touch the same element, so the dependence test would report
+/// NoDependence for them. Unrolled, banked bodies consist largely of such
+/// pairs (`bank[3][%i]` vs `bank[7][%i]`), and the full Fourier-Motzkin test
+/// costs far more than this check.
+static bool haveDisjointConstantIndex(const AffineValueMap &ma,
+                                      const AffineValueMap &mb) {
+  if (ma.getNumResults() != mb.getNumResults())
+    return false;
+  for (unsigned i = 0, e = ma.getNumResults(); i < e; ++i) {
+    auto ca = dyn_cast<AffineConstantExpr>(ma.getAffineMap().getResult(i));
+    auto cb = dyn_cast<AffineConstantExpr>(mb.getAffineMap().getResult(i));
+    if (ca && cb && ca.getValue() != cb.getValue())
+      return true;
+  }
+  return false;
+}
+
+unsigned MemoryDependenceAnalysis::slotFor(Operation *op) {
+  auto [it, inserted] = slotOf.try_emplace(op, slots.size());
+  if (inserted)
+    slots.emplace_back();
+  return it->second;
+}
+
 /// Helper to iterate through memory operation pairs and check for dependences
 /// at a given loop nesting depth.
-static void checkMemrefDependence(SmallVectorImpl<Operation *> &memoryOps,
-                                  unsigned depth,
-                                  MemoryDependenceResult &results) {
-  for (auto *source : memoryOps) {
-    for (auto *destination : memoryOps) {
-      if (source == destination)
-        continue;
+void MemoryDependenceAnalysis::checkMemrefDependence(
+    SmallVectorImpl<Operation *> &memoryOps, unsigned depth) {
+  // Every memory op gets a (possibly empty) dependence list, as before.
+  for (auto *destination : memoryOps)
+    slotFor(destination);
 
-      // Initialize the dependence list for this destination.
-      if (results.count(destination) == 0)
-        results[destination] = SmallVector<MemoryDependence>();
+  // Accesses to different memrefs never depend on each other, so only pairs
+  // within one memref's group are examined; program order is kept inside each
+  // group, so the dependences are recorded in the same order as before.
+  llvm::MapVector<Value, SmallVector<Operation *>> byMemref;
+  DenseMap<Operation *, AffineValueMap> accessMaps;
+  for (auto *op : memoryOps) {
+    MemRefAccess access(op);
+    byMemref[access.memref].push_back(op);
+    access.getAccessMap(&accessMaps[op]);
+  }
 
-      // Look for inter-iteration dependences on the same memory location.
+  DenseMap<PairKey, PairResult, PairKeyInfo> memo;
+  [[maybe_unused]] unsigned numPairs = 0, numDisjoint = 0, numHits = 0,
+                            numTests = 0, numDeps = 0;
+
+  for (auto &group : byMemref) {
+    SmallVectorImpl<Operation *> &ops = group.second;
+    for (auto *source : ops) {
       MemRefAccess src(source);
-      MemRefAccess dst(destination);
-      FlatAffineValueConstraints dependenceConstraints;
-      SmallVector<DependenceComponent, 2> depComps;
+      const AffineValueMap &srcMap = accessMaps[source];
+      for (auto *destination : ops) {
+        if (source == destination)
+          continue;
+        ++numPairs;
+        const AffineValueMap &dstMap = accessMaps[destination];
+        if (haveDisjointConstantIndex(srcMap, dstMap)) {
+          ++numDisjoint;
+          continue;
+        }
 
-      // Requested depth might not be a valid comparison if they do not belong
-      // to the same loop nest
-      if (depth > getInnermostCommonLoopDepth({source, destination}))
-        continue;
+        PairKey key;
+        key.srcBlock = source->getBlock();
+        key.dstBlock = destination->getBlock();
+        key.srcMap = srcMap.getAffineMap();
+        key.dstMap = dstMap.getAffineMap();
+        key.srcOperands.assign(srcMap.getOperands().begin(),
+                               srcMap.getOperands().end());
+        key.dstOperands.assign(dstMap.getOperands().begin(),
+                               dstMap.getOperands().end());
+        key.depth = depth;
+        key.srcBeforeDst = appearsBefore(source, destination);
 
-      DependenceResult result = checkMemrefAccessDependence(
-          src, dst, depth, &dependenceConstraints, &depComps, true);
+        auto [memoIt, fresh] = memo.try_emplace(key);
+        PairResult &pr = memoIt->second;
+        if (fresh) {
+          MemRefAccess dst(destination);
+          // Requested depth might not be a valid comparison if they do not
+          // belong to the same loop nest
+          if (depth > getInnermostCommonLoopDepth({source, destination})) {
+            pr.skipped = true;
+          } else {
+            ++numTests;
+            FlatAffineValueConstraints dependenceConstraints;
+            DependenceResult result = checkMemrefAccessDependence(
+                src, dst, depth, &dependenceConstraints, &pr.comps, true);
+            pr.value = result.value;
+            pr.sameElement = (src == dst);
+          }
+        } else {
+          ++numHits;
+        }
+        if (pr.skipped)
+          continue;
 
-      results[destination].emplace_back(source, result.value, depComps);
+        // Only record actual dependences. Every consumer filters on
+        // hasDependence(); keeping the NoDependence results made the result
+        // map quadratic in the number of memory ops.
+        if (hasDependence(pr.value)) {
+          ++numDeps;
+          record(source, destination, pr.value, pr.comps);
+        }
 
-      // Also consider intra-iteration dependences on the same memory location.
-      // This currently does not consider aliasing.
-      if (src != dst)
-        continue;
+        // Also consider intra-iteration dependences on the same memory
+        // location. This currently does not consider aliasing.
+        if (!pr.sameElement)
+          continue;
 
-      // Collect surrounding loops to use in dependence components. Only proceed
-      // if we are in the innermost loop.
-      SmallVector<AffineForOp> enclosingLoops;
-      getAffineForIVs(*destination, &enclosingLoops);
-      if (enclosingLoops.size() != depth)
-        continue;
+        // Collect surrounding loops to use in dependence components. Only
+        // proceed if we are in the innermost loop.
+        SmallVector<AffineForOp> enclosingLoops;
+        getAffineForIVs(*destination, &enclosingLoops);
+        if (enclosingLoops.size() != depth)
+          continue;
 
-      // Look for the common parent that src and dst share. If there is none,
-      // there is nothing more to do.
-      SmallVector<Operation *> srcParents;
-      getEnclosingAffineOps(*source, &srcParents);
-      SmallVector<Operation *> dstParents;
-      getEnclosingAffineOps(*destination, &dstParents);
+        // Look for the common parent that src and dst share. If there is
+        // none, there is nothing more to do.
+        SmallVector<Operation *> srcParents;
+        getEnclosingAffineOps(*source, &srcParents);
+        SmallVector<Operation *> dstParents;
+        getEnclosingAffineOps(*destination, &dstParents);
 
-      Operation *commonParent = nullptr;
-      for (auto *srcParent : llvm::reverse(srcParents)) {
-        for (auto *dstParent : llvm::reverse(dstParents)) {
-          if (srcParent == dstParent)
-            commonParent = srcParent;
+        Operation *commonParent = nullptr;
+        for (auto *srcParent : llvm::reverse(srcParents)) {
+          for (auto *dstParent : llvm::reverse(dstParents)) {
+            if (srcParent == dstParent)
+              commonParent = srcParent;
+            if (commonParent != nullptr)
+              break;
+          }
           if (commonParent != nullptr)
             break;
         }
-        if (commonParent != nullptr)
-          break;
-      }
 
-      if (commonParent == nullptr)
-        continue;
-
-      // Check the common parent's regions.
-      for (auto &commonRegion : commonParent->getRegions()) {
-        if (commonRegion.empty())
+        if (commonParent == nullptr)
           continue;
 
-        // Only support structured constructs with single-block regions for now.
-        assert(commonRegion.hasOneBlock() &&
-               "only single-block regions are supported");
+        // Check the common parent's regions.
+        for (auto &commonRegion : commonParent->getRegions()) {
+          if (commonRegion.empty())
+            continue;
 
-        Block &commonBlock = commonRegion.front();
+          // Only support structured constructs with single-block regions for
+          // now.
+          assert(commonRegion.hasOneBlock() &&
+                 "only single-block regions are supported");
 
-        // Find the src and dst ancestor in the common block, if any.
-        Operation *srcOrAncestor = commonBlock.findAncestorOpInBlock(*source);
-        Operation *dstOrAncestor =
-            commonBlock.findAncestorOpInBlock(*destination);
-        if (srcOrAncestor == nullptr || dstOrAncestor == nullptr)
-          continue;
+          Block &commonBlock = commonRegion.front();
 
-        // Check if the src or its ancestor is before the dst or its ancestor.
-        if (srcOrAncestor->isBeforeInBlock(dstOrAncestor)) {
-          // Build dependence components for each loop depth.
-          SmallVector<DependenceComponent> intraDeps;
-          for (size_t i = 0; i < depth; ++i) {
-            DependenceComponent depComp;
-            depComp.op = enclosingLoops[i];
-            depComp.lb = 0;
-            depComp.ub = 0;
-            intraDeps.push_back(depComp);
+          // Find the src and dst ancestor in the common block, if any.
+          Operation *srcOrAncestor = commonBlock.findAncestorOpInBlock(*source);
+          Operation *dstOrAncestor =
+              commonBlock.findAncestorOpInBlock(*destination);
+          if (srcOrAncestor == nullptr || dstOrAncestor == nullptr)
+            continue;
+
+          // Check if the src or its ancestor is before the dst or its
+          // ancestor.
+          if (srcOrAncestor->isBeforeInBlock(dstOrAncestor)) {
+            // Build dependence components for each loop depth.
+            SmallVector<DependenceComponent> intraDeps;
+            for (size_t i = 0; i < depth; ++i) {
+              DependenceComponent depComp;
+              depComp.op = enclosingLoops[i];
+              depComp.lb = 0;
+              depComp.ub = 0;
+              intraDeps.push_back(depComp);
+            }
+
+            ++numDeps;
+            record(source, destination, DependenceResult::HasDependence,
+                   intraDeps);
           }
-
-          results[destination].emplace_back(
-              source, DependenceResult::HasDependence, intraDeps);
         }
       }
     }
   }
+  LLVM_DEBUG(llvm::dbgs() << "memory dependence analysis, depth " << depth
+                          << ": " << memoryOps.size() << " accesses, "
+                          << byMemref.size() << " memrefs, " << numPairs
+                          << " same-memref pairs, " << numDisjoint
+                          << " disjoint by constant index, " << numHits
+                          << " memo hits, " << numTests
+                          << " dependence tests, " << numDeps
+                          << " dependences recorded\n");
+}
+
+void MemoryDependenceAnalysis::record(
+    Operation *source, Operation *destination,
+    DependenceResult::ResultEnum type,
+    ArrayRef<DependenceComponent> components) {
+  unsigned slot = slotFor(destination);
+  slots[slot].emplace_back(source, type, components);
+  SmallVector<unsigned> &holders = bySource[source];
+  if (holders.empty() || holders.back() != slot)
+    holders.push_back(slot);
 }
 
 /// MemoryDependenceAnalysis traverses any AffineForOps in the FuncOp body and
@@ -146,29 +332,49 @@ circt::analysis::MemoryDependenceAnalysis::MemoryDependenceAnalysis(
   });
 
   // For each depth, check memref accesses.
+  [[maybe_unused]] auto t0 = std::chrono::steady_clock::now();
   for (unsigned depth = 1, e = depthToLoops.size(); depth <= e; ++depth)
-    checkMemrefDependence(memoryOps, depth, results);
+    checkMemrefDependence(memoryOps, depth);
+  LLVM_DEBUG(llvm::dbgs()
+             << "memory dependence analysis took "
+             << std::chrono::duration<double>(std::chrono::steady_clock::now() -
+                                              t0)
+                    .count()
+             << " s\n");
 }
 
 /// Returns the dependences, if any, that the given Operation depends on.
 ArrayRef<MemoryDependence>
 circt::analysis::MemoryDependenceAnalysis::getDependences(Operation *op) {
-  return results[op];
+  auto it = slotOf.find(op);
+  if (it == slotOf.end())
+    return {};
+  return slots[it->second];
 }
 
 /// Replaces the dependences, if any, from the oldOp to the newOp.
 void circt::analysis::MemoryDependenceAnalysis::replaceOp(Operation *oldOp,
                                                           Operation *newOp) {
-  // If oldOp had any dependences.
-  auto it = results.find(oldOp);
-  if (it != results.end())
-    // Move the dependences to newOp.
-    it->first = newOp;
+  // Re-key the dependences *to* oldOp. (The original code assigned the new
+  // key through the map iterator, which leaves the entry in the bucket of the
+  // old key's hash, where a lookup by newOp cannot find it.)
+  auto it = slotOf.find(oldOp);
+  if (it != slotOf.end()) {
+    unsigned slot = it->second;
+    slotOf.erase(it);
+    slotOf[newOp] = slot;
+  }
 
-  // Find any dependences originating from oldOp and make newOp the source.
-  // TODO(mikeurbach): consider adding an inverted index to avoid this scan.
-  for (auto &it : results)
-    for (auto &dep : it.second)
+  // Retarget the dependences *from* oldOp, using the inverted index instead
+  // of a scan over every list.
+  auto srcIt = bySource.find(oldOp);
+  if (srcIt == bySource.end())
+    return;
+  SmallVector<unsigned> holders = std::move(srcIt->second);
+  bySource.erase(srcIt);
+  for (unsigned slot : holders)
+    for (auto &dep : slots[slot])
       if (dep.source == oldOp)
         dep.source = newOp;
+  bySource[newOp] = std::move(holders);
 }

@@ -35,6 +35,22 @@
 //         pipeline op is not IsolatedFromAbove, so it may freely reference
 //         outer induction variables and loop-invariant values.
 //
+//   4. Scalability for unrolled bodies (option `fast-threshold`, default 150):
+//      a loop whose modulo problem holds more resource-limited (memory)
+//      operations than the threshold is scheduled by a greedy resource-bound
+//      modulo list scheduler (II = max(ResMinII, recurrence-feasible II),
+//      ASAP placement in dependence order against a modulo reservation
+//      table, II bumped when an op cannot be placed) instead of the
+//      simplex-based ModuloSimplexScheduler, which re-solves an LP per
+//      resource-limited op and is cubic in the body size. Small bodies keep
+//      the simplex scheduler. `fast-threshold=0` uses the greedy scheduler for
+//      every loop.
+//
+//   5. Pre-scheduling CSE (option `cse`, default on): duplicated
+//      side-effect-free ops (the per-access index arithmetic left by affine
+//      map expansion) are merged before the problem is built. Memory ops are
+//      never merged, so the port demand seen by --bram-analysis is unchanged.
+//
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/Resource/Passes/AffineToLoopScheduleModified.h"
@@ -63,7 +79,8 @@
 #include "mlir/IR/Dominance.h"
 #include "mlir/IR/IRMapping.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
-#include "mlir/Transforms/Passes.h"   // mlir::createCSEPass
+#include "mlir/IR/OperationSupport.h"
+#include "mlir/Interfaces/SideEffectInterfaces.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "mlir/Transforms/RegionUtils.h"
@@ -73,11 +90,16 @@
 #include "llvm/Support/Debug.h"
 #include <cassert>
 #include <limits>
+#include <queue>
 #include <mlir/IR/IntegerSet.h>
 
 #define DEBUG_TYPE "affine-to-loopschedule"
 // https://circt.llvm.org/docs/Scheduling/
 namespace circt {
+// The generated base class takes an AffineToLoopScheduleOptions struct, which
+// the DECL block defines; the public header declares it in circt::hls_analysis,
+// so declare it here in circt as well for the DEF block.
+#define GEN_PASS_DECL_AFFINETOLOOPSCHEDULE
 #define GEN_PASS_DEF_AFFINETOLOOPSCHEDULE
 #include "circt/Conversion/Passes.h.inc"
 } // namespace circt
@@ -305,6 +327,292 @@ void AffineToLoopSchedule::unrollInnerReductions() {
 }
 
 
+//===----------------------------------------------------------------------===//
+// Pre-scheduling CSE of side-effect-free ops
+//===----------------------------------------------------------------------===//
+namespace {
+// DenseMapInfo keyed on structural op equivalence (same op, attributes, operand
+// values and result types; locations ignored), as mlir::CSE does.
+struct PureOpInfo : public llvm::DenseMapInfo<Operation *> {
+  static unsigned getHashValue(const Operation *opC) {
+    return OperationEquivalence::computeHash(
+        const_cast<Operation *>(opC),
+        /*hashOperands=*/OperationEquivalence::directHashValue,
+        /*hashResults=*/OperationEquivalence::ignoreHashValue,
+        OperationEquivalence::IgnoreLocations);
+  }
+  static bool isEqual(const Operation *lhsC, const Operation *rhsC) {
+    auto *lhs = const_cast<Operation *>(lhsC);
+    auto *rhs = const_cast<Operation *>(rhsC);
+    if (lhs == rhs)
+      return true;
+    // Entries are never erased, so no tombstone can be compared (as in
+    // mlir/lib/Transforms/Utils/CSE.cpp).
+    if (lhs == getEmptyKey() || rhs == getEmptyKey())
+      return false;
+    return OperationEquivalence::isEquivalentTo(
+        lhs, rhs, OperationEquivalence::IgnoreLocations);
+  }
+};
+} // namespace
+
+/// Merge every later duplicate of a side-effect-free, region-free,
+/// non-terminator op into the first occurrence within the same block. Nested
+/// blocks are processed with their own scope. Ops with memory effects (loads,
+/// stores, store_enables) are never candidates, so the number and order of
+/// memory accesses is preserved exactly. Returns the number of ops erased.
+static unsigned cseBlockPureOps(Block &block) {
+  unsigned merged = 0;
+  DenseSet<Operation *, PureOpInfo> seen;
+  for (Operation &op : llvm::make_early_inc_range(block)) {
+    for (Region &region : op.getRegions())
+      for (Block &nested : region)
+        merged += cseBlockPureOps(nested);
+    if (op.getNumRegions() != 0 || op.getNumResults() == 0 ||
+        op.hasTrait<OpTrait::IsTerminator>() || !isMemoryEffectFree(&op))
+      continue;
+    auto [it, inserted] = seen.insert(&op);
+    if (inserted)
+      continue;
+    op.replaceAllUsesWith(*it);
+    op.erase();
+    ++merged;
+  }
+  return merged;
+}
+
+//===----------------------------------------------------------------------===//
+// Greedy resource-bound modulo scheduler (fast path for large loop bodies)
+//===----------------------------------------------------------------------===//
+// The ModuloSimplexScheduler fixes one resource-limited op at a time and
+// re-solves the LP after each, which is cubic in the body size; a 64-way
+// unrolled body with ~700 memory ops takes minutes. This scheduler produces a
+// valid ModuloProblem solution in O(II * (V + E)) per II candidate:
+//
+//   1. II starts at ResMinII = max over resources of ceil(uses / limit).
+//   2. Resource-free ASAP times are the longest paths in the constraint graph
+//      (edge weight latency - distance * II). A positive cycle means a
+//      recurrence cannot close within II: bump II (what the simplex does when
+//      it raises its parameter T).
+//   3. Ops are placed in a topological order of the intra-iteration (distance
+//      0) edges, ties broken by problem insertion order (= program order).
+//      Each op starts ASAP w.r.t. every already placed predecessor; a
+//      resource-limited op takes the first of the II congruence classes from
+//      that time whose modulo reservation table has a free instance (one
+//      always exists while II >= ResMinII).
+//   4. Every dependence, including back edges whose source was placed after
+//      its destination, is re-checked; a violation bumps II and restarts.
+//
+// Steps 3/4 are classic iterative modulo scheduling without backtracking. The
+// structure --bram-analysis reads (II and each access's stage mod II) comes
+// out the same as from the simplex for the saturated resources that decide
+// the port demand: both place accesses at the first free slot from their
+// ASAP time.
+namespace {
+class FastModuloScheduler {
+public:
+  explicit FastModuloScheduler(ModuloProblem &prob) : prob(prob) {}
+
+  /// Returns the number of operations linked to a resource with a limit.
+  static unsigned countLimitedOps(ModuloProblem &prob);
+
+  LogicalResult schedule(unsigned maxIIBumps);
+
+private:
+  struct Edge {
+    unsigned src;
+    unsigned latency;
+    unsigned distance;
+  };
+
+  ModuloProblem &prob;
+  SmallVector<Operation *> ops;                             // insertion order
+  SmallVector<unsigned> latency;                            // per op
+  SmallVector<SmallVector<Edge, 4>> preds;                  // incoming edges
+  SmallVector<SmallVector<Problem::ResourceType, 1>> rsrcs; // limited rsrcs
+  SmallVector<unsigned> topo;
+
+  LogicalResult build();
+  unsigned resMinII() const;
+  bool tryII(unsigned ii, SmallVectorImpl<unsigned> &start);
+};
+} // namespace
+
+unsigned FastModuloScheduler::countLimitedOps(ModuloProblem &prob) {
+  unsigned n = 0;
+  for (Operation *op : prob.getOperations()) {
+    auto lr = prob.getLinkedResourceTypes(op);
+    if (!lr)
+      continue;
+    if (llvm::any_of(*lr, [&](Problem::ResourceType r) {
+          return prob.getLimit(r).value_or(0) > 0;
+        }))
+      ++n;
+  }
+  return n;
+}
+
+LogicalResult FastModuloScheduler::build() {
+  DenseMap<Operation *, unsigned> index;
+  for (Operation *op : prob.getOperations()) {
+    index[op] = ops.size();
+    ops.push_back(op);
+  }
+  unsigned n = ops.size();
+  latency.assign(n, 0);
+  preds.assign(n, {});
+  rsrcs.assign(n, {});
+  for (unsigned i = 0; i < n; ++i) {
+    auto opr = prob.getLinkedOperatorType(ops[i]);
+    if (!opr)
+      return failure();
+    auto lat = prob.getLatency(*opr);
+    if (!lat)
+      return failure();
+    latency[i] = *lat;
+    if (auto lr = prob.getLinkedResourceTypes(ops[i]))
+      for (Problem::ResourceType r : *lr)
+        if (prob.getLimit(r).value_or(0) > 0)
+          rsrcs[i].push_back(r);
+  }
+
+  SmallVector<unsigned> indeg(n, 0);
+  SmallVector<SmallVector<unsigned, 4>> succ0(n);
+  for (unsigned j = 0; j < n; ++j) {
+    for (auto &dep : prob.getDependences(ops[j])) {
+      auto it = index.find(dep.getSource());
+      if (it == index.end())
+        continue;
+      unsigned i = it->second;
+      unsigned dist = prob.getDistance(dep).value_or(0);
+      preds[j].push_back({i, latency[i], dist});
+      if (dist == 0) {
+        succ0[i].push_back(j);
+        ++indeg[j];
+      }
+    }
+  }
+
+  // Kahn's algorithm; among ready ops the earliest inserted goes first.
+  std::priority_queue<unsigned, std::vector<unsigned>, std::greater<unsigned>>
+      ready;
+  for (unsigned i = 0; i < n; ++i)
+    if (indeg[i] == 0)
+      ready.push(i);
+  while (!ready.empty()) {
+    unsigned i = ready.top();
+    ready.pop();
+    topo.push_back(i);
+    for (unsigned j : succ0[i])
+      if (--indeg[j] == 0)
+        ready.push(j);
+  }
+  // A cycle of distance-0 edges has no schedule at any II.
+  return success(topo.size() == n);
+}
+
+unsigned FastModuloScheduler::resMinII() const {
+  DenseMap<Problem::ResourceType, unsigned> uses;
+  for (auto &rs : rsrcs)
+    for (Problem::ResourceType r : rs)
+      ++uses[r];
+  unsigned ii = 1;
+  for (auto &[r, count] : uses) {
+    unsigned limit = *prob.getLimit(r);
+    ii = std::max(ii, (count + limit - 1) / limit);
+  }
+  return ii;
+}
+
+bool FastModuloScheduler::tryII(unsigned ii, SmallVectorImpl<unsigned> &start) {
+  unsigned n = ops.size();
+  // (2) resource-free ASAP: longest paths; a positive cycle means infeasible.
+  SmallVector<int64_t> asap(n, 0);
+  bool changed = true;
+  for (unsigned round = 0; changed && round <= n; ++round) {
+    changed = false;
+    for (unsigned j : topo)
+      for (const Edge &e : preds[j]) {
+        int64_t cand = asap[e.src] + static_cast<int64_t>(e.latency) -
+                       static_cast<int64_t>(e.distance) * ii;
+        if (cand > asap[j]) {
+          asap[j] = cand;
+          changed = true;
+        }
+      }
+  }
+  if (changed)
+    return false;
+
+  // (3) list scheduling against a modulo reservation table.
+  SmallVector<int64_t> st(n, -1);
+  DenseMap<Problem::ResourceType, SmallVector<unsigned>> mrt;
+  for (unsigned j : topo) {
+    int64_t est = asap[j];
+    for (const Edge &e : preds[j])
+      if (st[e.src] >= 0)
+        est = std::max(est, st[e.src] + static_cast<int64_t>(e.latency) -
+                                static_cast<int64_t>(e.distance) * ii);
+    if (rsrcs[j].empty()) {
+      st[j] = est;
+      continue;
+    }
+    bool placed = false;
+    for (unsigned k = 0; k < ii && !placed; ++k) {
+      int64_t t = est + k;
+      unsigned slot = static_cast<unsigned>(t % ii);
+      bool free = true;
+      for (Problem::ResourceType r : rsrcs[j]) {
+        auto &tab = mrt[r];
+        if (tab.empty())
+          tab.assign(ii, 0);
+        if (tab[slot] >= *prob.getLimit(r)) {
+          free = false;
+          break;
+        }
+      }
+      if (!free)
+        continue;
+      for (Problem::ResourceType r : rsrcs[j])
+        ++mrt[r][slot];
+      st[j] = t;
+      placed = true;
+    }
+    if (!placed)
+      return false;
+  }
+
+  // (4) every edge, including back edges placed out of order.
+  for (unsigned j = 0; j < n; ++j)
+    for (const Edge &e : preds[j])
+      if (st[e.src] + static_cast<int64_t>(e.latency) >
+          st[j] + static_cast<int64_t>(e.distance) * ii)
+        return false;
+
+  start.clear();
+  for (int64_t t : st)
+    start.push_back(static_cast<unsigned>(t));
+  return true;
+}
+
+LogicalResult FastModuloScheduler::schedule(unsigned maxIIBumps) {
+  if (failed(build()))
+    return failure();
+  unsigned ii = resMinII();
+  SmallVector<unsigned> start;
+  for (unsigned bumps = 0; bumps <= maxIIBumps; ++bumps, ++ii) {
+    if (!tryII(ii, start))
+      continue;
+    prob.setInitiationInterval(ii);
+    for (unsigned i = 0, n = ops.size(); i < n; ++i)
+      prob.setStartTime(ops[i], start[i]);
+    LLVM_DEBUG(llvm::dbgs() << "fast modulo schedule: " << ops.size()
+                            << " ops, II = " << ii << "\n");
+    return success();
+  }
+  return failure();
+}
+
 void AffineToLoopSchedule::runOnOperation() {
   // Phase 0 — structural transforms. Both mutate the loop nest and MUST run
   // before any analysis is constructed.
@@ -339,16 +647,19 @@ void AffineToLoopSchedule::runOnOperation() {
   // MODIFIED: collapse the redundant index arithmetic introduced by
   // per-access affine-map expansion. Each affine.load/store expands its own
   // copy of the floordiv/mod delinearization, so a banked access used N
-  // times yields N identical divsi/select chains. Running CSE here — before
+  // times yields N identical divsi/select chains. Merging them here — before
   // the scheduling problem is constructed — means the scheduler sees one
   // shared computation, so its result occupies a single pipeline register
-  // slot instead of one per access (otherwise the redundancy is frozen into
-  // the loopschedule.register tuple, where later CSE can merge the def but
-  // not the duplicated register operands).
-  {
-    OpPassManager cleanup(getOperation()->getName());
-    cleanup.addPass(createCSEPass());
-    cleanup.addPass(mlir::createSymbolDCEPass());
+  // slot instead of one per access. Only side-effect-free ops are merged
+  // (never loads/stores), so the memory dependence analysis computed above
+  // stays valid and the per-bank port demand is untouched. (An earlier
+  // version built an OpPassManager with CSE here but never ran it.)
+  if (cseBeforeSchedule) {
+    unsigned merged = 0;
+    for (Block &block : getOperation().getBody())
+      merged += cseBlockPureOps(block);
+    LLVM_DEBUG(llvm::dbgs() << "pre-schedule CSE merged " << merged
+                            << " side-effect-free ops\n");
   }
 
   // Get scheduling analysis for the whole function.
@@ -802,7 +1113,19 @@ AffineToLoopSchedule::solveSchedulingProblem(AffineForOp forOp,
     return failure();
 
   auto *anchor = forOp.getBody()->getTerminator();
-  if (failed(scheduleSimplex(problem, anchor)))
+
+  // MODIFIED: large bodies (more resource-limited ops than `fast-threshold`,
+  // or any body when the threshold is 0) go to the greedy resource-bound
+  // scheduler; if it cannot find a schedule it falls back to the simplex.
+  unsigned limited = FastModuloScheduler::countLimitedOps(problem);
+  bool scheduled = false;
+  if (fastThreshold == 0 || limited > fastThreshold) {
+    FastModuloScheduler fast(problem);
+    scheduled = succeeded(fast.schedule(/*maxIIBumps=*/4096));
+    LLVM_DEBUG(if (!scheduled) llvm::dbgs()
+               << "fast modulo scheduler failed; falling back to simplex\n");
+  }
+  if (!scheduled && failed(scheduleSimplex(problem, anchor)))
     return failure();
 
   // Verify the solution.

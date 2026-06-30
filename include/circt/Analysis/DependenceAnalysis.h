@@ -17,6 +17,7 @@
 #include "circt/Support/LLVM.h"
 #include "mlir/Dialect/Affine/Analysis/AffineAnalysis.h"
 #include <utility>
+#include <vector>
 
 namespace mlir {
 namespace affine {
@@ -75,8 +76,20 @@ struct MemoryDependenceAnalysis {
   void replaceOp(Operation *oldOp, Operation *newOp);
 
 private:
-  // Store dependence results.
-  MemoryDependenceResult results;
+  // Dependences are stored per destination in stable slots, so replaceOp()
+  // re-keys an operation without copying its list; `bySource` is the inverted
+  // index that lets replaceOp() retarget the dependences leaving an operation
+  // without rescanning every list.
+  std::vector<SmallVector<MemoryDependence>> slots;
+  DenseMap<Operation *, unsigned> slotOf;
+  DenseMap<Operation *, SmallVector<unsigned>> bySource;
+
+  unsigned slotFor(Operation *op);
+  void record(Operation *source, Operation *destination,
+              mlir::affine::DependenceResult::ResultEnum type,
+              ArrayRef<mlir::affine::DependenceComponent> components);
+  void checkMemrefDependence(SmallVectorImpl<Operation *> &memoryOps,
+                             unsigned depth);
 };
 
 } // namespace analysis

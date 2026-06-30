@@ -35,6 +35,17 @@ def AffineToLoopSchedule : Pass<"convert-affine-to-loopschedule", "mlir::func::F
     "mlir::scf::SCFDialect",
     "mlir::func::FuncDialect"
   ];
+  let options = [
+    Option<"fastThreshold", "fast-threshold", "unsigned", /*default=*/"150",
+           "Loop bodies with more than this many resource-limited (memory) "
+           "operations are scheduled by the greedy resource-bound modulo list "
+           "scheduler instead of the simplex-based one; 0 uses the greedy "
+           "scheduler for every loop.">,
+    Option<"cseBeforeSchedule", "cse", "bool", /*default=*/"true",
+           "Merge duplicated side-effect-free ops (index arithmetic left by "
+           "per-access affine-map expansion) before the scheduling problem is "
+           "built. Memory ops are never merged.">
+  ];
 }
 
 //===----------------------------------------------------------------------===//

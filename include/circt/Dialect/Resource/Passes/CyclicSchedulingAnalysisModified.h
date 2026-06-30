@@ -38,7 +38,7 @@ struct CyclicSchedulingAnalysis {
 
 private:
   void analyzeForOp(mlir::affine::AffineForOp forOp,
-                    analysis::MemoryDependenceAnalysis memoryAnalysis);
+                    analysis::MemoryDependenceAnalysis &memoryAnalysis);
 
   DenseMap<Operation *, scheduling::CyclicProblem> problems;
 };

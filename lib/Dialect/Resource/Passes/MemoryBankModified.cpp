@@ -161,6 +161,47 @@ BankAccess computeBankAccess(AffineMap accessMap,
   return ba;
 }
 
+// Bank-index constness through a stepped loop counter. An operand that is the
+// induction variable of `affine.for %i = lb to ub step s` only ever takes the
+// values lb + s*t, so `(d0 + c) mod f` is a constant whenever s is a multiple
+// of f, even though the expression is not constant in d0. The access maps keep
+// the IV as their operand (the offset `idx floordiv f` must see the real
+// value); only the *decision* "constant bank or rotating" is made on the
+// substituted form. This is the same rewrite `infer-vitis-split-array`
+// applies in makeLinearIndex(), so both passes agree on which accesses rotate
+// once loop normalization is not in the pipeline. Loops with step 1 are left
+// alone: substituting lb + t cannot make a residue constant.
+static std::optional<unsigned>
+constantBankThroughInductionVars(AffineMap accessMap, ArrayRef<Value> operands,
+                                 const PartitionSpec &spec,
+                                 MemRefType origTy) {
+  unsigned nDims = accessMap.getNumDims();
+  unsigned nSyms = accessMap.getNumSymbols();
+  MLIRContext *ctx = accessMap.getContext();
+  SmallVector<AffineExpr, 4> dimRepl;
+  bool any = false;
+  for (unsigned i = 0; i < nDims; ++i) {
+    AffineExpr d = getAffineDimExpr(i, ctx);
+    Value v = operands[i];
+    if (affine::isAffineForInductionVar(v)) {
+      affine::AffineForOp owner = affine::getForInductionVarOwner(v);
+      if (owner.hasConstantLowerBound() && owner.getStepAsInt() != 1) {
+        d = d * owner.getStepAsInt() + owner.getConstantLowerBound();
+        any = true;
+      }
+    }
+    dimRepl.push_back(d);
+  }
+  if (!any)
+    return std::nullopt;
+  AffineExpr idx = accessMap.getResult(spec.dim).replaceDims(dimRepl);
+  AffineExpr bank = computeBankAndOffset(idx, spec, origTy).first;
+  if (auto c = dyn_cast<AffineConstantExpr>(
+          simplifyAffineExpr(bank, nDims, nSyms)))
+    return static_cast<unsigned>(c.getValue());
+  return std::nullopt;
+}
+
 // Partition memories carrying `hls.array_partition` throughout the function.
 struct MemoryBankingPass
     : public hls_analysis::impl::MemoryBankingBase<MemoryBankingPass> {
@@ -682,9 +723,17 @@ struct BankAffineLoadPattern
     SmallVector<Value,4> operands(loadOp.getMapOperands().begin(),
                                   loadOp.getMapOperands().end());
     affine::fullyComposeAffineMapAndOperands(&accessMap, &operands);
+    // Fold constant operands into the map. After --auto-pipeline-unroll the
+    // first unrolled iteration indexes with an SSA constant (%c0), and without
+    // this fold `(d0) -> (d0 mod f)` with d0 = %c0 looked like a rotating
+    // access, expanding into f loads + (f-1) selects per access.
+    affine::canonicalizeMapAndOperands(&accessMap, &operands);
     accessMap = simplifyAffineMap(accessMap);
     BankAccess ba = computeBankAccess(accessMap, spec, origTy,
                                       rewriter.getContext());
+    if (!ba.constBank)
+      ba.constBank =
+          constantBankThroughInductionVars(accessMap, operands, spec, origTy);
  
     // (1) constant bank -> single direct load.
     if (ba.constBank) {
@@ -829,11 +878,15 @@ struct BankAffineStorePattern
     SmallVector<Value,4> operands(storeOp.getMapOperands().begin(),
                                   storeOp.getMapOperands().end());
     affine::fullyComposeAffineMapAndOperands(&accessMap, &operands);
-
-    
-    accessMap = simplifyAffineMap(accessMap);   // canonicalize after compose
+    // See BankAffineLoadPattern: fold constant operands (unrolled iterations)
+    // so a constant bank is recognised instead of demuxed into f store_enables.
+    affine::canonicalizeMapAndOperands(&accessMap, &operands);
+    accessMap = simplifyAffineMap(accessMap);
     BankAccess ba = computeBankAccess(accessMap, spec, origTy,
                                       rewriter.getContext());
+    if (!ba.constBank)
+      ba.constBank =
+          constantBankThroughInductionVars(accessMap, operands, spec, origTy);
  
     rewriter.setInsertionPoint(storeOp);
  

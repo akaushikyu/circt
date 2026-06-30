@@ -51,8 +51,10 @@ circt::hls_analysis::CyclicSchedulingAnalysis::CyclicSchedulingAnalysis(
   });
 }
 
+// The analysis is taken by reference: the previous by-value parameter copied
+// the whole dependence map once per innermost loop.
 void circt::hls_analysis::CyclicSchedulingAnalysis::analyzeForOp(
-    AffineForOp forOp, analysis::MemoryDependenceAnalysis memoryAnalysis) {
+    AffineForOp forOp, analysis::MemoryDependenceAnalysis &memoryAnalysis) {
   // Create a cyclic scheduling problem.
   CyclicProblem problem(forOp);
 
