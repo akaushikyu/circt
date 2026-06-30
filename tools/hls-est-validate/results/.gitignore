@@ -1,0 +1,3 @@
+# large per-array JSON results are regenerated from the Vitis cache / hls-est runs; only CSV summaries are tracked
+*.json
+baseline/*.json
