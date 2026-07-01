@@ -392,8 +392,11 @@ static unsigned cseBlockPureOps(Block &block) {
 //   1. II starts at ResMinII = max over resources of ceil(uses / limit).
 //   2. Resource-free ASAP times are the longest paths in the constraint graph
 //      (edge weight latency - distance * II). A positive cycle means a
-//      recurrence cannot close within II: bump II (what the simplex does when
-//      it raises its parameter T).
+//      recurrence cannot close within II (what makes the simplex raise its
+//      parameter T). Feasibility is monotone in II (a cycle's slack is
+//      distance_sum * II - latency_sum, and every cycle has distance >= 1),
+//      so the recurrence-feasible II is found by galloping plus bisection:
+//      O(log II) positive-cycle tests instead of one per candidate II.
 //   3. Ops are placed in a topological order of the intra-iteration (distance
 //      0) edges, ties broken by problem insertion order (= program order).
 //      Each op starts ASAP w.r.t. every already placed predecessor; a
@@ -434,6 +437,10 @@ private:
 
   LogicalResult build();
   unsigned resMinII() const;
+  /// Longest-path ASAP times at `ii`; false on a positive cycle.
+  bool asapTimes(unsigned ii, SmallVectorImpl<int64_t> &asap) const;
+  /// Smallest II >= lo without a positive cycle, or 0 if there is none.
+  unsigned recMinII(unsigned lo) const;
   bool tryII(unsigned ii, SmallVectorImpl<unsigned> &start);
 };
 } // namespace
@@ -524,11 +531,13 @@ unsigned FastModuloScheduler::resMinII() const {
   return ii;
 }
 
-bool FastModuloScheduler::tryII(unsigned ii, SmallVectorImpl<unsigned> &start) {
+bool FastModuloScheduler::asapTimes(unsigned ii,
+                                    SmallVectorImpl<int64_t> &asap) const {
   unsigned n = ops.size();
-  // (2) resource-free ASAP: longest paths; a positive cycle means infeasible.
-  SmallVector<int64_t> asap(n, 0);
+  asap.assign(n, 0);
   bool changed = true;
+  // n relaxation rounds settle every longest path (at most n - 1 edges); a
+  // change in round n + 1 is a positive cycle.
   for (unsigned round = 0; changed && round <= n; ++round) {
     changed = false;
     for (unsigned j : topo)
@@ -541,7 +550,46 @@ bool FastModuloScheduler::tryII(unsigned ii, SmallVectorImpl<unsigned> &start) {
         }
       }
   }
-  if (changed)
+  return !changed;
+}
+
+unsigned FastModuloScheduler::recMinII(unsigned lo) const {
+  SmallVector<int64_t> asap;
+  if (asapTimes(lo, asap))
+    return lo;
+  // Every cycle has distance >= 1 (build() rejected distance-0 cycles) and a
+  // simple cycle's latency sum is at most the sum of all op latencies, so
+  // that sum is a feasible II and bounds the search.
+  uint64_t bound = 0;
+  for (unsigned lat : latency)
+    bound += lat;
+  bound = std::max<uint64_t>(bound, static_cast<uint64_t>(lo) + 1);
+  // Gallop to the first feasible lo + 2^k ...
+  uint64_t infeasible = lo, hi = lo;
+  for (uint64_t step = 1;; step *= 2) {
+    hi = std::min(static_cast<uint64_t>(lo) + step, bound);
+    if (asapTimes(static_cast<unsigned>(hi), asap))
+      break;
+    if (hi >= bound)
+      return 0;
+    infeasible = hi;
+  }
+  // ... then bisect (infeasible, hi]; feasibility is monotone in II.
+  while (hi - infeasible > 1) {
+    uint64_t mid = infeasible + (hi - infeasible) / 2;
+    if (asapTimes(static_cast<unsigned>(mid), asap))
+      hi = mid;
+    else
+      infeasible = mid;
+  }
+  return static_cast<unsigned>(hi);
+}
+
+bool FastModuloScheduler::tryII(unsigned ii, SmallVectorImpl<unsigned> &start) {
+  unsigned n = ops.size();
+  // (2) resource-free ASAP times (ii >= recMinII, so no positive cycle).
+  SmallVector<int64_t> asap;
+  if (!asapTimes(ii, asap))
     return false;
 
   // (3) list scheduling against a modulo reservation table.
@@ -598,8 +646,14 @@ bool FastModuloScheduler::tryII(unsigned ii, SmallVectorImpl<unsigned> &start) {
 LogicalResult FastModuloScheduler::schedule(unsigned maxIIBumps) {
   if (failed(build()))
     return failure();
-  unsigned ii = resMinII();
+  unsigned resII = resMinII();
+  unsigned ii = recMinII(resII);
+  if (ii == 0)
+    return failure();
+  LLVM_DEBUG(llvm::dbgs() << "fast modulo scheduler: ResMinII = " << resII
+                          << ", recurrence-feasible II = " << ii << "\n");
   SmallVector<unsigned> start;
+  // From here every bump is a placement conflict, not a recurrence.
   for (unsigned bumps = 0; bumps <= maxIIBumps; ++bumps, ++ii) {
     if (!tryII(ii, start))
       continue;
