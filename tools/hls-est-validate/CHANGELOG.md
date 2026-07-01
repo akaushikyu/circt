@@ -4,7 +4,7 @@ Newest entry first. One entry per logical change, including changes that were
 tried and reverted. Branch: `hls-est-vitis-match` in `~/circt`.
 
 ## 2026-10-09 — hls-est: T1 perf review fixes (O(log II) recurrence search, dependence-path correction, file mode)
-- **Commit:** (hash recorded by the following changelog-only commit; branch `hls-est-vitis-match`)
+- **Commit:** 97cf18a10 (branch `hls-est-vitis-match`); this hash line: the following changelog-only commit
 - **Files:** lib/Dialect/Resource/Passes/AffineToLoopScheduleModified.cpp, lib/Analysis/DependenceAnalysis.cpp (mode only), test/hls-est/Passes/fast_schedule_recurrence.mlir (new), test/hls-est/Passes/memory_recurrence_xfail.mlir (new, XFAIL), tools/hls-est-validate/OPEN_ISSUES.md (new), tools/hls-est-validate/CHANGELOG.md
 - **What:** the three findings of the review of 99ac05534 / d2a4d3a5c.
   - D2 (`FastModuloScheduler`): the recurrence-feasible II is found by `recMinII()` — galloping from ResMinII (lo+1, lo+2, lo+4, …) then bisection — over the positive-cycle longest-path test (`asapTimes()`), which is monotone in II because a cycle's slack is distance_sum·II − latency_sum and every cycle has distance ≥ 1 (`build()` rejects distance-0 cycles); the sum of all op latencies bounds the search. Before, every candidate II from ResMinII upwards re-ran the O(n·E) relaxation, cost ∝ (RecMinII − ResMinII)·n·E. The +1 bump loop now starts at the recurrence-feasible II and only resolves placement conflicts, so `maxIIBumps` (4096) counts from there instead of from ResMinII (a recurrence more than 4096 above ResMinII used to fall back to the simplex; no measured input is near that).
