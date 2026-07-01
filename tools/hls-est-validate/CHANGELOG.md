@@ -4,7 +4,7 @@ Newest entry first. One entry per logical change, including changes that were
 tried and reverted. Branch: `hls-est-vitis-match` in `~/circt`.
 
 ## 2026-10-09 — hls-est: Vitis storage model (LUTRAM >= 1024, RAMB18 aspect modes / true-dual-port x18 cost, RAM_1WNR replication, 17-slot port model, invariant-load hoist)
-- **Commit:** (code, tests, notes and this entry; hash recorded in the following changelog-only commit) (branch `hls-est-vitis-match`)
+- **Commit:** 342b39dfc (code, tests, notes and this entry; branch `hls-est-vitis-match`); this hash line: the following changelog-only commit
 - **Files:** include/circt/Dialect/Resource/Interfaces/MemoryDS.h, lib/Dialect/Resource/Interfaces/MemoryInterface.cpp, include/circt/Dialect/Resource/Passes/MemrefBankClassification.h, lib/Dialect/Resource/Passes/MemrefBankClassification.cpp, lib/Dialect/Resource/Passes/AffineToLoopScheduleModified.cpp, include/circt/Conversion/Passes.td, lib/Dialect/Resource/Passes/BRAMAnalysis.cpp; new lit tests test/hls-est/Passes/{replication_1wnr,replication_two_stores,invariant_load_hoist,lutram_threshold,aspect_modes}.mlir; updated expectations test/hls-est/Passes/{fast_schedule,bram_debug_json,bram_debug_text,bram_debug_status}.mlir; tools/hls-est-validate/VITIS_NOTES.md (hls-est status of N4/N5/N6), OPEN_ISSUES.md (O2-O5), CHANGELOG.md
 - **What:**
   1. *LUTRAM threshold* (`MemoryInterface.cpp` `meetsBRAMPromotionThreshold`, `MemoryDS.h` `kBRAMPromotionBits = 1024`): `Words * exact Bits >= 1024` -> BRAM (was `> 1024`). The exclusion text reads `size N bits < 1024-bit BRAM promotion threshold (Words*Bits >= 1024 -> BRAM); distributed RAM, 0 BRAM`.
