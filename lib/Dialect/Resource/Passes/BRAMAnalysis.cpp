@@ -54,33 +54,43 @@ static llvm::cl::opt<std::string> bramDebugJsonOpt(
 namespace {
 
 //===----------------------------------------------------------------------===//
-// Device model (Zynq-7020 / 7-series, UG473).
+// Device model (Zynq-7020 / 7-series RAMB18E1), as Vitis HLS 2025.1 prices it
+// (VITIS_NOTES.md N6, 147 + 3 kernels; ~/hls-est-work/exp-notes/aspect.md,
+// aspect_chk.md).
 //===----------------------------------------------------------------------===//
-// One BRAM_18K block holds 16*1024 = 16384 *data* bits (parity excluded; this is
-// the S_bram value, NOT 18*1024). A RAMB36E1 is just two of these tiled, so we
-// count everything in BRAM_18K units and let width/depth tiling synthesize the
-// 36K cases.
+// A RAMB18E1 holds 18*1024 = 18432 bits *including the parity bits*, in one of
+// the aspect-ratio modes below (data bits per word x words). Vitis cuts a bank
+// of D words x W bits into ceil(W/m) columns that all use the same mode m, each
+// column takes P/depth(m) blocks with P = 2^ceil(log2 D) (the address space of
+// the core, not the word count: 2500x18 one-port = 4, not 3), and it takes the
+// cheapest mode:
 //
-// The per-block *data width* depends on how many ports must be live at once:
+//     BRAM_18K(W, D, wide) = min over m of ceil(W / m) * max(1, P / depth(m))
 //
-//     primitive / mode        gross width   data width   "# of 9b bytes"
-//     RAMB18E1 TDP (2P/T2P)       18            16             2
-//     RAMB18E1 1P / SDP (S2P)     36            32             4
-//     RAMB36E1 TDP                36            32             4   (= 2x 18K)
-//     RAMB36E1 SDP               72            64             8   (= 2x 18K)
+//     mode m (bits)  1      2     4     9     18    36
+//     depth(m)       16384  8192  4096  2048  1024  512
 //
-// The x16-per-port limit is a *True-Dual-Port* effect: it applies only when the
-// array needs two ports live in the SAME cycle (1R+1W read-modify, 2R, or 2W),
-// which forces TDP where each port maxes at x18. With only one live port there
-// is nothing to force TDP, so the block is used in its wide x36 config and a
-// 512x32 array fits one 18K block -- this is why a time-shared single-port array
-// (RAM_1P) is 1 BRAM, not 2. A simple-dual-port (RAM_S2P: one port read-only,
-// one write-only) is likewise wide x36. So wide x32 == {RAM_1P, RAM_S2P};
-// narrow x16 == {RAM_2P, RAM_T2P}. That x16 -> x32 difference is the whole
-// story: at x16 a 32-bit element needs two width tiles (one RAMB36E1); at x32 it
-// fits one 18K block. An 8/16-bit element fits x16, so contention never doubles
-// it -- which is exactly the bug in the old flat "RAM_2P -> x2".
-constexpr int64_t kBitsPerBRAM = 16 * 1024;
+// The x36 mode (both ports of the block ganged into one 36-bit port) is only
+// available when at most ONE port is live per cycle (`wide`: Vitis' ram_1p, or
+// an explicit ram_s2p). When two ports are live in the same cycle (a read and
+// a write, or two reads, in one iteration of a pipelined loop: ram_2p /
+// ram_t2p) each port is at most x18. Every copy of a replicated RAM_1WNR is a
+// true-dual-port RAM (port A writes/reads, port B reads), so copies are priced
+// narrow. Parity bits count: 1024x18 = 1, 2048x9 = 1, 512x36 wide = 1.
+//
+// Data points (Vitis): 1024x32 one-port 2, 4096x32 8 (wide or narrow), 64x32
+// one-port 1 / two-port 2, 1024x40 3, 1024x72 4, 2048x24 3, 3072x20 5 (five
+// x4 columns; mixed-width columns are not used), 1024x1 1.
+constexpr int64_t kBitsPerBRAM = 18 * 1024; // incl. parity
+
+struct AspectMode {
+  unsigned width;  // data bits per word in this mode (parity included)
+  int64_t depth;   // words per RAMB18E1 in this mode
+};
+constexpr AspectMode kAspectModes[] = {{1, 16384}, {2, 8192}, {4, 4096},
+                                       {9, 2048},  {18, 1024}, {36, 512}};
+constexpr unsigned kMaxPortWidthWide = 36;   // one live port (x36)
+constexpr unsigned kMaxPortWidthNarrow = 18; // two live ports (TDP, x18)
 
 struct PortDemand {
   unsigned reads = 0;
@@ -133,13 +143,35 @@ struct PartitionRecord {
 struct BankMathRecord {
   bool present = false;
   int64_t bitsPerBram = kBitsPerBRAM;
-  unsigned maxWidth = 0;     // blockDataWidth(kind): 32 or 16
-  unsigned configWidth = 0;  // width the block is configured at
-  int64_t widthTiles = 0;
-  int64_t depthPerBlock = 0;
-  int64_t depthTiles = 0;
-  int64_t replication = 1;
-  int64_t blocks = 0;
+  bool wide = false;         // x36 mode allowed (one live port / RAM_S2P)
+  unsigned maxWidth = 0;     // widest mode allowed: 36 (wide) or 18 (narrow)
+  unsigned configWidth = 0;  // chosen aspect-ratio mode m (bits per word)
+  int64_t widthTiles = 0;    // columns = ceil(elemBits / m)
+  int64_t depthPerBlock = 0; // words per RAMB18 in mode m
+  int64_t addrDepth = 0;     // P = 2^ceil(log2 words): the priced depth
+  int64_t depthTiles = 0;    // blocks per column = max(1, P / depthPerBlock)
+  int64_t blocksPerCopy = 0; // widthTiles * depthTiles
+  int64_t replication = 1;   // RAM_1WNR copies (1: not replicated)
+  int64_t blocks = 0;        // blocksPerCopy * replication
+};
+
+// Per pipelined loop, what Vitis' replication rule saw (replication.md R2).
+struct ReplicationLoopRecord {
+  std::string scopeLoc;
+  unsigned ii = 0;
+  unsigned reads = 0;  // loads per iteration of the loop
+  unsigned writes = 0; // stores per iteration of the loop
+  unsigned need = 0;   // ceil((reads + writes) / ii): ports the loop needs
+  unsigned copies = 0; // max(1, need - 1), capped
+};
+
+struct ReplicationRecord {
+  bool present = false;     // the bank's accesses were attributed
+  bool replicable = false;  // no loop body stores to the bank twice
+  unsigned maxStoresPerLoop = 0;
+  unsigned copies = 1;      // chosen copy count (1: plain RAM)
+  SmallVector<ReplicationLoopRecord> loops;
+  std::optional<std::string> limitingLoop; // scope that set `copies`
 };
 
 struct MemrefRecord {
@@ -169,6 +201,7 @@ struct MemrefRecord {
 
   std::string ramType;
   std::string ramReason;
+  ReplicationRecord replication;
   BankMathRecord bankMath;
   unsigned bram = 0;
   bool infeasible = false;
@@ -275,18 +308,18 @@ struct KindResult {
 };
 
 // A single BRAM primitive has at most two ports. Map the per-cycle access
-// pattern to the narrowest mode that serves it; that mode then fixes the
-// per-block data width in blockDataWidth(). Note this is count-only and never
-// returns RAM_S2P: from counts a read-modify array (narrow RAM_2P) and a
-// segregated producer/consumer (wide RAM_S2P) both look like 1R+1W. The wide
-// case is decided structurally by the caller (concurrent + segregated) or via
-// an explicit bind_storage pragma.
+// pattern to the narrowest mode that serves it; that mode then fixes whether
+// the x36 aspect ratio is allowed (isWideKind). Note this is count-only and
+// never returns RAM_S2P: from counts a read-modify array (narrow RAM_2P) and a
+// segregated producer/consumer (wide RAM_S2P) both look like 1R+1W, and Vitis'
+// automatic storage inference never picks ram_s2p either (aspect.md R2) - only
+// an explicit bind_storage pragma does.
 static KindResult selectStorageKind(const PortDemand &d) {
   KindResult r;
   unsigned total = d.total, w = d.writes, rd = d.reads;
 
   if (total <= 1) {
-    r.kind = StorageKind::RAM_1P;          // one live port, wide x32
+    r.kind = StorageKind::RAM_1P;          // one live port, wide x36
     return r;
   }
   if (total == 2) {
@@ -306,68 +339,79 @@ static KindResult selectStorageKind(const PortDemand &d) {
 //===----------------------------------------------------------------------===//
 // Width-aware block count.
 //===----------------------------------------------------------------------===//
-// Data bits one BRAM_18K block can present per cycle for the given kind.
-unsigned blockDataWidth(StorageKind k) {
+// Whether the kind leaves at most one port live per cycle, so the block may
+// use the x36 aspect ratio (both ports ganged). Two live ports (true dual
+// port) cap each port at x18.
+bool isWideKind(StorageKind k) {
   switch (k) {
   case StorageKind::RAM_1P:   // one live port -> no TDP constraint -> wide
   case StorageKind::RAM_S2P:  // simple dual port: dedicated R + W -> wide
-    return 32;
+    return true;
   case StorageKind::RAM_2P:   // two live ports (read-modify) -> TDP x18
   case StorageKind::RAM_T2P:  // two live ports -> TDP x18
-  case StorageKind::RAM_1WNR:
-    return 16;
+  case StorageKind::RAM_1WNR: // every copy is a TDP RAM -> x18
   case StorageKind::LUTRAM:
   case StorageKind::URAM:
-    return 0; // not mapped to BRAM
+    return false;
   }
-  return 16;
+  return false;
+}
+
+// Widest aspect-ratio mode (data bits per port) the kind allows.
+unsigned blockDataWidth(StorageKind k) {
+  if (k == StorageKind::LUTRAM || k == StorageKind::URAM)
+    return 0; // not mapped to BRAM
+  return isWideKind(k) ? kMaxPortWidthWide : kMaxPortWidthNarrow;
 }
 
 int64_t ceilDiv(int64_t a, int64_t b) { return (a + b - 1) / b; }
 
-// Round a data width up to a width the block can be configured at (1,2,4,8,16,
-// 32...). A 24-bit element occupies an x32 slice and a 12-bit element an x16
-// slice; that rounding is what wastes BRAM depth for non-power-of-two widths.
-unsigned configWidth(unsigned w) {
-  return w <= 1 ? 1u : static_cast<unsigned>(llvm::PowerOf2Ceil(w));
-}
-
-// BRAM_18K blocks needed for numElems x elemBits in the chosen kind.
-// Width tiling handles elements wider than the per-block bus (the x16 -> x32
-// promotion); depth tiling handles arrays deeper than one block at that width.
-// `bm`, when given, receives the intermediate values for the debug report; it
-// is write-only here and never feeds back into the arithmetic.
-int64_t estimateBlocks(int64_t numElems, unsigned elemBits, StorageKind kind,
+// BRAM_18K blocks for ONE copy of numElems x elemBits: the min over the
+// aspect-ratio modes of ceil(elemBits / m) columns x max(1, P / depth(m))
+// blocks per column, P = 2^ceil(log2 numElems) (N6). `wide` allows the x36
+// mode. `bm`, when given, receives the intermediate values of the winning
+// mode for the debug report; it is write-only here and never feeds back into
+// the arithmetic.
+int64_t estimateBlocks(int64_t numElems, unsigned elemBits, bool wide,
                        BankMathRecord *bm = nullptr) {
-  unsigned wmax = blockDataWidth(kind);
   if (bm) {
     bm->present = true;
-    bm->maxWidth = wmax;
+    bm->wide = wide;
+    bm->maxWidth = wide ? kMaxPortWidthWide : kMaxPortWidthNarrow;
   }
-  if (wmax == 0 || numElems == 0 || elemBits == 0)
+  if (numElems <= 0 || elemBits == 0)
     return 0;
 
-  int64_t widthTiles;
-  unsigned cfgW;
-  if (elemBits <= wmax) {
-    widthTiles = 1;
-    cfgW = std::min(configWidth(elemBits), wmax); // narrower elements pack deeper
-  } else {
-    widthTiles = ceilDiv(elemBits, wmax); // promote: each tile is a full x-wmax block
-    cfgW = wmax;
+  int64_t addrDepth = static_cast<int64_t>(llvm::PowerOf2Ceil(
+      static_cast<uint64_t>(numElems)));
+  int64_t best = -1;
+  AspectMode bestMode{0, 0};
+  int64_t bestCols = 0, bestPerCol = 0;
+  // Widest mode first, so a tie is reported as the fewest-columns layout.
+  for (const AspectMode &mode : llvm::reverse(kAspectModes)) {
+    if (!wide && mode.width > kMaxPortWidthNarrow)
+      continue;
+    int64_t cols = ceilDiv(elemBits, mode.width);
+    int64_t perCol = std::max<int64_t>(addrDepth / mode.depth, 1);
+    int64_t blocks = cols * perCol;
+    if (best < 0 || blocks < best) {
+      best = blocks;
+      bestMode = mode;
+      bestCols = cols;
+      bestPerCol = perCol;
+    }
   }
-  int64_t depthPerBlock = std::max<int64_t>(kBitsPerBRAM / cfgW, 1);
-  int64_t depthTiles = ceilDiv(numElems, depthPerBlock);
-  int64_t blocks = widthTiles * depthTiles;
   if (bm) {
-    bm->configWidth = cfgW;
-    bm->widthTiles = widthTiles;
-    bm->depthPerBlock = depthPerBlock;
-    bm->depthTiles = depthTiles;
+    bm->configWidth = bestMode.width;
+    bm->widthTiles = bestCols;
+    bm->depthPerBlock = bestMode.depth;
+    bm->addrDepth = addrDepth;
+    bm->depthTiles = bestPerCol;
+    bm->blocksPerCopy = best;
     bm->replication = 1;
-    bm->blocks = blocks;
+    bm->blocks = best;
   }
-  return blocks;
+  return best;
 }
 
 //===----------------------------------------------------------------------===//
@@ -611,12 +655,102 @@ static void recordAccesses(ArrayRef<AccessSummary> accesses, MemrefRecord &r) {
   }
 }
 
+//===----------------------------------------------------------------------===//
+// Replication (RAM_1WNR), VITIS_NOTES.md N4 / replication.md R1-R3.
+//===----------------------------------------------------------------------===//
+// Per pipelined loop L with R loads and W stores of the bank per iteration at
+// II: Vitis needs ceil((R + W) / II) port-cycles per II; one true-dual-port
+// RAM gives two, every further one comes from a copy whose port B serves
+// reads while port A of all copies is the single shared write port (reading
+// when idle). So copies = max(1, ceil((R + W) / II) - 1), capped at 16, max
+// over the loops that access the bank. A bank that some loop body stores to
+// more than once is never replicated (one shared write port cannot take two
+// writes per iteration): it stays a plain 2-port RAM and the scheduler has
+// raised that loop's II to ceil((R + W) / 2) instead (MemrefBankClassification).
+// Straight-line code outside any loop does not take part (the rule was only
+// observed on loop bodies).
+static ReplicationRecord analyzeReplication(ArrayRef<AccessSummary> accesses,
+                                            bool attributed) {
+  ReplicationRecord r;
+  r.present = attributed;
+  if (!attributed)
+    return r;
+
+  struct ScopeStats {
+    Operation *scope = nullptr;
+    unsigned reads = 0, writes = 0, ii = 0;
+  };
+  SmallVector<ScopeStats> scopes; // first-appearance order (deterministic)
+  for (const AccessSummary &a : accesses) {
+    ScopeStats *st = nullptr;
+    for (ScopeStats &s : scopes)
+      if (s.scope == a.scope)
+        st = &s;
+    if (!st) {
+      scopes.push_back({a.scope, 0, 0, a.ii});
+      st = &scopes.back();
+    }
+    (a.isWrite ? st->writes : st->reads)++;
+  }
+
+  r.maxStoresPerLoop = 0;
+  for (const ScopeStats &s : scopes) {
+    bool isLoopBody = s.scope && (isa<LoopSchedulePipelineOp>(s.scope) ||
+                                  isa<LoopLikeOpInterface>(s.scope));
+    if (isLoopBody)
+      r.maxStoresPerLoop = std::max(r.maxStoresPerLoop, s.writes);
+  }
+  r.replicable = r.maxStoresPerLoop <= 1;
+  r.copies = 1;
+  for (const ScopeStats &s : scopes) {
+    if (!s.scope || !isa<LoopSchedulePipelineOp>(s.scope) || s.ii == 0)
+      continue;
+    ReplicationLoopRecord lr;
+    lr.scopeLoc = locString(s.scope->getLoc());
+    lr.ii = s.ii;
+    lr.reads = s.reads;
+    lr.writes = s.writes;
+    lr.need = static_cast<unsigned>(ceilDiv(s.reads + s.writes, s.ii));
+    unsigned c = lr.need > 1 ? lr.need - 1 : 1;
+    lr.copies = std::min(c, kMaxReplicationCopies);
+    if (r.replicable && lr.copies > r.copies) {
+      r.copies = lr.copies;
+      r.limitingLoop = lr.scopeLoc;
+    }
+    r.loops.push_back(std::move(lr));
+  }
+  if (!r.replicable)
+    r.copies = 1;
+  return r;
+}
+
 static std::string ramReasonFor(const PortDemand &d, const KindResult &kr,
-                                bool attributed, bool anyStoreEnable) {
+                                const ReplicationRecord &rep, bool attributed,
+                                bool anyStoreEnable, bool demandClamped) {
   std::string s;
   llvm::raw_string_ostream os(s);
   if (!attributed) {
     os << "global: accesses not attributed, default " << kindName(kr.kind);
+    return s;
+  }
+  if (kr.kind == StorageKind::RAM_1WNR) {
+    os << "replicable (no loop body stores to it more than once)";
+    if (rep.limitingLoop) {
+      for (const ReplicationLoopRecord &l : rep.loops)
+        if (l.scopeLoc == *rep.limitingLoop) {
+          os << "; pipeline @ " << l.scopeLoc << ": " << l.reads << "R+"
+             << l.writes << "W per iteration at II " << l.ii
+             << " needs ceil(" << (l.reads + l.writes) << "/" << l.ii
+             << ")=" << l.need << " port-cycles";
+          break;
+        }
+    }
+    os << " -> RAM_1WNR with " << rep.copies
+       << " copies (port B of every copy reads, port A of all copies is the "
+          "shared write port and reads when idle";
+    if (rep.copies >= kMaxReplicationCopies)
+      os << "; capped at " << kMaxReplicationCopies;
+    os << "); each copy is a true-dual-port RAM (x18/port)";
     return s;
   }
   os << "peak port demand " << d.total << "/cycle (" << d.reads << "R+"
@@ -625,13 +759,22 @@ static std::string ramReasonFor(const PortDemand &d, const KindResult &kr,
     os << ": " << kr.note;
     return s;
   }
-  if (d.total <= 1)
+  if (demandClamped)
+    os << ", clamped to 2 ports (replicable bank, but no pipelined loop needs "
+          "more than ceil((R+W)/II) <= 2 port-cycles, so Vitis spreads the "
+          "accesses over the II)";
+  if (d.total <= 1 && !demandClamped)
     os << ": at most one live port -> " << kindName(kr.kind) << " (x"
        << blockDataWidth(kr.kind) << " wide, no TDP constraint)";
   else
-    os << ": " << d.reads << "R+" << d.writes << "W in the same cycle -> "
-       << kindName(kr.kind) << " (x" << blockDataWidth(kr.kind)
-       << "/port, true dual port)";
+    os << ": two ports live in the same cycle -> " << kindName(kr.kind)
+       << " (x" << blockDataWidth(kr.kind) << "/port, true dual port)";
+  if (!rep.replicable)
+    os << "; not replicable: a loop body stores to it " << rep.maxStoresPerLoop
+       << " times (Vitis keeps one 2-port RAM and raises that loop's II)";
+  else if (!rep.loops.empty())
+    os << "; replicable, but every pipelined loop needs <= 2 port-cycles per "
+          "II (no RAM_1WNR)";
   if (d.segregated)
     os << "; reads and writes live in different scopes (RAM_S2P-eligible) but "
           "count-only selection never picks RAM_S2P";
@@ -695,9 +838,11 @@ static BRAMCost estimateBRAM(MemoryResourceOpInterface iface,
       rec.excludeReason = "zero-size array (0 bits)";
     } else {
       rec.status = "excluded_small";
-      rec.excludeReason = "size " + std::to_string(bits) + " bits <= " +
+      rec.excludeReason = "size " + std::to_string(bits) + " bits < " +
                           std::to_string(kBRAMPromotionBits) +
-                          "-bit BRAM promotion threshold; kept in LUTRAM/FFs";
+                          "-bit BRAM promotion threshold (Words*Bits >= " +
+                          std::to_string(kBRAMPromotionBits) +
+                          " -> BRAM); distributed RAM, 0 BRAM";
     }
     // Still describe the accesses: useful when diagnosing a Vitis mismatch on
     // a small array, and it does not touch the estimate.
@@ -705,6 +850,8 @@ static BRAMCost estimateBRAM(MemoryResourceOpInterface iface,
         collectAccessSummaries(iface.getOperation());
     recordAccesses(accesses, rec);
     rec.demand = computePortDemand(accesses);
+    rec.replication =
+        analyzeReplication(accesses, rec.accessesAttributed);
     rec.ramType = kindName(cost.kind);
     rec.ramReason = "not selected: " + cost.note;
     rec.bram = cost.bramCount;
@@ -740,29 +887,63 @@ static BRAMCost estimateBRAM(MemoryResourceOpInterface iface,
   SmallVector<AccessSummary> accesses =
       collectAccessSummaries(iface.getOperation());
   PortDemand demand = computePortDemand(accesses);
-  KindResult kr = selectStorageKind(demand);
-  // --- Width-aware block count ---
-  int64_t blocks = estimateBlocks(numElems, elemBits, kr.kind, &rec.bankMath);
+  ReplicationRecord rep =
+      analyzeReplication(accesses, rec.accessesAttributed);
+  KindResult kr;
+  bool demandClamped = false;
+  int64_t blocks;
+  if (rep.copies > 1) {
+    // RAM_1WNR: `copies` true-dual-port RAMs holding identical data.
+    kr.kind = StorageKind::RAM_1WNR;
+    int64_t perCopy =
+        estimateBlocks(numElems, elemBits, /*wide=*/false, &rec.bankMath);
+    blocks = perCopy * rep.copies;
+    rec.bankMath.replication = rep.copies;
+    rec.bankMath.blocks = blocks;
+  } else {
+    PortDemand d = demand;
+    if (rep.replicable && d.total > 2) {
+      // The scheduler grants a replicable bank 17 slots per cycle, so it may
+      // pack more than two accesses into one cycle even when ceil((R+W)/II)
+      // <= 2 (the II was raised by something else). Vitis then spreads them
+      // over the II on the two ports of one plain RAM.
+      demandClamped = true;
+      d.total = 2;
+      d.reads = std::min(d.reads, 2u);
+      d.writes = std::min(d.writes, 2u);
+      if (d.reads >= 1 && d.writes >= 1)
+        d.reads = d.writes = 1;
+    }
+    kr = selectStorageKind(d);
+    blocks = estimateBlocks(numElems, elemBits, isWideKind(kr.kind),
+                            &rec.bankMath);
+  }
   cost.kind = kr.kind;
   cost.infeasible = kr.infeasible;
   cost.bramCount = static_cast<unsigned>(blocks);
-  cost.note =
-      !kr.note.empty()
-          ? kr.note + " => " + std::to_string(blocks) + " BRAM"
-          : (std::to_string(numElems) + "x" + std::to_string(elemBits) +
-             "b -> " + kindName(kr.kind) + " (x" +
-             std::to_string(blockDataWidth(kr.kind)) + "/block) = " +
-             std::to_string(blocks) + " BRAM_18K");
+  if (!kr.note.empty())
+    cost.note = kr.note + " => " + std::to_string(blocks) + " BRAM";
+  else if (kr.kind == StorageKind::RAM_1WNR)
+    cost.note = std::to_string(numElems) + "x" + std::to_string(elemBits) +
+                "b -> RAM_1WNR, " + std::to_string(rep.copies) +
+                " copies x " + std::to_string(rec.bankMath.blocksPerCopy) +
+                " (x18/port) = " + std::to_string(blocks) + " BRAM_18K";
+  else
+    cost.note = std::to_string(numElems) + "x" + std::to_string(elemBits) +
+                "b -> " + kindName(kr.kind) + " (x" +
+                std::to_string(blockDataWidth(kr.kind)) + "/port) = " +
+                std::to_string(blocks) + " BRAM_18K";
 
   // --- Record ---
   recordAccesses(accesses, rec);
   rec.demand = demand;
+  rec.replication = rep;
   rec.status = kr.infeasible ? "infeasible" : "counted";
   rec.ramType = kindName(kr.kind);
   bool anyStoreEnable = llvm::any_of(
       rec.accesses, [](const AccessRecord &a) { return a.storeEnable; });
-  rec.ramReason =
-      ramReasonFor(demand, kr, rec.accessesAttributed, anyStoreEnable);
+  rec.ramReason = ramReasonFor(demand, kr, rep, rec.accessesAttributed,
+                               anyStoreEnable, demandClamped);
   rec.bram = cost.bramCount;
   rec.infeasible = cost.infeasible;
   return cost;
@@ -865,16 +1046,34 @@ static void printDebugText(ArrayRef<MemrefRecord> records, int64_t total,
            << " writes=" << s.demand.writes << " total=" << s.demand.total
            << "\n";
     }
+    if (r.replication.present) {
+      const ReplicationRecord &p = r.replication;
+      os << "  replication: " << (p.replicable ? "replicable" : "not replicable")
+         << " (max " << p.maxStoresPerLoop
+         << " store(s) per loop body), copies " << p.copies;
+      if (p.limitingLoop)
+        os << " set by pipeline @ " << *p.limitingLoop;
+      os << "\n";
+      for (const ReplicationLoopRecord &l : p.loops)
+        os << "    pipeline @ " << l.scopeLoc << " ii=" << l.ii << ": "
+           << l.reads << "R+" << l.writes << "W per iteration -> ceil("
+           << (l.reads + l.writes) << "/" << l.ii << ")=" << l.need
+           << " port-cycles -> copies " << l.copies << "\n";
+    }
     os << "  ram type: " << r.ramType << " -- " << r.ramReason << "\n";
     if (r.bankMath.present) {
       const BankMathRecord &b = r.bankMath;
-      os << "  bank math: " << b.bitsPerBram << " bits/BRAM_18K, max width "
-         << b.maxWidth << " at " << r.ramType << ", element " << r.elemBits
-         << "b -> config width " << b.configWidth << ", width tiles "
-         << b.widthTiles << ", depth/block " << b.depthPerBlock
-         << ", depth tiles ceil(" << (r.words ? *r.words : 0) << "/"
-         << b.depthPerBlock << ")=" << b.depthTiles << ", replication "
-         << b.replication << " -> " << b.blocks << " block(s)\n";
+      os << "  bank math: " << b.bitsPerBram << " bits/BRAM_18K (incl. parity), "
+         << (b.wide ? "one live port -> x36 allowed" : "two live ports -> x18 max")
+         << " at " << r.ramType << ", element " << r.elemBits
+         << "b -> mode x" << b.configWidth << ": columns ceil(" << r.elemBits
+         << "/" << b.configWidth << ")=" << b.widthTiles << ", depth/block "
+         << b.depthPerBlock << ", address depth 2^ceil(log2 "
+         << (r.words ? *r.words : 0) << ")=" << b.addrDepth
+         << ", blocks/column max(1," << b.addrDepth << "/" << b.depthPerBlock
+         << ")=" << b.depthTiles << " -> " << b.blocksPerCopy
+         << " per copy, replication " << b.replication << " -> " << b.blocks
+         << " block(s)\n";
     }
     os << "  bram: " << r.bram << (r.infeasible ? "  [INFEASIBLE]" : "")
        << "\n";
@@ -975,15 +1174,42 @@ static llvm::json::Object toJson(const MemrefRecord &r) {
   o["ram_type"] = r.ramType;
   o["ram_reason"] = r.ramReason;
 
+  if (r.replication.present) {
+    const ReplicationRecord &p = r.replication;
+    llvm::json::Object rp;
+    rp["replicable"] = p.replicable;
+    rp["max_stores_per_loop"] = static_cast<int64_t>(p.maxStoresPerLoop);
+    rp["copies"] = static_cast<int64_t>(p.copies);
+    rp["limiting_loop"] = optStr(p.limitingLoop);
+    llvm::json::Array loops;
+    for (const ReplicationLoopRecord &l : p.loops) {
+      llvm::json::Object lo;
+      lo["scope_loc"] = l.scopeLoc;
+      lo["ii"] = static_cast<int64_t>(l.ii);
+      lo["reads"] = static_cast<int64_t>(l.reads);
+      lo["writes"] = static_cast<int64_t>(l.writes);
+      lo["need"] = static_cast<int64_t>(l.need);
+      lo["copies"] = static_cast<int64_t>(l.copies);
+      loops.push_back(std::move(lo));
+    }
+    rp["loops"] = std::move(loops);
+    o["replication"] = std::move(rp);
+  } else {
+    o["replication"] = nullptr;
+  }
+
   if (r.bankMath.present) {
     const BankMathRecord &b = r.bankMath;
     llvm::json::Object bm;
     bm["bits_per_bram"] = b.bitsPerBram;
+    bm["wide"] = b.wide;
     bm["max_width"] = static_cast<int64_t>(b.maxWidth);
-    bm["config_width"] = static_cast<int64_t>(b.configWidth);
-    bm["width_tiles"] = b.widthTiles;
-    bm["depth_per_block"] = b.depthPerBlock;
-    bm["depth_tiles"] = b.depthTiles;
+    bm["config_width"] = static_cast<int64_t>(b.configWidth); // mode m
+    bm["width_tiles"] = b.widthTiles;         // columns = ceil(bits / m)
+    bm["depth_per_block"] = b.depthPerBlock;  // words per RAMB18 in mode m
+    bm["addr_depth"] = b.addrDepth;           // 2^ceil(log2 words)
+    bm["depth_tiles"] = b.depthTiles;         // blocks per column
+    bm["blocks_per_copy"] = b.blocksPerCopy;
     bm["replication"] = b.replication;
     bm["blocks"] = b.blocks;
     o["bank_math"] = std::move(bm);
@@ -998,7 +1224,7 @@ static llvm::json::Object toJson(const MemrefRecord &r) {
 static std::error_code writeDebugJson(ArrayRef<MemrefRecord> records,
                                       int64_t total, StringRef path) {
   llvm::json::Object root;
-  root["version"] = 1;
+  root["version"] = 2;
   root["total_bram"] = total;
 
   llvm::json::Array functions;

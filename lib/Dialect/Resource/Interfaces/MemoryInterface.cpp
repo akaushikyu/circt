@@ -104,12 +104,13 @@ std::optional<PartitionSpec> parsePartitionSpec(Operation *op) {
   return spec;
 }
 
-/// Whether an array of `sizeInBits` is large enough that a tool would map it
-/// to block RAM rather than leaving it in registers/LUTRAM. The threshold is
-/// `kBRAMPromotionBits` (MemoryDS.h), shared with the --bram-debug explanation
-/// so the number it quotes is the one applied here.
+/// Whether an array of `sizeInBits` (Words x exact element Bits) is large
+/// enough that Vitis maps it to block RAM rather than distributed RAM. The
+/// threshold `kBRAMPromotionBits` (MemoryDS.h) is inclusive - exactly 1024
+/// bits is a BRAM (VITIS_NOTES.md N5) - and shared with the --bram-debug
+/// explanation so the number it quotes is the one applied here.
 bool meetsBRAMPromotionThreshold(int64_t sizeInBits) {
-  return sizeInBits > circt::hls_analysis::kBRAMPromotionBits;
+  return sizeInBits >= circt::hls_analysis::kBRAMPromotionBits;
 }
 
 /// Shared cost opt-out: an allocation explicitly annotated as not BRAM-backed

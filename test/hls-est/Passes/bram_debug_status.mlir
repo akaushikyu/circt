@@ -43,7 +43,7 @@ module {
 // CHECK-NEXT: "varname": "zero",
 // CHECK-NEXT: "words": 0
 
-// CHECK:      "exclude_reason": "size 256 bits <= 1024-bit BRAM promotion threshold; kept in LUTRAM/FFs",
+// CHECK:      "exclude_reason": "size 256 bits < 1024-bit BRAM promotion threshold (Words*Bits >= 1024 -> BRAM); distributed RAM, 0 BRAM",
 // CHECK:      "status": "excluded_small",
 // CHECK-NEXT: "varname": "small",
 // CHECK-NEXT: "words": 8

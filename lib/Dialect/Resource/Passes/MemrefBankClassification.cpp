@@ -27,8 +27,23 @@ StringRef stringifyStorageMode(StorageMode mode) {
     return "sdp";
   case StorageMode::TDP:
     return "tdp";
+  case StorageMode::OneWriteNRead:
+    return "1wnr";
   }
   return "?";
+}
+
+unsigned storageModeSlots(StorageMode mode) {
+  switch (mode) {
+  case StorageMode::OnePort:
+    return 1;
+  case StorageMode::SDP: // one read + one write; callers split the pools
+  case StorageMode::TDP:
+    return kDualPortSlots;
+  case StorageMode::OneWriteNRead:
+    return kReplicatedPortSlots;
+  }
+  return kDualPortSlots;
 }
 
 StringRef stringifyStorageKind(StorageKind mode) {
@@ -50,11 +65,14 @@ StorageKind classifyStorageKind(unsigned reads, unsigned writes) {
   return StorageKind::RAM_1WNR;
 }
 
-StorageMode classifyMode(unsigned reads, unsigned writes) {
-  if (writes >= 2) return StorageMode::TDP;  // needs 2 write-capable ports
-  if (writes == 1 && reads >= 1) return StorageMode::SDP;  // 1W-NR = RAM_1WNR
-  if (reads >= 2) return StorageMode::SDP; // CHANGED: many reads, no write
-  return StorageMode::OnePort;
+// Vitis (VITIS_NOTES.md N4, replication.md R1-R3): a bank some loop body
+// stores to more than once stays one true-dual-port RAM (the II is raised to
+// ceil((R+W)/2)); otherwise extra reads are served by replicated copies, up to
+// 16 copies + the shared write port = 17 accesses per cycle.
+StorageMode classifyMode(unsigned /*maxReads*/, unsigned maxStoresPerLoop) {
+  if (maxStoresPerLoop >= 2)
+    return StorageMode::TDP;
+  return StorageMode::OneWriteNRead;
 }
 
 /// Returns the memref operand of a load/store and flags which it was. Returns a
@@ -98,7 +116,11 @@ void BRAMClassification::enumerateBanks(Operation *root) {
 
 void BRAMClassification::profileAccesses(Operation *root) {
   // Per bank, per enclosing innermost loop: (reads, writes) within one body.
-  // Keyed loop = the innermost affine.for parent, or null for top-level access.
+  // Keyed loop = the innermost affine.for parent, or null for a straight-line
+  // access outside every loop. The counts are per loop *body* (after
+  // unrolling), which is what Vitis' replication rule looks at: a body with
+  // two stores to the bank needs two write ports in one iteration, so the bank
+  // cannot be a RAM_1WNR (one shared write port) and stays a 2-port RAM.
   using LoopCounts = llvm::DenseMap<Operation *, std::pair<unsigned, unsigned>>;
   llvm::DenseMap<Value, LoopCounts> perLoop;
 
@@ -119,15 +141,21 @@ void BRAMClassification::profileAccesses(Operation *root) {
       ++counts.second;
   });
 
-  // Fold to the worst-case profile across loops, applying the II rule.
+  // Fold to the worst-case profile across loops. Straight-line accesses
+  // (null loop) run once and have no II, so they do not decide replicability
+  // (Vitis' rule was only observed on loop bodies; replication.md "R3").
   for (auto &[bank, loopCounts] : perLoop) {
     BankProfile &prof = banks[bank];
+    unsigned maxStoresPerLoop = 0;
     for (auto &[loop, rw] : loopCounts) {
       unsigned reads = rw.first, writes = rw.second;
       prof.maxReads = std::max(prof.maxReads, reads);
       prof.maxWrites = std::max(prof.maxWrites, writes);
+      if (loop)
+        maxStoresPerLoop = std::max(maxStoresPerLoop, writes);
     }
-    prof.mode = classifyMode(prof.maxReads, prof.maxWrites);
+    prof.replicable = maxStoresPerLoop <= 1;
+    prof.mode = classifyMode(prof.maxReads, maxStoresPerLoop);
     prof.type = classifyStorageKind(prof.maxReads, prof.maxWrites);
   }
 }
@@ -135,7 +163,7 @@ void BRAMClassification::profileAccesses(Operation *root) {
 
 StorageMode BRAMClassification::getMode(Value bank) const {
   auto it = banks.find(bank);
-  return it == banks.end() ? StorageMode::OnePort : it->second.mode;
+  return it == banks.end() ? StorageMode::TDP : it->second.mode;
 }
 
 const BankProfile *BRAMClassification::getProfile(Value bank) const {
@@ -148,8 +176,10 @@ void BRAMClassification::dump(llvm::raw_ostream &os) const {
   for (auto &[bank, prof] : banks) {
     os << "  bank " << bank << ": " << prof.width << "x" << prof.depth
        << " modes=" << stringifyStorageMode(prof.mode) << " (R=" << prof.maxReads
-       << " W=" << prof.maxWrites << ")"
-       << " storage kind= " << stringifyStorageKind(prof.type);
+       << " W=" << prof.maxWrites
+       << (prof.replicable ? ", replicable" : ", not replicable") << ")"
+       << " slots/cycle=" << storageModeSlots(prof.mode)
+       << " storage kind= " << stringifyStorageKind(prof.type) << "\n";
   }
 }
 

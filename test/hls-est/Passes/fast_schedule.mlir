@@ -4,17 +4,19 @@
 //
 // The greedy resource-bound modulo scheduler (every loop with fast-threshold=0;
 // by default only bodies with more than 150 resource-limited ops) must give the
-// same BRAM total as the simplex-based scheduler. The kernel exercises a
-// port-limited loop (three reads of `tab` per iteration through one read port:
-// II 3, the reads spread over the three phases, so `tab` stays single-port), a
-// loop-carried accumulation (a recurrence through iter_args), and a
-// read-modify-write of `acc` at II 1 (its load and store share the one phase,
-// so `acc` needs two ports and the narrower x16 TDP configuration).
+// same BRAM total as the simplex-based scheduler. The kernel exercises a loop
+// with three reads of `tab` per iteration (no loop body stores to `tab` more
+// than once, so the bank is replicable: 17 slots per cycle, II 1, and Vitis
+// serves the 3 reads from 2 copies of a true-dual-port 256 x 32 RAM = 2 x 2 =
+// 4 BRAM; VITIS_NOTES.md N4), a loop-carried accumulation (a recurrence
+// through iter_args), and a read-modify-write of `acc` at II 1 (its load and
+// store share the one phase, so `acc` needs two ports and the narrower x18
+// aspect ratio: 2 BRAM).
 //
-// CHECK: Total BRAM: 3
+// CHECK: Total BRAM: 6
 //
 // SCHED: loopschedule.pipeline II = {{ *}}1
-// SCHED: loopschedule.pipeline II = {{ *}}3
+// SCHED: loopschedule.pipeline II = {{ *}}1
 // SCHED: loopschedule.pipeline II = {{ *}}1
 // SCHED: loopschedule.pipeline II = {{ *}}1
 

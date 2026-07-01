@@ -42,15 +42,18 @@ module {
 // CHECK-NEXT:   "kernel"
 // CHECK:      "memrefs": [
 
-// bank 0 of buf
+// bank 0 of buf: one live port -> the x36 mode, 512 words = one RAMB18.
 // CHECK:      "bank_math": {
-// CHECK-NEXT:   "bits_per_bram": 16384,
+// CHECK-NEXT:   "addr_depth": 512,
+// CHECK-NEXT:   "bits_per_bram": 18432,
 // CHECK-NEXT:   "blocks": 1,
-// CHECK-NEXT:   "config_width": 32,
+// CHECK-NEXT:   "blocks_per_copy": 1,
+// CHECK-NEXT:   "config_width": 36,
 // CHECK-NEXT:   "depth_per_block": 512,
 // CHECK-NEXT:   "depth_tiles": 1,
-// CHECK-NEXT:   "max_width": 32,
+// CHECK-NEXT:   "max_width": 36,
 // CHECK-NEXT:   "replication": 1,
+// CHECK-NEXT:   "wide": true,
 // CHECK-NEXT:   "width_tiles": 1
 // CHECK:      "bram": 1,
 // CHECK-NEXT: "elem_bits": 32,
@@ -73,6 +76,12 @@ module {
 // CHECK-NEXT:   "reason": null,
 // CHECK-NEXT:   "source": "pragma"
 // CHECK:      "ram_type": "RAM_1P",
+// CHECK:      "replication": {
+// CHECK-NEXT:   "copies": 1,
+// CHECK-NEXT:   "limiting_loop": null,
+// CHECK-NEXT:   "loops": [
+// CHECK:        "max_stores_per_loop": 1,
+// CHECK-NEXT:   "replicable": true
 // CHECK:      "status": "counted",
 // CHECK-NEXT: "varname": "buf",
 // CHECK-NEXT: "words": 512
@@ -99,4 +108,4 @@ module {
 
 // CHECK:      "summary": [
 // CHECK:      "total_bram": 3,
-// CHECK-NEXT: "version": 1
+// CHECK-NEXT: "version": 2

@@ -8,13 +8,24 @@
 
 namespace circt::hls_analysis {
 
-    /// Size above which an array is assumed to be mapped to block RAM rather
-    /// than kept in registers/LUTRAM: 32 words x 32 bits. The cost interface
-    /// (contributesToBRAMCost) applies it and the --bram-debug explanation
-    /// quotes it, so the two cannot drift apart.
-    /// TODO: most tools expose this as a configurable threshold; make it a
-    ///       target/device parameter instead of a constant.
-    inline constexpr int64_t kBRAMPromotionBits = 32 * 32;
+    /// Smallest array (Words * exact element Bits) that Vitis HLS implements
+    /// in block RAM; anything smaller becomes distributed RAM (0 BRAM). The
+    /// threshold is inclusive: 64x16 = 1024 bits -> 1 BRAM, 93x11 = 1023 ->
+    /// LUTRAM, 64x15 = 960 -> LUTRAM (VITIS_NOTES.md N5, 23 kernels). The cost
+    /// interface (contributesToBRAMCost) applies it and the --bram-debug
+    /// explanation quotes it, so the two cannot drift apart.
+    inline constexpr int64_t kBRAMPromotionBits = 1024;
+
+    /// RAM_1WNR replication (VITIS_NOTES.md N4): at most 16 identical copies
+    /// of a bank, i.e. 16 dedicated read ports (port B of every copy) plus the
+    /// shared port A, which writes or - in a cycle without a write - reads.
+    /// The scheduler therefore offers 17 read-or-write slots per cycle to a
+    /// bank that can be replicated (no loop body stores to it more than once).
+    inline constexpr unsigned kMaxReplicationCopies = 16;
+    inline constexpr unsigned kReplicatedPortSlots = kMaxReplicationCopies + 1;
+    /// Ports of one physical block RAM (true dual port). A bank that cannot be
+    /// replicated, and an interface memref, offers this many slots per cycle.
+    inline constexpr unsigned kDualPortSlots = 2;
 
     enum class StorageKind {
       RAM_1P,

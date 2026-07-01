@@ -53,7 +53,7 @@ module {
 // CHECK-NEXT:   partition: none
 // CHECK-NEXT:   accesses: not attributed (memref.global has no SSA result)
 // CHECK-NEXT:   ram type: RAM_1P -- global: accesses not attributed, default RAM_1P
-// CHECK-NEXT:   bank math: 16384 bits/BRAM_18K, max width 32 at RAM_1P, element 32b -> config width 32, width tiles 1, depth/block 512, depth tiles ceil(64/512)=1, replication 1 -> 1 block(s)
+// CHECK-NEXT:   bank math: 18432 bits/BRAM_18K (incl. parity), one live port -> x36 allowed at RAM_1P, element 32b -> mode x36: columns ceil(32/36)=1, depth/block 512, address depth 2^ceil(log2 64)=64, blocks/column max(1,64/512)=1 -> 1 per copy, replication 1 -> 1 block(s)
 // CHECK-NEXT:   bram: 1
 
 // CHECK:      [kernel#1] buf[bank 0/2] (alloca) @ kernel.cpp:12:5
@@ -62,8 +62,9 @@ module {
 // CHECK-NEXT:   partition: cyclic factor=2 dim=1 source=pragma (bank 0 of 2)
 // CHECK-NEXT:   accesses (2):
 // CHECK:          port demand: reads=1 writes=1 total=1 (max over scopes; segregated R/W)
-// CHECK:          ram type: RAM_1P -- peak port demand 1/cycle (1R+1W, max over scopes): at most one live port -> RAM_1P (x32 wide, no TDP constraint)
-// CHECK:          bank math: 16384 bits/BRAM_18K, max width 32 at RAM_1P, element 32b -> config width 32, width tiles 1, depth/block 512, depth tiles ceil(512/512)=1, replication 1 -> 1 block(s)
+// CHECK:          replication: replicable (max 1 store(s) per loop body), copies 1
+// CHECK:          ram type: RAM_1P -- peak port demand 1/cycle (1R+1W, max over scopes): at most one live port -> RAM_1P (x36 wide, no TDP constraint); replicable, but every pipelined loop needs <= 2 port-cycles per II (no RAM_1WNR)
+// CHECK:          bank math: 18432 bits/BRAM_18K (incl. parity), one live port -> x36 allowed at RAM_1P, element 32b -> mode x36: columns ceil(32/36)=1, depth/block 512, address depth 2^ceil(log2 512)=512, blocks/column max(1,512/512)=1 -> 1 per copy, replication 1 -> 1 block(s)
 // CHECK-NEXT:   bram: 1
 
 // CHECK:      [kernel#2] buf[bank 1/2] (alloca) @ kernel.cpp:12:5
@@ -74,12 +75,12 @@ module {
 // CHECK-NEXT:   shape [256] x i32 (32 bits) = 256 words
 // CHECK-NEXT:   status: counted
 // CHECK-NEXT:   partition: none
-// CHECK:        bank math: 16384 bits/BRAM_18K, max width 32 at RAM_1P, element 32b -> config width 32, width tiles 1, depth/block 512, depth tiles ceil(256/512)=1, replication 1 -> 1 block(s)
+// CHECK:        bank math: 18432 bits/BRAM_18K (incl. parity), one live port -> x36 allowed at RAM_1P, element 32b -> mode x36: columns ceil(32/36)=1, depth/block 512, address depth 2^ceil(log2 256)=256, blocks/column max(1,256/512)=1 -> 1 per copy, replication 1 -> 1 block(s)
 // CHECK-NEXT:   bram: 1
 
 // CHECK:      [kernel#4] small (alloca) @ kernel.cpp:14:5
 // CHECK-NEXT:   shape [8] x i32 (32 bits) = 8 words
-// CHECK-NEXT:   status: excluded_small -- size 256 bits <= 1024-bit BRAM promotion threshold; kept in LUTRAM/FFs
+// CHECK-NEXT:   status: excluded_small -- size 256 bits < 1024-bit BRAM promotion threshold (Words*Bits >= 1024 -> BRAM); distributed RAM, 0 BRAM
 // CHECK:        ram type: RAM_1P -- not selected: excluded from BRAM accounting (LUTRAM / stream / zero-size)
 // CHECK-NEXT:   bram: 0
 

@@ -24,32 +24,46 @@
 
 namespace circt::hls_analysis {
 
-/// Physical port configuration a bank must support over its whole live range.
-/// Ordered by capability: OnePort < SDP < TDP. The scheduler relies on this
-/// ordering — defaulting to TDP never under-constrains, so tightening is the
-/// only direction the post-schedule pass ever moves.
+/// Port slots the scheduler may use per cycle on a bank (the Vitis storage
+/// model, VITIS_NOTES.md N4):
+///   OneWriteNRead  bank that Vitis may replicate (RAM_1WNR): no loop body
+///                  stores to it more than once, so every read beyond the two
+///                  ports of one block RAM is served by another copy. 16
+///                  copies + the shared write port = 17 slots per cycle; the
+///                  loop II becomes ceil((R + W) / 17).
+///   TDP            bank that some loop body stores to twice or more: Vitis
+///                  keeps one true-dual-port RAM and raises the II instead
+///                  (ceil((R + W) / 2)). Also the fallback for interface
+///                  memrefs (function arguments) and anything untracked.
+///   OnePort / SDP  kept for completeness (one r/w port; dedicated R + W);
+///                  no longer produced by classifyMode.
 enum class StorageMode {
-  OnePort, // 1 R/W port. Reads and writes contend.
-  SDP,     // 1 dedicated read + 1 dedicated write.
-  TDP,     // 2 ports, each R or W.
+  OnePort,       // 1 R/W port. Reads and writes contend.
+  SDP,           // 1 dedicated read + 1 dedicated write.
+  TDP,           // 2 ports, each R or W.
+  OneWriteNRead, // replicable: kReplicatedPortSlots read-or-write slots.
 };
 
 llvm::StringRef stringifyStorageMode(StorageMode mode);
 
-/// Pure classification rule from a per-cycle access profile.
-///   writes >= 2            -> TDP (two write-capable ports needed)
-///   reads >= 1 && writes>=1-> SDP (1R + 1W dedicated)
-///   reads >= 2             -> TDP (two read ports; see SDP-promotion TODO)
-///   otherwise              -> OnePort
-StorageMode classifyMode(unsigned reads, unsigned writes);
+/// Port slots per cycle the scheduler grants a bank in `mode`.
+unsigned storageModeSlots(StorageMode mode);
+
+/// Classification rule from the per-loop-body access profile.
+///   maxStoresPerLoop >= 2 -> TDP            (no replication; 2 slots)
+///   otherwise             -> OneWriteNRead  (replicable; 17 slots)
+StorageMode classifyMode(unsigned maxReads, unsigned maxStoresPerLoop);
 
 struct BankProfile {
   mlir::Value memref;          // The bank itself (alloca result).
   unsigned width = 0;          // Element bit width.
   unsigned depth = 0;          // Number of elements.
-  unsigned maxReads = 0;       // Max concurrent reads/cycle across all loops.
-  unsigned maxWrites = 0;      // Max concurrent writes/cycle across all loops.
-  StorageMode mode = StorageMode::OnePort;
+  unsigned maxReads = 0;       // Max loads in one loop body.
+  unsigned maxWrites = 0;      // Max stores in one loop body.
+  // Every loop body stores to the bank at most once, so Vitis may serve extra
+  // reads from replicated copies (RAM_1WNR) instead of raising the II.
+  bool replicable = true;
+  StorageMode mode = StorageMode::OneWriteNRead;
   StorageKind type =  StorageKind::RAM_1P;
   unsigned copies  = 1;                       // replication factor
   unsigned loopII  = 1;                       // binding II for this bank
@@ -61,7 +75,8 @@ public:
   /// region-holding op) whose banks should be classified.
   explicit BRAMClassification(mlir::Operation *op);
 
-  /// Mode for `bank`. Returns OnePort if the value is not a tracked bank.
+  /// Mode for `bank`. Returns TDP (two slots, the interface/untracked rule)
+  /// if the value is not a tracked bank.
   StorageMode getMode(mlir::Value bank) const;
 
   /// Full profile for `bank`, or nullptr if untracked.

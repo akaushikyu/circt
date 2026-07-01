@@ -144,10 +144,120 @@ private:
   // bands into single loops where legal.
   void coalescePerfectNests();
 
+  // MODIFIED: pre-analysis LICM on the loops about to be pipelined (after
+  // coalescing). Moves loop-invariant pure ops and loop-invariant affine
+  // loads from a memref the loop never writes to just before the loop.
+  void hoistInvariantLoads();
+
   CyclicSchedulingAnalysis *schedulingAnalysis;
 };
 
 } // namespace
+
+//===----------------------------------------------------------------------===//
+// Invariant-load hoisting (Vitis LICM, VITIS_NOTES.md N4 / replication.md R4).
+//
+// Vitis hoists a load whose address does not depend on the pipelined loop's
+// induction variable, from an array the loop does not store to, out of the
+// loop (it enters the loop module as a scalar argument). Such a load then uses
+// no port of the loop's schedule, so it neither limits the II nor counts
+// toward the replication factor. The decision is made on the loop as it is
+// pipelined: when a perfect nest has been flattened (coalesced) the outer
+// index is part of the flattened loop and `A[i][k]` with k unrolled is NOT
+// invariant - which is why this runs after coalescePerfectNests() and not as
+// a pipeline-level --affine-loop-invariant-code-motion (that would hoist out
+// of the inner loop before the flatten decision and make the nest imperfect).
+//
+// Only ops directly in the loop body are moved (nothing from inside an
+// affine.if: that would be speculation), in program order, so an op is
+// hoisted iff every operand is defined outside the loop or by an op hoisted
+// before it. A memref counts as written in the loop if any op inside the
+// loop has a write effect on it or uses it without declaring its effects
+// (a call, a cast), so aliases are treated conservatively.
+//===----------------------------------------------------------------------===//
+
+static bool isInnermostAffineFor(AffineForOp forOp);
+
+/// True if some op inside `forOp` may write `mem` (or uses it opaquely).
+static bool isMemrefWrittenInLoop(Value mem, AffineForOp forOp) {
+  bool written = false;
+  forOp.getBody()->walk([&](Operation *op) {
+    if (written)
+      return WalkResult::interrupt();
+    if (!llvm::is_contained(op->getOperands(), mem))
+      return WalkResult::advance();
+    auto eff = dyn_cast<MemoryEffectOpInterface>(op);
+    if (!eff) {
+      written = true; // unknown effects on the memref: assume a write
+      return WalkResult::interrupt();
+    }
+    SmallVector<MemoryEffects::EffectInstance> effects;
+    eff.getEffectsOnValue(mem, effects);
+    for (auto &e : effects)
+      if (!isa<MemoryEffects::Read>(e.getEffect())) {
+        written = true; // Write, Allocate, Free
+        return WalkResult::interrupt();
+      }
+    return WalkResult::advance();
+  });
+  return written;
+}
+
+void AffineToLoopSchedule::hoistInvariantLoads() {
+  SmallVector<AffineForOp> loops;
+  getOperation().walk([&](AffineForOp forOp) {
+    if (isInnermostAffineFor(forOp))
+      loops.push_back(forOp);
+  });
+
+  unsigned hoistedLoads = 0, hoistedPure = 0;
+  for (AffineForOp forOp : loops) {
+    DenseSet<Value> invariant; // results of ops hoisted so far
+    auto isInvariantValue = [&](Value v) {
+      return forOp.isDefinedOutsideOfLoop(v) || invariant.contains(v);
+    };
+    DenseMap<Value, bool> writtenCache;
+    auto writtenInLoop = [&](Value mem) {
+      auto it = writtenCache.find(mem);
+      if (it != writtenCache.end())
+        return it->second;
+      bool w = isMemrefWrittenInLoop(mem, forOp);
+      writtenCache[mem] = w;
+      return w;
+    };
+
+    SmallVector<Operation *> toHoist;
+    for (Operation &op : forOp.getBody()->without_terminator()) {
+      if (op.getNumRegions() != 0)
+        continue;
+      bool hoistable = false;
+      if (auto load = dyn_cast<AffineLoadOp>(op)) {
+        hoistable = llvm::all_of(load.getMapOperands(), isInvariantValue) &&
+                    isInvariantValue(load.getMemRef()) &&
+                    !writtenInLoop(load.getMemRef());
+        if (hoistable)
+          ++hoistedLoads;
+      } else if (isMemoryEffectFree(&op) && isSpeculatable(&op) &&
+                 op.getNumResults() > 0) {
+        hoistable = llvm::all_of(op.getOperands(), isInvariantValue);
+        if (hoistable)
+          ++hoistedPure;
+      }
+      if (!hoistable)
+        continue;
+      toHoist.push_back(&op);
+      for (Value r : op.getResults())
+        invariant.insert(r);
+    }
+    // Program order is preserved, so every hoisted op's operands are already
+    // above the loop when it is moved.
+    for (Operation *op : toHoist)
+      op->moveBefore(forOp);
+  }
+  LLVM_DEBUG(llvm::dbgs() << "hoisted " << hoistedLoads
+                          << " loop-invariant affine.load and " << hoistedPure
+                          << " pure ops out of innermost loops\n");
+}
 
 /// Returns true if `forOp` contains no nested affine.for anywhere in its
 /// body (including inside ifs).
@@ -674,6 +784,12 @@ void AffineToLoopSchedule::runOnOperation() {
   // unrollInnerReductions();     // unroll innermost reduction loops; the loop
   // above becomes the new innermost/pipelined loop
 
+  // MODIFIED: Vitis-style LICM on the loops that will be pipelined, after the
+  // flatten decision (see hoistInvariantLoads). Moves ops only, so it must
+  // precede the analyses below like the coalescing does.
+  if (hoistInvariant)
+    hoistInvariantLoads();
+
   // MODIFIED: drop trivially dead ops up front. A dead op has no outgoing
   // dependence edge, so it is a sink in the scheduling DAG; anchoring it
   // would burn a slot and a pipeline register for a value nothing reads.
@@ -955,13 +1071,19 @@ LogicalResult AffineToLoopSchedule::lowerAffineStructures(
 //===----------------------------------------------------------------------===//
 // Operator type (latency-1 "mem_<hash>") is unchanged and shared per memref —
 // it governs latency, not port count. Only the *resource* construction varies
-// by mode:
-//   1P  -> one pool, limit 1
-//   TDP -> one pool, limit 2
-//   SDP -> two pools, limit 1 each: loads -> _rd, stores -> _wr (dedicated)
-//
+// by mode (the Vitis storage model, VITIS_NOTES.md N4):
+//   1WNR -> one pool, limit 17: a bank no loop body stores to twice can be
+//           replicated (16 copies + the shared write port), so the loop II is
+//           ceil((R + W) / 17) and --bram-analysis prices the copies
+//   TDP  -> one pool, limit 2: a bank some loop body stores to twice or more
+//           stays one true-dual-port RAM and the II is ceil((R + W) / 2); also
+//           every interface memref (function argument) and untracked memref
+//   1P   -> one pool, limit 1
+//   SDP  -> two pools, limit 1 each: loads -> _rd, stores -> _wr (dedicated)
+// The greedy scheduler (FastModuloScheduler) reads the same limits through
+// prob.getLimit(), so both paths see one port model.
 //===----------------------------------------------------------------------===//
- 
+
 static void linkMemoryResource(Operation *memOp, Value memRef, bool isLoad,
                                ModuloProblem &problem,
                                const BRAMClassification &bramClass) {
@@ -971,27 +1093,22 @@ static void linkMemoryResource(Operation *memOp, Value memRef, bool isLoad,
       problem.getOrInsertOperatorType("mem_" + key);
   problem.setLatency(memOpr, 1);
   problem.setLinkedOperatorType(memOp, memOpr);
- 
+
   using hls_analysis::StorageMode;
   const BankProfile *prof = bramClass.getProfile(memRef);
- 
+
   SmallVector<Problem::ResourceType> rsrcs;
-  // Fallback: untracked memref -> preserve original single-pool limit-2.
+  // Fallback: untracked memref (interface argument, get_global) -> two ports.
   StorageMode mode = prof ? prof->mode : StorageMode::TDP;
   Problem::ResourceType r;
-  
+
   switch (mode) {
-  case StorageMode::OnePort: {
-    // 1 r/w port single
+  case StorageMode::OnePort:
+  case StorageMode::TDP:
+  case StorageMode::OneWriteNRead: {
+    // One shared pool of read-or-write slots.
     r = problem.getOrInsertResourceType("mem_" + key + "_rsrc");
-    problem.setLimit(r, 1);
-    rsrcs.push_back(r);
-    break;
-  }
-  case StorageMode::TDP: {
-    // 2 r/w port single
-    r = problem.getOrInsertResourceType("mem_" + key + "_rsrc");
-    problem.setLimit(r, 2);
+    problem.setLimit(r, hls_analysis::storageModeSlots(mode));
     rsrcs.push_back(r);
     break;
   }

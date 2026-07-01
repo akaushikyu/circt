@@ -44,7 +44,13 @@ def AffineToLoopSchedule : Pass<"convert-affine-to-loopschedule", "mlir::func::F
     Option<"cseBeforeSchedule", "cse", "bool", /*default=*/"true",
            "Merge duplicated side-effect-free ops (index arithmetic left by "
            "per-access affine-map expansion) before the scheduling problem is "
-           "built. Memory ops are never merged.">
+           "built. Memory ops are never merged.">,
+    Option<"hoistInvariant", "hoist-invariant", "bool", /*default=*/"true",
+           "After perfect nests are flattened, move loop-invariant pure ops "
+           "and loop-invariant affine.load ops (address independent of the "
+           "loop, memref not written in the loop) out of each loop that will "
+           "be pipelined, as Vitis' LICM does; hoisted loads use no port of "
+           "the pipelined loop.">
   ];
 }
 
