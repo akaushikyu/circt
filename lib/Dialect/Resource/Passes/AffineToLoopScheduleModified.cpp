@@ -67,6 +67,9 @@
 #include "mlir/Dialect/Affine/Analysis/LoopAnalysis.h"
 #include "mlir/Dialect/Affine/IR/AffineMemoryOpInterfaces.h"
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
+#include "mlir/Dialect/Affine/IR/AffineValueMap.h"
+#include "mlir/Interfaces/CallInterfaces.h"
+#include "mlir/Interfaces/ViewLikeInterface.h"
 #include "mlir/Dialect/Affine/LoopUtils.h"
 #include "mlir/Dialect/Affine/Utils.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
@@ -148,6 +151,7 @@ private:
   // coalescing). Moves loop-invariant pure ops and loop-invariant affine
   // loads from a memref the loop never writes to just before the loop.
   void hoistInvariantLoads();
+  void cleanupRedundantAccesses();
 
   CyclicSchedulingAnalysis *schedulingAnalysis;
 };
@@ -172,32 +176,92 @@ private:
 // affine.if: that would be speculation), in program order, so an op is
 // hoisted iff every operand is defined outside the loop or by an op hoisted
 // before it. A memref counts as written in the loop if any op inside the
-// loop has a write effect on it or uses it without declaring its effects
-// (a call, a cast), so aliases are treated conservatively.
+// loop has a write effect on it *or on any view of it* (memref.cast,
+// subview, ...: the alias set below), or uses one of them without declaring
+// its effects; a memref that escaped (call, region op, yield) is never
+// hoisted from.
 //===----------------------------------------------------------------------===//
 
 static bool isInnermostAffineFor(AffineForOp forOp);
 
-/// True if some op inside `forOp` may write `mem` (or uses it opaquely).
-static bool isMemrefWrittenInLoop(Value mem, AffineForOp forOp) {
+namespace {
+/// The memref itself plus every value derived from it through a view-like op
+/// (memref.cast, subview, reinterpret_cast, expand/collapse_shape, ...),
+/// transitively. `escaped`: some member has a use that is neither a plain
+/// access nor a view - a call, an op with regions taking it (scf.for
+/// iter_args), a terminator yielding it, or an op producing a memref we
+/// cannot follow - so the set may be incomplete.
+struct MemrefAliasInfo {
+  SmallPtrSet<Value, 4> members;
+  bool escaped = false;
+};
+} // namespace
+
+/// A use through which the memref cannot flow anywhere else: an affine access
+/// or a region-free, non-call op with declared effects and no memref result.
+static bool isPlainMemrefUse(Operation *user) {
+  if (isa<AffineReadOpInterface, AffineWriteOpInterface>(user))
+    return true;
+  if (isa<CallOpInterface>(user) || user->getNumRegions() != 0 ||
+      user->hasTrait<OpTrait::IsTerminator>() ||
+      !isa<MemoryEffectOpInterface>(user))
+    return false;
+  return llvm::none_of(user->getResultTypes(),
+                       [](Type t) { return isa<BaseMemRefType>(t); });
+}
+
+static MemrefAliasInfo collectMemrefAliases(Value mem) {
+  MemrefAliasInfo info;
+  SmallVector<Value> worklist{mem};
+  info.members.insert(mem);
+  while (!worklist.empty()) {
+    Value v = worklist.pop_back_val();
+    for (Operation *user : v.getUsers()) {
+      if (isa<ViewLikeOpInterface>(user)) {
+        for (Value r : user->getResults())
+          if (isa<BaseMemRefType>(r.getType()) && info.members.insert(r).second)
+            worklist.push_back(r);
+        continue;
+      }
+      if (!isPlainMemrefUse(user))
+        info.escaped = true;
+    }
+  }
+  return info;
+}
+
+/// True if some op inside `forOp` may write the memref through any member of
+/// its alias set (or uses one opaquely), or if the memref has escaped.
+static bool isMemrefWrittenInLoop(const MemrefAliasInfo &alias,
+                                  AffineForOp forOp) {
+  if (alias.escaped)
+    return true;
   bool written = false;
   forOp.getBody()->walk([&](Operation *op) {
-    if (written)
-      return WalkResult::interrupt();
-    if (!llvm::is_contained(op->getOperands(), mem))
-      return WalkResult::advance();
-    auto eff = dyn_cast<MemoryEffectOpInterface>(op);
-    if (!eff) {
-      written = true; // unknown effects on the memref: assume a write
-      return WalkResult::interrupt();
-    }
-    SmallVector<MemoryEffects::EffectInstance> effects;
-    eff.getEffectsOnValue(mem, effects);
-    for (auto &e : effects)
-      if (!isa<MemoryEffects::Read>(e.getEffect())) {
-        written = true; // Write, Allocate, Free
+    if (isa<ViewLikeOpInterface>(op))
+      return WalkResult::advance(); // pure; its result is a member itself
+    for (Value opd : op->getOperands()) {
+      if (!alias.members.contains(opd))
+        continue;
+      if (isa<AffineWriteOpInterface>(op)) {
+        written = true;
         return WalkResult::interrupt();
       }
+      if (isa<AffineReadOpInterface>(op))
+        continue;
+      auto eff = dyn_cast<MemoryEffectOpInterface>(op);
+      if (!eff) {
+        written = true; // unknown effects on the memref: assume a write
+        return WalkResult::interrupt();
+      }
+      SmallVector<MemoryEffects::EffectInstance> effects;
+      eff.getEffectsOnValue(opd, effects);
+      for (auto &e : effects)
+        if (!isa<MemoryEffects::Read>(e.getEffect())) {
+          written = true; // Write, Allocate, Free
+          return WalkResult::interrupt();
+        }
+    }
     return WalkResult::advance();
   });
   return written;
@@ -210,6 +274,15 @@ void AffineToLoopSchedule::hoistInvariantLoads() {
       loops.push_back(forOp);
   });
 
+  // Alias sets are a property of the function (moving ops changes no uses).
+  DenseMap<Value, MemrefAliasInfo> aliasCache;
+  auto aliasInfo = [&](Value mem) -> const MemrefAliasInfo & {
+    auto it = aliasCache.find(mem);
+    if (it == aliasCache.end())
+      it = aliasCache.try_emplace(mem, collectMemrefAliases(mem)).first;
+    return it->second;
+  };
+
   unsigned hoistedLoads = 0, hoistedPure = 0;
   for (AffineForOp forOp : loops) {
     DenseSet<Value> invariant; // results of ops hoisted so far
@@ -221,7 +294,7 @@ void AffineToLoopSchedule::hoistInvariantLoads() {
       auto it = writtenCache.find(mem);
       if (it != writtenCache.end())
         return it->second;
-      bool w = isMemrefWrittenInLoop(mem, forOp);
+      bool w = isMemrefWrittenInLoop(aliasInfo(mem), forOp);
       writtenCache[mem] = w;
       return w;
     };
@@ -257,6 +330,232 @@ void AffineToLoopSchedule::hoistInvariantLoads() {
   LLVM_DEBUG(llvm::dbgs() << "hoisted " << hoistedLoads
                           << " loop-invariant affine.load and " << hoistedPure
                           << " pure ops out of innermost loops\n");
+}
+
+//===----------------------------------------------------------------------===//
+// Redundant-access cleanup (Vitis GVN / DSE on the unrolled body;
+// VITIS_NOTES.md N4: R and W per iteration are counted "after unrolling, CSE,
+// LICM").
+//
+// Within one block, in program order, Vitis' LLVM pipeline removes
+//   - a load of an address loaded before with no intervening write that may
+//     alias it: the same value (CSE / GVN)                         [cse-loads]
+//   - a load of an address stored before with no intervening may-alias write
+//     (store-to-load forwarding), and a store overwritten by a later store to
+//     the same address with no intervening may-alias read (dead-store
+//     elimination)                                            [forward-stores]
+// so an unrolled accumulator `acc[i] += ...` (load, add, store, N times)
+// becomes one load and one store per iteration, and only those use ports.
+//
+// Two affine accesses to one memref are compared with
+// AffineValueMap::difference after full composition: every result a constant
+// 0 -> same address; some result a nonzero constant -> disjoint (`A[i][k]`
+// vs `A[i][k+1]` after unrolling); anything else may alias. Distinct memref
+// values never alias (the affine dialect's and the dependence analysis'
+// assumption), so only memrefs whose SSA value identifies the storage take
+// part: allocas, allocs and function arguments (not views, iter_args or
+// get_global results, see isRootMemref), and only when they have not escaped
+// (collectMemrefAliases). Only affine.load / affine.store are tracked; a
+// non-affine or predicated access, an access through a view, an op with
+// regions touching the memref, and any other use of the memref or of a view
+// of it are opaque: they forget everything known about that memref. Nothing
+// is forwarded across a block boundary or a loop back edge.
+//
+// The surviving op records what it absorbed (`hls.merged_loads` on a load,
+// `hls.forwarded_loads` / `hls.removed_stores` on a store); the affine
+// lowering carries the attributes along (copyHlsAttrs) so --bram-debug can
+// show why R and W are what they are. Erases ops, so it runs before every
+// analysis (runOnOperation).
+//===----------------------------------------------------------------------===//
+
+namespace {
+enum class AddrRelation { Same, Disjoint, MayAlias };
+
+struct AccessAddr {
+  AffineMap map;
+  SmallVector<Value, 4> operands;
+  AccessAddr(AffineMap m, ValueRange opds)
+      : map(m), operands(opds.begin(), opds.end()) {
+    fullyComposeAffineMapAndOperands(&map, &operands);
+    canonicalizeMapAndOperands(&map, &operands);
+  }
+};
+
+/// What is known about one address of a memref at the current point of a
+/// block.
+struct KnownValue {
+  AccessAddr addr;
+  Value value;      // the value held at `addr`
+  Operation *store; // the affine.store that put it there; null: a load read it
+  bool readSince;   // a read that may alias `addr` happened after `store`
+};
+} // namespace
+
+static AddrRelation compareAddresses(const AccessAddr &a,
+                                     const AccessAddr &b) {
+  if (a.map.getNumResults() != b.map.getNumResults())
+    return AddrRelation::MayAlias;
+  AffineValueMap va(a.map, a.operands), vb(b.map, b.operands), diff;
+  AffineValueMap::difference(va, vb, &diff);
+  bool allZero = true;
+  for (unsigned d = 0, n = diff.getNumResults(); d < n; ++d) {
+    auto c = dyn_cast<AffineConstantExpr>(diff.getResult(d));
+    if (!c)
+      allZero = false;
+    else if (c.getValue() != 0)
+      return AddrRelation::Disjoint;
+  }
+  return allZero ? AddrRelation::Same : AddrRelation::MayAlias;
+}
+
+static int64_t counterAttr(Operation *op, StringRef name) {
+  if (auto a = op->getAttrOfType<IntegerAttr>(name))
+    return a.getInt();
+  return 0;
+}
+
+static void addCounterAttr(Operation *op, StringRef name, int64_t by) {
+  if (by <= 0)
+    return;
+  op->setAttr(name, IntegerAttr::get(IntegerType::get(op->getContext(), 64),
+                                     counterAttr(op, name) + by));
+}
+
+/// Memrefs whose SSA value identifies the storage: a local array or a
+/// function argument. Two memref.get_global of one symbol are two values for
+/// one memory, and a view or an iter_arg aliases its source: not tracked.
+static bool isRootMemref(Value mem) {
+  if (auto arg = dyn_cast<BlockArgument>(mem))
+    return isa<func::FuncOp>(arg.getOwner()->getParentOp());
+  return isa_and_present<memref::AllocaOp, memref::AllocOp>(
+      mem.getDefiningOp());
+}
+
+void AffineToLoopSchedule::cleanupRedundantAccesses() {
+  SmallVector<Block *> blocks;
+  getOperation().walk([&](Block *b) { blocks.push_back(b); });
+
+  DenseMap<Value, MemrefAliasInfo> aliasCache;
+  auto aliasInfo = [&](Value mem) -> const MemrefAliasInfo & {
+    auto it = aliasCache.find(mem);
+    if (it == aliasCache.end())
+      it = aliasCache.try_emplace(mem, collectMemrefAliases(mem)).first;
+    return it->second;
+  };
+
+  unsigned merged = 0, forwarded = 0, removed = 0;
+  for (Block *block : blocks) {
+    DenseMap<Value, SmallVector<KnownValue, 8>> known; // root -> values
+    DenseMap<Value, Value> memberToRoot;               // alias member -> root
+    auto forget = [&](Value mem) {
+      auto it = memberToRoot.find(mem);
+      if (it != memberToRoot.end())
+        known.erase(it->second);
+      known.erase(mem);
+    };
+    auto forgetOperands = [&](Operation *op) {
+      for (Value v : op->getOperands())
+        if (isa<BaseMemRefType>(v.getType()))
+          forget(v);
+    };
+    // Tracked iff a root that has not escaped. Registers the alias set so
+    // that an access through a view forgets the root's state.
+    auto trackable = [&](Value mem) -> bool {
+      if (!isRootMemref(mem))
+        return false;
+      const MemrefAliasInfo &ai = aliasInfo(mem);
+      if (ai.escaped)
+        return false;
+      if (!memberToRoot.count(mem))
+        for (Value m : ai.members)
+          memberToRoot[m] = mem;
+      return true;
+    };
+
+    for (Operation &op : llvm::make_early_inc_range(*block)) {
+      if (auto load = dyn_cast<AffineLoadOp>(op)) {
+        Value mem = load.getMemRef();
+        if (!trackable(mem)) {
+          forget(mem);
+          continue;
+        }
+        AccessAddr addr(load.getAffineMap(), load.getMapOperands());
+        auto &vals = known[mem];
+        KnownValue *same = nullptr;
+        for (KnownValue &kv : vals) {
+          AddrRelation rel = compareAddresses(addr, kv.addr);
+          if (rel == AddrRelation::Same) {
+            same = &kv;
+            break;
+          }
+          if (rel == AddrRelation::MayAlias && kv.store)
+            kv.readSince = true;
+        }
+        if (same && (same->store ? forwardStores : cseLoads)) {
+          // The memory is not read: the known value is used instead.
+          if (same->store) {
+            addCounterAttr(same->store, "hls.forwarded_loads", 1);
+            ++forwarded;
+          } else {
+            addCounterAttr(same->value.getDefiningOp(), "hls.merged_loads", 1);
+            ++merged;
+          }
+          load.getResult().replaceAllUsesWith(same->value);
+          load.erase();
+          continue;
+        }
+        if (same) { // option off: a real read of a known address
+          if (same->store)
+            same->readSince = true;
+          continue;
+        }
+        vals.push_back({addr, load.getResult(), nullptr, false});
+        continue;
+      }
+      if (auto store = dyn_cast<AffineStoreOp>(op)) {
+        Value mem = store.getMemRef();
+        if (!trackable(mem)) {
+          forget(mem);
+          continue;
+        }
+        AccessAddr addr(store.getAffineMap(), store.getMapOperands());
+        auto &vals = known[mem];
+        SmallVector<KnownValue, 8> kept;
+        for (KnownValue &kv : vals) {
+          AddrRelation rel = compareAddresses(addr, kv.addr);
+          if (rel == AddrRelation::Disjoint) {
+            kept.push_back(kv);
+            continue;
+          }
+          if (rel == AddrRelation::Same && kv.store && !kv.readSince &&
+              forwardStores) {
+            // Overwritten before anything could read it: dead. This store
+            // stands for it (and for the loads it served) in the report.
+            addCounterAttr(&op, "hls.removed_stores",
+                           1 + counterAttr(kv.store, "hls.removed_stores"));
+            addCounterAttr(&op, "hls.forwarded_loads",
+                           counterAttr(kv.store, "hls.forwarded_loads"));
+            kv.store->erase();
+            ++removed;
+          }
+          // Same (still needed) or may-alias: the old value is unknown now.
+        }
+        vals = std::move(kept);
+        vals.push_back(
+            {addr, store.getValueToStore(), store.getOperation(), false});
+        continue;
+      }
+      // Anything else that touches a memref, or a view of one, directly or
+      // inside its regions, is opaque for that memref.
+      forgetOperands(&op);
+      for (Region &region : op.getRegions())
+        region.walk([&](Operation *inner) { forgetOperands(inner); });
+    }
+  }
+  LLVM_DEBUG(llvm::dbgs() << "redundant-access cleanup: merged " << merged
+                          << " loads, forwarded " << forwarded
+                          << " loads from stores, removed " << removed
+                          << " dead stores\n");
 }
 
 /// Returns true if `forOp` contains no nested affine.for anywhere in its
@@ -787,6 +1086,16 @@ void AffineToLoopSchedule::runOnOperation() {
   // MODIFIED: Vitis-style LICM on the loops that will be pipelined, after the
   // flatten decision (see hoistInvariantLoads). Moves ops only, so it must
   // precede the analyses below like the coalescing does.
+  // MODIFIED: Vitis GVN / DSE on the unrolled bodies (see
+  // cleanupRedundantAccesses), before the LICM so that a dead store no longer
+  // pins its memref in the loop. Erases ops, so it precedes every analysis.
+  // `forward-stores` is off by default (Passes.td): it reproduces Vitis per
+  // array (an unrolled `acc[i] +=` becomes 1 BRAM, not a 2-port RAM) but the
+  // totals of atax / bicg / mvt then lose the cancelling error of the
+  // one-port sequential-scope rule (OPEN_ISSUES.md O3), so adopting it waits
+  // for that fix (CLAUDE.md: no change that breaks a matching case).
+  if (cseLoads || forwardStores)
+    cleanupRedundantAccesses();
   if (hoistInvariant)
     hoistInvariantLoads();
 
@@ -869,6 +1178,22 @@ void AffineToLoopSchedule::runOnOperation() {
 /// Apply the affine map from an 'affine.load' operation to its operands, and
 /// feed the results to a newly created 'memref.load' operation (which replaces
 /// the original 'affine.load').
+/// The `hls.*` discardable attributes of an affine access (the counters the
+/// redundant-access cleanup left on it) that its lowered form keeps, so that
+/// --bram-debug can still report them.
+static SmallVector<NamedAttribute> hlsAttrsOf(Operation *op) {
+  SmallVector<NamedAttribute> out;
+  for (NamedAttribute a : op->getDiscardableAttrs())
+    if (a.getName().strref().starts_with("hls."))
+      out.push_back(a);
+  return out;
+}
+
+static void setAttrs(Operation *op, ArrayRef<NamedAttribute> attrs) {
+  for (const NamedAttribute &a : attrs)
+    op->setAttr(a.getName(), a.getValue());
+}
+
 /// Also replaces the affine load with the memref load in dependenceAnalysis.
 /// TODO(mikeurbach): this is copied from AffineToStandard, see if we can reuse.
 class AffineLoadLowering : public OpConversionPattern<AffineLoadOp> {
@@ -888,8 +1213,10 @@ public:
       return failure();
 
     // Build memref.load memref[expandedMap.results].
+    SmallVector<NamedAttribute> hlsAttrs = hlsAttrsOf(op);
     auto memrefLoad = rewriter.replaceOpWithNewOp<memref::LoadOp>(
         op, op.getMemRef(), *resultOperands);
+    setAttrs(memrefLoad, hlsAttrs);
 
     dependenceAnalysis.replaceOp(op, memrefLoad);
 
@@ -922,8 +1249,10 @@ public:
       return failure();
 
     // Build memref.store valueToStore, memref[expandedMap.results].
+    SmallVector<NamedAttribute> hlsAttrs = hlsAttrsOf(op);
     auto memrefStore = rewriter.replaceOpWithNewOp<memref::StoreOp>(
         op, op.getValueToStore(), op.getMemRef(), *maybeExpandedMap);
+    setAttrs(memrefStore, hlsAttrs);
 
     dependenceAnalysis.replaceOp(op, memrefStore);
 

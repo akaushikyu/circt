@@ -119,6 +119,12 @@ struct AccessRecord {
   unsigned ii = 0;
   unsigned stageStart = 0;
   bool storeEnable = false; // hls.store_enable: write-only, no phantom read
+  // Counters the scheduler's redundant-access cleanup left on the op
+  // (AffineToLoopScheduleModified.cpp cleanupRedundantAccesses): accesses
+  // that no longer exist because this one stands for them.
+  unsigned mergedLoads = 0;    // hls.merged_loads: same-address loads (CSE)
+  unsigned forwardedLoads = 0; // hls.forwarded_loads: loads served by the value
+  unsigned removedStores = 0;  // hls.removed_stores: stores it overwrote
   Operation *scope = nullptr;
 };
 
@@ -556,6 +562,12 @@ static bool isStoreEnableOp(Operation *op) {
   return n == "hls.store_enable" || n == "hls.affine.store_enable";
 }
 
+static unsigned counterAttr(Operation *op, StringRef name) {
+  if (auto a = op->getAttrOfType<IntegerAttr>(name))
+    return a.getInt() > 0 ? static_cast<unsigned>(a.getInt()) : 0u;
+  return 0;
+}
+
 // Identity: id, name, varname, kind, enclosing function, location, partition
 // provenance. All of it comes from attributes the front end / banking left on
 // the op; nothing here is derived from the estimate.
@@ -637,6 +649,9 @@ static void recordAccesses(ArrayRef<AccessSummary> accesses, MemrefRecord &r) {
     ar.ii = a.ii;
     ar.stageStart = a.stageStart;
     ar.storeEnable = isStoreEnableOp(a.op);
+    ar.mergedLoads = counterAttr(a.op, "hls.merged_loads");
+    ar.forwardedLoads = counterAttr(a.op, "hls.forwarded_loads");
+    ar.removedStores = counterAttr(a.op, "hls.removed_stores");
     r.accesses.push_back(std::move(ar));
     if (!llvm::is_contained(scopeOrder, a.scope))
       scopeOrder.push_back(a.scope);
@@ -1034,6 +1049,18 @@ static void printDebugText(ArrayRef<MemrefRecord> records, int64_t total,
           os << " ii=" << a.ii << " stage=" << a.stageStart;
         if (a.storeEnable)
           os << " (store_enable: write-only, no read port)";
+        if (a.mergedLoads)
+          os << " (+" << a.mergedLoads
+             << " same-address load(s) merged into it: CSE)";
+        if (a.forwardedLoads || a.removedStores) {
+          os << " (absorbed";
+          if (a.forwardedLoads)
+            os << " " << a.forwardedLoads << " forwarded load(s)";
+          if (a.removedStores)
+            os << (a.forwardedLoads ? "," : "") << " " << a.removedStores
+               << " dead store(s)";
+          os << ")";
+        }
         os << "\n";
       }
       os << "  port demand: reads=" << r.demand.reads
@@ -1149,6 +1176,9 @@ static llvm::json::Object toJson(const MemrefRecord &r) {
     ao["ii"] = static_cast<int64_t>(a.ii);
     ao["stage_start"] = static_cast<int64_t>(a.stageStart);
     ao["store_enable"] = a.storeEnable;
+    ao["merged_loads"] = static_cast<int64_t>(a.mergedLoads);
+    ao["forwarded_loads"] = static_cast<int64_t>(a.forwardedLoads);
+    ao["removed_stores"] = static_cast<int64_t>(a.removedStores);
     accesses.push_back(std::move(ao));
   }
   o["accesses"] = std::move(accesses);

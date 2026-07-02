@@ -5,6 +5,7 @@
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/IR/BuiltinTypes.h"
+#include "mlir/Interfaces/LoopLikeInterface.h"
 #include "llvm/Support/Debug.h"
 
 #include <llvm/ADT/TypeSwitch.h>
@@ -69,7 +70,7 @@ StorageKind classifyStorageKind(unsigned reads, unsigned writes) {
 // stores to more than once stays one true-dual-port RAM (the II is raised to
 // ceil((R+W)/2)); otherwise extra reads are served by replicated copies, up to
 // 16 copies + the shared write port = 17 accesses per cycle.
-StorageMode classifyMode(unsigned /*maxReads*/, unsigned maxStoresPerLoop) {
+StorageMode classifyMode(unsigned maxStoresPerLoop) {
   if (maxStoresPerLoop >= 2)
     return StorageMode::TDP;
   return StorageMode::OneWriteNRead;
@@ -116,8 +117,9 @@ void BRAMClassification::enumerateBanks(Operation *root) {
 
 void BRAMClassification::profileAccesses(Operation *root) {
   // Per bank, per enclosing innermost loop: (reads, writes) within one body.
-  // Keyed loop = the innermost affine.for parent, or null for a straight-line
-  // access outside every loop. The counts are per loop *body* (after
+  // Keyed loop = the innermost enclosing LoopLikeOpInterface op (affine.for,
+  // scf.for, ...: the same notion of scope as BRAMAnalysis' sequentialScope),
+  // or null for a straight-line access outside every loop. The counts are per loop *body* (after
   // unrolling), which is what Vitis' replication rule looks at: a body with
   // two stores to the bank needs two write ports in one iteration, so the bank
   // cannot be a RAM_1WNR (one shared write port) and stays a 2-port RAM.
@@ -133,7 +135,7 @@ void BRAMClassification::profileAccesses(Operation *root) {
     if (it == banks.end())
       return; // Access to an argument/off-chip memref, not a tracked bank.
 
-    Operation *loop = op->getParentOfType<affine::AffineForOp>();
+    Operation *loop = op->getParentOfType<LoopLikeOpInterface>();
     auto &counts = perLoop[bank][loop];
     if (isLoad)
       ++counts.first;
@@ -155,7 +157,7 @@ void BRAMClassification::profileAccesses(Operation *root) {
         maxStoresPerLoop = std::max(maxStoresPerLoop, writes);
     }
     prof.replicable = maxStoresPerLoop <= 1;
-    prof.mode = classifyMode(prof.maxReads, maxStoresPerLoop);
+    prof.mode = classifyMode(maxStoresPerLoop);
     prof.type = classifyStorageKind(prof.maxReads, prof.maxWrites);
   }
 }

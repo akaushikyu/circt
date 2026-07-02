@@ -12,6 +12,10 @@
 //   1024 x 1 = 1024 -> 1 BRAM   (aspect_1p_w1_d1024)
 //   32 x 32 = 1024 -> 1 BRAM    (lutram_d32_w32)
 // Every array is written in one loop and read in another: one live port.
+// The i11 / i15 memrefs are what cgeist emits with the width-exact shim
+// (`--shim exact`, `_BitInt(W)`); the harness's default scalar shim widens
+// ap_int<11> / ap_int<15> to i16, so through it both arrays are 1 BRAM
+// (VITIS_NOTES.md N5, OPEN_ISSUES.md O6).
 
 module {
   func.func @kernel(%in_b64x16: memref<64xi16>, %out_b64x16: memref<64xi16>, %in_b93x11: memref<93xi11>, %out_b93x11: memref<93xi11>, %in_b64x15: memref<64xi15>, %out_b64x15: memref<64xi15>, %in_b16x64: memref<16xi64>, %out_b16x64: memref<16xi64>, %in_b1024x1: memref<1024xi1>, %out_b1024x1: memref<1024xi1>, %in_b32x32: memref<32xi32>, %out_b32x32: memref<32xi32>) {

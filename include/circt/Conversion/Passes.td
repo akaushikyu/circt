@@ -50,7 +50,21 @@ def AffineToLoopSchedule : Pass<"convert-affine-to-loopschedule", "mlir::func::F
            "and loop-invariant affine.load ops (address independent of the "
            "loop, memref not written in the loop) out of each loop that will "
            "be pipelined, as Vitis' LICM does; hoisted loads use no port of "
-           "the pipelined loop.">
+           "the pipelined loop.">,
+    Option<"cseLoads", "cse-loads", "bool", /*default=*/"true",
+           "Before scheduling, replace a load by an earlier load of the same "
+           "address of the same memref in the same block when no intervening "
+           "write may alias it (Vitis GVN): the duplicate uses no port and "
+           "does not count toward R.">,
+    Option<"forwardStores", "forward-stores", "bool", /*default=*/"false",
+           "Before scheduling, replace a load by the value an earlier store in "
+           "the same block put at the same address (no intervening may-alias "
+           "write) and drop a store overwritten by a later store to the same "
+           "address with no intervening may-alias read (Vitis store-to-load "
+           "forwarding / dead-store elimination): an unrolled accumulator "
+           "becomes one load and one store per iteration. Off by default: "
+           "it is right per array but exposes the sequential two-port gap "
+           "(OPEN_ISSUES.md O3) and loses exact totals until that is fixed.">
   ];
 }
 

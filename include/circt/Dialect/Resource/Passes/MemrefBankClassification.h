@@ -49,10 +49,11 @@ llvm::StringRef stringifyStorageMode(StorageMode mode);
 /// Port slots per cycle the scheduler grants a bank in `mode`.
 unsigned storageModeSlots(StorageMode mode);
 
-/// Classification rule from the per-loop-body access profile.
+/// Classification rule from the per-loop-body access profile (the number
+/// of reads plays no part):
 ///   maxStoresPerLoop >= 2 -> TDP            (no replication; 2 slots)
 ///   otherwise             -> OneWriteNRead  (replicable; 17 slots)
-StorageMode classifyMode(unsigned maxReads, unsigned maxStoresPerLoop);
+StorageMode classifyMode(unsigned maxStoresPerLoop);
 
 struct BankProfile {
   mlir::Value memref;          // The bank itself (alloca result).
@@ -64,9 +65,7 @@ struct BankProfile {
   // reads from replicated copies (RAM_1WNR) instead of raising the II.
   bool replicable = true;
   StorageMode mode = StorageMode::OneWriteNRead;
-  StorageKind type =  StorageKind::RAM_1P;
-  unsigned copies  = 1;                       // replication factor
-  unsigned loopII  = 1;                       // binding II for this bank
+  StorageKind type = StorageKind::RAM_1P;
 };
 
 class BRAMClassification {
