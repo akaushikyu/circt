@@ -3,6 +3,14 @@
 Newest entry first. One entry per logical change, including changes that were
 tried and reverted. Branch: `hls-est-vitis-match` in `~/circt`.
 
+## 2026-10-09 — run_vitis: `--td auto|off`, timeout killer fix; second ground truth started
+- **Commit:** 11ebf1e65 (harness only)
+- **Files:** tools/hls-est-validate/run_vitis.py
+- **What:** `--td auto` runs the same designs with `syn.array_partition.throughput_driven=auto` into separate work dirs (`work/td-auto/...`) and a separate summary (`results/vitis-tdauto.json`), so Peter can compare both Vitis configurations; the ground truth stays td=off. The timeout killer now matches the Vitis child processes too (they spell the work dir with forward slashes), which had left an orphaned `vitis_hls.exe` for flowgnn/gat after its 1 h timeout.
+- **Why:** CLAUDE.md's V-array story (V split 8 ways) is what td=auto does; td=off (Peter's script) does not split it. Both numbers are useful.
+- **Effect:** no estimator change. Incident worth knowing: a second td=off runner started on the same work dirs collided with the first one and corrupted 37 results (`FileNotFoundError`, `error deleting ...` in the Vitis log); their cache entries were deleted and re-synthesized (results/vitis.json now 131 ok of 143; the 11 failures are missing vendor headers (`gmp.h`, `hls_video.h`, `../host/typedefs.h`), URAM `bind_storage` on Zynq-7000, and flowgnn/gat timing out at 1 h). Never run two runners on one work root.
+- **Reverted?:** no
+
 ## 2026-10-09 — hls-est: Vitis storage model (LUTRAM >= 1024, RAMB18 aspect modes / true-dual-port x18 cost, RAM_1WNR replication, 17-slot port model, invariant-load hoist)
 - **Commit:** 342b39dfc (code, tests, notes and this entry; branch `hls-est-vitis-match`); this hash line: the following changelog-only commit
 - **Files:** include/circt/Dialect/Resource/Interfaces/MemoryDS.h, lib/Dialect/Resource/Interfaces/MemoryInterface.cpp, include/circt/Dialect/Resource/Passes/MemrefBankClassification.h, lib/Dialect/Resource/Passes/MemrefBankClassification.cpp, lib/Dialect/Resource/Passes/AffineToLoopScheduleModified.cpp, include/circt/Conversion/Passes.td, lib/Dialect/Resource/Passes/BRAMAnalysis.cpp; new lit tests test/hls-est/Passes/{replication_1wnr,replication_two_stores,invariant_load_hoist,lutram_threshold,aspect_modes}.mlir; updated expectations test/hls-est/Passes/{fast_schedule,bram_debug_json,bram_debug_text,bram_debug_status}.mlir; tools/hls-est-validate/VITIS_NOTES.md (hls-est status of N4/N5/N6), OPEN_ISSUES.md (O2-O5), CHANGELOG.md
