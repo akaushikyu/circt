@@ -4,7 +4,7 @@ Newest entry first. One entry per logical change, including changes that were
 tried and reverted. Branch: `hls-est-vitis-match` in `~/circt`.
 
 ## 2026-10-09 — hls-est: T2 storage review fixes (alias-aware hoist, redundant-access cleanup, classification tidy-up, D3/D4 notes)
-- **Commit:** (code, tests, notes and this entry; branch `hls-est-vitis-match`); this hash line: the following changelog-only commit
+- **Commit:** 798e705e4 (code, tests, notes and this entry; branch `hls-est-vitis-match`); this hash line: the following changelog-only commit
 - **Files:** lib/Dialect/Resource/Passes/AffineToLoopScheduleModified.cpp, include/circt/Conversion/Passes.td, include/circt/Dialect/Resource/Passes/MemrefBankClassification.h, lib/Dialect/Resource/Passes/MemrefBankClassification.cpp, lib/Dialect/Resource/Passes/BRAMAnalysis.cpp; new lit tests test/hls-est/Passes/{invariant_load_alias,access_cse,access_forwarding}.mlir; test/hls-est/Passes/lutram_threshold.mlir (comment only); tools/hls-est-validate/VITIS_NOTES.md (N4, N5), OPEN_ISSUES.md (O3 updated, O6, O7), CHANGELOG.md (this entry; D4 correction in the T2 entry below)
 - **What:**
   1. *D1, alias-aware invariant-load hoist* (`collectMemrefAliases`, `isPlainMemrefUse`, `isMemrefWrittenInLoop`): the alias set of a memref is itself plus every `ViewLikeOpInterface` result derived from it (memref.cast, subview, reinterpret_cast, ...), transitively; a write or opaque use of any member inside the loop counts as a write of the memref, and a memref that escaped (call, op with regions, terminator, non-view memref result) is never hoisted from. The reviewer's p3 (store through a `memref.cast` of buf, load buf[0]) keeps its load inside the pipeline.
