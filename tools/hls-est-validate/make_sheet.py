@@ -146,6 +146,21 @@ def main():
            ["total |BRAM error|", CMP.get("summary", {}).get("total_abs_error", "")]]
     write_table(wc, ["setting", "value"], cfg)
 
+    # ---- secondary ground truth: throughput_driven=auto ----
+    TDA = C.load_json(Path(args.vitis).with_name("vitis-tdauto.json"), {}) or {}
+    if TDA:
+        wt = wb.create_sheet("vitis td=auto")
+        trows = []
+        for k in sorted(set(V) | set(TDA)):
+            ds, bm = k.split("/", 1)
+            o, a = V.get(k) or {}, TDA.get(k) or {}
+            ob = (o.get("totals") or {}).get("BRAM") if o.get("status") == "ok" else None
+            ab = (a.get("totals") or {}).get("BRAM") if a.get("status") == "ok" else None
+            trows.append([ds, bm, ob, ab, (ab - ob) if ob is not None and ab is not None else None,
+                          o.get("status", "not run"), a.get("status", "not run")])
+        write_table(wt, ["dataset", "benchmark", "BRAM (td=off, ground truth)", "BRAM (td=auto)",
+                         "diff (auto - off)", "status td=off", "status td=auto"], trows)
+
     # ---- pipeline experiments ----
     we = wb.create_sheet("pipeline experiments")
     erows, hdr = [], ["(no experiments/results.csv yet)"]
