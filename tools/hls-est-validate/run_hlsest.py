@@ -254,7 +254,8 @@ def process(d, args, shim, run_id):
     r["top_fn"], r["top_rule"] = top_fn, rule
     log_prefix = str(LOG_ROOT / run_id / f"{d['dataset']}__{d['benchmark']}")
     Path(log_prefix).parent.mkdir(parents=True, exist_ok=True)
-    dbg = log_prefix + ".debug.json" if args.debug_json else None
+    # Always emit the per-memref debug JSON: compare.py needs it to match arrays by name.
+    dbg = log_prefix + ".debug.json" if not args.no_debug_json else None
     hr = run_hlsest(mlir, top_fn, args.pipeline, args.timeout, log_prefix,
                     privatize=not args.no_privatize, debug_json=dbg)
     r.update(hr)
@@ -273,7 +274,8 @@ def main():
     ap.add_argument("--run-id", default=None)
     ap.add_argument("--force-cgeist", action="store_true")
     ap.add_argument("--no-privatize", action="store_true")
-    ap.add_argument("--debug-json", action="store_true")
+    ap.add_argument("--debug-json", action="store_true", help="(default now; kept for compatibility)")
+    ap.add_argument("--no-debug-json", action="store_true")
     ap.add_argument("--quiet", action="store_true")
     args = ap.parse_args()
 
