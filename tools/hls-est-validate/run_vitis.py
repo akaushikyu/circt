@@ -228,6 +228,8 @@ def main():
     ap.add_argument("--keep-work", action="store_true")
     ap.add_argument("--list", action="store_true")
     ap.add_argument("--out", default=str(C.RESULTS_DIR / "vitis.json"))
+    ap.add_argument("--reparse", action="store_true",
+                    help="rebuild the summary from the cached reports (after a parser change); no synthesis")
     ap.add_argument("--td", default="off", choices=["off", "auto"],
                     help="syn.array_partition.throughput_driven (ground truth uses 'off')")
     args = ap.parse_args()
@@ -249,6 +251,24 @@ def main():
         return
 
     summary = C.load_json(args.out, {}) or {}
+    if args.reparse:
+        n = 0
+        for d in designs:
+            k = C.design_key(d)
+            r = summary.get(k)
+            if not r or r.get("status") != "ok" or not r.get("cache_dir"):
+                continue
+            parsed = VP.parse_cache_dir(r["cache_dir"], d["top"])
+            if parsed.get("ok"):
+                r["totals"] = VP.totals_from(parsed)
+                for f in ("memories", "loops", "instances", "modules", "log"):
+                    r[f] = parsed.get(f, r.get(f))
+                r["bind_nodes"] = parsed.get("bind_nodes", [])
+                C.dump_json(r, Path(r["cache_dir"]) / "result.json")
+                n += 1
+        C.dump_json(summary, args.out)
+        print(f"reparsed {n} cached results -> {args.out}")
+        return
     print(f"{len(designs)} designs, -j{args.j}, timeout {args.timeout}s", flush=True)
     done = 0
     with cf.ThreadPoolExecutor(max_workers=args.j) as ex:

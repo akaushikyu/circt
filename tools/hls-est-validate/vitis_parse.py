@@ -114,8 +114,36 @@ def parse_memory_table(rpt_text, module):
                 d = {hdr[k]: _num(r[k]) for k in range(len(hdr))}
                 d["module"] = module
                 mems.append(normalize_memory(d))
+            group_banks(mems)
             break
     return mems
+
+
+def group_banks(mems):
+    """Vitis names partition banks `<arr>_U`, `<arr>_1_U`, ... (bank 0 unsuffixed).
+    A row `<pre>_<k>_U` is a bank of `<pre>` when a sibling row `<pre>_U` or
+    `<pre>_<j>_U` with the same element width exists in the same module report
+    (the Module column is the *owner* of the shared RTL memory and cannot be used)."""
+    names = {}
+    for m in mems:
+        inst = str(m.get("Memory", ""))
+        nm = inst[:-2] if inst.endswith("_U") else inst
+        names.setdefault(nm, []).append(m)
+    for m in mems:
+        if m.get("bank") is not None:
+            continue
+        inst = str(m.get("Memory", ""))
+        nm = inst[:-2] if inst.endswith("_U") else inst
+        mb = re.match(r"^(.*)_(\d+)$", nm)
+        if not mb:
+            continue
+        pre = mb.group(1)
+        sibs = list(names.get(pre, []))
+        for other, lst in names.items():
+            if other != nm and re.match(r"^" + re.escape(pre) + r"_\d+$", other):
+                sibs += lst
+        if any(sb.get("Bits") == m.get("Bits") for sb in sibs):
+            m["array"], m["bank"] = pre, int(mb.group(2))
 
 
 _CORE_RE = re.compile(r"_(RAM_AUTO_1R1W|RAM_1P|RAM_2P|RAM_S2P|RAM_T2P|RAM_1WNR|RAM_1P_[A-Z0-9]+|RAM_2P_[A-Z0-9]+|RAM_T2P_[A-Z0-9]+|RAM_S2P_[A-Z0-9]+|ROM_AUTO_1R|ROM_1P|ROM_2P|ROM_NP|ROM_[A-Z0-9_]+|RAM_[A-Z0-9_]+|FIFO[A-Z0-9_]*|LUTRAM[A-Z0-9_]*)(_\d+)?$", re.I)
@@ -305,6 +333,22 @@ def parse_work_dir(work_wsl, top):
                     elif inst == b["variable"]:
                         m["array"] = b["variable"]
     return out
+
+
+def parse_cache_dir(cdir, top):
+    """Same as parse_work_dir but on a harvested cache entry (report/, log/)."""
+    import tempfile, shutil, os
+    cdir = Path(cdir)
+    tmp = Path(tempfile.mkdtemp(prefix="vcache_"))
+    try:
+        (tmp / "hls" / "syn").mkdir(parents=True)
+        os.symlink(cdir / "report", tmp / "hls" / "syn" / "report")
+        (tmp / "logs").mkdir()
+        if (cdir / "log" / "hls_compile.log").exists():
+            os.symlink(cdir / "log" / "hls_compile.log", tmp / "logs" / "hls_compile.log")
+        return parse_work_dir(tmp, top)
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
 
 
 def totals_from(parsed):
