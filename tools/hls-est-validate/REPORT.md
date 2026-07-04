@@ -52,7 +52,13 @@ Per-dataset counts, the per-array comparison and the mismatch list with diagnose
 - Storage model: LUTRAM threshold, aspect modes, replication, 17-slot port model, invariant-load hoist, same-address load CSE.
 - Pipeline decision (T3), dead-memory elimination + Vitis folds + globals + m_axi (T4), td=off partition inference (T5): TBD.
 - Frontend (needs Peter's sign-off): cgeist lowers `_Float16`/`_BitInt(N)`; unsigned index casts, compound assignments,
-  APInt folds, typedef signedness; width-exact shim `shim/exact`. Exact fixed-point semantics: route decision TBD.
+  APInt folds, typedef signedness; width-exact shim `shim/exact`. Exact fixed-point semantics: two routes were
+  studied read-only (`~/hls-est-work/feas/{A,B}/design.md`); route A was chosen: cgeist lowers "scalar wrapper"
+  classes (one scalar data member, possibly through a base class) to that scalar, so an `ap_fixed` shim whose only
+  member is `_BitInt(W)` yields `memref<...xiW>` arrays and plain integer arithmetic that hls-est folds bit-exactly
+  (about 350 lines in cgeist; route B needed about 2000 lines of struct scalarization and affine re-raising in hls-est).
+  Side effect: the array-of-class constructor bug behind 84 failing designs goes away. Not covered: assignable range
+  references (`x.range(h,l) = v`, 125 corpus lines), which use proxy classes with a reference member.
 
 ## 5. Pipeline experiments
 
