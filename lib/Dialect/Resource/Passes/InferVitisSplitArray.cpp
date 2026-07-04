@@ -36,10 +36,14 @@
 //   -> infer-vitis-split-array
 //   -> memory banking -> scheduling / BRAM estimation
 // At that point every innermost loop left is a pipelined loop (see
-// getPipelineII).
+// getPipelineII). A loop tagged `hls.flattened_parents = N` by
+// auto-pipeline-unroll is flattened by Vitis with its N enclosing loops: their
+// induction variables are loop-variant for the pipeline, so a load indexed by
+// them is not hoisted and counts (LoopPragmas.h, getFlattenedRoot).
 //
 //===----------------------------------------------------------------------===//
 #include "circt/Dialect/Resource/Passes/InferVitisSplitArray.h"
+#include "circt/Dialect/Resource/Passes/LoopPragmas.h"
 #include "mlir/Dialect/Affine/Analysis/LoopAnalysis.h"
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
@@ -228,8 +232,9 @@ static void analyzeAddress(AffineMap map, ValueRange mapOperands,
   canonicalizeMapAndOperands(&map, &operands);
   map = simplifyAffineMap(map);
 
+  AffineForOp root = getFlattenedRoot(loop);
   loopInvariant = llvm::all_of(
-      operands, [&](Value v) { return loop.isDefinedOutsideOfLoop(v); });
+      operands, [&](Value v) { return root.isDefinedOutsideOfLoop(v); });
   for (AffineExpr expr : map.getResults())
     access.index.push_back(
         makeLinearIndex(expr, map.getNumDims(), operands, terms));
@@ -251,6 +256,35 @@ static std::string addressKey(const Access &access) {
       os << '+' << coeff << "*t" << id;
   }
   return key;
+}
+
+/// True if some op in the loops flattened into `loop`'s pipeline (its
+/// `hls.flattened_parents` ancestors), outside `loop` itself, may write `mem`
+/// or uses it opaquely: Vitis sinks that code into the pipelined loop, so a
+/// read of `mem` there cannot be hoisted.
+static bool isWrittenInFlattenedParents(Value mem, AffineForOp loop) {
+  AffineForOp root = getFlattenedRoot(loop);
+  if (root == loop)
+    return false;
+  bool written = false;
+  root.getBody()->walk([&](Operation *op) {
+    if (loop->isAncestor(op) || !llvm::is_contained(op->getOperands(), mem))
+      return WalkResult::advance();
+    auto eff = dyn_cast<MemoryEffectOpInterface>(op);
+    if (!eff) {
+      written = true;
+      return WalkResult::interrupt();
+    }
+    SmallVector<MemoryEffects::EffectInstance> effects;
+    eff.getEffectsOnValue(mem, effects);
+    for (auto &e : effects)
+      if (!isa<MemoryEffects::Read>(e.getEffect())) {
+        written = true;
+        return WalkResult::interrupt();
+      }
+    return WalkResult::advance();
+  });
+  return written;
 }
 
 /// Record, for every memory touched inside `loop`, the accesses that still
@@ -305,8 +339,10 @@ collectRegions(AffineForOp loop, unsigned targetII, TermTable &terms,
 
   for (auto &entry : raw) {
     SmallVector<RawAccess, 8> &accesses = entry.second;
-    bool writtenInLoop = llvm::any_of(
-        accesses, [](const RawAccess &ra) { return ra.access.isWrite; });
+    bool writtenInLoop =
+        llvm::any_of(accesses,
+                     [](const RawAccess &ra) { return ra.access.isWrite; }) ||
+        isWrittenInFlattenedParents(entry.first, loop);
 
     PipelineRegion region;
     region.loop = loop;

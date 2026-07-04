@@ -1,6 +1,7 @@
 // RUN: hls-est %s  --auto-pipeline-unroll --canonicalize --affine-scalrep --affine-loop-normalize --memory-banking-bram --convert-affine-to-loopschedule --bram-analysis | FileCheck %s -check-prefix=CHECK-BRAM
 
-// CHECK-BRAM: Total BRAM: 32
+// Vitis HLS 2025.1 csynth (results/vitis.json polybench/gemm): buff_A 120 + buff_B 120 + buff_C 8 + tmp1 8 = 256.
+// CHECK-BRAM: Total BRAM: 256
 
 module {
   func.func @gemm(%arg0: f32, %arg1: f32, %arg2: memref<64x64xf32>, %arg3: memref<64x64xf32>, %arg4: memref<64x64xf32>, %arg5: memref<64x64xf32>) {

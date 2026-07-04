@@ -55,6 +55,7 @@
 
 #include "circt/Dialect/Resource/Passes/AffineToLoopScheduleModified.h"
 #include "circt/Dialect/Resource/Passes/MemrefBankClassification.h"
+#include "circt/Dialect/Resource/Passes/LoopPragmas.h"
 #include "circt/Dialect/Resource/Passes/CyclicSchedulingAnalysisModified.h"
 #include "circt/Analysis/DependenceAnalysis.h"
 #include "circt/Dialect/LoopSchedule/LoopScheduleOps.h"
@@ -285,16 +286,21 @@ void AffineToLoopSchedule::hoistInvariantLoads() {
 
   unsigned hoistedLoads = 0, hoistedPure = 0;
   for (AffineForOp forOp : loops) {
+    // MODIFIED (T3): `hls.flattened_parents = N` (--auto-pipeline-unroll)
+    // says Vitis flattens the N enclosing loops into this pipeline, so their
+    // IVs - and everything defined in their bodies - are loop-variant for
+    // it, and a write in their bodies is a write in the pipelined loop.
+    AffineForOp root = circt::hls_analysis::getFlattenedRoot(forOp);
     DenseSet<Value> invariant; // results of ops hoisted so far
     auto isInvariantValue = [&](Value v) {
-      return forOp.isDefinedOutsideOfLoop(v) || invariant.contains(v);
+      return root.isDefinedOutsideOfLoop(v) || invariant.contains(v);
     };
     DenseMap<Value, bool> writtenCache;
     auto writtenInLoop = [&](Value mem) {
       auto it = writtenCache.find(mem);
       if (it != writtenCache.end())
         return it->second;
-      bool w = isMemrefWrittenInLoop(aliasInfo(mem), forOp);
+      bool w = isMemrefWrittenInLoop(aliasInfo(mem), root);
       writtenCache[mem] = w;
       return w;
     };
@@ -558,15 +564,45 @@ void AffineToLoopSchedule::cleanupRedundantAccesses() {
                           << " dead stores\n");
 }
 
-/// Returns true if `forOp` contains no nested affine.for anywhere in its
-/// body (including inside ifs).
+/// Returns true if `forOp` contains no loop of any kind anywhere in its body
+/// (including inside ifs). MODIFIED (T3): an scf.for / scf.while inside an
+/// affine.for used to make that affine.for "innermost" and sent it to the
+/// scheduler, which has no operator type for the inner loop; such a loop is
+/// sequential control around the inner loop, like an affine.for nest whose
+/// inner loop is the pipelined one.
 static bool isInnermostAffineFor(AffineForOp forOp) {
   bool hasNested = false;
-  forOp.getBody()->walk([&](AffineForOp) {
+  forOp.getBody()->walk([&](Operation *op) {
+    if (!isa<LoopLikeOpInterface>(op))
+      return WalkResult::advance();
     hasNested = true;
     return WalkResult::interrupt();
   });
   return !hasNested;
+}
+
+/// MODIFIED (T3): the pipeline terminator requires every yielded value to be
+/// produced by a pipeline stage, and the stage plumbing only finds a value
+/// yielded straight from a multicycle op (an fadd accumulator) when the
+/// terminator happens to be scheduled when that op completes. Every yielded
+/// value therefore goes through an identity `arith.select %true, %v, %v`
+/// (a comb op, zero latency, scheduled once the value is ready): a loop that
+/// yields one of its own iter_args or a value defined outside it (a shift
+/// register: `affine.yield %new, %prev`) and the promoted `acc[k] +=`
+/// accumulators of an unrolled body are both handled by that.
+static void materializeYieldedValues(AffineForOp forOp) {
+  auto yield = cast<AffineYieldOp>(forOp.getBody()->getTerminator());
+  Value trueVal;
+  OpBuilder b(yield);
+  for (OpOperand &opd : yield->getOpOperands()) {
+    Value v = opd.get();
+    if (!trueVal) {
+      OpBuilder ob(forOp);
+      trueVal = arith::ConstantOp::create(ob, forOp.getLoc(),
+                                          ob.getBoolAttr(true));
+    }
+    opd.set(arith::SelectOp::create(b, yield.getLoc(), trueVal, v, v));
+  }
 }
 
 /// MODIFIED: Returns true if the perfect band has a rectangular iteration
@@ -652,18 +688,48 @@ void AffineToLoopSchedule::coalescePerfectNests() {
     // coalesceLoops silently miscompiles triangular/trapezoidal nests
     // instead of failing (see isRectangularBand). Non-rectangular nests
     // fall back to innermost-loop pipelining.
+    // MODIFIED (T3): affine::coalesceLoops erases every loop but the
+    // outermost and cannot carry an inner loop's results (iter_args chained
+    // through two levels: "operation destroyed but still has uses"); such a
+    // band is left as a nest whose innermost loop is pipelined in place.
+    bool innerResults = llvm::any_of(
+        ArrayRef<AffineForOp>(band).drop_front(),
+        [](AffineForOp loop) { return loop.getNumResults() != 0; });
     if (band.size() > 1 && isInnermostAffineFor(band.back()) &&
-        isRectangularBand(band))
+        isRectangularBand(band) && !innerResults)
       bands.push_back(std::move(band));
   });
 
   for (auto &band : bands) {
+    // MODIFIED (T3): the pipeline tags of --auto-pipeline-unroll sit on the
+    // innermost loop, which coalesceLoops erases. Carry them to the loop
+    // that survives and discount the band's own levels from
+    // hls.flattened_parents: they are part of the coalesced loop now.
+    AffineForOp innermost = band.back();
+    Attribute pipelineTag =
+        innermost->getAttr(circt::hls_analysis::kLoopPipelineAttr);
+    Attribute pipelineOff =
+        innermost->getAttr(circt::hls_analysis::kLoopPipelineOffAttr);
+    unsigned flattened = circt::hls_analysis::getFlattenedParents(innermost);
+    unsigned levels = band.size() - 1;
     if (failed(coalesceLoops(MutableArrayRef<AffineForOp>(band)))) {
       LLVM_DEBUG(llvm::dbgs()
                  << "Could not coalesce perfect nest rooted at "
                  << *band.front()
                  << "; falling back to innermost-loop pipelining\n");
+      continue;
     }
+    AffineForOp outer = band.front();
+    if (pipelineTag)
+      outer->setAttr(circt::hls_analysis::kLoopPipelineAttr, pipelineTag);
+    if (pipelineOff)
+      outer->setAttr(circt::hls_analysis::kLoopPipelineOffAttr, pipelineOff);
+    if (flattened > levels)
+      outer->setAttr(circt::hls_analysis::kLoopFlattenedParentsAttr,
+                     IntegerAttr::get(IntegerType::get(outer.getContext(), 64),
+                                      flattened - levels));
+    else
+      outer->removeAttr(circt::hls_analysis::kLoopFlattenedParentsAttr);
   }
 }
 
@@ -827,6 +893,7 @@ public:
 
   /// Returns the number of operations linked to a resource with a limit.
   static unsigned countLimitedOps(ModuloProblem &prob);
+
 
   LogicalResult schedule(unsigned maxIIBumps);
 
@@ -1098,6 +1165,11 @@ void AffineToLoopSchedule::runOnOperation() {
     cleanupRedundantAccesses();
   if (hoistInvariant)
     hoistInvariantLoads();
+  // MODIFIED (T3): see materializeYieldedValues.
+  getOperation().walk([&](AffineForOp forOp) {
+    if (isInnermostAffineFor(forOp))
+      materializeYieldedValues(forOp);
+  });
 
   // MODIFIED: drop trivially dead ops up front. A dead op has no outgoing
   // dependence edge, so it is a sink in the scheduling DAG; anchoring it
@@ -1160,8 +1232,11 @@ void AffineToLoopSchedule::runOnOperation() {
         getModuloProblem(schedulingAnalysis->getProblem(loop));
 
     // Populate the target operator types.
+    // MODIFIED (T3): a loop whose body holds an op the scheduler has no
+    // operator type for (a call to a math function, ...) stays a sequential
+    // affine.for instead of failing the pass; populateOperatorTypes warned.
     if (failed(populateOperatorTypes(loop, moduloProblem, bramClass)))
-      return signalPassFailure();
+      continue;
     
     anchorUntrackedSideEffects(loop, moduloProblem);
 
@@ -1585,8 +1660,12 @@ LogicalResult AffineToLoopSchedule::populateOperatorTypes(
         });
   });
  
-  if (result.wasInterrupted())
-    return forOp.emitError("unsupported operation ") << *unsupported;
+  if (result.wasInterrupted()) {
+    forOp.emitWarning("not pipelined (left as a sequential loop): "
+                      "unsupported operation ")
+        << *unsupported;
+    return failure();
+  }
  
   return success();
 }

@@ -49,8 +49,8 @@ ABLATION = [
     ("+inline", "--inline --affine-loop-normalize --auto-pipeline-unroll --infer-vitis-split-array " + CORE),
     ("+loop-fusion", "--affine-loop-normalize --affine-loop-fusion --auto-pipeline-unroll --infer-vitis-split-array " + CORE),
     ("vis-default", "--auto-pipeline-unroll --canonicalize --affine-scalrep --affine-loop-normalize " + CORE),
-    ("unroll-threshold-64", "--affine-loop-normalize --auto-pipeline-unroll=threshold=64 --infer-vitis-split-array " + CORE),
-    ("unroll-threshold-16", "--affine-loop-normalize --auto-pipeline-unroll=threshold=16 --infer-vitis-split-array " + CORE),
+    ("pipeline-loops-64", "--affine-loop-normalize --auto-pipeline-unroll=pipeline-loops=64 --infer-vitis-split-array " + CORE),
+    ("pipeline-loops-16", "--affine-loop-normalize --auto-pipeline-unroll=pipeline-loops=16 --infer-vitis-split-array " + CORE),
 ]
 
 
