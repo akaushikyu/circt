@@ -1,0 +1,13 @@
+subset,rows,n6,open,both,n6_only,open_only,neither,vec_rows,vec_match
+[vitis.json] all rows,23003,23000,23003,23000,0,3,0,17308,17300
+"[vitis.json] plain (non-1WNR, >= 1024 bits)",14416,14413,14416,14413,0,3,0,10695,10689
+[vitis.json] RAM_1WNR,101,101,101,101,0,0,0,101,99
+[vitis.json] < 1024 bits,8486,8486,8486,8486,0,0,0,6512,6512
+[experiments] all rows,1679,1656,1669,1656,0,13,10,1673,1639
+"[experiments] plain (non-1WNR, >= 1024 bits)",1368,1345,1358,1345,0,13,10,1365,1333
+[experiments] RAM_1WNR,117,117,117,117,0,0,0,117,115
+[experiments] < 1024 bits,196,196,196,196,0,0,0,193,193
+[legacy:vitis-tdoff.json] all rows,20951,20851,20851,20851,0,0,100,15256,15248
+"[legacy:vitis-tdoff.json] plain (non-1WNR, >= 1024 bits)",13391,13299,13299,13299,0,0,92,9670,9664
+[legacy:vitis-tdoff.json] RAM_1WNR,101,93,93,93,0,0,8,101,99
+[legacy:vitis-tdoff.json] < 1024 bits,7459,7459,7459,7459,0,0,0,5485,5485
