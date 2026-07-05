@@ -4,6 +4,36 @@ Known defects and unfinished work that no change-log entry has fixed yet.
 Newest first. Each entry names its evidence and the CHANGELOG.md entry that
 filed it; remove an entry when the change log records its fix.
 
+## O12. `tiled_attn_module` "600 -> 1321" is a measurement artefact (top-selection passes omitted), not an hls-est regression (filed 2026-10-09, bisect of 3ad60fb79..93dba77f4)
+- **Claim checked:** REPORT.md section 6 and SESSION_LOG.md list "forgebench/tiled_attn_module base-pipeline total 600 (results/baseline/hlsest-base-scalar.json, hls-est 3ad60fb79) -> 1321 at 93dba77f4 or later" as a regression to bisect.
+- **Bisect:** only fa522b385 and 93dba77f4 touch C++ in 3ad60fb79..93dba77f4 (`git log --stat -- lib include tools/hls-est`). I built 3ad60fb79, fa522b385 and 93dba77f4 in a separate worktree; the binaries are kept as `~/hls-est-work/bisect/hls-est.<hash>`. With the recorded `cmd` (`--symbol-privatize=exclude=_Z3topPA256_fS0_S0_S0_S0_S0_S0_S0_S0_PA64_f --symbol-dce --affine-loop-normalize --memory-banking-bram --convert-affine-to-loopschedule --bram-analysis`, MLIR `tiled_attn_module.66699dee4ee44e29.mlir`), all three binaries give **600**, and their report text is byte-identical (22 memrefs). With only the JSON's `pipeline` field, which leaves out `--symbol-privatize`/`--symbol-dce`, all three give **1321**. No commit changes this design. The 1321 came from the T1-review spot check, which ran `hls-est $M $P` with P set to the `pipeline` field, so its pre-T1 binary gave 1321 as well. `build/clion/bin/hls-est` (working tree at 21:30) also gives 600 with the recorded cmd.
+- **Per array** (`--bram-debug-json` of 93dba77f4 on both command lines, `~/hls-est-work/bisect/out/tiled{,.noprune}.dbg.json`): the 22 memrefs of `top` are identical in both runs (same loc, RAM type and BRAM). The extra +721 BRAM are memrefs of five other public functions that `--symbol-dce` deletes:
+  - top_A: 494 (BRAM_weights_q/k/v 256x256, 128 each; split_wq/wk/wv 32 each; BRAM_1 4; BRAM_attn_input 4; split_out 1; scores 2; Q/K/V 1 each)
+  - top_B: 106 (BRAM_weights_* 64x256, 32 each; BRAM_attn_input 4; BRAM_1 1; scores 2; Q/K/V 1)
+  - grouped_mha_8_256_16_16_with_mha_4: 102
+  - grouped_multihead_attention_8_256_16_16: 14
+  - grouped_multihead_attention_8_256_4_16: 5
+
+  `top` has no calls left because cgeist inlined every callee (O10). The extra functions are therefore uncalled alternative tops (top_A, top_B) and standalone copies of callees whose bodies are already inlined into `top`, which is the inlining-duplication overcount that CLAUDE.md warns about. Banking, the provenance attributes and the RAM-type decisions are not involved: no memref in this design is partitioned.
+- **Closer to Vitis:** 600, for every array. Vitis td=off (`results/vitis.json`, total 270) builds only `top`:
+  - in `top`: BRAM_A1/A5/B1 2 each, BRAM_A2/A3/A4 64 each, BRAM_B2/B3/B4 16 each, BRAM_B5 1
+  - `top_Outline_VITIS_LOOP_396_1`: 19 (split_out 1, split_wv 16, plus one grouped_multihead_attention_8_256_4_16 instance)
+  - a second 4_16 instance in `top`: 2
+  - mem1_m_axi: 2
+
+  There is no top_A, top_B or 16_16 module. Each 4_16 instance holds V 1 + scores 1, and the two instances match the two inlined copies in `top` (MLIR lines 652-655 and 779-782). So none of the 721 extra BRAM has a Vitis counterpart. The remaining 600 vs 270 has unrelated causes:
+  - the scalar shim stores ap_fixed<16,5> as f32, which doubles every array (128 vs 64, 32 vs 16, 4 vs 2)
+  - split_wq/split_wk and Q/K are dead in Vitis (scale overflow, CLAUDE.md step 2)
+  - scores is costed as 64x32b RAM_2P = 2 vs Vitis 1
+  - the m_axi buffer (2) is not modelled
+- **Other designs:** I re-ran all 79 `status ok` entries of hlsest-base-scalar.json with the recorded cmd (8 jobs, 120 s timeout; `~/hls-est-work/bisect/sweep/sweep.json`). 3ad60fb79 and 93dba77f4 give identical totals, identical exit codes and byte-identical report text on 79/79, and every total equals the recorded `total_bram`. So fa522b385 and 93dba77f4 are estimate-neutral on this set. Leaving out the top-selection passes (93dba77f4) changes 18/79:
+  - totals change: activation_op1 294->392, attention_op_p1 406->420, attention_op_p2 31->36, attention_op_p3 31->36, attn_breakdown_op1 12->14, diff_dims_module_large 1920->3840, diff_dims_module_small 1920->3840, diff_orders_module 192->384, llama_transformer_p2 40->47, mult_op_module_dot 16->32, tiled_attn_module 600->1321, tiled_attn_p1 406->420, tiled_attn_p2 106->111, vec_mtx_module 18->36, spector_hls/fir 4->8
+  - conv_A/B/C (123/315/387) abort in `--convert-affine-to-loopschedule` with the `IRMapping::lookup` assertion, on a function that is not the top
+- **Fix (proposed, not done):**
+  1. Harness: `run_hlsest.py` writes `pipeline` = `args.pipeline` without the prefix that `run_hlsest()` adds. Also record the full pass string that was run (for example `top_passes`/`pipeline_full` in `_meta` and per entry), and re-run cases from `cmd`, never from `pipeline`. The owner of REPORT.md section 6 and SESSION_LOG.md should drop the "600->1321 bisect" item.
+  2. hls-est: give `--bram-analysis` a `top=<symbol>` option (or read an `hls.top` attribute set from the Vitis `set_top`) that costs only memrefs in functions reachable from the top through `func.call`. It should warn when no top is given and more than one public `func.func` holds memrefs, so that a missing prefix produces a warning instead of a silent 2x total. This changes outputs on multi-function modules, so it needs Peter's approval first.
+  3. The conv_* abort on non-top functions is a separate `--convert-affine-to-loopschedule` crash. Not investigated (no symbolized stack).
+
 ## O7. Store-to-load forwarding / dead-store elimination is implemented but off by default until O3 is fixed (filed 2026-10-09, T2 storage review fixes entry)
 - **Symptom:** VITIS_NOTES.md N4 counts R and W per iteration "after unrolling, CSE, LICM". `--convert-affine-to-loopschedule=forward-stores=true` (`cleanupRedundantAccesses`) does exactly that for an unrolled accumulator (`tmp1[i] += ...` 64x -> one store, no load) and is Vitis-exact per array where it acts: atax tmp1 2 -> 1 (Vitis 1), bicg buff_q_out 2 -> 1 (1), gesummv tmp1/tmp2 2 -> 1 (1), lp1 of atax reaches II 32 = Vitis. But the totals of atax (13 -> 12), bicg (14 -> 13) and mvt (14 -> 12) stop matching: mvt buff_x1/x2 go 2 -> 1 where Vitis keeps `ram_2p` = 2 because the hoisted invariant reads are issued on both ports of the sequential body (O3), and in atax/bicg the tmp1 / buff_q_out overcount was cancelling the same O3 undercount (buff_x / buff_p 1 vs 2). Harness subset: canonical 31/73 -> 30/73, no split 34/74 -> 31/74 (CHANGELOG "T2 storage review fixes", Effect).
 - **Fix:** implement O3 (two live ports for independent accesses in a sequential scope), then flip `forward-stores` to on and re-measure; the two must land together or every total that matched by cancellation flips.
