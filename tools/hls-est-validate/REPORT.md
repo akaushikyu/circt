@@ -67,6 +67,9 @@ and the reason for each pass's effect.
 
 ## 6. Open items and honest caveats
 
-- `tiled_attn_module` base-pipeline total changed 600 -> 1321 between the baseline and the debug-mode commits (to bisect).
+- Resolved: the reported `tiled_attn_module` change 600 -> 1321 was not a regression. The re-run had omitted the per-design
+  top-selection prefix (`--symbol-privatize=exclude=<top> --symbol-dce`), so uncalled public functions (alternative tops,
+  standalone copies of inlined callees) were costed too. Every hls-est commit gives identical totals on all 79 baseline
+  designs with the recorded commands (O12). The harness now records `pipeline_full`; an hls-est `top=` option is memo M7.
 - Designs not compared: TBD list with reasons (cgeist crashes on class code, Polygeist-only ops, timeouts).
 - Exact `ap_fixed` semantics end to end: TBD.

@@ -222,8 +222,12 @@ def run_hlsest(mlir, top_fn, pipeline, timeout, log_prefix, privatize=True, debu
     Path(log_prefix + ".out").write_text(p.stdout)
     Path(log_prefix + ".err").write_text(" ".join(cmd) + "\n\n" + p.stderr)
     total, mems = parse_hlsest_output(p.stdout + "\n" + p.stderr)
-    r = {"elapsed_s": round(el, 2), "cmd": " ".join(cmd), "total_bram": total, "memrefs": mems,
-         "exit": p.returncode}
+    # pipeline_full = every pass actually run, incl. the per-design top-selection prefix
+    # (--symbol-privatize/--symbol-dce).  Re-run a case from `cmd`/`pipeline_full`, never from
+    # `pipeline` alone: without the prefix uncalled public functions are costed too (OPEN_ISSUES O12).
+    full = " ".join(a for a in cmd[2:] if a not in ("-o", "/dev/null"))
+    r = {"elapsed_s": round(el, 2), "cmd": " ".join(cmd), "pipeline_full": full, "total_bram": total,
+         "memrefs": mems, "exit": p.returncode}
     if p.returncode < 0 or p.returncode > 1 and ("Stack dump" in p.stderr or "Aborted" in p.stderr or "Assertion" in p.stderr):
         r["status"] = "hls-est error: crash"
         a = re.search(r"Assertion `([^']*)' failed", p.stderr)
@@ -290,6 +294,8 @@ def main():
     run_id = args.run_id or time.strftime("%Y%m%d-%H%M%S")
     ghash = C.git_hash()
     results = {"_meta": {"pipeline": args.pipeline, "shim": str(shim), "hls_est_git": ghash,
+                         "top_passes": ("none" if args.no_privatize else
+                                        "--symbol-privatize=exclude=<top> --symbol-dce prepended per design"),
                          "timeout": args.timeout, "run_id": run_id, "hls_est": C.HLS_EST}}
     if not args.quiet:
         print(f"{len(designs)} designs; pipeline: {args.pipeline}; shim: {shim}; git {ghash}", flush=True)

@@ -69,3 +69,19 @@ Each needs Peter's OK before it becomes default behaviour of cgeist or of the ha
 
 To be written from the open-source reconciliation (N8) when it lands: which of N6's rules the `queryBRAM` source agrees
 with, where the 2025.1 binary differs, and whether any default constant in hls-est should change.
+
+## M7 — O12: let `--bram-analysis` cost only what the top function reaches
+
+**Question.** Today the harness selects the top with `--symbol-privatize=exclude=<top> --symbol-dce` before the
+pipeline. Without that prefix hls-est costs every public function, and cgeist emits uncalled alternative tops and
+standalone copies of callees it already inlined (O10). On the 79 baseline designs, 15 totals change (up to 2x, e.g.
+tiled_attn_module 600 -> 1321) and conv_A/B/C crash when the prefix is missing (bisect, O12).
+
+**Proposal.** A `top=<symbol>` option on `--bram-analysis` (or an `hls.top` attribute set by cgeist), costing only memrefs
+in functions reachable from the top through `func.call`, plus a warning when no top is given and several public functions
+hold memrefs. With the prefix in place (as the harness and the lit RUN lines already do) nothing changes; it removes a trap
+for hand-run commands and for the Compiler Explorer integration.
+
+**Cost.** Small (one option, one reachability walk, lit tests); no baseline changes. Needs Peter's OK because it changes
+what the default output means when no top is given.
+
