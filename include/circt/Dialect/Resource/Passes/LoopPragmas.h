@@ -40,6 +40,12 @@ constexpr llvm::StringLiteral kLoopUnrollPartialAttr = "hls.unroll_partial";
 /// directly enclosing affine.for ancestors into the pipeline, so their
 /// induction variables are loop-variant for that pipeline.
 constexpr llvm::StringLiteral kLoopFlattenedParentsAttr = "hls.flattened_parents";
+/// `hls.auto_unrolled = [{factor = F : i64, loc = loc(...)}, ...]` on a
+/// pipelined loop (written by --auto-pipeline-unroll): the loops it unrolled
+/// completely for that pipeline, in unroll order (innermost first), with
+/// their trip counts. A decision record for --bram-debug; no estimate reads
+/// it.
+constexpr llvm::StringLiteral kLoopAutoUnrolledAttr = "hls.auto_unrolled";
 /// Value of the `source` key of an automatic `hls.pipeline` tag.
 constexpr llvm::StringLiteral kLoopPipelineAutoSource = "auto";
 

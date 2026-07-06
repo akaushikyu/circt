@@ -14,7 +14,7 @@
 // CHECK-LABEL: func.func @reduce
 // CHECK:       affine.for %{{.*}} = 0 to 8 {
 // CHECK-NOT:     affine.for
-// CHECK:       } {hls.pipeline = [{II = 0 : i32, source = "auto"}]}
+// CHECK:       } {hls.auto_unrolled = [{factor = 16 : i64, loc = #loc{{[0-9]*}}}], hls.pipeline = [{II = 0 : i32, source = "auto"}]}
 func.func @reduce(%a: memref<8x16xi32>, %b: memref<16xi32>, %out: memref<8xi32>) {
   %c0_i32 = arith.constant 0 : i32
   %lo = memref.alloca() {hls.preserve, polygeist.varname = "lo"} : memref<8xi32>
@@ -44,7 +44,7 @@ func.func @reduce(%a: memref<8x16xi32>, %b: memref<16xi32>, %out: memref<8xi32>)
 // CHECK-NOT:     affine.for
 // CHECK-NOT:     affine.load %[[LO]][
 // CHECK:         affine.store %{{.*}}, %[[LO]][
-// CHECK-NEXT:  } {hls.pipeline = [{II = 0 : i32, source = "auto"}]}
+// CHECK-NEXT:  } {hls.auto_unrolled = [{factor = 16 : i64, loc = #loc{{[0-9]*}}}], hls.pipeline = [{II = 0 : i32, source = "auto"}]}
 func.func @promote(%a: memref<8x16xi32>, %b: memref<16xi32>, %out: memref<8xi32>) {
   %lo = memref.alloca() {hls.preserve, polygeist.varname = "lo"} : memref<8xi32>
   %lb = memref.alloca() {hls.preserve, polygeist.varname = "lb"} : memref<16xi32>

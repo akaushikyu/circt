@@ -2,7 +2,7 @@
 """Compare --auto-pipeline-unroll's decisions with Vitis HLS on the
 pipeline_unroll experiment kernels (VITIS_NOTES.md N3).
 
-For every kernel in ~/hls-est-work/exp-src/pipeline_unroll{,_chk}/*.cpp:
+For every kernel in ~/hls-est-work/exp-src/pipeline_unroll{,_chk,_float}/*.cpp:
   1. the cgeist MLIR (scalar shim, `<mlir-dir>/<kernel>.mlir`) is run through
        hls-est --affine-loop-normalize --auto-pipeline-unroll=emit-remarks
      and the remarks + output IR give, per loop:
@@ -22,7 +22,11 @@ For every kernel in ~/hls-est-work/exp-src/pipeline_unroll{,_chk}/*.cpp:
 A kernel named `..._pl<N>_...` was synthesized with
 syn.compile.pipeline_loops=N; hls-est gets pipeline-loops=N for it.
 
+--apu-opts "a b=c" appends options to --auto-pipeline-unroll in both runs
+(e.g. --apu-opts float-loads-perfect).
+
 Usage: check_pipeline_unroll.py [--mlir-dir DIR] [--no-bram] [--md OUT.md]
+                                [--only K1,K2] [--apu-opts OPTS]
 """
 import argparse
 import json
@@ -33,7 +37,8 @@ from pathlib import Path
 HOME = Path.home()
 HLS_EST = HOME / "circt/build/clion/bin/hls-est"
 EXP_SRC = [HOME / "hls-est-work/exp-src/pipeline_unroll",
-           HOME / "hls-est-work/exp-src/pipeline_unroll_chk"]
+           HOME / "hls-est-work/exp-src/pipeline_unroll_chk",
+           HOME / "hls-est-work/exp-src/pipeline_unroll_float"]
 EXPERIMENTS = HOME / "hls-est-work/experiments"
 
 RE_PIPE = re.compile(r"\[HLS 214-376\] automatically set the pipeline for Loop< ?VITIS_LOOP_(\d+)_\d+>")
@@ -54,16 +59,22 @@ def pipeline_loops_of(kernel):
     return int(m.group(1)) if m else None
 
 
-def decide_flags(kernel):
+APU_OPTS = []  # extra --auto-pipeline-unroll options (--apu-opts)
+
+
+def apu_flag(kernel, extra):
     pl = pipeline_loops_of(kernel)
-    opts = "emit-remarks" + (f" pipeline-loops={pl}" if pl is not None else "")
-    return ["--affine-loop-normalize", f"--auto-pipeline-unroll={opts}",
+    opts = list(extra) + ([f"pipeline-loops={pl}"] if pl is not None else []) + APU_OPTS
+    return "--auto-pipeline-unroll" + ("=" + " ".join(opts) if opts else "")
+
+
+def decide_flags(kernel):
+    return ["--affine-loop-normalize", apu_flag(kernel, ["emit-remarks"]),
             "--mlir-print-debuginfo"]
 
 
 def bram_flags(kernel):
-    pl = pipeline_loops_of(kernel)
-    auto = "--auto-pipeline-unroll" + (f"=pipeline-loops={pl}" if pl is not None else "")
+    auto = apu_flag(kernel, [])
     return ["--affine-loop-normalize", auto, "--memory-banking-bram",
             "--convert-affine-to-loopschedule", "--bram-analysis"]
 
@@ -208,7 +219,10 @@ def main():
     ap.add_argument("--no-bram", action="store_true")
     ap.add_argument("--md", default=None)
     ap.add_argument("--only", default="")
+    ap.add_argument("--apu-opts", default="",
+                    help="extra --auto-pipeline-unroll options, space separated")
     args = ap.parse_args()
+    APU_OPTS.extend(args.apu_opts.split())
     mlir_dir = Path(args.mlir_dir)
     kernels = [(cpp.stem, cpp) for d in EXP_SRC for cpp in sorted(d.glob("*.cpp"))]
     if args.only:

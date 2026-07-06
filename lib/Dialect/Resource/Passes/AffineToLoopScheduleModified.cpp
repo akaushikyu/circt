@@ -710,6 +710,10 @@ void AffineToLoopSchedule::coalescePerfectNests() {
         innermost->getAttr(circt::hls_analysis::kLoopPipelineAttr);
     Attribute pipelineOff =
         innermost->getAttr(circt::hls_analysis::kLoopPipelineOffAttr);
+    Attribute autoUnrolled =
+        innermost->getAttr(circt::hls_analysis::kLoopAutoUnrolledAttr);
+    Attribute unrollPartial =
+        innermost->getAttr(circt::hls_analysis::kLoopUnrollPartialAttr);
     unsigned flattened = circt::hls_analysis::getFlattenedParents(innermost);
     unsigned levels = band.size() - 1;
     if (failed(coalesceLoops(MutableArrayRef<AffineForOp>(band)))) {
@@ -724,6 +728,11 @@ void AffineToLoopSchedule::coalescePerfectNests() {
       outer->setAttr(circt::hls_analysis::kLoopPipelineAttr, pipelineTag);
     if (pipelineOff)
       outer->setAttr(circt::hls_analysis::kLoopPipelineOffAttr, pipelineOff);
+    if (autoUnrolled)
+      outer->setAttr(circt::hls_analysis::kLoopAutoUnrolledAttr, autoUnrolled);
+    if (unrollPartial)
+      outer->setAttr(circt::hls_analysis::kLoopUnrollPartialAttr,
+                     unrollPartial);
     if (flattened > levels)
       outer->setAttr(circt::hls_analysis::kLoopFlattenedParentsAttr,
                      IntegerAttr::get(IntegerType::get(outer.getContext(), 64),
@@ -1768,6 +1777,20 @@ AffineToLoopSchedule::createLoopSchedulePipeline(AffineForOp forOp,
 
   auto pipeline = LoopSchedulePipelineOp::create(builder, resultTypes, ii,
                                                  tripCountAttr, iterArgs);
+
+  // MODIFIED (T3 review fixes): carry the decision record of
+  // --auto-pipeline-unroll (hls.pipeline tag, hls.flattened_parents,
+  // hls.auto_unrolled, hls.unroll_partial) onto the pipeline op so that
+  // --bram-debug can print which loops were flattened into and unrolled for
+  // this pipeline. In-process only (the pipeline op's printer does not print
+  // discardable attributes); nothing in the estimate reads them.
+  for (StringRef name :
+       {circt::hls_analysis::kLoopPipelineAttr,
+        circt::hls_analysis::kLoopFlattenedParentsAttr,
+        circt::hls_analysis::kLoopAutoUnrolledAttr,
+        circt::hls_analysis::kLoopUnrollPartialAttr})
+    if (Attribute a = forOp->getAttr(name))
+      pipeline->setAttr(name, a);
 
   // Create the condition, which currently just compares the induction
   // variable to the upper bound.

@@ -19,7 +19,13 @@
 //     auto-pipelining of every loop around it and is pipelined itself (Vitis
 //     ground truth of spector_hls/fir, forgebench/mult_op_p1, diff_dims_p1,
 //     diff_orders_p1: the partially unrolled loops - and their user-made
-//     copies - are the pipelined ones, their parents are not).
+//     copies - are the pipelined ones, their parents are not). Vitis keeps
+//     the remainder iterations of a trip count the factor does not divide in
+//     the unrolled body (exit checks), it has no epilogue loop: the cleanup
+//     loop MLIR generates is unrolled completely into straight-line code
+//     after the loop, and only the main loop carries `hls.unroll_partial`
+//     (none does when the main loop is left with a single iteration and
+//     MLIR replaces it by its body).
 //
 //  1. Perfect-nest collapse. A loop whose body holds exactly one nested loop
 //     and no memory operation outside it (register-only code is allowed)
@@ -31,7 +37,11 @@
 //     accesses of a memory touched at one inner-invariant address only
 //     (`acc[i] += ...`) are promoted to a register with the load before and
 //     the store after the inner loop. Both make the nest imperfect; pure
-//     arithmetic never does.
+//     arithmetic never does. The hoist rule is confirmed for integer
+//     elements only: Vitis flattens the same nest when the invariant load
+//     reads a floating-point element (see "Perfectness and floating point"
+//     below; option float-loads-perfect, default off). Promotion makes the
+//     nest imperfect whatever the element type.
 //
 //  2. Top-down decision. A (collapsed) loop P is pipelined iff every loop
 //     nested anywhere inside it - loops of called functions included - has a
@@ -58,10 +68,36 @@
 //     and --infer-vitis-split-array / --bram-analysis count them.
 //
 // Tags: the pipelined loop gets `hls.pipeline = [{II = 0 : i32, source =
-// "auto"}]`. A user `hls.pipeline` is kept as written and always wins (the
-// loop is pipelined whatever T, everything inside it is unrolled); a user
-// `hls.pipeline_off` loop is never auto-pipelined. `pipeline-loops=0`
-// disables the automatic decision; user pragmas are still applied.
+// "auto"}]` and, when it unrolled loops, `hls.auto_unrolled = [{factor, loc},
+// ...]` (a record for --bram-debug). A user `hls.pipeline` is kept as written
+// and always wins (the loop is pipelined whatever T, everything inside it is
+// unrolled); a user `hls.pipeline_off` loop is never auto-pipelined.
+// `pipeline-loops=0` disables the automatic decision; user pragmas are still
+// applied.
+//
+// Perfectness and floating point (VITIS_NOTES.md N3, exp-src/
+// pipeline_unroll_float): a load at an inner-invariant address makes the nest
+// imperfect only when the loaded element is an integer. The same nest
+// reading a float element (`lo[i][j] = la[i][j] * lb[i]`, float `lb`) is
+// converted into a perfect nest and flattened by Vitis
+// (rv_st_hoist_f_m64_n64, rv_rmw_hoist_f_m8_n64 / _m64_n64, pf_fmul_m8_n64,
+// pf_fadd_m8_n64, pf_fmac_m8_n32, pf_srchoist_m8_n64 - the load written in
+// the outer body in the source -, pm_floatarr_iop_m8_n64 - float arrays,
+// integer arithmetic; polybench atax lp3/lp4, bicg lp1/lp2), while every
+// integer twin is unrolled (rv_st_hoist_m64_n64, rv_rmw_hoist_m8_n64,
+// pi_add_m8_n64, pi_mul3_m8_n64, pl_mul_m8_n64, pi_srchoist_m8_n64,
+// pm_intarr_fop_m8_n64 - int arrays, float arithmetic), and so is a body
+// with one float and one int invariant load (pf_twoload_m8_n64). It is the
+// type of the load, not of the arithmetic. Register promotion of an
+// accumulator makes the nest imperfect for float elements too
+// (pf_memred_m8_n16; atax lp1/lp2, bicg lp3/lp4, gesummv, mvt). Vitis'
+// mechanism is not visible in the IR dumps (the decision precedes a.o.1.ll,
+// where the float load is hoisted all the same). Option float-loads-perfect
+// applies this rule; it is off by default until Peter adopts it
+// (MEMOS.md): off, every hoistable invariant load breaks perfectness, as in
+// the original T3 model. With the harness' scalar shim ap_fixed is a
+// float/double in MLIR, while Vitis sees an integer: use the exact shim for
+// ap_fixed designs.
 //
 //===----------------------------------------------------------------------===//
 
@@ -95,6 +131,7 @@
 using namespace mlir;
 using namespace mlir::affine;
 using circt::hls_analysis::getFlattenedParents;
+using circt::hls_analysis::kLoopAutoUnrolledAttr;
 using circt::hls_analysis::kLoopFlattenedParentsAttr;
 using circt::hls_analysis::kLoopPipelineAttr;
 using circt::hls_analysis::kLoopPipelineAutoSource;
@@ -108,6 +145,10 @@ namespace {
 //===----------------------------------------------------------------------===//
 // Pragma attributes
 //===----------------------------------------------------------------------===//
+
+/// Set on a loop only for the duration of its loopUnrollByFactor call, so
+/// that the main loop and the cleanup clone can be found afterwards.
+constexpr llvm::StringLiteral kUnrollPendingAttr = "hls.unroll_partial_pending";
 
 /// First dictionary of a `[{...}]` (or bare `{...}`) pragma attribute.
 static DictionaryAttr pragmaDict(Attribute attr) {
@@ -311,11 +352,21 @@ static bool isPromotableIn(Value mem, AffineForOp loop,
   return true;
 }
 
-/// Where Vitis' LICM / promotion leave a memory operation: the innermost loop
-/// out of which it cannot move. Opaque memory ops (calls, hls.store_enable,
-/// ...) stay where they are.
+static bool hasFloatElement(Value mem) {
+  return isa<FloatType>(cast<MemRefType>(mem.getType()).getElementType());
+}
+
+/// Where Vitis' LICM / promotion leave a memory operation AT DECISION TIME:
+/// the innermost loop out of which it cannot move. Opaque memory ops (calls,
+/// hls.store_enable, ...) stay where they are. With `floatLoadsPerfect`, so
+/// does a read-only load of a floating-point element (observed, see the file
+/// header; the physical hoist that Vitis' later LICM applies to it is done
+/// by hoistInvariantOps when a loop is actually unrolled).
 class LicmModel {
 public:
+  explicit LicmModel(bool floatLoadsPerfect)
+      : floatLoadsPerfect(floatLoadsPerfect) {}
+
   /// The loop whose body `op` effectively sits in (nullptr: outside every
   /// loop of the function).
   AffineForOp effectiveLoop(Operation *op) {
@@ -332,9 +383,13 @@ public:
     if (!isInvariantIn(a, loop))
       return false;
     if (!a.isWrite && !written(a.mem, loop))
-      return true; // LICM hoist
+      // LICM hoist (confirmed for integer elements; a float load stays put
+      // for the decision under float-loads-perfect).
+      return !(floatLoadsPerfect && hasFloatElement(a.mem));
     return promotable(a.mem, loop);
   }
+
+  const bool floatLoadsPerfect;
 
 private:
   using Key = std::pair<Value, Operation *>;
@@ -389,6 +444,23 @@ struct Node {
   AffineForOp tagged;
 };
 
+/// A read-only load of a floating-point element directly in `outer`'s body
+/// from a memory `inner` never writes. cgeist's own LICM moves inner-invariant
+/// loads there (`lb[i]` of `lo[i][j] = la[i][j] * lb[i]` ends up before the j
+/// loop in the MLIR), and a source may hold it there too (`float t = lb[i];`
+/// before the j loop, pf_srchoist_m8_n64), but Vitis converts such a nest
+/// into a perfect one and flattens it (see the file header), so under
+/// float-loads-perfect the load is judged as if it were in the inner loop.
+static bool isSinkableFloatLoad(Operation *op, AffineForOp outer,
+                                AffineForOp inner) {
+  if (op->getBlock() != outer.getBody())
+    return false;
+  std::optional<Access> a = getAccess(op);
+  if (!a || a->isWrite || !hasFloatElement(a->mem))
+    return false;
+  return !isMemrefWrittenInLoop(a->mem, inner);
+}
+
 /// Does `outer` form a perfect nest with `inner` (the only loop directly in
 /// its body), as Vitis judges it after LICM / promotion?
 static bool isPerfectPair(AffineForOp outer, AffineForOp inner,
@@ -409,6 +481,8 @@ static bool isPerfectPair(AffineForOp outer, AffineForOp inner,
       return WalkResult::advance();
     if (licm.effectiveLoop(op) != outer)
       return WalkResult::advance(); // hoisted further out
+    if (licm.floatLoadsPerfect && isSinkableFloatLoad(op, outer, inner))
+      return WalkResult::advance(); // sunk back by Vitis' nest conversion
     perfect = false;
     return WalkResult::interrupt();
   });
@@ -509,8 +583,20 @@ public:
         node->userFixed = true;
     }
     node->pipelineOff = node->chain.back()->hasAttr(kLoopPipelineOffAttr);
-    for (auto [loop, childViaCall] : childLoops)
+    for (auto [loop, childViaCall] : childLoops) {
+      // A child reached through a call: keep its function on the call stack
+      // while its subtree is built, so that a call back into that function
+      // (direct or mutual recursion) is cut there too, not only during
+      // collectChildren. Children of this function are already covered by
+      // the entry runOnOperation pushed.
+      Operation *owner = nullptr;
+      if (auto fn = loop->getParentOfType<func::FuncOp>())
+        owner = fn.getOperation();
+      bool pushed = owner && callStack.insert(owner).second;
       node->children.push_back(build(loop, childViaCall, callStack));
+      if (pushed)
+        callStack.erase(owner);
+    }
     if (opaqueLoop) {
       // A loop that is not an affine.for: a dynamic child.
       auto opaque = std::make_unique<Node>();
@@ -705,6 +791,15 @@ struct AutoPipelineUnrollPass
                      "loops are unrolled (Vitis LICM; off keeps them as "
                      "memory accesses of the pipeline)"),
       llvm::cl::init(true)};
+  Option<bool> floatLoadsPerfect{
+      *this, "float-loads-perfect",
+      llvm::cl::desc("A read-only inner-invariant load of a floating-point "
+                     "element does not make a loop nest imperfect, so the "
+                     "nest is flattened rather than its inner loop unrolled "
+                     "(Vitis 2025.1 observation, VITIS_NOTES.md N3; off: "
+                     "every hoistable invariant load breaks perfectness, "
+                     "the original T3 rule)"),
+      llvm::cl::init(false)};
   Option<bool> emitRemarks{
       *this, "emit-remarks",
       llvm::cl::desc("Print one remark per decision (pipeline, unroll, "
@@ -760,11 +855,64 @@ struct AutoPipelineUnrollPass
       remark(loop.getLoc(), "user unroll: by factor " + Twine(factor) +
                                 " (the loop is never auto-unrolled into a "
                                 "parent pipeline)");
-      // loopUnrollByFactor keeps `loop` as the main loop (a cleanup loop,
-      // if any, is a fresh clone without the marker).
-      loop->setAttr(kLoopUnrollPartialAttr, b.getI64IntegerAttr(factor));
-      if (failed(loopUnrollByFactor(loop, factor)))
-        LLVM_DEBUG(llvm::dbgs() << "  loopUnrollByFactor failed\n");
+      applyPartialUnroll(loop, factor);
+    }
+  }
+
+  /// `#pragma HLS unroll factor=F` with 1 < F < trip count (or a dynamic
+  /// trip count). loopUnrollByFactor keeps `loop` as the main loop (step
+  /// scaled by F) and, when F does not divide the trip count, clones it -
+  /// attributes included - into a cleanup loop with the original step right
+  /// after it; either loop is replaced by its body when it is left with a
+  /// single iteration (`loop` is then erased). Vitis has no epilogue loop
+  /// (the exit checks stay in the unrolled body): the cleanup loop is
+  /// unrolled completely into straight-line code, and only the main loop -
+  /// if it is still a loop - gets `hls.unroll_partial`, so no second
+  /// partially-unrolled pipeline appears.
+  void applyPartialUnroll(AffineForOp loop, uint64_t factor) {
+    Builder b(loop.getContext());
+    auto markMain = [&](AffineForOp main) {
+      main->setAttr(kLoopUnrollPartialAttr,
+                    b.getI64IntegerAttr(static_cast<int64_t>(factor)));
+    };
+    // An empty body: loopUnrollByFactor leaves the loop as it is.
+    if (llvm::hasSingleElement(loop.getBody()->getOperations())) {
+      markMain(loop);
+      return;
+    }
+    // Where the results of the call will sit: between `prev` and `next`
+    // (both survive it; a loop always has a terminator after it).
+    Block *block = loop->getBlock();
+    Operation *prev = loop->getPrevNode();
+    Operation *next = loop->getNextNode();
+    int64_t step = loop.getStepAsInt();
+    // A temporary marker the cleanup clone inherits, to find both loops.
+    loop->setAttr(kUnrollPendingAttr, b.getUnitAttr());
+    if (failed(loopUnrollByFactor(loop, factor))) {
+      // Fails before touching the IR (bounds with several results).
+      LLVM_DEBUG(llvm::dbgs() << "  loopUnrollByFactor failed\n");
+      loop->removeAttr(kUnrollPendingAttr);
+      markMain(loop);
+      return;
+    }
+    SmallVector<AffineForOp, 2> results;
+    for (Operation *op = prev ? prev->getNextNode() : &block->front();
+         op && op != next; op = op->getNextNode())
+      if (auto forOp = dyn_cast<AffineForOp>(op))
+        if (forOp->hasAttr(kUnrollPendingAttr))
+          results.push_back(forOp);
+    for (AffineForOp forOp : results) {
+      forOp->removeAttr(kUnrollPendingAttr);
+      if (forOp.getStepAsInt() != step) {
+        markMain(forOp); // the main loop, step * factor
+        continue;
+      }
+      remark(forOp.getLoc(),
+             "user unroll: remainder iterations unrolled completely (Vitis "
+             "keeps them in the unrolled body, there is no epilogue loop)");
+      if (failed(loopUnrollFull(forOp)))
+        remark(forOp.getLoc(), "user unroll: the remainder loop has a "
+                               "dynamic trip count, left rolled");
     }
   }
 
@@ -785,12 +933,24 @@ struct AutoPipelineUnrollPass
     });
   }
 
-  /// Everything inside the pipelined loop is unrolled completely.
+  /// Everything inside the pipelined loop is unrolled completely. Each
+  /// unrolled loop is recorded on `pipelined` in `hls.auto_unrolled`.
   void unrollInside(AffineForOp pipelined, SymbolTableCollection &symbolTable) {
     SmallVector<AffineForOp> inner;
     SmallPtrSet<Operation *, 4> visitedCallees;
+    // The function that owns `pipelined` is never re-entered through a call
+    // (direct or mutual recursion): that would collect `pipelined` itself,
+    // or an ancestor of it, and erase it under our feet.
+    if (auto owner = pipelined->getParentOfType<func::FuncOp>())
+      visitedCallees.insert(owner.getOperation());
     collectInner(pipelined.getRegion(), inner, visitedCallees, symbolTable);
+    Builder b(pipelined.getContext());
+    SmallVector<Attribute> record;
+    if (auto prev = pipelined->getAttrOfType<ArrayAttr>(kLoopAutoUnrolledAttr))
+      record.append(prev.begin(), prev.end());
     for (AffineForOp loop : inner) {
+      if (loop == pipelined || loop->isProperAncestor(pipelined))
+        continue;
       std::optional<uint64_t> trip = getConstantTripCount(loop);
       if (!trip) {
         remark(loop.getLoc(), "cannot unroll: dynamic trip count");
@@ -807,9 +967,19 @@ struct AutoPipelineUnrollPass
                  Twine(promoted) + " memory(ies) to registers)");
       loop->removeAttr(kLoopPipelineAttr);
       loop->removeAttr(kLoopFlattenedParentsAttr);
-      if (failed(loopUnrollFull(loop)))
+      loop->removeAttr(kLoopAutoUnrolledAttr);
+      LocationAttr loc = loop.getLoc();
+      if (failed(loopUnrollFull(loop))) {
         LLVM_DEBUG(llvm::dbgs() << "  loopUnrollFull failed\n");
+        continue;
+      }
+      record.push_back(b.getDictionaryAttr(
+          {b.getNamedAttr("factor",
+                          b.getI64IntegerAttr(static_cast<int64_t>(*trip))),
+           b.getNamedAttr("loc", loc)}));
     }
+    if (!record.empty())
+      pipelined->setAttr(kLoopAutoUnrolledAttr, b.getArrayAttr(record));
   }
 
   /// LLVM LICM also promotes the accesses that became loop-invariant in the
@@ -891,6 +1061,7 @@ struct AutoPipelineUnrollPass
       if (isAutoPipelineTag(loop->getAttr(kLoopPipelineAttr)))
         loop->removeAttr(kLoopPipelineAttr);
       loop->removeAttr(kLoopFlattenedParentsAttr);
+      loop->removeAttr(kLoopAutoUnrolledAttr);
     });
 
     for (auto func : module.getOps<func::FuncOp>())
@@ -900,7 +1071,7 @@ struct AutoPipelineUnrollPass
     for (auto func : module.getOps<func::FuncOp>()) {
       if (func.isExternal())
         continue;
-      LicmModel licm;
+      LicmModel licm(floatLoadsPerfect);
       Forest forest(licm);
       // Top-level loops of this function; callee loops are decided with
       // their own function and only take part in the feasibility test.

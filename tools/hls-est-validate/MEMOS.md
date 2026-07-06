@@ -85,3 +85,42 @@ for hand-run commands and for the Compiler Explorer integration.
 **Cost.** Small (one option, one reachability walk, lit tests); no baseline changes. Needs Peter's OK because it changes
 what the default output means when no top is given.
 
+## M8 — turn on `--auto-pipeline-unroll=float-loads-perfect` by default (O13)
+
+**Question.** The T3 decision treats every hoistable inner-invariant load as making a nest imperfect (inner loop
+unrolled, outer pipelined). Vitis does that only when the loaded element is an integer; with a float element it
+converts the nest into a perfect one and flattens it (VITIS_NOTES.md N3, 18 kernels in
+`~/hls-est-work/exp-src/pipeline_unroll_float`, all decisions read from the `hls_compile.log` 200-2061 / 214-376 /
+214-186 / 203-541 lines; polybench atax lp3/lp4 and bicg lp1/lp2 in `results/vitis.json`). The option implements that
+rule (T3 review fixes entry); the default is off.
+
+**Before / after** (harness subset, `-j 8 --timeout 120`, hls-est = the T3 review fixes commit; runs in
+`~/hls-est-work/t3r/`; "off" is identical per design to HEAD 22d473858):
+
+| pipeline | option | exact | total abs error | hls-est ok | changed designs |
+|---|---|---|---|---|---|
+| default (with split) | off | 33 / 73 | 5053 | 74 | - |
+| default (with split) | on | 33 / 73 | 5055 | 74 | atax 68 -> 69, bicg 69 -> 70 (Vitis 13 / 14; the split pass's partitions dominate, O2) |
+| without split | off | 39 / 73 | 4283 | 74 | - |
+| without split | on | 39 / 73 | 4281 | 74 | atax 11 -> 12, bicg 12 -> 13 (Vitis 13 / 14; buff_y_out / buff_s_out now 2 = Vitis, the rest is O3) |
+
+The "on" rows are the harness files (`nosplit_f`, `canon_f`) with two designs corrected: there, forgebench
+diff_dims_p3 (both pipelines) and conv_block_module (no split) hit the 120 s limit while other workflows loaded the
+machine (load average 40-50 on 32 cores); run alone without a limit, diff_dims_p3 gives 384 with and without the option
+and conv_block_module the same pre-existing `getIntOrFloatBitWidth` assertion, and the option does not change a single
+decision in either. Uncorrected, the files read 39 / 72, |err| 4251 and 33 / 72, |err| 5025. Regression gate (polybench_pragmas bicg 8, gesummv 16, mvt 8, syrk 32) exact in all four
+runs. Validation kernels (`check_pipeline_unroll.py`, 86 compared): decisions 74 -> 81 agree, BRAM totals 58 -> 64 equal
+(pf_fadd/fmac/fmul/srchoist 4 -> 2, rv_rmw_hoist_f_m8_n64 25 -> 3, _m64_n64 98 -> 11, all = Vitis); the 5 remaining
+disagreements are O10 (4) and O8 (1).
+
+**What breaks.** No total in the subset. Decisions change in 7 of 96 subset designs (decision pass alone, remark sets
+compared): atax, bicg, polybench_pragmas/bicg (total still 8 = Vitis), machsuite gemm_blocked (double; total
+unchanged) and three ap_fixed designs - forgebench Llama_GPT_module, gpt_transformer_p1, llama_transformer_p2 (totals
+unchanged). The last three are the risk: the scalar shim (and, per M2, the exact shim for W <= 16) gives `ap_fixed` a
+float element type, so the rule fires on arrays that Vitis sees as `iN` and keeps imperfect. Unverified against those
+designs' loop tables; by N3 those three decision changes are wrong.
+
+**Recommendation.** Adopt together with an integer-backed `ap_fixed` shim (M3 route A / `exactclass`), where the MLIR
+element type is the type Vitis decides on; until then keep it off (one global pipeline: no per-dataset switch).
+Either way the lit RUN lines stay as they are (the option is tested in
+`test/hls-est/Passes/auto_pipeline_float_loads.mlir` in both settings).

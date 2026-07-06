@@ -45,7 +45,7 @@ func.func @sib16_65(%a: memref<8x65xi32>, %b: memref<65xi32>, %out: memref<8xi32
 // CHECK-LABEL: func.func @sib16_16
 // CHECK:       affine.for %{{.*}} = 0 to 8 {
 // CHECK-NOT:     affine.for
-// CHECK:       } {hls.pipeline = [{II = 0 : i32, source = "auto"}]}
+// CHECK:       } {hls.auto_unrolled = [{factor = 16 : i64, loc = #loc{{[0-9]*}}}, {factor = 16 : i64, loc = #loc{{[0-9]*}}}], hls.pipeline = [{II = 0 : i32, source = "auto"}]}
 func.func @sib16_16(%a: memref<8x16xi32>, %b: memref<16xi32>, %out: memref<8xi32>) {
   %c0_i32 = arith.constant 0 : i32
   %lo = memref.alloca() {hls.preserve, polygeist.varname = "lo"} : memref<8xi32>

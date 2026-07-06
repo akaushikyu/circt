@@ -57,11 +57,13 @@ func.func @scalarmid(%a: memref<8x16xi32>, %b: memref<16xi32>, %out: memref<1xi3
 }
 
 // A j-invariant load inside the inner loop: Vitis' LICM hoists it into the
-// outer body, the nest is imperfect, j (16) is unrolled, i pipelined.
+// outer body, the nest is imperfect, j (16) is unrolled, i pipelined
+// (integer element: pu_st_hoist_m8_n16, rv_st_hoist_m64_n64, pi_add_m8_n64,
+// pi_mul3_m8_n64, pl_mul_m8_n64).
 // CHECK-LABEL: func.func @hoisted_load
 // CHECK:       affine.for %{{.*}} = 0 to 8 {
 // CHECK-NOT:     affine.for
-// CHECK:       } {hls.pipeline = [{II = 0 : i32, source = "auto"}]}
+// CHECK:       } {hls.auto_unrolled = [{factor = 16 : i64, loc = #loc{{[0-9]*}}}], hls.pipeline = [{II = 0 : i32, source = "auto"}]}
 func.func @hoisted_load(%a: memref<8x16xi32>, %b: memref<8xi32>, %out: memref<8x16xi32>) {
   %lo = memref.alloca() {hls.preserve, polygeist.varname = "lo"} : memref<8x16xi32>
   %lb = memref.alloca() {hls.preserve, polygeist.varname = "lb"} : memref<8xi32>

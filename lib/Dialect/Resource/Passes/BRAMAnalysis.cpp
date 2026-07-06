@@ -1,5 +1,6 @@
 #include "circt/Dialect/Resource/Passes/BRAMAnalysis.h"
 #include "circt/Dialect/Resource/Interfaces/MemoryInterface.h"
+#include "circt/Dialect/Resource/Passes/LoopPragmas.h"
 #include "circt/Dialect/LoopSchedule/LoopScheduleOps.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
@@ -1001,7 +1002,71 @@ sortedByBram(ArrayRef<MemrefRecord> records) {
   return order;
 }
 
-static void printDebugText(ArrayRef<MemrefRecord> records, int64_t total,
+// The pipeline / unroll / flatten decisions --auto-pipeline-unroll recorded
+// on each pipelined loop (carried onto the loopschedule.pipeline op by
+// --convert-affine-to-loopschedule). Read-only: the estimate never looks at
+// them. `loc` is the same string as the per-scope `scope_loc` of the memref
+// records, so the two can be joined.
+struct PipelineRecord {
+  std::string loc;
+  std::string func;
+  unsigned ii = 0;
+  std::optional<int64_t> tripCount;
+  // "auto" (tagged by --auto-pipeline-unroll), "user" (a source pragma) or
+  // "innermost" (no tag: the conversion's default of pipelining every
+  // innermost loop).
+  std::string source = "innermost";
+  unsigned flattenedParents = 0;      // hls.flattened_parents
+  std::optional<int64_t> unrollPartial; // hls.unroll_partial (user factor)
+  struct Unrolled {
+    std::string loc;
+    int64_t factor = 0;
+  };
+  SmallVector<Unrolled> unrolled; // hls.auto_unrolled, in unroll order
+};
+
+static SmallVector<PipelineRecord> collectPipelineRecords(ModuleOp module) {
+  SmallVector<PipelineRecord> out;
+  module.walk([&](LoopSchedulePipelineOp p) {
+    PipelineRecord r;
+    r.loc = locString(p.getLoc());
+    if (auto fn = p->getParentOfType<func::FuncOp>())
+      r.func = fn.getName().str();
+    r.ii = static_cast<unsigned>(p.getII());
+    if (auto tc = p.getTripCount())
+      r.tripCount = static_cast<int64_t>(*tc);
+    if (Attribute tag = p->getAttr(kLoopPipelineAttr)) {
+      r.source = "user";
+      if (auto arr = dyn_cast<ArrayAttr>(tag))
+        tag = arr.empty() ? Attribute() : arr[0];
+      if (auto dict = dyn_cast_or_null<DictionaryAttr>(tag))
+        if (auto s = dict.getAs<StringAttr>("source"))
+          r.source = s.getValue().str();
+    }
+    if (auto fp = p->getAttrOfType<IntegerAttr>(kLoopFlattenedParentsAttr))
+      if (fp.getInt() > 0)
+        r.flattenedParents = static_cast<unsigned>(fp.getInt());
+    if (auto up = p->getAttrOfType<IntegerAttr>(kLoopUnrollPartialAttr))
+      r.unrollPartial = up.getInt();
+    if (auto arr = p->getAttrOfType<ArrayAttr>(kLoopAutoUnrolledAttr))
+      for (Attribute a : arr) {
+        auto dict = dyn_cast<DictionaryAttr>(a);
+        if (!dict)
+          continue;
+        PipelineRecord::Unrolled u;
+        if (auto f = dict.getAs<IntegerAttr>("factor"))
+          u.factor = f.getInt();
+        if (auto l = dict.getAs<LocationAttr>("loc"))
+          u.loc = locString(l);
+        r.unrolled.push_back(std::move(u));
+      }
+    out.push_back(std::move(r));
+  });
+  return out;
+}
+
+static void printDebugText(ArrayRef<MemrefRecord> records,
+                           ArrayRef<PipelineRecord> pipelines, int64_t total,
                            llvm::raw_ostream &os) {
   os << "=== bram-debug: how each BRAM number was derived ===\n";
   for (const MemrefRecord &r : records) {
@@ -1104,6 +1169,19 @@ static void printDebugText(ArrayRef<MemrefRecord> records, int64_t total,
     }
     os << "  bram: " << r.bram << (r.infeasible ? "  [INFEASIBLE]" : "")
        << "\n";
+  }
+  os << "--- pipelines (decisions of --auto-pipeline-unroll) ---\n";
+  for (const PipelineRecord &p : pipelines) {
+    os << "  pipeline @ " << p.loc << " in @" << p.func << ": ii=" << p.ii;
+    if (p.tripCount)
+      os << " trip=" << *p.tripCount;
+    os << " source=" << p.source
+       << " flattened_parents=" << p.flattenedParents;
+    if (p.unrollPartial)
+      os << " unroll_partial=" << *p.unrollPartial;
+    os << "\n";
+    for (const PipelineRecord::Unrolled &u : p.unrolled)
+      os << "    unrolled x" << u.factor << " @ " << u.loc << "\n";
   }
   os << "--- summary (sorted by BRAM) ---\n";
   for (const MemrefRecord *r : sortedByBram(records))
@@ -1252,6 +1330,7 @@ static llvm::json::Object toJson(const MemrefRecord &r) {
 
 // Returns the error code of the failed open, or a default (success) code.
 static std::error_code writeDebugJson(ArrayRef<MemrefRecord> records,
+                                      ArrayRef<PipelineRecord> pipelineRecords,
                                       int64_t total, StringRef path) {
   llvm::json::Object root;
   root["version"] = 2;
@@ -1270,6 +1349,28 @@ static std::error_code writeDebugJson(ArrayRef<MemrefRecord> records,
   for (const MemrefRecord &r : records)
     memrefs.push_back(toJson(r));
   root["memrefs"] = std::move(memrefs);
+
+  llvm::json::Array pipelines;
+  for (const PipelineRecord &p : pipelineRecords) {
+    llvm::json::Object po;
+    po["scope_loc"] = p.loc;
+    po["func"] = p.func;
+    po["ii"] = static_cast<int64_t>(p.ii);
+    po["trip_count"] = optInt(p.tripCount);
+    po["source"] = p.source;
+    po["flattened_parents"] = static_cast<int64_t>(p.flattenedParents);
+    po["unroll_partial"] = optInt(p.unrollPartial);
+    llvm::json::Array unrolled;
+    for (const PipelineRecord::Unrolled &u : p.unrolled) {
+      llvm::json::Object uo;
+      uo["loc"] = u.loc;
+      uo["factor"] = u.factor;
+      unrolled.push_back(std::move(uo));
+    }
+    po["unrolled"] = std::move(unrolled);
+    pipelines.push_back(std::move(po));
+  }
+  root["pipelines"] = std::move(pipelines);
 
   llvm::json::Array summary;
   for (const MemrefRecord *r : sortedByBram(records)) {
@@ -1328,11 +1429,14 @@ struct BRAMAnalysisLoopSchedule
     // and the stdout report are complete by now; a JSON path that cannot be
     // opened is still an error (non-zero exit), so a harness that asked for
     // the file never mistakes its absence for an empty result.
+    SmallVector<PipelineRecord> pipelines;
+    if (bramDebugOpt || !bramDebugJsonOpt.empty())
+      pipelines = collectPipelineRecords(getOperation());
     if (bramDebugOpt)
-      printDebugText(records, total, llvm::errs());
+      printDebugText(records, pipelines, total, llvm::errs());
     if (!bramDebugJsonOpt.empty())
       if (std::error_code ec =
-              writeDebugJson(records, total, bramDebugJsonOpt)) {
+              writeDebugJson(records, pipelines, total, bramDebugJsonOpt)) {
         // Location-based emitError: no "see current operation" module dump.
         mlir::emitError(getOperation().getLoc(),
                         "bram-debug-json: cannot write '")

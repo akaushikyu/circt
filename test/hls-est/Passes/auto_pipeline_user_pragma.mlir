@@ -18,7 +18,7 @@
 // CHECK-LABEL: func.func @user_outer
 // CHECK:       affine.for %{{.*}} = 0 to 8 {
 // CHECK-NOT:     affine.for
-// CHECK:       } {hls.pipeline = [{II = 1 : i32, rewind = false, style = "stp"}]}
+// CHECK:       } {hls.auto_unrolled = [{factor = 128 : i64, loc = #loc{{[0-9]*}}}], hls.pipeline = [{II = 1 : i32, rewind = false, style = "stp"}]}
 func.func @user_outer(%a: memref<8x128xi32>, %b: memref<128xi32>, %out: memref<8xi32>) {
   %c0_i32 = arith.constant 0 : i32
   %lo = memref.alloca() {hls.preserve, polygeist.varname = "lo"} : memref<8xi32>

@@ -18,7 +18,7 @@
 // PL16-LABEL: func.func @reduce16
 // PL16:       affine.for %{{.*}} = 0 to 8 {
 // PL16-NOT:     affine.for
-// PL16:       } {hls.pipeline = [{II = 0 : i32, source = "auto"}]}
+// PL16:       } {hls.auto_unrolled = [{factor = 16 : i64, loc = #loc{{[0-9]*}}}], hls.pipeline = [{II = 0 : i32, source = "auto"}]}
 
 // PL15-LABEL: func.func @reduce16
 // PL15:       affine.for %{{.*}} = 0 to 8 {
@@ -30,7 +30,7 @@
 // PL64-LABEL: func.func @reduce16
 // PL64:       affine.for %{{.*}} = 0 to 8 {
 // PL64-NOT:     affine.for
-// PL64:       } {hls.pipeline = [{II = 0 : i32, source = "auto"}]}
+// PL64:       } {hls.auto_unrolled = [{factor = 16 : i64, loc = #loc{{[0-9]*}}}], hls.pipeline = [{II = 0 : i32, source = "auto"}]}
 func.func @reduce16(%a: memref<8x16xi32>, %b: memref<16xi32>, %out: memref<8xi32>) {
   %c0_i32 = arith.constant 0 : i32
   %lo = memref.alloca() {hls.preserve, polygeist.varname = "lo"} : memref<8xi32>
@@ -53,7 +53,7 @@ func.func @reduce16(%a: memref<8x16xi32>, %b: memref<16xi32>, %out: memref<8xi32
 // PL64-LABEL: func.func @reduce64
 // PL64:       affine.for %{{.*}} = 0 to 8 {
 // PL64-NOT:     affine.for
-// PL64:       } {hls.pipeline = [{II = 0 : i32, source = "auto"}]}
+// PL64:       } {hls.auto_unrolled = [{factor = 64 : i64, loc = #loc{{[0-9]*}}}], hls.pipeline = [{II = 0 : i32, source = "auto"}]}
 // OFF-LABEL: func.func @reduce64
 // OFF-NOT:   hls.pipeline
 func.func @reduce64(%a: memref<8x64xi32>, %b: memref<64xi32>, %out: memref<8xi32>) {

@@ -39,7 +39,7 @@ func.func @reduce65(%a: memref<8x65xi32>, %b: memref<65xi32>, %out: memref<8xi32
 // CHECK:       affine.for %{{.*}} = 0 to 4 {
 // CHECK:         affine.for %{{.*}} = 0 to 4 {
 // CHECK-NOT:       affine.for
-// CHECK:         } {hls.flattened_parents = 1 : i64, hls.pipeline = [{II = 0 : i32, source = "auto"}]}
+// CHECK:         } {hls.auto_unrolled = [{factor = 17 : i64, loc = #loc{{[0-9]*}}}], hls.flattened_parents = 1 : i64, hls.pipeline = [{II = 0 : i32, source = "auto"}]}
 // CHECK-NEXT:  {{^ *}$}}
 func.func @red3c(%a: memref<4x4x17xi32>, %b: memref<17xi32>, %c: memref<4xi32>) {
   %c5_i32 = arith.constant 5 : i32
