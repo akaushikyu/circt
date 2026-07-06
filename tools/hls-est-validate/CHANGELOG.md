@@ -3,6 +3,21 @@
 Newest entry first. One entry per logical change, including changes that were
 tried and reverted. Branch: `hls-est-vitis-match` in `~/circt`.
 
+## 2026-10-09 — hls-est-validate: rtl_memories, align_arrays, vitis_trace visibility tools
+- **Commit:** the commit titled "hls-est-validate: rtl_memories, align_arrays, vitis_trace visibility tools" (branch `hls-est-vitis-match`); its hash is recorded in the following changelog-only commit
+- **Files:** tools/hls-est-validate/rtl_memories.py, align_arrays.py, vitis_trace.py (new); VITIS_NOTES.md (N9)
+- **What:** stdlib-only debugging tools; hls-est and every estimate are unchanged.
+  1. `rtl_memories.py <dir | ds/bench> [--all] [--json F] [--make-rtl]` reads `syn/verilog`. For each physical memory it lists core, ram/rom_style, width, depth/address bits, port groups (`RW+15R`), the RAM_1WNR storage copies with the port that writes and reads each one, the init file, and how often the parent module is instantiated. It joins the csynth memory table and compares the total. A results key only uses a leftover work dir whose memory table equals the ground truth. `--make-rtl` re-synthesizes once with `vitis_adhoc.py --keep`, because the harvest keeps no RTL.
+  2. `align_arrays.py <ds/bench> [--brief] [--run-id ID]` prints one row per array across `a.g.ld.5.gdce` / `a.o.1` / `a.o.2` / `a.o.3` / scheduler allocas (`<module>.verbose.rpt`) / report / RTL / the hls-est debug JSON, with the first stage where the array diverges (deleted, partitioned into N, merged back, width W->W', ROM, RAM_1WNR copies, LUTRAM, interface). It keeps function clones apart from partition banks and matches arrays one to one. It also reconciles the csynth BRAM total as memory rows + adapters + FIFO channels. By default it reads the newest hls-est run whose passes include the default pipeline.
+  3. `vitis_trace.py <ds/bench>... [--summary]` writes a bundle to `~/hls-est-work/traces/<ds>__<bench>/` containing the align table, the Vitis log decisions next to hls-est `pipelines[]`, the loop and memory tables, the hls-est debug summary, the RTL summary and trace.json. `--summary` prints at most 60 lines.
+- **Why:** CLAUDE.md Step 1b and Step 3 need per-array evidence from every Vitis stage, because totals hide errors that cancel out. The previous attempt's partial scripts (interrupted at 19:40) were reviewed and finished here.
+- **Effect:** no estimate changes.
+  - On forgebench/attention_op_p1, polybench/gesummv and machsuite/fft_transpose, the RTL memory tables equal the ground truth (8 / 132 / 12 rows).
+  - `align()` runs on all 131 ok designs in results/vitis.json with 0 errors and reconciles every csynth BRAM total exactly.
+  - New Vitis facts are recorded in VITIS_NOTES N9: IR banks merged back before scheduling in fft_transpose and k3mm, the RAM_1WNR copy/port structure in the RTL, LUTRAM ROMs bound by Vitis math-header pragmas, and BRAM held by adapters and FIFO channels.
+  - Vitis cost: 2 ad-hoc re-syntheses (`/mnt/d/HLS/hls-est-vitis/exp/{gesummv,fft_transpose}`) to get RTL.
+- **Reverted?:** no
+
 ## 2026-10-09 — cgeist: unsigned float compound back-conversion, bool compound assignment, loops with zero-extended counters raise to affine (frontend)
 - **Commit:** Polygeist e5b6bbc9 (branch `hls-est-vitis-match`, repo root `/mnt/d/HLS`); this entry: the following changelog-only commit in `~/circt`
 - **Files:** Polygeist `tools/cgeist/Lib/clang-mlir.cc`, `lib/polygeist/Passes/CanonicalizeFor.cpp`
