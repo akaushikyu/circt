@@ -4,7 +4,7 @@ Newest entry first. One entry per logical change, including changes that were
 tried and reverted. Branch: `hls-est-vitis-match` in `~/circt`.
 
 ## 2026-10-09 — hls-est-validate: rtl_memories, align_arrays, vitis_trace visibility tools
-- **Commit:** the commit titled "hls-est-validate: rtl_memories, align_arrays, vitis_trace visibility tools" (branch `hls-est-vitis-match`); its hash is recorded in the following changelog-only commit
+- **Commit:** b93c11751 (scripts, N9 and this entry; branch `hls-est-vitis-match`); this hash line: the following changelog-only commit
 - **Files:** tools/hls-est-validate/rtl_memories.py, align_arrays.py, vitis_trace.py (new); VITIS_NOTES.md (N9)
 - **What:** stdlib-only debugging tools; hls-est and every estimate are unchanged.
   1. `rtl_memories.py <dir | ds/bench> [--all] [--json F] [--make-rtl]` reads `syn/verilog`. For each physical memory it lists core, ram/rom_style, width, depth/address bits, port groups (`RW+15R`), the RAM_1WNR storage copies with the port that writes and reads each one, the init file, and how often the parent module is instantiated. It joins the csynth memory table and compares the total. A results key only uses a leftover work dir whose memory table equals the ground truth. `--make-rtl` re-synthesizes once with `vitis_adhoc.py --keep`, because the harvest keeps no RTL.
