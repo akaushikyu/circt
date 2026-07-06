@@ -65,10 +65,40 @@ old numbers. Decide together with M3.
 
 Each needs Peter's OK before it becomes default behaviour of cgeist or of the harness.
 
-## M4 — BRAM formula defaults (priority 4)
+## M4 — BRAM formula defaults after the open-source reconciliation (N8)
 
-To be written from the open-source reconciliation (N8) when it lands: which of N6's rules the `queryBRAM` source agrees
-with, where the 2025.1 binary differs, and whether any default constant in hls-est should change.
+**Finding.** The 7-series branch of `MemoryQuerier::queryBRAM` in `~/hls-llvm-project` (tag 2025.1, `6ad94cf7d252`;
+identical on `main` `ee930469a6e`) is a depth-band formula: <=512 words ceil(W/36) in SDP mode else ceil(W/18);
+513-1024 ceil(W/18); 1025-2048 ceil(W/9); 2049-4096 min(ceil(W/4), 2*ceil(W/9)); 4097-8192 ceil(W/2); deeper
+2^ceil(log2 ceil(D/16384)) * W; times ceil(n_eff/2) for the used ports, where a 1WnR memory with n > 2 ports counts
+2n-2 (= n-1 copies at x18) and a ROM with n > 2 read ports counts n (= ceil(n/2) dual-port ROMs). SDP = one used port
+or the pairs {R,W}/{W,R}/{R,R}. LUTRAM when W*D < 1024 and the implementation is auto.
+
+**Agreement with the measured rules.** Up to 4096 words it equals N6 (min over aspect modes, x36 only with one live
+port); copies equal N4 (`ceil((R+W)/II) - 1`, cap 16); LUTRAM equals N5. On the 23003 memory rows of results/vitis.json
+the band formula matches all 23003, N6 matches 23000 (the 3 misses are ROMs read by more than two ports per cycle:
+gsm `bitoff`, aes `sbox`). 18 new standalone kernels (`~/hls-est-work/experiments/fr_*`) settle the cases where the two
+differ, all in favour of the band formula:
+
+| case | Vitis = band formula | N6 / hls-est today |
+|---|---|---|
+| deeper than 4096 words, e.g. 8192x9 / 8192x18 / 16384x18 / 6000x27 | 5 / 9 / 18 / 14 | 4 / 8 / 16 / 12 |
+| ROM read twice per cycle, 512x32 | 1 (SDP {R,R}) | 2 |
+| ROM read 3 or 4 times per cycle, 512x32 | 4 (ceil(n/2) ROMs) | 2 |
+| explicit ram_2p/t2p with one read-only + one write-only port, 512x72 | 2 | 3 |
+
+**Proposal.** Make the band formula the default in `BRAMAnalysis.cpp` `estimateBlocks`, decide x36 with the SDP test
+on the bank's used ports, and price read-only banks with n > 2 reads per cycle as ceil(n/2) ROMs. Corpus effect today:
+the 3 ROM rows above become exact; no other benchmark row changes (none is deeper than 4096 words with a width the two
+formulas disagree on). All current `aspect_modes.mlir` CHECK values stay. New lit values: 8192x9 = 5, 8192x18 = 9,
+6000x27 = 14, 16384x18 = 18, ROM 512x32 with 2 reads = 1, with 3 or 4 reads = 4.
+
+**Licence.** `CoreQuerier.cpp` carries only Xilinx/AMD copyright lines (no licence text in the file or directory;
+`llvm/LICENSE.TXT` is NCSA). The proposal is to implement the rule from our own measurements (the table above and N6),
+not to copy the source; the transcription in `formula_reconcile.py` mirrors the source branch for branch and should not
+be ported into hls-est C++ without your decision.
+
+**Cost.** A small C++ change plus lit tests; every baseline stays valid (3 rows move).
 
 ## M7 — O12: let `--bram-analysis` cost only what the top function reaches
 
