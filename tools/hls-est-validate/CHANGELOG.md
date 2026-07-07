@@ -3,6 +3,14 @@
 Newest entry first. One entry per logical change, including changes that were
 tried and reverted. Branch: `hls-est-vitis-match` in `~/circt`.
 
+## 2026-10-09 — formula_reconcile: owner_ops counts instructions, `_r` callee renames
+- **Commit:** this commit (branch `hls-est-vitis-match`)
+- **Files:** tools/hls-est-validate/formula_reconcile.py, results/formula_reconcile.csv, VITIS_NOTES.md (N8 wording)
+- **What:** the two low-severity findings of the re-check of dbb6b9550: `owner_ops` counted a multi-cycle load once per cycle (atax `buff_x` 128 -> 64 distinct loads); the call-graph merge did not follow callees that Vitis renames with `_r` (reserved words, e.g. `select` -> `select_r` in forgebench activation_module / activation_op3).
+- **Why:** re-check of wf_cde0098f-30a.
+- **Effect:** no count changes (summary CSV identical); 45 miss rows get corrected `owner_ops`.
+- **Reverted?:** no
+
 ## 2026-10-09 — hls-est-validate: N8 and visibility-tool review fixes
 - **Commit:** dbb6b9550 (scripts, notes, CSVs and this entry; branch `hls-est-vitis-match`); this hash line: the following changelog-only commit
 - **Files:** tools/hls-est-validate/formula_reconcile.py, align_arrays.py, vitis_trace.py, rtl_memories.py, VITIS_NOTES.md (N8; the N4 pointer line), CHANGELOG.md (this entry, the missing 3a0c04cc8 entry below, the re-synthesis count of the b93c11751 entry), results/formula_reconcile.csv, results/formula_reconcile_summary.csv

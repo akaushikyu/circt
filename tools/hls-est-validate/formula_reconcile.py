@@ -38,7 +38,7 @@ Per memory row (results JSON `memories[]`, plus experiments/*/*/result.json) it 
              sub-modules are used ("owner prefix"), else every module ("all modules").
              Caveat: a module's own local arrays have no MemPortTyVec in that module's
              report, so accesses made directly by the owner module are missing (atax
-             buff_x); `owner_ops` counts them (load/store operations on `%<array>_addr*`
+             buff_x); `owner_ops` counts them (distinct load/store instructions on `%<array>_addr*`
              in the owner's own verbose.sched.rpt) for every row the vector misses.
 and prints how many rows each matches, the N6 misses with a diagnosis category, the
 SDP-definition and 1WnR cross-checks, and the legacy-corpus reproduction (the 13391-row
@@ -268,7 +268,9 @@ class RunGraph:
         `message_passing_pe.1` is `message_passing_pe_1`, `load_64_ap_fixed_16_5_.2` is
         `load_64_ap_fixed_16_5_2`)."""
         for base in (fn, re.sub(r"__+", "_", fn), re.sub(r"_+", "_", fn.replace(".", "_"))):
-            for c in (base, base + "s", base + "_s"):
+            # `_r`: Vitis renames a function whose name is an HDL reserved word (callee `select`
+            # is module `select_r`).
+            for c in (base, base + "s", base + "_s", base + "_r"):
                 if c in self.modules():
                     return c
         self.unresolved.add(fn)
@@ -344,13 +346,16 @@ class RunGraph:
         return seen
 
     def owner_ops(self, module, name):
-        """Distinct load/store operations of `module`'s own schedule on `%<name>_addr*`."""
+        """Distinct load/store instructions of `module`'s own schedule on `%<name>_addr*`.
+        A multi-cycle access is printed once per cycle with different operation ids
+        ([2/2], [1/2]) but the same IR text, so instructions are keyed by that text."""
         rx = re.compile(r"%" + re.escape(name) + r"_addr(?:_\d+)?\b")
         ops = set()
         for line in self.sched_lines(module):
             m = LDST_RE.search(line)
             if m and rx.search(line):
-                ops.add(m.group(1))
+                q = re.search(r'"([^"]*)"', line)
+                ops.add(q.group(1) if q else m.group(1))
         return len(ops)
 
 
