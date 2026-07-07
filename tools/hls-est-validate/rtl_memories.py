@@ -130,17 +130,48 @@ def report_total_bram(vdir):
         return None
 
 
+def report_identity(vdir):
+    """(top, totals) of the csynth.xml next to the RTL: TopModelName and BRAM/DSP/FF/LUT."""
+    rep = report_dir_for(vdir)
+    if rep is None or VP is None or not (rep / "csynth.xml").exists():
+        return None, {}
+    try:
+        x = VP.parse_csynth_xml(rep / "csynth.xml")
+    except Exception:  # noqa: BLE001
+        return None, {}
+    r = x.get("resources") or {}
+    return x.get("TopModelName"), {"BRAM": r.get("BRAM_18K"), "DSP": r.get("DSP"), "FF": r.get("FF"), "LUT": r.get("LUT")}
+
+
 def matches_ground_truth(vdir, entry):
-    """(ok, reason): does the RTL dir's own memory table equal the ground-truth memory rows?"""
+    """(ok, reason): is this RTL dir from the ground-truth run?  Needs a ground truth with
+    numbers (a results entry whose run produced reports), the same top function, the same
+    memory table, and - because an empty memory table proves nothing - the same csynth
+    BRAM/DSP/FF/LUT totals when the table is empty."""
+    if not entry:
+        return False, "no ground truth (key not in results)"
+    gt_rows = entry.get("memories") or []
+    gt_tot = entry.get("totals") or {}
+    if not gt_rows and not isinstance(gt_tot.get("BRAM"), int):
+        return False, f"no ground truth numbers ({entry.get('status')}: {str(entry.get('note') or '').splitlines()[0][:120] if entry.get('note') else 'no note'})"
     rows = report_rows_for(vdir)
     if rows is None:
         return False, "no csynth report next to the RTL"
-    a, b = memory_signature(rows), memory_signature(entry.get("memories") or [])
-    if a == b:
-        return True, f"its memory table equals the ground truth ({len(a)} rows)"
-    sa, sb = set(a), set(b)
-    return False, (f"memory table differs from the ground truth ({len(sa - sb)} rows only here, {len(sb - sa)} only in "
-                   f"results/vitis.json; e.g. {sorted(sa - sb)[:2]})")
+    top, tot = report_identity(vdir)
+    if entry.get("top") and top and top != entry.get("top"):
+        return False, f"top {top} != ground-truth top {entry.get('top')}"
+    a, b = memory_signature(rows), memory_signature(gt_rows)
+    if a != b:
+        sa, sb = set(a), set(b)
+        return False, (f"memory table differs from the ground truth ({len(sa - sb)} rows only here, {len(sb - sa)} only in "
+                       f"results/vitis.json; e.g. {sorted(sa - sb)[:2]})")
+    if not a:
+        keys = ("BRAM", "DSP", "FF", "LUT")
+        if not tot or any(tot.get(k) != gt_tot.get(k) for k in keys):
+            return False, (f"both memory tables are empty and the csynth totals differ or are missing "
+                           f"(here {[tot.get(k) for k in keys]}, ground truth {[gt_tot.get(k) for k in keys]})")
+        return True, "no memory rows on either side; top and csynth BRAM/DSP/FF/LUT totals equal the ground truth"
+    return True, f"its memory table equals the ground truth ({len(a)} rows; top {top or '?'})"
 
 
 # ----------------------------------------------------------------------- resolve
@@ -153,8 +184,15 @@ def load_results(path=RESULTS_VITIS):
         return {}
 
 
+NO_RTL_KINDS = ("not in results", "Vitis failed", "no RTL kept")
+
+
 def find_verilog_dir(where, results=None):
-    """Return (verilog_dir, how) or (None, reason).  `how` says where it came from."""
+    """Return (verilog_dir, how) or (None, reason).  `how` says where it came from.  For a
+    results key the reason starts with one of NO_RTL_KINDS: `not in results` (unknown key),
+    `Vitis failed` (the ground-truth run has no numbers to match a work dir against; a
+    --make-rtl re-run would fail the same way), `no RTL kept` (the harvest keeps no RTL and no
+    leftover work dir matches; --make-rtl helps)."""
     p = Path(where)
     if p.is_dir():
         for cand in (p, p / "syn" / "verilog", p / "hls" / "syn" / "verilog", p / "hls" / "hls" / "syn" / "verilog",
@@ -170,6 +208,11 @@ def find_verilog_dir(where, results=None):
         key = str(where)
         res = results if results is not None else load_results()
         e = res.get(key)
+        if not e:
+            return None, f"not in results: {key} has no entry in results/vitis.json (nothing to match an RTL dir against)"
+        if e.get("status") != "ok" and not e.get("memories"):
+            note = str(e.get("note") or "no note").strip().splitlines()[0][:160]
+            return None, f"Vitis failed: {key} is `{e.get('status')}` ({note}); no ground truth to match, and no RTL"
         if e and e.get("cache_dir"):
             cdir = Path(e["cache_dir"])
             for cand in (cdir / "verilog", cdir / "syn" / "verilog"):
@@ -183,12 +226,12 @@ def find_verilog_dir(where, results=None):
                 if cand in seen or not cand.is_dir() or not any(cand.glob("*.v")):
                     continue
                 seen.add(cand)
-                ok, why = matches_ground_truth(cand, e or {})
+                ok, why = matches_ground_truth(cand, e)
                 if ok:
                     return cand, f"leftover work dir ({why}; not the harvested cache)"
                 if "*" not in pat:
                     rejected.append(f"{cand}: {why}")
-        return None, (f"{key}: the harvest keeps no syn/verilog (see the NOTE in rtl_memories.py; "
+        return None, (f"no RTL kept: {key}: the harvest keeps no syn/verilog (see the NOTE in rtl_memories.py; "
                       f"`rtl_memories.py {key} --make-rtl` re-synthesizes it once) and no leftover work dir with a "
                       f"matching memory table was found" + ("; rejected: " + " | ".join(rejected) if rejected else ""))
     return None, f"{where}: not a directory and not a results key"
@@ -701,6 +744,9 @@ def main():
                     help="for a dataset/benchmark key with no RTL: run vitis_adhoc.py --keep once (a Vitis run)")
     args = ap.parse_args()
     vdir, how = find_verilog_dir(args.where)
+    if vdir is None and args.make_rtl and not how.startswith("no RTL kept"):
+        print(f"{how}\n--make-rtl skipped: it needs a results key whose ground-truth Vitis run succeeded", file=sys.stderr)
+        return 2
     if vdir is None and args.make_rtl and "/" in args.where and not args.where.startswith("/"):
         print(f"{how}\n-> running vitis_adhoc.py for {args.where} (keeps the work dir) ...", file=sys.stderr)
         rc, tail = make_rtl(args.where)

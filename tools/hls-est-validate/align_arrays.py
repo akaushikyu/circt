@@ -144,11 +144,33 @@ def canon(name, dm=None):
     return full, last
 
 
+def bank_bases(name):
+    """Every split of trailing bank indices, longest base first:
+    `W_0_1` -> [('W_0', '1'), ('W', '0_1')]; `buff_A.3` -> [('buff_A', '3')]; `x` -> []."""
+    out, cur, tail = [], name, ""
+    while True:
+        m = re.match(r"^(.*?)[._](\d+)$", cur)
+        if not (m and m.group(1)):
+            return out
+        cur, tail = m.group(1), m.group(2) + ("_" + tail if tail else "")
+        out.append((cur, tail))
+
+
 def bank_base(name):
-    """`buff_A.3` / `buff_A_3` -> ('buff_A', 3); otherwise (name, None)."""
-    m = re.match(r"^(.*?)[._](\d+)$", name)
-    if m and m.group(1):
-        return m.group(1), int(m.group(2))
+    """All trailing bank indices stripped (multi-dimensional partitions name banks
+    `X_i_j`): `buff_A.3` -> ('buff_A', '3'), `BIAS_1_0_7` -> ('BIAS', '1_0_7'); otherwise
+    (name, None).  Callers that know the source array names use known_root() first, so a
+    real array `BIAS_1` keeps its own name and `BIAS_1_0_7` is its bank '0_7'."""
+    b = bank_bases(name)
+    return b[-1] if b else (name, None)
+
+
+def sibling_base(name, others):
+    """The longest bank base of `name` that another name in `others` shares (as itself or
+    as one of its own bank bases); (name, None) when there is none."""
+    for b, tail in bank_bases(name):
+        if b in others or any(x != name and any(bx == b for bx, _ in bank_bases(x)) for x in others):
+            return b, tail
     return name, None
 
 
@@ -422,8 +444,8 @@ def stage_entities(scan, dm, top_names, group_banks=True, known_allocas=None, kn
                 if root is not None:
                     base, bank = root, (tail or None)
                 else:
-                    b, k = bank_base(a["name"])
-                    if k is not None and (b in names or any(bank_base(x)[0] == b and x != a["name"] for x in names)):
+                    b, k = sibling_base(a["name"], names)
+                    if k is not None:
                         base, bank = b, k
             words = 1
             for d in dims:
@@ -442,10 +464,10 @@ def stage_entities(scan, dm, top_names, group_banks=True, known_allocas=None, kn
                 full, bank = root, tail
                 last = known_globals.get(root) or root
             elif root is None:
-                b, k = bank_base(full)
-                if k is not None and (b in fulls or any(bank_base(x)[0] == b and x != full for x in fulls)):
+                b, k = sibling_base(full, fulls)
+                if k is not None:
                     full, bank = b, k
-                    last = bank_base(last)[0]
+                    last = last[:len(last) - len(k) - 1] if last.endswith(k) and len(last) > len(k) + 1 else last
         words = 1
         for d in dims:
             words *= d
@@ -642,16 +664,35 @@ def vitis_reconcile(entry, rep_groups):
             "unexplained": (total - mem - leaf_bram - fifo_bram) if isinstance(total, int) else None}
 
 
-def report_groups(entry):
-    """`* Memory:` rows grouped by array (vitis_parse bank grouping), with the log lines about it.
+def report_key(m, known=None):
+    """Group name of one `* Memory:` row: its own variable (csynth.xml BindNode VARIABLE, else
+    the instance name without `_U`).  It is folded into another array only when it is a real
+    partition bank: with the source names (`known`), when the variable is not a source array
+    itself but extends one by bank indices (`V_3` -> V, `BIAS_1_0_7` -> BIAS_1); without them,
+    vitis_parse's bank grouping (`array`).  Two real arrays `FM_buffer_1` / `FM_buffer_2` stay
+    apart (vitis_parse alone would fold them into a fake `FM_buffer`)."""
+    inst = str(m.get("Memory", ""))
+    var = m.get("variable") or re.sub(r"_U(_x)?$", "", inst)
+    if not known:
+        name = m.get("array") or inst
+        return re.sub(r"_U(_x)?$", "", name) if name == inst else name
+    if var in known:
+        return var
+    root, _tail = known_root(var, known)
+    return root if root is not None else var
+
+
+def report_groups(entry, known=None):
+    """`* Memory:` rows grouped by array (report_key: the row's own variable, banks folded into
+    their source array), with the log lines about it.  `known` = source array names (allocas,
+    globals, top arguments of a.g.ld.5.gdce); None = vitis_parse's grouping.
     `bram` sums the rows as printed (once per module); `bram_eff` multiplies each row by the
     number of instances of its module (a callee instantiated twice holds two copies)."""
     groups = {}
     mult = module_multiplicity(entry)
     for m in entry.get("memories", []):
         inst = str(m.get("Memory", ""))
-        name = m.get("array") or inst
-        name = re.sub(r"_U(_x)?$", "", name) if name == inst else name
+        name = report_key(m, known)
         g = groups.setdefault(name, {"rows": 0, "bram": 0, "bram_eff": 0, "mult": set(), "words": 0, "bits": set(),
                                      "cores": {}, "modules": set(), "instances": [], "banks": set(), "variable": set()})
         g["rows"] += 1
@@ -688,14 +729,23 @@ def report_groups(entry):
     return groups, mention
 
 
-def rtl_groups(vdir):
+def rtl_groups(vdir, known=None):
+    """RTL memory instances grouped like report_key(): a source array keeps its name, a bank
+    is folded into the source array it extends; without source names, into a bank base that
+    another instance shares."""
     d = RTL.collect(vdir, with_adapters=False)
     groups = {}
+    insts = {re.sub(r"_U(_x)?$", "", x["instance"]) for x in d["memories"]}
     for m in d["memories"]:
         base = re.sub(r"_U(_x)?$", "", m["instance"])
-        b, bank = bank_base(base)
-        if bank is not None and any(re.sub(r"_U(_x)?$", "", x["instance"]) in (b, f"{b}_{bank}") and x is not m for x in d["memories"]):
-            base = b
+        if known and base in known:
+            pass
+        elif known and known_root(base, known)[0] is not None:
+            base = known_root(base, known)[0]
+        else:
+            b, bank = sibling_base(base, insts)
+            if bank is not None:
+                base = b
         g = groups.setdefault(base, {"n": 0, "cores": set(), "styles": set(), "width": set(), "depth": 0, "ports": set(),
                                      "copies": set(), "parents": set(), "report_bram": 0, "init": set(),
                                      "copy_map": set(), "parent_instances": set()})
@@ -747,7 +797,7 @@ def assign_groups(groups, entities, key_of=None):
             take(e, by_key.get(e["last"], []) + by_key.get(e["name"], []))
     for e in entities:
         if id(e) not in out:
-            take(e, [g for k, gs in by_key.items() if bank_base(k)[0] in (e["full"], e["last"]) for g in gs])
+            take(e, [g for k, gs in by_key.items() if any(b in (e["full"], e["last"]) for b, _ in bank_bases(k)) for g in gs])
     for e in entities:          # second entity with the same name as an already matched one
         if id(e) not in out:
             cands = by_key.get(e["full"], []) + by_key.get(e["last"], [])
@@ -841,9 +891,19 @@ def align(key, vitis_json=RESULTS_VITIS, hlsest_json=None, rtl_dir=None, no_args
         if e["kind"] == "alloca" and f3 and sched:
             names3 = {it["name"] for it in f3["items"]} | {e["name"]}
             e["sched_names"] = sorted(n for n in names3 if n in sched)
-    rep_groups, mention = report_groups(entry)
+    known = set()
+    if "source" in scans:
+        known = set(known_allocas) | set(known_globals) | set(known_globals.values())
+        for fn, info in scans["source"]["functions"].items():
+            fc, fl = canon(fn, dm)
+            if fc in top_names or fl in top_names or fn in top_names:
+                known |= {p["name"] for p in info["params"] if p.get("name")}
+    rep_groups, mention = report_groups(entry, known or None)
     hls = hlsest_groups(hlsest_json) if hlsest_json else None
-    rtl, rtl_info = (rtl_groups(rtl_dir) if rtl_dir else (None, None))
+    rtl, rtl_info = (rtl_groups(rtl_dir, known or None) if rtl_dir else (None, None))
+    status, note = entry.get("status"), vitis_note(entry)
+    # the memory tables exist (a run that timed out after csynth still has them; forgebench/mlp)
+    has_report = bool(entry.get("memories")) or (status == "ok")
 
     ents = list(entities.values())
     a_rep = assign_groups(rep_groups, ents)
@@ -870,7 +930,7 @@ def align(key, vitis_json=RESULTS_VITIS, hlsest_json=None, rtl_dir=None, no_args
                "report_name": rname, "hlsest_name": hname, "rtl_name": tname}
         sn = e.get("sched_names")
         row["forms"]["sched"] = (f"{len(sn)} alloca" + ("s" if len(sn) != 1 else "")) if sn else ("0 allocas" if sn == [] else "-")
-        row["divergence"], row["notes"] = first_divergence(e, rg, tg)
+        row["divergence"], row["notes"] = first_divergence(e, rg, tg, set(scans), status, note, has_report)
         for what, nm, shared in (("report", rname, rshared), ("hls-est", hname, hshared), ("rtl", tname, tshared)):
             if shared:
                 row["notes"].append(f"{what} group {nm} also matched another array of the same name (name-only match)")
@@ -890,7 +950,7 @@ def align(key, vitis_json=RESULTS_VITIS, hlsest_json=None, rtl_dir=None, no_args
                                           f"report: {rg['rows']} memory of {rg['words']} words")
                 else:
                     row["divergence"] += f"; report: {rg['rows']} memory of {rg['words']} words"
-        row["vitis"] = fmt_report_group(rg) if rg else "-"
+        row["vitis"] = fmt_report_group(rg) if rg else ("-" if has_report else "no report")
         row["vitis_bram"] = rg["bram_eff"] if rg else None
         row["vitis_log"] = [f"{cls}: {' '.join(str(x) for x in r)[:100]}" for cls, r in mention(rname or e["last"])][:4]
         row["rtl"] = (f"{tg['n']}inst {'/'.join(tg['cores'])} {tg['depth']}x{'/'.join(tg['width'])} ports={'/'.join(tg['ports'])} "
@@ -932,7 +992,10 @@ def align(key, vitis_json=RESULTS_VITIS, hlsest_json=None, rtl_dir=None, no_args
             if name in used_hls:
                 continue
             rows.append({"array": str(name), "kind": "hls-est-only", "func": "", "origin": "hls-est", "forms": {st: "-" for st in STAGES},
-                         "divergence": "hls-est memref with no Vitis counterpart", "notes": [], "vitis": "-", "vitis_bram": None, "vitis_log": [],
+                         "divergence": ("hls-est memref with no Vitis counterpart" if has_report and scans else
+                                        f"no Vitis counterpart to compare ({status_text(status, note)}; "
+                                        f"stages kept: {', '.join(sorted(scans)) or 'none'})"),
+                         "notes": [], "vitis": "-" if has_report else "no report", "vitis_bram": None, "vitis_log": [],
                          "rtl": "-", "hlsest": f"{g['n']}memref " + "/".join(g["statuses"]) + f" BRAM={g['bram']}",
                          "hlsest_form": f"{g['n']}x{g['shapes'][0] if g['shapes'] else '?'}@{'/'.join(str(b) for b in g['bits'])}",
                          "hlsest_bram": g["bram"], "hlsest_status": "/".join(g["statuses"])})
@@ -945,7 +1008,8 @@ def align(key, vitis_json=RESULTS_VITIS, hlsest_json=None, rtl_dir=None, no_args
             "hlsest_json": hls["path"] if hls else None, "hlsest_total": hls["total_bram"] if hls else None,
             "hlsest_pipeline": hls["pipeline"] if hls else None,
             "vitis_bram_total": (entry.get("totals") or {}).get("BRAM"), "rtl_dir": str(rtl_info["verilog_dir"]) if rtl_info else None,
-            "vitis_status": entry.get("status"), "vitis_reconcile": vitis_reconcile(entry, rep_groups),
+            "vitis_status": status, "vitis_note": note, "vitis_has_report": has_report,
+            "vitis_reconcile": vitis_reconcile(entry, rep_groups),
             "hlsest_sum_groups": hls["sum_bram"] if hls else None}
     if rtl_info:
         ok, why = RTL.matches_ground_truth(rtl_info["verilog_dir"], entry)
@@ -953,12 +1017,32 @@ def align(key, vitis_json=RESULTS_VITIS, hlsest_json=None, rtl_dir=None, no_args
     return rows, meta
 
 
-def first_divergence(e, rg, tg):
-    """Name the first stage where the array stops looking like its source form."""
+def vitis_note(entry):
+    """One-line reason of a Vitis run that did not finish ('' for ok runs)."""
+    if entry.get("status") == "ok":
+        return ""
+    n = str(entry.get("note") or "").strip().splitlines()
+    return (n[0] if n else "no note")[:160]
+
+
+def status_text(status, note):
+    """'vitis failed: <note>' (results statuses already start with 'vitis')."""
+    st = str(status) if str(status).startswith("vitis") else f"Vitis {status}"
+    return f"{st}: {note or 'no note'}"
+
+
+def first_divergence(e, rg, tg, stages_found=None, status="ok", note="", has_report=True):
+    """Name the first stage where the array stops looking like its source form.  A stage file
+    that is not in the cache dir is reported as missing (with the Vitis failure, when the run
+    failed), never as the stage that deleted the array."""
     forms = e["forms"]
     notes = []
     src = forms.get("source")
+    stages_found = set(STAGES) if stages_found is None else stages_found
+    why = status_text(status, note) if status != "ok" else "file not in the cache dir"
     if e["kind"] == "arg":
+        if not rg and not has_report:
+            return f"top argument (no memory table to compare: {why})", notes
         return ("interface (top argument; implemented as a port/adapter, not a local memory)" if not rg
                 else f"interface with a memory instance in the report ({'/'.join(rg['cores'])})"), notes
     if src is None:
@@ -970,6 +1054,8 @@ def first_divergence(e, rg, tg):
     seen_later = False
     for st in STAGES[1:]:
         f = forms.get(st)
+        if f is None and st not in stages_found:
+            return f"stage {st} missing ({why})", notes
         if f is None:
             if any(forms.get(x) for x in STAGES[STAGES.index(st) + 1:]) or rg:
                 notes.append(f"absent at {st}")
@@ -1016,6 +1102,8 @@ def first_divergence(e, rg, tg):
         if rg["bits"] and s_bits is not None and rg["bits"] != [s_bits]:
             return f"report bits {rg['bits']} != source {s_bits}", notes
         return "unchanged through a.o.3 and the report" + (" [flattened]" if notes else ""), notes
+    if not has_report:
+        return f"alive through a.o.3; no memory table to compare ({why})", notes
     if seen_later:
         return "no memory instance in the report (registers / scalarized / interface)", notes
     return "unknown", notes
@@ -1026,7 +1114,14 @@ def first_divergence(e, rg, tg):
 def reconcile_line(meta):
     """'Vitis BRAM 73 = memory rows 71 + leaf instances 2 (mem1_m_axi_U=2); hls-est 432 (arrays 432)'."""
     rc = meta.get("vitis_reconcile") or {}
-    s = (f"Vitis BRAM {rc.get('total')} = memory rows {rc.get('memories')} + leaf instances without memory rows "
+    st = meta.get("vitis_status")
+    if not isinstance(rc.get("total"), int):
+        s = f"Vitis BRAM: no number ({status_text(st, meta.get('vitis_note'))}); memory rows {rc.get('memories')}"
+        if meta.get("hlsest_json"):
+            s += f"; hls-est total {meta.get('hlsest_total')} (sum over arrays {meta.get('hlsest_sum_groups')})"
+        return s
+    s = ("" if st == "ok" else f"[{status_text(st, meta.get('vitis_note'))}; the memory tables exist] ")
+    s += (f"Vitis BRAM {rc.get('total')} = memory rows {rc.get('memories')} + leaf instances without memory rows "
          f"{rc.get('leaf_instances')}" + (f" ({', '.join(rc['leaf_names'])})" if rc.get("leaf_names") else ""))
     if rc.get("fifo_channels"):
         s += (f" + FIFO channels {rc['fifo_channels']} ({len(rc['fifo_names'])} with BRAM, Storage Report: "
@@ -1039,7 +1134,8 @@ def reconcile_line(meta):
 
 
 def print_rows(rows, meta, brief=False):
-    print(f"{meta['key']}  top={meta['top']}  vitis={meta['vitis_status']} BRAM={meta['vitis_bram_total']}  "
+    print(f"{meta['key']}  top={meta['top']}  vitis={meta['vitis_status']}"
+          + (f" ({meta.get('vitis_note')})" if meta.get("vitis_note") else "") + f" BRAM={meta['vitis_bram_total']}  "
           f"hls-est total={meta['hlsest_total']} ({Path(meta['hlsest_json']).parent.name + '/' + Path(meta['hlsest_json']).name if meta['hlsest_json'] else 'no debug json'})")
     print(f"cache={meta['cache_dir']}  stages={meta['stages_found']}  rtl={meta['rtl_dir'] or 'none'}")
     if meta.get("rtl_check"):
@@ -1047,11 +1143,18 @@ def print_rows(rows, meta, brief=False):
     print(reconcile_line(meta))
     if meta.get("hlsest_json"):
         print(f"hls-est pipeline: {meta.get('hlsest_pipeline') or 'unknown (no .err next to the debug JSON)'}")
-    print("form cells: <count>x[dims]@bits, C = constant initialiser, D = data initialiser; '-' = absent")
+    print("form cells: <count>x[dims]@bits, C = constant initialiser, D = data initialiser; '-' = absent"
+          + ("" if meta.get("vitis_has_report") else "; Vitis BRAM '?' = no memory table (the run failed)"))
+    if not rows:
+        print(f"no arrays to show: IR stages kept {', '.join(meta['stages_found']) or 'none'}; "
+              + ("Vitis memory table empty" if meta.get("vitis_has_report") else
+                 f"no Vitis memory table ({status_text(meta['vitis_status'], meta.get('vitis_note'))})")
+              + ("" if meta.get("hlsest_json") else "; no hls-est debug JSON"))
+        return
     if brief:
         cols = ["array", "kind", "source", "first divergence", "vitis BRAM", "hls-est form", "hls-est BRAM", "hls-est status"]
         table = [{"array": r["array"], "kind": r["kind"], "source": r["forms"]["source"], "first divergence": r["divergence"],
-                  "vitis BRAM": r["vitis_bram"] if r["vitis_bram"] is not None else "-",
+                  "vitis BRAM": r["vitis_bram"] if r["vitis_bram"] is not None else ("-" if meta.get("vitis_has_report") else "?"),
                   "hls-est form": r.get("hlsest_form") or "-",
                   "hls-est BRAM": r["hlsest_bram"] if r["hlsest_bram"] is not None else "-",
                   "hls-est status": r["hlsest_status"] or "-"} for r in rows]

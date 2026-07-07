@@ -28,10 +28,18 @@ Per memory row (results JSON `memories[]`, plus experiments/*/*/result.json) it 
              (n from the literal vector when present, else 2).
   pred_vec   open_query_bram() fed with Vitis's own port vectors: the per-module
              `<MemPortTyVec>` lines of db/*.verbose.bind.rpt (bind_portvec.py; 0 = W,
-             1 = R, 2 = RW, 3 = unused) merged slot-wise over the modules that touch the
-             array (a slot read in one module and written in another is RW).  Caveat:
-             a module's own local arrays have no MemPortTyVec in that module's report,
-             so accesses made directly by the owner module are missing (atax buff_x).
+             1 = R, 2 = RW, 3 = unused) merged slot-wise over the modules that access
+             the array (a slot read in one module and written in another is RW).  The
+             modules are found by following the call graph from the owner module: every
+             `call ... @<callee>, ...` line of db/<module>.verbose.sched.rpt that passes
+             the array, mapped by argument position to the callee's port name
+             (db/<callee>.adb.xml `<ports>`), recursively (vec_scope "call graph").  Without
+             the owner's sched report (legacy dirs) the owner and its `<owner>_*`
+             sub-modules are used ("owner prefix"), else every module ("all modules").
+             Caveat: a module's own local arrays have no MemPortTyVec in that module's
+             report, so accesses made directly by the owner module are missing (atax
+             buff_x); `owner_ops` counts them (load/store operations on `%<array>_addr*`
+             in the owner's own verbose.sched.rpt) for every row the vector misses.
 and prints how many rows each matches, the N6 misses with a diagnosis category, the
 SDP-definition and 1WnR cross-checks, and the legacy-corpus reproduction (the 13391-row
 corpus of the CHANGELOG "Vitis storage model" entry, results/baseline/vitis-tdoff.json).
@@ -50,6 +58,7 @@ import csv
 import glob
 import json
 import os
+import re
 from collections import Counter, OrderedDict
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -220,11 +229,162 @@ def merge_vectors(vecs):
 
 
 def related_vectors(vecs, owner):
-    """Vectors of the modules that belong to the owner (the owner itself and its
-    `<owner>_...` sub-modules, `_s` template suffix dropped); all vectors if none."""
+    """Fallback when the run has no sched reports: vectors of the modules named like the
+    owner (the owner itself and its `<owner>_...` sub-modules, `_s` template suffix
+    dropped); all vectors if none."""
     base = owner[:-2] if owner.endswith("_s") else owner
     rel = [(m, v) for m, v in vecs if m == owner or m.startswith(base + "_")]
-    return (rel, "owner") if rel else (list(vecs), "all-modules")
+    return (rel, "owner prefix") if rel else (list(vecs), "all modules")
+
+
+CALL_RE = re.compile(r'"(?:%[\w.$]+ = )?call [^@"]*@([\w.$]+)((?:,[^"]*)?)"')
+PORT_RE = re.compile(r'<port id="\d+" name="([^"]*)"')
+LDST_RE = re.compile(r"Operation (\d+) '(load|store)'")
+
+
+class RunGraph:
+    """Call graph of one Vitis run dir, from its db/ files (read lazily, cached):
+    db/<module>.verbose.sched.rpt `call` lines (callee + argument list, one entry per
+    distinct call) and db/<module>.adb.xml `<ports>` (the callee's parameter names in
+    order; a call passes argument k to port k)."""
+
+    def __init__(self, run_dir):
+        self.db = os.path.join(run_dir or "", "db")
+        self._mods, self._calls, self._ports, self._lines = None, {}, {}, {}
+        self.mismatch = 0     # calls whose argument count differs from the callee's port count
+        self.unresolved = set()   # callee names with no db/<module>.verbose.sched.rpt
+
+    def modules(self):
+        if self._mods is None:
+            self._mods = {os.path.basename(f)[:-len(".verbose.sched.rpt")]
+                          for f in glob.glob(os.path.join(self.db, "*.verbose.sched.rpt"))}
+        return self._mods
+
+    def module_of(self, fn):
+        """Module (file stem) of an LLVM callee name.  The RTL-legal module name turns `.` into
+        `_`, collapses runs of `_` and appends `s` to a name ending in `_` (callee
+        `grouped_multihead_attention_8_256_16_16_ap_fixed_16_5__Pipeline_VITIS_LOOP_70_1_` is
+        module `grouped_multihead_attention_8_256_16_16_ap_fixed_16_5_Pipeline_VITIS_LOOP_70_1_s`,
+        `message_passing_pe.1` is `message_passing_pe_1`, `load_64_ap_fixed_16_5_.2` is
+        `load_64_ap_fixed_16_5_2`)."""
+        for base in (fn, re.sub(r"__+", "_", fn), re.sub(r"_+", "_", fn.replace(".", "_"))):
+            for c in (base, base + "s", base + "_s"):
+                if c in self.modules():
+                    return c
+        self.unresolved.add(fn)
+        return None
+
+    def sched_lines(self, module):
+        if module not in self._lines:
+            try:
+                with open(os.path.join(self.db, module + ".verbose.sched.rpt"), errors="replace") as f:
+                    self._lines[module] = [l for l in f if "Operation" in l]
+            except OSError:
+                self._lines[module] = []
+        return self._lines[module]
+
+    def calls(self, module):
+        """{argument token: [(callee function, position, argument count)]} over the distinct
+        call sites of `module` (a call is printed once per state it spans)."""
+        if module not in self._calls:
+            idx, seen = {}, set()
+            for line in self.sched_lines(module):
+                if "call " not in line:
+                    continue
+                m = CALL_RE.search(line)
+                if not m:
+                    continue
+                args = tuple((a.split() or [""])[-1] for a in m.group(2).split(",")[1:])
+                if (m.group(1), args) in seen:
+                    continue
+                seen.add((m.group(1), args))
+                for k, a in enumerate(args):
+                    if a.startswith("%"):
+                        idx.setdefault(a, []).append((m.group(1), k, len(args)))
+            self._calls[module] = idx
+        return self._calls[module]
+
+    def ports(self, module):
+        if module not in self._ports:
+            names = []
+            for suffix in (".adb.xml", ".sched.adb.xml", ".bind.adb.xml"):
+                try:
+                    with open(os.path.join(self.db, module + suffix), "rb") as f:
+                        data = f.read()          # bytes: only the <ports> slice is decoded
+                except OSError:
+                    continue
+                i = data.find(b"<ports>")
+                j = data.find(b"</ports>", i) if i >= 0 else -1
+                if i >= 0 and j > i:
+                    names = PORT_RE.findall(data[i:j].decode("utf-8", "replace"))
+                    break
+            self._ports[module] = names
+        return self._ports[module]
+
+    def reach(self, owner, name):
+        """(module, port name) pairs that the memory `name` of module `owner` is passed to,
+        through any depth of calls; the owner itself included."""
+        seen, stack = set(), [(owner, name)]
+        while stack:
+            mod, nm = stack.pop()
+            if (mod, nm) in seen:
+                continue
+            seen.add((mod, nm))
+            for fn, k, nargs in self.calls(mod).get("%" + nm, []):
+                callee = self.module_of(fn)
+                if callee is None:
+                    continue
+                ports = self.ports(callee)
+                if len(ports) == nargs:
+                    stack.append((callee, ports[k]))
+                else:          # cannot map by position: same name if the callee has it
+                    self.mismatch += 1
+                    if nm in ports:
+                        stack.append((callee, nm))
+        return seen
+
+    def owner_ops(self, module, name):
+        """Distinct load/store operations of `module`'s own schedule on `%<name>_addr*`."""
+        rx = re.compile(r"%" + re.escape(name) + r"_addr(?:_\d+)?\b")
+        ops = set()
+        for line in self.sched_lines(module):
+            m = LDST_RE.search(line)
+            if m and rx.search(line):
+                ops.add(m.group(1))
+        return len(ops)
+
+
+_GRAPHS = {}
+_LAST = [None]
+
+
+def run_graph(run_dir):
+    """The RunGraph of a run dir.  Rows come grouped by run, so the file caches of the
+    previous run are dropped when the run changes (the counters are kept for the summary)."""
+    g = _GRAPHS.get(run_dir)
+    if g is None:
+        g = _GRAPHS[run_dir] = RunGraph(run_dir)
+    if _LAST[0] is not None and _LAST[0] is not g:
+        _LAST[0]._calls, _LAST[0]._ports, _LAST[0]._lines = {}, {}, {}
+    _LAST[0] = g
+    return g
+
+
+def call_graph_vectors(vecs, run_dir, owner, names):
+    """Vectors of every (module, port) the owner's memory reaches through calls.  Returns
+    (pairs, scope) or None when the owner's sched report is not there."""
+    g = run_graph(run_dir)
+    if owner not in g.modules():
+        return None
+    reach = set()
+    for nm in names:
+        reach |= g.reach(owner, nm)
+    rel = []
+    for (mod, port) in sorted(reach):
+        for m, v in vecs.get(port, []):
+            if m == mod:
+                rel.append((m, v))
+    return rel, "call graph"
 
 
 def load_runs(path, experiments=False):
@@ -281,7 +441,7 @@ def rows_of(label, runs):
 def evaluate(r, portvec, legacy_wide_default=False):
     W, D, bram = r["bits"], r["words"], r["bram"]
     blank = ("wide_n6", "pred_n6", "match_n6", "ports_open", "sdp_open", "mult_open", "pred_open", "match_open",
-             "vec_scope", "vec_modules", "vec_merged", "sdp_vec", "nports_vec", "mult_vec", "pred_vec", "match_vec")
+             "vec_scope", "vec_modules", "vec_merged", "sdp_vec", "nports_vec", "mult_vec", "pred_vec", "match_vec", "owner_ops")
     for k in blank:
         r[k] = ""
     if W is None or D is None or bram is None:
@@ -291,12 +451,18 @@ def evaluate(r, portvec, legacy_wide_default=False):
     vecs = (portvec.get(r["run_dir"]) or {})
     name = r["memory"][:-2] if r["memory"].endswith("_U") else r["memory"]
     # Vitis renames C/RTL reserved words (buf -> buf_r, in -> in_r) in the bind reports
-    cand = vecs.get(name) or vecs.get(name + "_r") or []
     vec = None
-    if cand:
-        rel, scope = related_vectors(cand, r["module"])
+    cg = call_graph_vectors(vecs, r["run_dir"], r["module"], [name, name + "_r"]) if vecs else None
+    if cg is not None:
+        rel, scope = cg
+    else:
+        cand = vecs.get(name) or vecs.get(name + "_r") or []
+        rel, scope = related_vectors(cand, r["module"]) if cand else ([], "")
+    if rel:
         vec = merge_vectors(rel)
-        r["vec_scope"], r["vec_modules"], r["vec_merged"] = scope, len(rel), " ".join(map(str, vec))
+        mods = sorted({m for m, _ in rel})
+        r["vec_scope"], r["vec_merged"] = scope, " ".join(map(str, vec))
+        r["vec_modules"] = "%d: %s%s" % (len(mods), " ".join(mods[:3]), " ..." if len(mods) > 3 else "")
     n_vec = len(open_used_ports(vec)) if vec else None
     # --- measured model ---
     wide = WIDE_OPTYPES.get(r["optype"])
@@ -328,6 +494,8 @@ def evaluate(r, portvec, legacy_wide_default=False):
     if vec:
         p, info = open_query_bram(W, D, vec, impl)
         r["sdp_vec"], r["nports_vec"], r["mult_vec"], r["pred_vec"], r["match_vec"] = info["sdp"], info["n"], info["mult"], p, int(p == bram)
+        if p != bram and r["run_dir"]:
+            r["owner_ops"] = run_graph(r["run_dir"]).owner_ops(r["module"], name)
     r["category"] = "" if r["match_n6"] == 1 else diagnose(r, alt_n6)
 
 
@@ -535,6 +703,36 @@ def main():
     print("  copies == n_ports(vec) - 1: %d / %d rows with a vector" % (
         sum(1 for r in w if r["nports_vec"] != "" and r["copies"] == r["nports_vec"] - 1), sum(1 for r in w if r["nports_vec"] != "")))
 
+    # ---- open(vec) misses: is the vector incomplete (owner's own accesses) or wrong? ----
+    for label, _runs, _legacy in groups:
+        sel = [r for r in rows if r["source"] == label and r["match_vec"] != ""]
+        if not sel:
+            continue
+        vm = [r for r in sel if r["match_vec"] == 0]
+        scopes = Counter(r["vec_scope"] for r in sel)
+        print("\n=== open(Vitis vectors) misses [%s]: %d of %d rows with a vector (vector scope: %s) ===" % (
+            label, len(vm), len(sel), ", ".join("%s %d" % kv for kv in scopes.most_common())))
+
+        def vcat(r):
+            if r["owner_ops"] not in ("", None, 0):
+                return "incomplete vector: the owner module accesses it directly (no MemPortTyVec for the owner)"
+            if r["vec_scope"] != "call graph":
+                return "no call graph (%s)" % r["vec_scope"]
+            return "vector complete as far as the call graph shows: unexplained"
+        for k, n in Counter(vcat(r) for r in vm).most_common():
+            print("  %5d  %s" % (n, k))
+        print("  design | memory | owner | WordsxBits | optype | Vitis | open(vec) | merged vec | vector modules | owner ops")
+        for r in vm[: args.list_misses]:
+            print("  %s | %s | %s | %sx%s | %s | %s | %s | [%s] | %s | %s" % (
+                r["design"], r["memory"], r["module"], r["words"], r["bits"], r["optype"] or "-", r["bram"], r["pred_vec"],
+                r["vec_merged"], r["vec_modules"][:90], r["owner_ops"]))
+    mism = sum(g.mismatch for g in _GRAPHS.values())
+    unres = Counter(fn for g in _GRAPHS.values() for fn in g.unresolved)
+    print("\ncall graph: %d run dirs read; %d call sites passed a memory with an argument count != the callee's port count "
+          "(mapped by name instead); %d callee names passed a memory but have no module report%s" % (
+              sum(1 for g in _GRAPHS.values() if g._mods), mism, len(unres),
+              (": " + ", ".join(sorted(unres)[:8])) if unres else ""))
+
     # ---- LUTRAM resources (MemoryQuerier::queryLUT / queryFF for a DRAM storage) ----
     lut_rows = [r for r in main_rows if r["words"] is not None and r["bits"] is not None and r["bram"] == 0
                 and r["impl"] in ("auto", "lutram") and r["words"] * r["bits"] < LUTRAM_BITS and r.get("lut") is not None]
@@ -558,7 +756,7 @@ def main():
     cols = ["source", "design", "dataset", "benchmark", "memory", "module", "rtl_module", "array", "words", "bits", "bram", "core",
             "optype", "optype_src", "impl", "is_1wnr", "copies", "copies_src", "wide_n6", "pred_n6", "match_n6", "ports_open",
             "sdp_open", "mult_open", "pred_open", "match_open", "vec_scope", "vec_modules", "vec_merged", "sdp_vec", "nports_vec",
-            "mult_vec", "pred_vec", "match_vec", "category", "legacy_pred", "legacy_note"]
+            "mult_vec", "pred_vec", "match_vec", "owner_ops", "category", "legacy_pred", "legacy_note"]
 
     def write(path, sel):
         os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)

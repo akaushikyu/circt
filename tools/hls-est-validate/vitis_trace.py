@@ -130,6 +130,11 @@ def loop_decisions_text(entry, hls_json):
     return "\n".join(lines)
 
 
+def failure_text(entry):
+    """'' for an ok run, else 'vitis failed: <first line of the note>'."""
+    return "" if entry.get("status") == "ok" else AA.status_text(entry.get("status"), AA.vitis_note(entry))
+
+
 def loop_tables_text(entry):
     loops = entry.get("loops") or []
     rows = [{"module": l.get("module"), "loop": l.get("name"), "pipelined": l.get("pipelined"),
@@ -138,13 +143,15 @@ def loop_tables_text(entry):
              "lat max": l.get("latency_max")} for l in loops]
     rows.sort(key=lambda r: (str(r["module"]), str(r["loop"])))
     if not rows:
-        return "(no loop tables)"
+        return "(no loop tables" + (f"; {failure_text(entry)})" if failure_text(entry) else ")")
     return RTL.fmt_table(rows, ["module", "loop", "pipelined", "II tgt", "II", "trip", "depth", "iter lat", "lat min", "lat max"], max_w=70)
 
 
 def memory_tables_text(entry, meta):
     mems = entry.get("memories") or []
     out = []
+    if failure_text(entry):
+        out.append(f"## {failure_text(entry)}" + ("" if mems else " - no memory tables, no BRAM numbers"))
     by_mod = {}
     for m in mems:
         by_mod.setdefault(m.get("module"), []).append(m)
@@ -239,7 +246,12 @@ def build(key, vitis_json, hlsest_json, rtl_dir, out_root, write=True, run_id=No
         vdir, rtl_how = RTL.find_verilog_dir(key, results=res)
         rtl_dir = str(vdir) if vdir else None
     rows, meta = AA.align(key, vitis_json, hj, rtl_dir)
-    meta["rtl_source"] = rtl_how if rtl_dir else "none (the harvest keeps no syn/verilog; `rtl_memories.py KEY --make-rtl`)"
+    if rtl_dir:
+        meta["rtl_source"] = rtl_how
+    elif str(rtl_how).startswith("no RTL kept"):
+        meta["rtl_source"] = "none (no RTL kept: the harvest keeps no syn/verilog; `rtl_memories.py KEY --make-rtl`)"
+    else:   # 'not in results: ...' / 'Vitis failed: ...' (rtl_memories.NO_RTL_KINDS)
+        meta["rtl_source"] = f"none ({str(rtl_how)[:200]})"
     meta["hlsest_pick"] = why[0] if why else ("given (--hlsest-json)" if hlsest_json else None)
     align_txt = _capture(lambda: AA.print_rows(rows, meta))
     hls_txt, hls_json = hlsest_debug_text(hj)
@@ -277,7 +289,12 @@ def build(key, vitis_json, hlsest_json, rtl_dir, out_root, write=True, run_id=No
             "rtl": rtl_json}, indent=1, sort_keys=True, default=str))
         readme = [f"# trace {key}", "",
                   f"- top: `{entry.get('top')}`; Vitis status `{entry.get('status')}` ({entry.get('vitis_version')}, "
-                  f"{entry.get('part')}, {entry.get('clock')}); cache `{entry.get('cache_dir')}`",
+                  f"{entry.get('part')}, {entry.get('clock')}); cache `{entry.get('cache_dir')}`"]
+        if failure_text(entry):
+            readme.append(f"- **Vitis did not finish:** {failure_text(entry)}; IR stages kept: "
+                          f"{', '.join(meta.get('stages_found') or []) or 'none'}; memory tables: "
+                          f"{'yes' if meta.get('vitis_has_report') else 'none (every Vitis BRAM cell is unknown, not 0)'}")
+        readme += [
                   f"- hls-est debug JSON: `{hj}` ({meta.get('hlsest_pick')})",
                   f"- RTL: {meta['rtl_source']}" + (f" (`{rtl_dir}`)" if rtl_dir else ""), "",
                   "| file | content |", "|---|---|",
@@ -298,9 +315,14 @@ def summary_lines(key, entry, rows, meta, hls_json, rtl_json=None, bundle=None):
     tot = entry.get("totals") or {}
     out = []
     hj = meta.get("hlsest_json")
-    out.append(f"{key}: top {entry.get('top')}; Vitis {entry.get('status')} BRAM {tot.get('BRAM')} DSP {tot.get('DSP')} "
+    st = str(entry.get("status"))
+    out.append(f"{key}: top {entry.get('top')}; {st if st.startswith('vitis') else 'Vitis ' + st} BRAM {tot.get('BRAM')} DSP {tot.get('DSP')} "
                f"FF {tot.get('FF')} LUT {tot.get('LUT')}; hls-est total {meta.get('hlsest_total')} "
                f"({Path(hj).parent.name if hj else 'no debug json'})")
+    known = bool(meta.get("vitis_has_report"))
+    if failure_text(entry):
+        out.append(f"Vitis did not finish: {failure_text(entry)[:200]}; stages kept "
+                   f"{', '.join(meta.get('stages_found') or []) or 'none'}; memory tables {'yes' if known else 'none'}")
     out.append(f"cache {meta.get('cache_dir')}" + (f"; bundle {bundle}" if bundle else ""))
     out.append(f"rtl: {meta.get('rtl_dir') or meta.get('rtl_source')}")
     out.append(f"hls-est pipeline: {meta.get('hlsest_pipeline') or 'unknown'} [{meta.get('hlsest_pick') or '-'}]")
@@ -308,15 +330,17 @@ def summary_lines(key, entry, rows, meta, hls_json, rtl_json=None, bundle=None):
     # arrays with BRAM on either side (biggest first, differences marked); the rest grouped by divergence
     arr = [r for r in rows if r["kind"] != "arg" and ((r["vitis_bram"] or 0) or (r["hlsest_bram"] or 0))]
     rest = [r for r in rows if r["kind"] != "arg" and r not in arr]
-    out.append("arrays with BRAM [Vitis | hls-est | hls-est status] source form -> first divergence   (* = BRAM differs)")
+    out.append("arrays with BRAM [Vitis | hls-est | hls-est status] source form -> first divergence   (* = BRAM differs"
+               + (")" if known else "; Vitis ? = unknown, no memory table)"))
     budget_arr = 12
     for i, r in enumerate(arr):
         if i >= budget_arr:
             out.append(f"  ... +{len(arr) - i} more arrays with BRAM (align_arrays.txt)")
             break
         vb, hb = r["vitis_bram"], r["hlsest_bram"]
-        mark = "*" if (vb or 0) != (hb or 0) else " "
-        out.append(f" {mark}{r['array'][:28]:28} [{str(vb if vb is not None else '-'):>4} | {str(hb if hb is not None else '-'):>4} | "
+        mark = "*" if known and (vb or 0) != (hb or 0) else " "
+        vcell = vb if vb is not None else ("-" if known else "?")
+        out.append(f" {mark}{r['array'][:28]:28} [{str(vcell):>4} | {str(hb if hb is not None else '-'):>4} | "
                    f"{(r['hlsest_status'] or '-')[:14]:14}] {r['forms']['source']} -> {r['divergence'][:64]}"
                    + (f" | hls-est {r.get('hlsest_form')}" if r.get("hlsest_form") not in (None, "-") else ""))
     groups = {}
@@ -325,7 +349,8 @@ def summary_lines(key, entry, rows, meta, hls_json, rtl_json=None, bundle=None):
         stg = re.search(r"at (a\.o\.\d)", r["divergence"])
         groups.setdefault(cat + (f" at {stg.group(1)}" if stg else ""), []).append(r["array"])
     if groups:
-        out.append("arrays with 0 BRAM on both sides, by first divergence:")
+        out.append("arrays with 0 BRAM on both sides, by first divergence:" if known else
+                   "arrays with no hls-est BRAM (Vitis BRAM unknown: no memory table), by first divergence:")
         for cat, names in sorted(groups.items(), key=lambda kv: -len(kv[1]))[:4]:
             out.append(f"  {cat} ({len(names)}): " + ", ".join(names)[:140])
     args_only = [r for r in rows if r["kind"] == "arg" and not r["vitis_bram"] and not r["hlsest_bram"]]
@@ -380,7 +405,8 @@ def summary_lines(key, entry, rows, meta, hls_json, rtl_json=None, bundle=None):
                     + "; ".join(f"{lp}/{a} II {iis(v)}" for (lp, a), v in sorted(viol.items())))[:220])
     # loop table (pipelined loops first) and hls-est's pipelines next to it
     loops = sorted(entry.get("loops") or [], key=lambda l: (l.get("pipelined") != "yes", str(l.get("module")), str(l.get("name"))))
-    out.append(f"Vitis loop table ({len(loops)} loops): loop  pipelined  II  trip  iter-latency  [module]")
+    out.append(f"Vitis loop table ({len(loops)} loops): loop  pipelined  II  trip  iter-latency  [module]" if loops or known
+               else f"Vitis loop table: none ({entry.get('status')})")
     for l in loops[:7]:
         out.append(f"  {str(l.get('name'))[:40]:40} {str(l.get('pipelined')):4} II {str(l.get('ii_achieved')):>3} "
                    f"trip {str(l.get('trip_count')):>6} lat {str(l.get('iter_latency')):>5} [{short_path(l.get('module'))[:46]}]")
@@ -394,7 +420,7 @@ def summary_lines(key, entry, rows, meta, hls_json, rtl_json=None, bundle=None):
     # memory table
     mems = sorted(entry.get("memories") or [], key=lambda m: -(m.get("BRAM_18K") or 0))
     out.append(f"Vitis memory table ({len(mems)} rows, sum BRAM {sum(m.get('BRAM_18K') or 0 for m in mems)} as printed): "
-               f"Memory  core  Words x Bits  BRAM  [module]")
+               f"Memory  core  Words x Bits  BRAM  [module]" if known else f"Vitis memory table: none ({entry.get('status')})")
     for m in mems[:6]:
         out.append(f"  {str(m.get('Memory'))[:34]:34} {str(m.get('core'))[:20]:20} {str(m.get('Words')):>6}x{str(m.get('Bits')):<3} "
                    f"{str(m.get('BRAM_18K')):>3} [{str(m.get('module'))[:40]}]")
