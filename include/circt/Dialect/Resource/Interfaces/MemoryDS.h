@@ -34,7 +34,13 @@ namespace circt::hls_analysis {
       RAM_T2P,
       LUTRAM,
       URAM,
-      RAM_1WNR
+      RAM_1WNR,
+      // Read-only storage (a constant-initialised memref.global): Vitis
+      // ROM_1P / ROM_2P are simple-dual-port (x36 allowed); ROM_NP is
+      // replicated, ceil(ports / 2) copies at x18 (VITIS_NOTES.md N8).
+      ROM_1P,
+      ROM_2P,
+      ROM_NP
     };
 
     struct PartitionSpec {

@@ -32,6 +32,13 @@ EXP_DIR = C.HERE / "experiments"
 CSV = EXP_DIR / "results.csv"
 
 CORE = "--memory-banking-bram --convert-affine-to-loopschedule --bram-analysis"
+# Vitis front-end cleanups (T4, MEMOS.md M5): globals as locals, x/0 -> 0,
+# folds, dead-memory elimination - meant to run before --auto-pipeline-unroll;
+# DME_FLAGS are the --bram-analysis model extensions that go with them
+# (globals attributed / priced as ROMs, m_axi adapter cost). Not default.
+DME_PRE = ("--promote-globals-to-allocas --vitis-fold --canonicalize --sccp "
+           "--dead-memory-elimination")
+DME_FLAGS = "--bram-attribute-globals --bram-maxi-adapters"
 
 ABLATION = [
     ("canonical", C.DEFAULT_PIPELINE),
@@ -51,6 +58,20 @@ ABLATION = [
     ("vis-default", "--auto-pipeline-unroll --canonicalize --affine-scalrep --affine-loop-normalize " + CORE),
     ("pipeline-loops-64", "--affine-loop-normalize --auto-pipeline-unroll=pipeline-loops=64 --infer-vitis-split-array " + CORE),
     ("pipeline-loops-16", "--affine-loop-normalize --auto-pipeline-unroll=pipeline-loops=16 --infer-vitis-split-array " + CORE),
+    # with-dme (T4): the cleanups prepended, with and without the split pass,
+    # and each mechanism on its own on the no-split pipeline.
+    ("with-dme", DME_PRE + " " + C.DEFAULT_PIPELINE + " " + DME_FLAGS),
+    ("with-dme-no-split", DME_PRE + " --affine-loop-normalize --auto-pipeline-unroll " + CORE + " " + DME_FLAGS),
+    ("with-dme-passes-only-no-split", DME_PRE + " --affine-loop-normalize --auto-pipeline-unroll " + CORE),
+    # the combination MEMOS M5 proposes (no global promotion, O17), run it with --shim exactclass
+    ("with-dme-maxi-no-split", "--vitis-fold --canonicalize --sccp --dead-memory-elimination "
+     "--affine-loop-normalize --auto-pipeline-unroll " + CORE + " --bram-maxi-adapters"),
+    ("with-dme-maxi", "--vitis-fold --canonicalize --sccp --dead-memory-elimination " + C.DEFAULT_PIPELINE
+     + " --bram-maxi-adapters"),
+    ("with-canon-sccp-no-split", "--canonicalize --sccp --affine-loop-normalize --auto-pipeline-unroll " + CORE),
+    ("with-maxi-no-split", "--affine-loop-normalize --auto-pipeline-unroll " + CORE + " --bram-maxi-adapters"),
+    ("with-globals-no-split", "--promote-globals-to-allocas --affine-loop-normalize --auto-pipeline-unroll " + CORE + " --bram-attribute-globals"),
+    ("with-call-latency-no-split", "--affine-loop-normalize --auto-pipeline-unroll " + CORE + " --loopschedule-call-latency=1"),
 ]
 
 

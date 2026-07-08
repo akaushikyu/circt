@@ -7,6 +7,7 @@ target_link_libraries(hls-est PRIVATE
         MLIRMemRefDialect
         MLIRSCFDialect
         MLIRFuncDialect
+        MLIRFuncInlinerExtension
         MLIRControlFlowDialect
         MLIRIndexDialect
         MLIRMathDialect

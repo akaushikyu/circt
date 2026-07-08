@@ -8,6 +8,9 @@ add_mlir_library(HLSPasses
         AutoPipelineUnroll.cpp
         DebugUnroll.cpp
         InferVitisSplitArray.cpp
+        VitisFold.cpp
+        PromoteGlobalsToAllocas.cpp
+        DeadMemoryElimination.cpp
         
         DEPENDS
         CIRCTTransformsPassIncGen
@@ -28,6 +31,8 @@ add_mlir_library(HLSPasses
         MLIRAffineDialect
         MLIRAffineAnalysis
         MLIRAffineToStandard
+        MLIRArithDialect
+        MLIRSCFDialect
         MLIRPass
         CIRCTScheduling
         CIRCTSchedulingAnalysis

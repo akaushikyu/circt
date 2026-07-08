@@ -58,7 +58,9 @@ POLYGEIST_TEST_HLS = "/mnt/d/HLS/Polygeist/tools/cgeist/Test/HLS"
 SHIM_INCLUDE = POLYGEIST_TEST_HLS + "/Inputs/vitis"   # Polygeist's Vitis header stand-ins
 POLYBENCH_UTIL_INCLUDE = "/mnt/d/HLS/Polygeist/tools/cgeist/Test/polybench/utilities"
 
-HLS_EST = str(CIRCT / "build/clion/bin/hls-est")
+# HLS_EST_BIN overrides the binary (e.g. a frozen copy, so that a rebuild
+# during a long run cannot mix two builds in one result file).
+HLS_EST = os.environ.get("HLS_EST_BIN") or str(CIRCT / "build/clion/bin/hls-est")
 
 # The canonical hls-est pipeline (CLAUDE.md).  Experiments vary this string.
 DEFAULT_PIPELINE = ("--affine-loop-normalize --auto-pipeline-unroll --infer-vitis-split-array "

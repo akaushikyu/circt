@@ -1,90 +1,39 @@
-//===- AffineToLoopSchedule.cpp--------------------------------------------===//
-//
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
+//===- AffineToLoopScheduleModified.cpp - estimate Vitis resources ------- ===//
+
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
-//
-//===----------------------------------------------------------------------===//
-//
-// MODIFIED VERSION. Changes relative to the original conversion:
-//
-//   1. affine.apply support: AffineApplyOp is now marked illegal in
-//      lowerAffineStructures(), so the AffineApplyLowering pattern from
-//      AffineToStandard (already pulled in via
-//      populateAffineToStdConversionPatterns) expands it into arith ops
-//      before scheduling. The scheduler therefore never sees affine.apply.
-//
-//   2. Expanded arithmetic coverage in populateOperatorTypes():
-//      - MulIOp / DivSIOp / DivUIOp / RemSIOp / RemUIOp -> "multicycle".
-//        (div/rem appear when affine.apply maps containing floordiv/mod are
-//        expanded, e.g. the delinearization introduced by loop coalescing.)
-//      - SelectOp, SubIOp, AndI/OrI/XOrI, shifts, trunc/ext, etc. -> "comb".
-//        These also appear in floordiv/mod expansion (cmpi + select fixups).
-//      - The original dead `.Case<AddIOp, CmpIOp>` (unreachable because both
-//        ops matched the first Case) has been removed.
-//
-//   3. Nested loop support, in two layers:
-//      a) Perfectly nested bands are coalesced (flattened) into a single
-//         loop with affine::coalesceLoops() before any analysis runs. The
-//         delinearization it introduces (floordiv/mod affine.apply ops) is
-//         handled by (1) and (2).
-//      b) Any remaining nesting (imperfect nests, or bands whose inner
-//         bounds depend on outer IVs so coalescing fails) falls back to
-//         pipelining each *innermost* loop in place. Outer affine.for loops
-//         are left intact as sequential control around the pipeline; the
-//         pipeline op is not IsolatedFromAbove, so it may freely reference
-//         outer induction variables and loop-invariant values.
-//
-//   4. Scalability for unrolled bodies (option `fast-threshold`, default 150):
-//      a loop whose modulo problem holds more resource-limited (memory)
-//      operations than the threshold is scheduled by a greedy resource-bound
-//      modulo list scheduler (II = max(ResMinII, recurrence-feasible II),
-//      ASAP placement in dependence order against a modulo reservation
-//      table, II bumped when an op cannot be placed) instead of the
-//      simplex-based ModuloSimplexScheduler, which re-solves an LP per
-//      resource-limited op and is cubic in the body size. Small bodies keep
-//      the simplex scheduler. `fast-threshold=0` uses the greedy scheduler for
-//      every loop.
-//
-//   5. Pre-scheduling CSE (option `cse`, default on): duplicated
-//      side-effect-free ops (the per-access index arithmetic left by affine
-//      map expansion) are merged before the problem is built. Memory ops are
-//      never merged, so the port demand seen by --bram-analysis is unchanged.
-//
-//===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/Resource/Passes/AffineToLoopScheduleModified.h"
-#include "circt/Dialect/Resource/Passes/MemrefBankClassification.h"
-#include "circt/Dialect/Resource/Passes/LoopPragmas.h"
-#include "circt/Dialect/Resource/Passes/CyclicSchedulingAnalysisModified.h"
 #include "circt/Analysis/DependenceAnalysis.h"
 #include "circt/Dialect/LoopSchedule/LoopScheduleOps.h"
 #include "circt/Dialect/Resource/HLS/HLSDialect.h"
+#include "circt/Dialect/Resource/HLS/HLSOps.h"
+#include "circt/Dialect/Resource/Passes/CyclicSchedulingAnalysisModified.h"
+#include "circt/Dialect/Resource/Passes/LoopPragmas.h"
+#include "circt/Dialect/Resource/Passes/MemrefBankClassification.h"
 #include "circt/Scheduling/Algorithms.h"
 #include "circt/Scheduling/Problems.h"
-#include "circt/Dialect/Resource/HLS/HLSOps.h"
 #include "mlir/Conversion/AffineToStandard/AffineToStandard.h"
 #include "mlir/Dialect/Affine/Analysis/AffineAnalysis.h"
 #include "mlir/Dialect/Affine/Analysis/LoopAnalysis.h"
 #include "mlir/Dialect/Affine/IR/AffineMemoryOpInterfaces.h"
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
 #include "mlir/Dialect/Affine/IR/AffineValueMap.h"
-#include "mlir/Interfaces/CallInterfaces.h"
-#include "mlir/Interfaces/ViewLikeInterface.h"
 #include "mlir/Dialect/Affine/LoopUtils.h"
 #include "mlir/Dialect/Affine/Utils.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlow.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/Dialect/Math/IR/Math.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
-#include "mlir/Dialect/Math/IR/Math.h"
 #include "mlir/IR/BuiltinDialect.h"
 #include "mlir/IR/Dominance.h"
 #include "mlir/IR/IRMapping.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/IR/OperationSupport.h"
+#include "mlir/Interfaces/CallInterfaces.h"
 #include "mlir/Interfaces/SideEffectInterfaces.h"
+#include "mlir/Interfaces/ViewLikeInterface.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "mlir/Transforms/RegionUtils.h"
@@ -94,15 +43,22 @@
 #include "llvm/Support/Debug.h"
 #include <cassert>
 #include <limits>
-#include <queue>
 #include <mlir/IR/IntegerSet.h>
+#include <queue>
 
 #define DEBUG_TYPE "affine-to-loopschedule"
-// https://circt.llvm.org/docs/Scheduling/
+
+#include "llvm/Support/CommandLine.h"
+
+static llvm::cl::opt<int> loopScheduleCallLatency(
+    "loopschedule-call-latency",
+    llvm::cl::desc("--convert-affine-to-loopschedule: operator latency for a "
+                   "func.call without memref operands inside a loop body "
+                   "(-1: leave that loop sequential)"),
+    llvm::cl::init(-1));
+
 namespace circt {
-// The generated base class takes an AffineToLoopScheduleOptions struct, which
-// the DECL block defines; the public header declares it in circt::hls_analysis,
-// so declare it here in circt as well for the DEF block.
+
 #define GEN_PASS_DECL_AFFINETOLOOPSCHEDULE
 #define GEN_PASS_DEF_AFFINETOLOOPSCHEDULE
 #include "circt/Conversion/Passes.h.inc"
@@ -122,7 +78,6 @@ using namespace circt::hls_analysis;
 
 namespace {
 
-
 struct AffineToLoopSchedule
     : public circt::impl::AffineToLoopScheduleBase<AffineToLoopSchedule> {
   void unrollInnerReductions();
@@ -133,24 +88,16 @@ private:
   LogicalResult
   lowerAffineStructures(MemoryDependenceAnalysis &dependenceAnalysis);
 
-  // MODIFIED: these now operate on a single (innermost) loop instead of a
-  // perfectly nested band, since nests are either coalesced into one loop
-  // up front, or only their innermost loops are pipelined in place.
   LogicalResult populateOperatorTypes(AffineForOp forOp, ModuloProblem &problem,
                                       const BRAMClassification &bramClass);
-  
+
   LogicalResult solveSchedulingProblem(AffineForOp forOp,
                                        ModuloProblem &problem);
-  LogicalResult createLoopSchedulePipeline(AffineForOp forOp,             
+  LogicalResult createLoopSchedulePipeline(AffineForOp forOp,
                                            ModuloProblem &problem);
 
-  // MODIFIED: pre-analysis structural transform. Flattens perfectly nested
-  // bands into single loops where legal.
   void coalescePerfectNests();
 
-  // MODIFIED: pre-analysis LICM on the loops about to be pipelined (after
-  // coalescing). Moves loop-invariant pure ops and loop-invariant affine
-  // loads from a memref the loop never writes to just before the loop.
   void hoistInvariantLoads();
   void cleanupRedundantAccesses();
 
@@ -158,30 +105,6 @@ private:
 };
 
 } // namespace
-
-//===----------------------------------------------------------------------===//
-// Invariant-load hoisting (Vitis LICM, VITIS_NOTES.md N4 / replication.md R4).
-//
-// Vitis hoists a load whose address does not depend on the pipelined loop's
-// induction variable, from an array the loop does not store to, out of the
-// loop (it enters the loop module as a scalar argument). Such a load then uses
-// no port of the loop's schedule, so it neither limits the II nor counts
-// toward the replication factor. The decision is made on the loop as it is
-// pipelined: when a perfect nest has been flattened (coalesced) the outer
-// index is part of the flattened loop and `A[i][k]` with k unrolled is NOT
-// invariant - which is why this runs after coalescePerfectNests() and not as
-// a pipeline-level --affine-loop-invariant-code-motion (that would hoist out
-// of the inner loop before the flatten decision and make the nest imperfect).
-//
-// Only ops directly in the loop body are moved (nothing from inside an
-// affine.if: that would be speculation), in program order, so an op is
-// hoisted iff every operand is defined outside the loop or by an op hoisted
-// before it. A memref counts as written in the loop if any op inside the
-// loop has a write effect on it *or on any view of it* (memref.cast,
-// subview, ...: the alias set below), or uses one of them without declaring
-// its effects; a memref that escaped (call, region op, yield) is never
-// hoisted from.
-//===----------------------------------------------------------------------===//
 
 static bool isInnermostAffineFor(AffineForOp forOp);
 
@@ -207,21 +130,23 @@ static bool isPlainMemrefUse(Operation *user) {
       user->hasTrait<OpTrait::IsTerminator>() ||
       !isa<MemoryEffectOpInterface>(user))
     return false;
-  return llvm::none_of(user->getResultTypes(),
-                       [](Type t) { return isa<BaseMemRefType>(t); });
+  return llvm::none_of(user->getResultTypes(), [](Type typeValue) {
+    return isa<BaseMemRefType>(typeValue);
+  });
 }
 
-static MemrefAliasInfo collectMemrefAliases(Value mem) {
+static MemrefAliasInfo collectMemrefAliases(Value memory) {
   MemrefAliasInfo info;
-  SmallVector<Value> worklist{mem};
-  info.members.insert(mem);
+  SmallVector<Value> worklist{memory};
+  info.members.insert(memory);
   while (!worklist.empty()) {
-    Value v = worklist.pop_back_val();
-    for (Operation *user : v.getUsers()) {
+    Value valueHandle = worklist.pop_back_val();
+    for (Operation *user : valueHandle.getUsers()) {
       if (isa<ViewLikeOpInterface>(user)) {
-        for (Value r : user->getResults())
-          if (isa<BaseMemRefType>(r.getType()) && info.members.insert(r).second)
-            worklist.push_back(r);
+        for (Value resultValue : user->getResults())
+          if (isa<BaseMemRefType>(resultValue.getType()) &&
+              info.members.insert(resultValue).second)
+            worklist.push_back(resultValue);
         continue;
       }
       if (!isPlainMemrefUse(user))
@@ -240,7 +165,7 @@ static bool isMemrefWrittenInLoop(const MemrefAliasInfo &alias,
   bool written = false;
   forOp.getBody()->walk([&](Operation *op) {
     if (isa<ViewLikeOpInterface>(op))
-      return WalkResult::advance(); // pure; its result is a member itself
+      return WalkResult::advance();
     for (Value opd : op->getOperands()) {
       if (!alias.members.contains(opd))
         continue;
@@ -252,14 +177,14 @@ static bool isMemrefWrittenInLoop(const MemrefAliasInfo &alias,
         continue;
       auto eff = dyn_cast<MemoryEffectOpInterface>(op);
       if (!eff) {
-        written = true; // unknown effects on the memref: assume a write
+        written = true;
         return WalkResult::interrupt();
       }
       SmallVector<MemoryEffects::EffectInstance> effects;
       eff.getEffectsOnValue(opd, effects);
-      for (auto &e : effects)
-        if (!isa<MemoryEffects::Read>(e.getEffect())) {
-          written = true; // Write, Allocate, Free
+      for (auto &entryValue : effects)
+        if (!isa<MemoryEffects::Read>(entryValue.getEffect())) {
+          written = true;
           return WalkResult::interrupt();
         }
     }
@@ -275,34 +200,31 @@ void AffineToLoopSchedule::hoistInvariantLoads() {
       loops.push_back(forOp);
   });
 
-  // Alias sets are a property of the function (moving ops changes no uses).
   DenseMap<Value, MemrefAliasInfo> aliasCache;
-  auto aliasInfo = [&](Value mem) -> const MemrefAliasInfo & {
-    auto it = aliasCache.find(mem);
+  auto aliasInfo = [&](Value memory) -> const MemrefAliasInfo & {
+    auto it = aliasCache.find(memory);
     if (it == aliasCache.end())
-      it = aliasCache.try_emplace(mem, collectMemrefAliases(mem)).first;
+      it = aliasCache.try_emplace(memory, collectMemrefAliases(memory)).first;
     return it->second;
   };
 
   unsigned hoistedLoads = 0, hoistedPure = 0;
   for (AffineForOp forOp : loops) {
-    // MODIFIED (T3): `hls.flattened_parents = N` (--auto-pipeline-unroll)
-    // says Vitis flattens the N enclosing loops into this pipeline, so their
-    // IVs - and everything defined in their bodies - are loop-variant for
-    // it, and a write in their bodies is a write in the pipelined loop.
+
     AffineForOp root = circt::hls_analysis::getFlattenedRoot(forOp);
-    DenseSet<Value> invariant; // results of ops hoisted so far
-    auto isInvariantValue = [&](Value v) {
-      return root.isDefinedOutsideOfLoop(v) || invariant.contains(v);
+    DenseSet<Value> invariant;
+    auto isInvariantValue = [&](Value valueHandle) {
+      return root.isDefinedOutsideOfLoop(valueHandle) ||
+             invariant.contains(valueHandle);
     };
     DenseMap<Value, bool> writtenCache;
-    auto writtenInLoop = [&](Value mem) {
-      auto it = writtenCache.find(mem);
+    auto writtenInLoop = [&](Value memory) {
+      auto it = writtenCache.find(memory);
       if (it != writtenCache.end())
         return it->second;
-      bool w = isMemrefWrittenInLoop(aliasInfo(mem), root);
-      writtenCache[mem] = w;
-      return w;
+      bool widthValue = isMemrefWrittenInLoop(aliasInfo(memory), root);
+      writtenCache[memory] = widthValue;
+      return widthValue;
     };
 
     SmallVector<Operation *> toHoist;
@@ -325,11 +247,10 @@ void AffineToLoopSchedule::hoistInvariantLoads() {
       if (!hoistable)
         continue;
       toHoist.push_back(&op);
-      for (Value r : op.getResults())
-        invariant.insert(r);
+      for (Value resultValue : op.getResults())
+        invariant.insert(resultValue);
     }
-    // Program order is preserved, so every hoisted op's operands are already
-    // above the loop when it is moved.
+
     for (Operation *op : toHoist)
       op->moveBefore(forOp);
   }
@@ -338,50 +259,14 @@ void AffineToLoopSchedule::hoistInvariantLoads() {
                           << " pure ops out of innermost loops\n");
 }
 
-//===----------------------------------------------------------------------===//
-// Redundant-access cleanup (Vitis GVN / DSE on the unrolled body;
-// VITIS_NOTES.md N4: R and W per iteration are counted "after unrolling, CSE,
-// LICM").
-//
-// Within one block, in program order, Vitis' LLVM pipeline removes
-//   - a load of an address loaded before with no intervening write that may
-//     alias it: the same value (CSE / GVN)                         [cse-loads]
-//   - a load of an address stored before with no intervening may-alias write
-//     (store-to-load forwarding), and a store overwritten by a later store to
-//     the same address with no intervening may-alias read (dead-store
-//     elimination)                                            [forward-stores]
-// so an unrolled accumulator `acc[i] += ...` (load, add, store, N times)
-// becomes one load and one store per iteration, and only those use ports.
-//
-// Two affine accesses to one memref are compared with
-// AffineValueMap::difference after full composition: every result a constant
-// 0 -> same address; some result a nonzero constant -> disjoint (`A[i][k]`
-// vs `A[i][k+1]` after unrolling); anything else may alias. Distinct memref
-// values never alias (the affine dialect's and the dependence analysis'
-// assumption), so only memrefs whose SSA value identifies the storage take
-// part: allocas, allocs and function arguments (not views, iter_args or
-// get_global results, see isRootMemref), and only when they have not escaped
-// (collectMemrefAliases). Only affine.load / affine.store are tracked; a
-// non-affine or predicated access, an access through a view, an op with
-// regions touching the memref, and any other use of the memref or of a view
-// of it are opaque: they forget everything known about that memref. Nothing
-// is forwarded across a block boundary or a loop back edge.
-//
-// The surviving op records what it absorbed (`hls.merged_loads` on a load,
-// `hls.forwarded_loads` / `hls.removed_stores` on a store); the affine
-// lowering carries the attributes along (copyHlsAttrs) so --bram-debug can
-// show why R and W are what they are. Erases ops, so it runs before every
-// analysis (runOnOperation).
-//===----------------------------------------------------------------------===//
-
 namespace {
 enum class AddrRelation { Same, Disjoint, MayAlias };
 
 struct AccessAddr {
   AffineMap map;
   SmallVector<Value, 4> operands;
-  AccessAddr(AffineMap m, ValueRange opds)
-      : map(m), operands(opds.begin(), opds.end()) {
+  AccessAddr(AffineMap memoryOp, ValueRange opds)
+      : map(memoryOp), operands(opds.begin(), opds.end()) {
     fullyComposeAffineMapAndOperands(&map, &operands);
     canonicalizeMapAndOperands(&map, &operands);
   }
@@ -391,32 +276,35 @@ struct AccessAddr {
 /// block.
 struct KnownValue {
   AccessAddr addr;
-  Value value;      // the value held at `addr`
-  Operation *store; // the affine.store that put it there; null: a load read it
-  bool readSince;   // a read that may alias `addr` happened after `store`
+  Value value;
+  Operation *store;
+  bool readSince;
 };
 } // namespace
 
-static AddrRelation compareAddresses(const AccessAddr &a,
-                                     const AccessAddr &b) {
-  if (a.map.getNumResults() != b.map.getNumResults())
+static AddrRelation compareAddresses(const AccessAddr &arrayValue,
+                                     const AccessAddr &buildPoint) {
+  if (arrayValue.map.getNumResults() != buildPoint.map.getNumResults())
     return AddrRelation::MayAlias;
-  AffineValueMap va(a.map, a.operands), vb(b.map, b.operands), diff;
+  AffineValueMap va(arrayValue.map, arrayValue.operands),
+      vb(buildPoint.map, buildPoint.operands), diff;
   AffineValueMap::difference(va, vb, &diff);
   bool allZero = true;
-  for (unsigned d = 0, n = diff.getNumResults(); d < n; ++d) {
-    auto c = dyn_cast<AffineConstantExpr>(diff.getResult(d));
-    if (!c)
+  for (unsigned dimensionIndex = 0, elementCount = diff.getNumResults();
+       dimensionIndex < elementCount; ++dimensionIndex) {
+    auto candidateValue =
+        dyn_cast<AffineConstantExpr>(diff.getResult(dimensionIndex));
+    if (!candidateValue)
       allZero = false;
-    else if (c.getValue() != 0)
+    else if (candidateValue.getValue() != 0)
       return AddrRelation::Disjoint;
   }
   return allZero ? AddrRelation::Same : AddrRelation::MayAlias;
 }
 
 static int64_t counterAttr(Operation *op, StringRef name) {
-  if (auto a = op->getAttrOfType<IntegerAttr>(name))
-    return a.getInt();
+  if (auto arrayValue = op->getAttrOfType<IntegerAttr>(name))
+    return arrayValue.getInt();
   return 0;
 }
 
@@ -430,63 +318,62 @@ static void addCounterAttr(Operation *op, StringRef name, int64_t by) {
 /// Memrefs whose SSA value identifies the storage: a local array or a
 /// function argument. Two memref.get_global of one symbol are two values for
 /// one memory, and a view or an iter_arg aliases its source: not tracked.
-static bool isRootMemref(Value mem) {
-  if (auto arg = dyn_cast<BlockArgument>(mem))
+static bool isRootMemref(Value memory) {
+  if (auto arg = dyn_cast<BlockArgument>(memory))
     return isa<func::FuncOp>(arg.getOwner()->getParentOp());
   return isa_and_present<memref::AllocaOp, memref::AllocOp>(
-      mem.getDefiningOp());
+      memory.getDefiningOp());
 }
 
 void AffineToLoopSchedule::cleanupRedundantAccesses() {
   SmallVector<Block *> blocks;
-  getOperation().walk([&](Block *b) { blocks.push_back(b); });
+  getOperation().walk([&](Block *buildPoint) { blocks.push_back(buildPoint); });
 
   DenseMap<Value, MemrefAliasInfo> aliasCache;
-  auto aliasInfo = [&](Value mem) -> const MemrefAliasInfo & {
-    auto it = aliasCache.find(mem);
+  auto aliasInfo = [&](Value memory) -> const MemrefAliasInfo & {
+    auto it = aliasCache.find(memory);
     if (it == aliasCache.end())
-      it = aliasCache.try_emplace(mem, collectMemrefAliases(mem)).first;
+      it = aliasCache.try_emplace(memory, collectMemrefAliases(memory)).first;
     return it->second;
   };
 
   unsigned merged = 0, forwarded = 0, removed = 0;
   for (Block *block : blocks) {
-    DenseMap<Value, SmallVector<KnownValue, 8>> known; // root -> values
-    DenseMap<Value, Value> memberToRoot;               // alias member -> root
-    auto forget = [&](Value mem) {
-      auto it = memberToRoot.find(mem);
+    DenseMap<Value, SmallVector<KnownValue, 8>> known;
+    DenseMap<Value, Value> memberToRoot;
+    auto forget = [&](Value memory) {
+      auto it = memberToRoot.find(memory);
       if (it != memberToRoot.end())
         known.erase(it->second);
-      known.erase(mem);
+      known.erase(memory);
     };
     auto forgetOperands = [&](Operation *op) {
-      for (Value v : op->getOperands())
-        if (isa<BaseMemRefType>(v.getType()))
-          forget(v);
+      for (Value valueHandle : op->getOperands())
+        if (isa<BaseMemRefType>(valueHandle.getType()))
+          forget(valueHandle);
     };
-    // Tracked iff a root that has not escaped. Registers the alias set so
-    // that an access through a view forgets the root's state.
-    auto trackable = [&](Value mem) -> bool {
-      if (!isRootMemref(mem))
+
+    auto trackable = [&](Value memory) -> bool {
+      if (!isRootMemref(memory))
         return false;
-      const MemrefAliasInfo &ai = aliasInfo(mem);
+      const MemrefAliasInfo &ai = aliasInfo(memory);
       if (ai.escaped)
         return false;
-      if (!memberToRoot.count(mem))
-        for (Value m : ai.members)
-          memberToRoot[m] = mem;
+      if (!memberToRoot.count(memory))
+        for (Value memoryOp : ai.members)
+          memberToRoot[memoryOp] = memory;
       return true;
     };
 
     for (Operation &op : llvm::make_early_inc_range(*block)) {
       if (auto load = dyn_cast<AffineLoadOp>(op)) {
-        Value mem = load.getMemRef();
-        if (!trackable(mem)) {
-          forget(mem);
+        Value memory = load.getMemRef();
+        if (!trackable(memory)) {
+          forget(memory);
           continue;
         }
         AccessAddr addr(load.getAffineMap(), load.getMapOperands());
-        auto &vals = known[mem];
+        auto &vals = known[memory];
         KnownValue *same = nullptr;
         for (KnownValue &kv : vals) {
           AddrRelation rel = compareAddresses(addr, kv.addr);
@@ -498,7 +385,7 @@ void AffineToLoopSchedule::cleanupRedundantAccesses() {
             kv.readSince = true;
         }
         if (same && (same->store ? forwardStores : cseLoads)) {
-          // The memory is not read: the known value is used instead.
+
           if (same->store) {
             addCounterAttr(same->store, "hls.forwarded_loads", 1);
             ++forwarded;
@@ -510,7 +397,7 @@ void AffineToLoopSchedule::cleanupRedundantAccesses() {
           load.erase();
           continue;
         }
-        if (same) { // option off: a real read of a known address
+        if (same) {
           if (same->store)
             same->readSince = true;
           continue;
@@ -519,13 +406,13 @@ void AffineToLoopSchedule::cleanupRedundantAccesses() {
         continue;
       }
       if (auto store = dyn_cast<AffineStoreOp>(op)) {
-        Value mem = store.getMemRef();
-        if (!trackable(mem)) {
-          forget(mem);
+        Value memory = store.getMemRef();
+        if (!trackable(memory)) {
+          forget(memory);
           continue;
         }
         AccessAddr addr(store.getAffineMap(), store.getMapOperands());
-        auto &vals = known[mem];
+        auto &vals = known[memory];
         SmallVector<KnownValue, 8> kept;
         for (KnownValue &kv : vals) {
           AddrRelation rel = compareAddresses(addr, kv.addr);
@@ -535,8 +422,7 @@ void AffineToLoopSchedule::cleanupRedundantAccesses() {
           }
           if (rel == AddrRelation::Same && kv.store && !kv.readSince &&
               forwardStores) {
-            // Overwritten before anything could read it: dead. This store
-            // stands for it (and for the loads it served) in the report.
+
             addCounterAttr(&op, "hls.removed_stores",
                            1 + counterAttr(kv.store, "hls.removed_stores"));
             addCounterAttr(&op, "hls.forwarded_loads",
@@ -544,15 +430,13 @@ void AffineToLoopSchedule::cleanupRedundantAccesses() {
             kv.store->erase();
             ++removed;
           }
-          // Same (still needed) or may-alias: the old value is unknown now.
         }
         vals = std::move(kept);
         vals.push_back(
             {addr, store.getValueToStore(), store.getOperation(), false});
         continue;
       }
-      // Anything else that touches a memref, or a view of one, directly or
-      // inside its regions, is opaque for that memref.
+
       forgetOperands(&op);
       for (Region &region : op.getRegions())
         region.walk([&](Operation *inner) { forgetOperands(inner); });
@@ -593,15 +477,16 @@ static bool isInnermostAffineFor(AffineForOp forOp) {
 static void materializeYieldedValues(AffineForOp forOp) {
   auto yield = cast<AffineYieldOp>(forOp.getBody()->getTerminator());
   Value trueVal;
-  OpBuilder b(yield);
+  OpBuilder buildPoint(yield);
   for (OpOperand &opd : yield->getOpOperands()) {
-    Value v = opd.get();
+    Value valueHandle = opd.get();
     if (!trueVal) {
       OpBuilder ob(forOp);
-      trueVal = arith::ConstantOp::create(ob, forOp.getLoc(),
-                                          ob.getBoolAttr(true));
+      trueVal =
+          arith::ConstantOp::create(ob, forOp.getLoc(), ob.getBoolAttr(true));
     }
-    opd.set(arith::SelectOp::create(b, yield.getLoc(), trueVal, v, v));
+    opd.set(arith::SelectOp::create(buildPoint, yield.getLoc(), trueVal,
+                                    valueHandle, valueHandle));
   }
 }
 
@@ -614,9 +499,7 @@ static void materializeYieldedValues(AffineForOp forOp) {
 /// outer-IV-dependent bound operand is undefined, and corrupts the IR
 /// (null operands) instead of returning failure. So we must check here.
 static bool isRectangularBand(ArrayRef<AffineForOp> band) {
-  // Op handles are value-like wrappers around Operation*, but their
-  // generated accessors are not const-qualified, so copy out of the
-  // ArrayRef before calling getRegion().
+
   AffineForOp outermost = band.front();
   Region &outerRegion = outermost.getRegion();
   for (AffineForOp loop : band.drop_front()) {
@@ -671,8 +554,7 @@ ModuloProblem AffineToLoopSchedule::getModuloProblem(CyclicProblem &prob) {
 /// IVs) are simply left alone; their innermost loops are pipelined in place
 /// later, with the outer loops remaining as sequential affine.for control.
 void AffineToLoopSchedule::coalescePerfectNests() {
-  // Collect maximal perfect bands first (pre-order so outer bands are found
-  // before any inner siblings), then mutate after the walk completes.
+
   SmallVector<SmallVector<AffineForOp>> bands;
   DenseSet<Operation *> visited;
   getOperation().walk<WalkOrder::PreOrder>([&](AffineForOp root) {
@@ -682,16 +564,7 @@ void AffineToLoopSchedule::coalescePerfectNests() {
     getPerfectlyNestedLoops(band, root);
     for (AffineForOp loop : band)
       visited.insert(loop);
-    // Only worth coalescing if the band actually ends in an innermost loop;
-    // otherwise the flattened loop still would not be pipelineable.
-    // MODIFIED: additionally require a rectangular iteration space, since
-    // coalesceLoops silently miscompiles triangular/trapezoidal nests
-    // instead of failing (see isRectangularBand). Non-rectangular nests
-    // fall back to innermost-loop pipelining.
-    // MODIFIED (T3): affine::coalesceLoops erases every loop but the
-    // outermost and cannot carry an inner loop's results (iter_args chained
-    // through two levels: "operation destroyed but still has uses"); such a
-    // band is left as a nest whose innermost loop is pipelined in place.
+
     bool innerResults = llvm::any_of(
         ArrayRef<AffineForOp>(band).drop_front(),
         [](AffineForOp loop) { return loop.getNumResults() != 0; });
@@ -701,10 +574,7 @@ void AffineToLoopSchedule::coalescePerfectNests() {
   });
 
   for (auto &band : bands) {
-    // MODIFIED (T3): the pipeline tags of --auto-pipeline-unroll sit on the
-    // innermost loop, which coalesceLoops erases. Carry them to the loop
-    // that survives and discount the band's own levels from
-    // hls.flattened_parents: they are part of the coalesced loop now.
+
     AffineForOp innermost = band.back();
     Attribute pipelineTag =
         innermost->getAttr(circt::hls_analysis::kLoopPipelineAttr);
@@ -742,10 +612,6 @@ void AffineToLoopSchedule::coalescePerfectNests() {
   }
 }
 
-// Anchor memref-level write-effecting ops (e.g. hls.store_enable) that
-// MemoryDependenceAnalysis can't see. Without an outgoing edge the scheduler
-// treats them as sinks; give each an auxiliary dependence to the loop
-// terminator so the dependence DAG has a single sink.
 static void anchorUntrackedSideEffects(AffineForOp forOp,
                                        ModuloProblem &problem) {
   Operation *anchor = forOp.getBody()->getTerminator();
@@ -753,8 +619,6 @@ static void anchorUntrackedSideEffects(AffineForOp forOp,
   SmallVector<Operation *> ops(problem.getOperations().begin(),
                                problem.getOperations().end());
 
-  // Every op that is already the source of some dependence has an outgoing
-  // edge; everything else is a sink.
   DenseSet<Operation *> hasSuccessor;
   for (Operation *op : ops)
     for (auto dep : problem.getDependences(op))
@@ -771,6 +635,27 @@ static void anchorUntrackedSideEffects(AffineForOp forOp,
   }
 }
 
+static void anchorRegionCaptures(AffineForOp forOp, ModuloProblem &problem) {
+  Block *body = forOp.getBody();
+  for (Operation &regionOp : body->without_terminator()) {
+    if (regionOp.getNumRegions() == 0 || !problem.hasOperation(&regionOp))
+      continue;
+    regionOp.walk([&](Operation *nested) {
+      if (nested == &regionOp)
+        return;
+      for (Value valueHandle : nested->getOperands()) {
+        Operation *def = valueHandle.getDefiningOp();
+        if (!def || def == &regionOp || def->getBlock() != body ||
+            !problem.hasOperation(def))
+          continue;
+        auto inserted =
+            problem.insertDependence(Problem::Dependence(def, &regionOp));
+        (void)inserted;
+      }
+    });
+  }
+}
+
 /// MODIFIED: Fully unroll constant-trip innermost reduction loops so the
 /// loop *above* them becomes the pipelineable innermost loop, matching
 /// Vitis HLS behavior ("pipeline 2nd-level loop, unroll lower loop"). The
@@ -782,47 +667,39 @@ static void anchorUntrackedSideEffects(AffineForOp forOp,
 /// that carry a reduction (iter_args)
 void AffineToLoopSchedule::unrollInnerReductions() {
   SmallVector<AffineForOp> targets;
-  // TODO: automatically unroll loop count with trips < 64
-  //       paramterize later (Vitis specific behavior)
-  
+
   unsigned kMaxUnrollTrip = 64;
-  
+
   getOperation().walk([&](AffineForOp forOp) {
     if (!isInnermostAffineFor(forOp))
       return;
-    // Reduction: carries iter_args (the accumulator).
+
     if (forOp.getNumIterOperands() == 0)
       return;
     auto tc = getConstantTripCount(forOp);
     if (!tc || *tc == 0)
       return;
-    // Guard against unrolling something huge; the HLS inner dim is small.
-    if (*tc > kMaxUnrollTrip)   // e.g. 64
+
+    if (*tc > kMaxUnrollTrip)
       return;
     targets.push_back(forOp);
   });
 
   for (AffineForOp forOp : targets) {
     if (failed(loopUnrollFull(forOp))) {
-      LLVM_DEBUG(llvm::dbgs()
-                 << "could not fully unroll inner reduction: " << *forOp << "\n");
+      LLVM_DEBUG(llvm::dbgs() << "could not fully unroll inner reduction: "
+                              << *forOp << "\n");
     }
   }
 }
 
-
-//===----------------------------------------------------------------------===//
-// Pre-scheduling CSE of side-effect-free ops
-//===----------------------------------------------------------------------===//
 namespace {
-// DenseMapInfo keyed on structural op equivalence (same op, attributes, operand
-// values and result types; locations ignored), as mlir::CSE does.
+
 struct PureOpInfo : public llvm::DenseMapInfo<Operation *> {
   static unsigned getHashValue(const Operation *opC) {
     return OperationEquivalence::computeHash(
-        const_cast<Operation *>(opC),
-        /*hashOperands=*/OperationEquivalence::directHashValue,
-        /*hashResults=*/OperationEquivalence::ignoreHashValue,
+        const_cast<Operation *>(opC), OperationEquivalence::directHashValue,
+        OperationEquivalence::ignoreHashValue,
         OperationEquivalence::IgnoreLocations);
   }
   static bool isEqual(const Operation *lhsC, const Operation *rhsC) {
@@ -830,8 +707,7 @@ struct PureOpInfo : public llvm::DenseMapInfo<Operation *> {
     auto *rhs = const_cast<Operation *>(rhsC);
     if (lhs == rhs)
       return true;
-    // Entries are never erased, so no tombstone can be compared (as in
-    // mlir/lib/Transforms/Utils/CSE.cpp).
+
     if (lhs == getEmptyKey() || rhs == getEmptyKey())
       return false;
     return OperationEquivalence::isEquivalentTo(
@@ -865,36 +741,6 @@ static unsigned cseBlockPureOps(Block &block) {
   return merged;
 }
 
-//===----------------------------------------------------------------------===//
-// Greedy resource-bound modulo scheduler (fast path for large loop bodies)
-//===----------------------------------------------------------------------===//
-// The ModuloSimplexScheduler fixes one resource-limited op at a time and
-// re-solves the LP after each, which is cubic in the body size; a 64-way
-// unrolled body with ~700 memory ops takes minutes. This scheduler produces a
-// valid ModuloProblem solution in O(II * (V + E)) per II candidate:
-//
-//   1. II starts at ResMinII = max over resources of ceil(uses / limit).
-//   2. Resource-free ASAP times are the longest paths in the constraint graph
-//      (edge weight latency - distance * II). A positive cycle means a
-//      recurrence cannot close within II (what makes the simplex raise its
-//      parameter T). Feasibility is monotone in II (a cycle's slack is
-//      distance_sum * II - latency_sum, and every cycle has distance >= 1),
-//      so the recurrence-feasible II is found by galloping plus bisection:
-//      O(log II) positive-cycle tests instead of one per candidate II.
-//   3. Ops are placed in a topological order of the intra-iteration (distance
-//      0) edges, ties broken by problem insertion order (= program order).
-//      Each op starts ASAP w.r.t. every already placed predecessor; a
-//      resource-limited op takes the first of the II congruence classes from
-//      that time whose modulo reservation table has a free instance (one
-//      always exists while II >= ResMinII).
-//   4. Every dependence, including back edges whose source was placed after
-//      its destination, is re-checked; a violation bumps II and restarts.
-//
-// Steps 3/4 are classic iterative modulo scheduling without backtracking. The
-// structure --bram-analysis reads (II and each access's stage mod II) comes
-// out the same as from the simplex for the saturated resources that decide
-// the port demand: both place accesses at the first free slot from their
-// ASAP time.
 namespace {
 class FastModuloScheduler {
 public:
@@ -902,7 +748,6 @@ public:
 
   /// Returns the number of operations linked to a resource with a limit.
   static unsigned countLimitedOps(ModuloProblem &prob);
-
 
   LogicalResult schedule(unsigned maxIIBumps);
 
@@ -914,10 +759,10 @@ private:
   };
 
   ModuloProblem &prob;
-  SmallVector<Operation *> ops;                             // insertion order
-  SmallVector<unsigned> latency;                            // per op
-  SmallVector<SmallVector<Edge, 4>> preds;                  // incoming edges
-  SmallVector<SmallVector<Problem::ResourceType, 1>> rsrcs; // limited rsrcs
+  SmallVector<Operation *> ops;
+  SmallVector<unsigned> latency;
+  SmallVector<SmallVector<Edge, 4>> preds;
+  SmallVector<SmallVector<Problem::ResourceType, 1>> rsrcs;
   SmallVector<unsigned> topo;
 
   LogicalResult build();
@@ -931,17 +776,17 @@ private:
 } // namespace
 
 unsigned FastModuloScheduler::countLimitedOps(ModuloProblem &prob) {
-  unsigned n = 0;
+  unsigned elementCount = 0;
   for (Operation *op : prob.getOperations()) {
     auto lr = prob.getLinkedResourceTypes(op);
     if (!lr)
       continue;
-    if (llvm::any_of(*lr, [&](Problem::ResourceType r) {
-          return prob.getLimit(r).value_or(0) > 0;
+    if (llvm::any_of(*lr, [&](Problem::ResourceType resultValue) {
+          return prob.getLimit(resultValue).value_or(0) > 0;
         }))
-      ++n;
+      ++elementCount;
   }
-  return n;
+  return elementCount;
 }
 
 LogicalResult FastModuloScheduler::build() {
@@ -950,67 +795,66 @@ LogicalResult FastModuloScheduler::build() {
     index[op] = ops.size();
     ops.push_back(op);
   }
-  unsigned n = ops.size();
-  latency.assign(n, 0);
-  preds.assign(n, {});
-  rsrcs.assign(n, {});
-  for (unsigned i = 0; i < n; ++i) {
-    auto opr = prob.getLinkedOperatorType(ops[i]);
+  unsigned elementCount = ops.size();
+  latency.assign(elementCount, 0);
+  preds.assign(elementCount, {});
+  rsrcs.assign(elementCount, {});
+  for (unsigned loopIndex = 0; loopIndex < elementCount; ++loopIndex) {
+    auto opr = prob.getLinkedOperatorType(ops[loopIndex]);
     if (!opr)
       return failure();
     auto lat = prob.getLatency(*opr);
     if (!lat)
       return failure();
-    latency[i] = *lat;
-    if (auto lr = prob.getLinkedResourceTypes(ops[i]))
-      for (Problem::ResourceType r : *lr)
-        if (prob.getLimit(r).value_or(0) > 0)
-          rsrcs[i].push_back(r);
+    latency[loopIndex] = *lat;
+    if (auto lr = prob.getLinkedResourceTypes(ops[loopIndex]))
+      for (Problem::ResourceType resultValue : *lr)
+        if (prob.getLimit(resultValue).value_or(0) > 0)
+          rsrcs[loopIndex].push_back(resultValue);
   }
 
-  SmallVector<unsigned> indeg(n, 0);
-  SmallVector<SmallVector<unsigned, 4>> succ0(n);
-  for (unsigned j = 0; j < n; ++j) {
-    for (auto &dep : prob.getDependences(ops[j])) {
+  SmallVector<unsigned> indeg(elementCount, 0);
+  SmallVector<SmallVector<unsigned, 4>> succ0(elementCount);
+  for (unsigned innerIndex = 0; innerIndex < elementCount; ++innerIndex) {
+    for (auto &dep : prob.getDependences(ops[innerIndex])) {
       auto it = index.find(dep.getSource());
       if (it == index.end())
         continue;
-      unsigned i = it->second;
+      unsigned loopIndex = it->second;
       unsigned dist = prob.getDistance(dep).value_or(0);
-      preds[j].push_back({i, latency[i], dist});
+      preds[innerIndex].push_back({loopIndex, latency[loopIndex], dist});
       if (dist == 0) {
-        succ0[i].push_back(j);
-        ++indeg[j];
+        succ0[loopIndex].push_back(innerIndex);
+        ++indeg[innerIndex];
       }
     }
   }
 
-  // Kahn's algorithm; among ready ops the earliest inserted goes first.
   std::priority_queue<unsigned, std::vector<unsigned>, std::greater<unsigned>>
       ready;
-  for (unsigned i = 0; i < n; ++i)
-    if (indeg[i] == 0)
-      ready.push(i);
+  for (unsigned loopIndex = 0; loopIndex < elementCount; ++loopIndex)
+    if (indeg[loopIndex] == 0)
+      ready.push(loopIndex);
   while (!ready.empty()) {
-    unsigned i = ready.top();
+    unsigned loopIndex = ready.top();
     ready.pop();
-    topo.push_back(i);
-    for (unsigned j : succ0[i])
-      if (--indeg[j] == 0)
-        ready.push(j);
+    topo.push_back(loopIndex);
+    for (unsigned innerIndex : succ0[loopIndex])
+      if (--indeg[innerIndex] == 0)
+        ready.push(innerIndex);
   }
-  // A cycle of distance-0 edges has no schedule at any II.
-  return success(topo.size() == n);
+
+  return success(topo.size() == elementCount);
 }
 
 unsigned FastModuloScheduler::resMinII() const {
-  DenseMap<Problem::ResourceType, unsigned> uses;
+  DenseMap<Problem::ResourceType, unsigned> symbolUses;
   for (auto &rs : rsrcs)
-    for (Problem::ResourceType r : rs)
-      ++uses[r];
+    for (Problem::ResourceType resultValue : rs)
+      ++symbolUses[resultValue];
   unsigned ii = 1;
-  for (auto &[r, count] : uses) {
-    unsigned limit = *prob.getLimit(r);
+  for (auto &[resultValue, count] : symbolUses) {
+    unsigned limit = *prob.getLimit(resultValue);
     ii = std::max(ii, (count + limit - 1) / limit);
   }
   return ii;
@@ -1018,19 +862,19 @@ unsigned FastModuloScheduler::resMinII() const {
 
 bool FastModuloScheduler::asapTimes(unsigned ii,
                                     SmallVectorImpl<int64_t> &asap) const {
-  unsigned n = ops.size();
-  asap.assign(n, 0);
+  unsigned elementCount = ops.size();
+  asap.assign(elementCount, 0);
   bool changed = true;
-  // n relaxation rounds settle every longest path (at most n - 1 edges); a
-  // change in round n + 1 is a positive cycle.
-  for (unsigned round = 0; changed && round <= n; ++round) {
+
+  for (unsigned round = 0; changed && round <= elementCount; ++round) {
     changed = false;
-    for (unsigned j : topo)
-      for (const Edge &e : preds[j]) {
-        int64_t cand = asap[e.src] + static_cast<int64_t>(e.latency) -
-                       static_cast<int64_t>(e.distance) * ii;
-        if (cand > asap[j]) {
-          asap[j] = cand;
+    for (unsigned innerIndex : topo)
+      for (const Edge &entryValue : preds[innerIndex]) {
+        int64_t cand = asap[entryValue.src] +
+                       static_cast<int64_t>(entryValue.latency) -
+                       static_cast<int64_t>(entryValue.distance) * ii;
+        if (cand > asap[innerIndex]) {
+          asap[innerIndex] = cand;
           changed = true;
         }
       }
@@ -1042,14 +886,12 @@ unsigned FastModuloScheduler::recMinII(unsigned lo) const {
   SmallVector<int64_t> asap;
   if (asapTimes(lo, asap))
     return lo;
-  // Every cycle has distance >= 1 (build() rejected distance-0 cycles) and a
-  // simple cycle's latency sum is at most the sum of all op latencies, so
-  // that sum is a feasible II and bounds the search.
+
   uint64_t bound = 0;
   for (unsigned lat : latency)
     bound += lat;
   bound = std::max<uint64_t>(bound, static_cast<uint64_t>(lo) + 1);
-  // Gallop to the first feasible lo + 2^k ...
+
   uint64_t infeasible = lo, hi = lo;
   for (uint64_t step = 1;; step *= 2) {
     hi = std::min(static_cast<uint64_t>(lo) + step, bound);
@@ -1059,7 +901,7 @@ unsigned FastModuloScheduler::recMinII(unsigned lo) const {
       return 0;
     infeasible = hi;
   }
-  // ... then bisect (infeasible, hi]; feasibility is monotone in II.
+
   while (hi - infeasible > 1) {
     uint64_t mid = infeasible + (hi - infeasible) / 2;
     if (asapTimes(static_cast<unsigned>(mid), asap))
@@ -1071,60 +913,59 @@ unsigned FastModuloScheduler::recMinII(unsigned lo) const {
 }
 
 bool FastModuloScheduler::tryII(unsigned ii, SmallVectorImpl<unsigned> &start) {
-  unsigned n = ops.size();
-  // (2) resource-free ASAP times (ii >= recMinII, so no positive cycle).
+  unsigned elementCount = ops.size();
+
   SmallVector<int64_t> asap;
   if (!asapTimes(ii, asap))
     return false;
 
-  // (3) list scheduling against a modulo reservation table.
-  SmallVector<int64_t> st(n, -1);
+  SmallVector<int64_t> st(elementCount, -1);
   DenseMap<Problem::ResourceType, SmallVector<unsigned>> mrt;
-  for (unsigned j : topo) {
-    int64_t est = asap[j];
-    for (const Edge &e : preds[j])
-      if (st[e.src] >= 0)
-        est = std::max(est, st[e.src] + static_cast<int64_t>(e.latency) -
-                                static_cast<int64_t>(e.distance) * ii);
-    if (rsrcs[j].empty()) {
-      st[j] = est;
+  for (unsigned innerIndex : topo) {
+    int64_t est = asap[innerIndex];
+    for (const Edge &entryValue : preds[innerIndex])
+      if (st[entryValue.src] >= 0)
+        est = std::max(est, st[entryValue.src] +
+                                static_cast<int64_t>(entryValue.latency) -
+                                static_cast<int64_t>(entryValue.distance) * ii);
+    if (rsrcs[innerIndex].empty()) {
+      st[innerIndex] = est;
       continue;
     }
     bool placed = false;
-    for (unsigned k = 0; k < ii && !placed; ++k) {
-      int64_t t = est + k;
-      unsigned slot = static_cast<unsigned>(t % ii);
+    for (unsigned keyValue = 0; keyValue < ii && !placed; ++keyValue) {
+      int64_t typeValue = est + keyValue;
+      unsigned slot = static_cast<unsigned>(typeValue % ii);
       bool free = true;
-      for (Problem::ResourceType r : rsrcs[j]) {
-        auto &tab = mrt[r];
+      for (Problem::ResourceType resultValue : rsrcs[innerIndex]) {
+        auto &tab = mrt[resultValue];
         if (tab.empty())
           tab.assign(ii, 0);
-        if (tab[slot] >= *prob.getLimit(r)) {
+        if (tab[slot] >= *prob.getLimit(resultValue)) {
           free = false;
           break;
         }
       }
       if (!free)
         continue;
-      for (Problem::ResourceType r : rsrcs[j])
-        ++mrt[r][slot];
-      st[j] = t;
+      for (Problem::ResourceType resultValue : rsrcs[innerIndex])
+        ++mrt[resultValue][slot];
+      st[innerIndex] = typeValue;
       placed = true;
     }
     if (!placed)
       return false;
   }
 
-  // (4) every edge, including back edges placed out of order.
-  for (unsigned j = 0; j < n; ++j)
-    for (const Edge &e : preds[j])
-      if (st[e.src] + static_cast<int64_t>(e.latency) >
-          st[j] + static_cast<int64_t>(e.distance) * ii)
+  for (unsigned innerIndex = 0; innerIndex < elementCount; ++innerIndex)
+    for (const Edge &entryValue : preds[innerIndex])
+      if (st[entryValue.src] + static_cast<int64_t>(entryValue.latency) >
+          st[innerIndex] + static_cast<int64_t>(entryValue.distance) * ii)
         return false;
 
   start.clear();
-  for (int64_t t : st)
-    start.push_back(static_cast<unsigned>(t));
+  for (int64_t typeValue : st)
+    start.push_back(static_cast<unsigned>(typeValue));
   return true;
 }
 
@@ -1138,13 +979,14 @@ LogicalResult FastModuloScheduler::schedule(unsigned maxIIBumps) {
   LLVM_DEBUG(llvm::dbgs() << "fast modulo scheduler: ResMinII = " << resII
                           << ", recurrence-feasible II = " << ii << "\n");
   SmallVector<unsigned> start;
-  // From here every bump is a placement conflict, not a recurrence.
+
   for (unsigned bumps = 0; bumps <= maxIIBumps; ++bumps, ++ii) {
     if (!tryII(ii, start))
       continue;
     prob.setInitiationInterval(ii);
-    for (unsigned i = 0, n = ops.size(); i < n; ++i)
-      prob.setStartTime(ops[i], start[i]);
+    for (unsigned loopIndex = 0, elementCount = ops.size();
+         loopIndex < elementCount; ++loopIndex)
+      prob.setStartTime(ops[loopIndex], start[loopIndex]);
     LLVM_DEBUG(llvm::dbgs() << "fast modulo schedule: " << ops.size()
                             << " ops, II = " << ii << "\n");
     return success();
@@ -1153,39 +995,19 @@ LogicalResult FastModuloScheduler::schedule(unsigned maxIIBumps) {
 }
 
 void AffineToLoopSchedule::runOnOperation() {
-  // Phase 0 — structural transforms. Both mutate the loop nest and MUST run
-  // before any analysis is constructed.
-  coalescePerfectNests();      // flatten perfect rectangular bands
-  // unrollInnerReductions();     // unroll innermost reduction loops; the loop
-  // above becomes the new innermost/pipelined loop
 
-  // MODIFIED: Vitis-style LICM on the loops that will be pipelined, after the
-  // flatten decision (see hoistInvariantLoads). Moves ops only, so it must
-  // precede the analyses below like the coalescing does.
-  // MODIFIED: Vitis GVN / DSE on the unrolled bodies (see
-  // cleanupRedundantAccesses), before the LICM so that a dead store no longer
-  // pins its memref in the loop. Erases ops, so it precedes every analysis.
-  // `forward-stores` is off by default (Passes.td): it reproduces Vitis per
-  // array (an unrolled `acc[i] +=` becomes 1 BRAM, not a 2-port RAM) but the
-  // totals of atax / bicg / mvt then lose the cancelling error of the
-  // one-port sequential-scope rule (OPEN_ISSUES.md O3), so adopting it waits
-  // for that fix (CLAUDE.md: no change that breaks a matching case).
+  coalescePerfectNests();
+
   if (cseLoads || forwardStores)
     cleanupRedundantAccesses();
   if (hoistInvariant)
     hoistInvariantLoads();
-  // MODIFIED (T3): see materializeYieldedValues.
+
   getOperation().walk([&](AffineForOp forOp) {
     if (isInnermostAffineFor(forOp))
       materializeYieldedValues(forOp);
   });
 
-  // MODIFIED: drop trivially dead ops up front. A dead op has no outgoing
-  // dependence edge, so it is a sink in the scheduling DAG; anchoring it
-  // would burn a slot and a pipeline register for a value nothing reads.
-  // This must precede getAnalysis<MemoryDependenceAnalysis>(), since
-  // erasing ops later invalidates the analysis's cached Operation* keys —
-  // and must never run after a ModuloProblem has been built from them.
   {
     SmallVector<Operation *> dead;
     getOperation().walk([&](Operation *op) {
@@ -1195,25 +1017,12 @@ void AffineToLoopSchedule::runOnOperation() {
     for (Operation *op : llvm::reverse(dead))
       op->erase();
   }
-  
-  // Get dependence analysis for the whole function.
+
   auto dependenceAnalysis = getAnalysis<MemoryDependenceAnalysis>();
 
-  // After dependence analysis, materialize affine structures.
   if (failed(lowerAffineStructures(dependenceAnalysis)))
     return signalPassFailure();
 
-
-  // MODIFIED: collapse the redundant index arithmetic introduced by
-  // per-access affine-map expansion. Each affine.load/store expands its own
-  // copy of the floordiv/mod delinearization, so a banked access used N
-  // times yields N identical divsi/select chains. Merging them here — before
-  // the scheduling problem is constructed — means the scheduler sees one
-  // shared computation, so its result occupies a single pipeline register
-  // slot instead of one per access. Only side-effect-free ops are merged
-  // (never loads/stores), so the memory dependence analysis computed above
-  // stays valid and the per-bank port demand is untouched. (An earlier
-  // version built an OpPassManager with CSE here but never ran it.)
   if (cseBeforeSchedule) {
     unsigned merged = 0;
     for (Block &block : getOperation().getBody())
@@ -1222,14 +1031,10 @@ void AffineToLoopSchedule::runOnOperation() {
                             << " side-effect-free ops\n");
   }
 
-  // Get scheduling analysis for the whole function.
   schedulingAnalysis = &getAnalysis<CyclicSchedulingAnalysis>();
 
   auto &bramClass = getAnalysis<BRAMClassification>();
-  
-  // MODIFIED: Instead of bailing on nests, collect every *innermost* loop
-  // (post-coalescing) and pipeline each one in place. Outer loops of
-  // non-coalescable nests remain as affine.for wrapping the pipeline.
+
   SmallVector<AffineForOp> innermostLoops;
   getOperation().walk([&](AffineForOp forOp) {
     if (isInnermostAffineFor(forOp))
@@ -1240,20 +1045,15 @@ void AffineToLoopSchedule::runOnOperation() {
     ModuloProblem moduloProblem =
         getModuloProblem(schedulingAnalysis->getProblem(loop));
 
-    // Populate the target operator types.
-    // MODIFIED (T3): a loop whose body holds an op the scheduler has no
-    // operator type for (a call to a math function, ...) stays a sequential
-    // affine.for instead of failing the pass; populateOperatorTypes warned.
     if (failed(populateOperatorTypes(loop, moduloProblem, bramClass)))
       continue;
-    
+
+    anchorRegionCaptures(loop, moduloProblem);
     anchorUntrackedSideEffects(loop, moduloProblem);
 
-    // Solve the scheduling problem computed by the analysis.
     if (failed(solveSchedulingProblem(loop, moduloProblem)))
       return signalPassFailure();
 
-    // Convert the IR.
     if (failed(createLoopSchedulePipeline(loop, moduloProblem)))
       return signalPassFailure();
   }
@@ -1267,15 +1067,15 @@ void AffineToLoopSchedule::runOnOperation() {
 /// --bram-debug can still report them.
 static SmallVector<NamedAttribute> hlsAttrsOf(Operation *op) {
   SmallVector<NamedAttribute> out;
-  for (NamedAttribute a : op->getDiscardableAttrs())
-    if (a.getName().strref().starts_with("hls."))
-      out.push_back(a);
+  for (NamedAttribute arrayValue : op->getDiscardableAttrs())
+    if (arrayValue.getName().strref().starts_with("hls."))
+      out.push_back(arrayValue);
   return out;
 }
 
 static void setAttrs(Operation *op, ArrayRef<NamedAttribute> attrs) {
-  for (const NamedAttribute &a : attrs)
-    op->setAttr(a.getName(), a.getValue());
+  for (const NamedAttribute &arrayValue : attrs)
+    op->setAttr(arrayValue.getName(), arrayValue.getValue());
 }
 
 /// Also replaces the affine load with the memref load in dependenceAnalysis.
@@ -1289,14 +1089,13 @@ public:
   LogicalResult
   matchAndRewrite(AffineLoadOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    // Expand affine map from 'affineLoadOp'.
+
     SmallVector<Value, 8> indices(op.getMapOperands());
     auto resultOperands =
         expandAffineMap(rewriter, op.getLoc(), op.getAffineMap(), indices);
     if (!resultOperands)
       return failure();
 
-    // Build memref.load memref[expandedMap.results].
     SmallVector<NamedAttribute> hlsAttrs = hlsAttrsOf(op);
     auto memrefLoad = rewriter.replaceOpWithNewOp<memref::LoadOp>(
         op, op.getMemRef(), *resultOperands);
@@ -1325,14 +1124,13 @@ public:
   LogicalResult
   matchAndRewrite(AffineStoreOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    // Expand affine map from 'affineStoreOp'.
+
     SmallVector<Value, 8> indices(op.getMapOperands());
     auto maybeExpandedMap =
         expandAffineMap(rewriter, op.getLoc(), op.getAffineMap(), indices);
     if (!maybeExpandedMap)
       return failure();
 
-    // Build memref.store valueToStore, memref[expandedMap.results].
     SmallVector<NamedAttribute> hlsAttrs = hlsAttrsOf(op);
     auto memrefStore = rewriter.replaceOpWithNewOp<memref::StoreOp>(
         op, op.getValueToStore(), op.getMemRef(), *maybeExpandedMap);
@@ -1347,58 +1145,53 @@ private:
   MemoryDependenceAnalysis &dependenceAnalysis;
 };
 
-// Lower an IntegerSet predicate to one i1: AND of one comparison per
-// constraint. Equality (expr == 0) -> cmpi eq; inequality (expr >= 0) -> sge.
-// Empty set is vacuously true.
-static Value materializeIntegerSet(OpBuilder &b, Location loc, IntegerSet set,
-                                   ValueRange setOperands) {
+static Value materializeIntegerSet(OpBuilder &buildPoint, Location loc,
+                                   IntegerSet set, ValueRange setOperands) {
   if (set.getNumConstraints() == 0)
-    return arith::ConstantIntOp::create(b, loc, /*value=*/1, /*width=*/1);
+    return arith::ConstantIntOp::create(buildPoint, loc, 1, 1);
 
-  Value zero = arith::ConstantIndexOp::create(b, loc, 0);
+  Value zero = arith::ConstantIndexOp::create(buildPoint, loc, 0);
   Value acc;
-  for (unsigned i = 0, e = set.getNumConstraints(); i < e; ++i) {
-    AffineExpr c = set.getConstraint(i);
-    bool isEq = set.isEq(i);
-    auto cMap = AffineMap::get(set.getNumDims(), set.getNumSymbols(), c);
-    Value lhs = affine::AffineApplyOp::create(b, loc, cMap,
+  for (unsigned loopIndex = 0, entryValue = set.getNumConstraints();
+       loopIndex < entryValue; ++loopIndex) {
+    AffineExpr candidateValue = set.getConstraint(loopIndex);
+    bool isEq = set.isEq(loopIndex);
+    auto cMap =
+        AffineMap::get(set.getNumDims(), set.getNumSymbols(), candidateValue);
+    Value lhs = affine::AffineApplyOp::create(buildPoint, loc, cMap,
                                               llvm::to_vector(setOperands));
     Value cmp = arith::CmpIOp::create(
-        b, loc, isEq ? arith::CmpIPredicate::eq : arith::CmpIPredicate::sge,
-        lhs, zero);
-    acc = acc ? arith::AndIOp::create(b, loc, acc, cmp).getResult() : cmp;
+        buildPoint, loc,
+        isEq ? arith::CmpIPredicate::eq : arith::CmpIPredicate::sge, lhs, zero);
+    acc = acc ? arith::AndIOp::create(buildPoint, loc, acc, cmp).getResult()
+              : cmp;
   }
   return acc;
 }
 
 struct AffineStoreEnableLowering
     : public OpConversionPattern<hls_analysis::AffineStoreEnableOp> {
-  AffineStoreEnableLowering(MLIRContext *ctx,
-                            MemoryDependenceAnalysis &da)
-      : OpConversionPattern(ctx), dependenceAnalysis(da) {}
+  AffineStoreEnableLowering(MLIRContext *context, MemoryDependenceAnalysis &da)
+      : OpConversionPattern(context), dependenceAnalysis(da) {}
 
   LogicalResult
   matchAndRewrite(AffineStoreEnableOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     Location loc = op.getLoc();
 
-    // (a) predicate set -> i1
     Value en = materializeIntegerSet(rewriter, loc, op.getCondition(),
                                      adaptor.getSetOperands());
     if (!en)
       return rewriter.notifyMatchFailure(op, "could not materialize predicate");
 
-    // (b) affine map -> index SSA values
-    auto idx = expandAffineMap(rewriter, loc, op.getMap(),
-                               llvm::to_vector(adaptor.getMapOperands()));
-    if (!idx)
+    auto indexValue = expandAffineMap(
+        rewriter, loc, op.getMap(), llvm::to_vector(adaptor.getMapOperands()));
+    if (!indexValue)
       return rewriter.notifyMatchFailure(op, "could not expand access map");
 
-    // (c) flat predicated store
     auto lowered = rewriter.replaceOpWithNewOp<hls_analysis::StoreEnableOp>(
-        op, adaptor.getValue(), en, adaptor.getMemref(), *idx);
+        op, adaptor.getValue(), en, adaptor.getMemref(), *indexValue);
 
-    // (d) hand the scheduler the dependence edges the affine op carried
     dependenceAnalysis.replaceOp(op, lowered);
     return success();
   }
@@ -1407,40 +1200,33 @@ private:
   MemoryDependenceAnalysis &dependenceAnalysis;
 };
 
-/// Helper to hoist computation out of scf::IfOp branches, turning it into a
-/// mux-like operation, and exposing potentially concurrent execution of its
-/// branches.
-struct IfOpHoisting : OpConversionPattern<IfOp> {
-  using OpConversionPattern<IfOp>::OpConversionPattern;
-
-  LogicalResult
-  matchAndRewrite(IfOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    rewriter.modifyOpInPlace(op, [&]() {
-      if (!op.thenBlock()->without_terminator().empty()) {
-        rewriter.splitBlock(op.thenBlock(), --op.thenBlock()->end());
-        rewriter.inlineBlockBefore(&op.getThenRegion().front(), op);
-      }
-      if (op.elseBlock() && !op.elseBlock()->without_terminator().empty()) {
-        rewriter.splitBlock(op.elseBlock(), --op.elseBlock()->end());
-        rewriter.inlineBlockBefore(&op.getElseRegion().front(), op);
-      }
-    });
-
-    return success();
+/// Hoists computation out of scf::IfOp branches, turning the if into a
+/// mux-like operation and exposing concurrent execution of its branches (was
+/// the IfOpHoisting conversion pattern). Runs on the whole function after the
+/// conversion: innermost ifs first (post-order), each branch's ops moved in
+/// front of the if in order (then-branch, then else-branch), leaving the
+/// yields.
+static void hoistIfBodies(Operation *root) {
+  SmallVector<IfOp> ifs;
+  root->walk<WalkOrder::PostOrder>([&](IfOp op) { ifs.push_back(op); });
+  for (IfOp op : ifs) {
+    for (Block *blk : {op.thenBlock(), op.elseBlock()}) {
+      if (!blk)
+        continue;
+      for (Operation &inner :
+           llvm::make_early_inc_range(blk->without_terminator()))
+        inner.moveBefore(op);
+    }
   }
-};
-
-/// Helper to determine if an scf::IfOp is in mux-like form.
-static bool ifOpLegalityCallback(IfOp op) {
-  return op.thenBlock()->without_terminator().empty() &&
-         (!op.elseBlock() || op.elseBlock()->without_terminator().empty());
 }
 
-/// Helper to mark AffineYieldOp legal, unless it is inside a partially
-/// converted scf::IfOp.
+/// Helper to mark AffineYieldOp legal, unless it is the terminator of a
+/// partially converted scf::IfOp (an affine.if lowered to scf.if). MODIFIED
+/// (T4): the immediate parent only - the yield of an affine.for nested in an
+/// scf.if stays an affine.yield (it used to be converted to an scf.yield when
+/// the if was not hoisted away first, which broke the loop).
 static bool yieldOpLegalityCallback(AffineYieldOp op) {
-  return !op->getParentOfType<IfOp>();
+  return !isa<IfOp>(op->getParentOp());
 }
 
 /// After analyzing memory dependences, and before creating the schedule, we
@@ -1456,15 +1242,11 @@ LogicalResult AffineToLoopSchedule::lowerAffineStructures(
   auto op = getOperation();
 
   ConversionTarget target(*context);
-  target.addLegalDialect<AffineDialect, ArithDialect, MemRefDialect,
-                         SCFDialect, HLSDialect>();
-  // MODIFIED: AffineApplyOp is now illegal too. The AffineApplyLowering
-  // pattern registered by populateAffineToStdConversionPatterns expands it
-  // into explicit arith ops (muli/addi/divsi/remsi/cmpi/select for
-  // floordiv/mod semantics), which the scheduler can then handle. 
-  target.addIllegalOp<AffineApplyOp, AffineStoreEnableOp,
-                      AffineIfOp, AffineLoadOp, AffineStoreOp>();
-  target.addDynamicallyLegalOp<IfOp>(ifOpLegalityCallback);
+  target.addLegalDialect<AffineDialect, ArithDialect, MemRefDialect, SCFDialect,
+                         HLSDialect>();
+
+  target.addIllegalOp<AffineApplyOp, AffineStoreEnableOp, AffineIfOp,
+                      AffineLoadOp, AffineStoreOp>();
   target.addDynamicallyLegalOp<AffineYieldOp>(yieldOpLegalityCallback);
 
   RewritePatternSet patterns(context);
@@ -1472,38 +1254,20 @@ LogicalResult AffineToLoopSchedule::lowerAffineStructures(
   patterns.add<AffineLoadLowering>(context, dependenceAnalysis);
   patterns.add<AffineStoreLowering>(context, dependenceAnalysis);
   patterns.add<AffineStoreEnableLowering>(context, dependenceAnalysis);
-  patterns.add<IfOpHoisting>(context);
 
   if (failed(applyPartialConversion(op, target, std::move(patterns))))
     return failure();
 
+  hoistIfBodies(op);
   return success();
 }
-
-
-//===----------------------------------------------------------------------===//
-// Operator type (latency-1 "mem_<hash>") is unchanged and shared per memref —
-// it governs latency, not port count. Only the *resource* construction varies
-// by mode (the Vitis storage model, VITIS_NOTES.md N4):
-//   1WNR -> one pool, limit 17: a bank no loop body stores to twice can be
-//           replicated (16 copies + the shared write port), so the loop II is
-//           ceil((R + W) / 17) and --bram-analysis prices the copies
-//   TDP  -> one pool, limit 2: a bank some loop body stores to twice or more
-//           stays one true-dual-port RAM and the II is ceil((R + W) / 2); also
-//           every interface memref (function argument) and untracked memref
-//   1P   -> one pool, limit 1
-//   SDP  -> two pools, limit 1 each: loads -> _rd, stores -> _wr (dedicated)
-// The greedy scheduler (FastModuloScheduler) reads the same limits through
-// prob.getLimit(), so both paths see one port model.
-//===----------------------------------------------------------------------===//
 
 static void linkMemoryResource(Operation *memOp, Value memRef, bool isLoad,
                                ModuloProblem &problem,
                                const BRAMClassification &bramClass) {
   auto key = std::to_string(hash_value(memRef));
-  // Operator type: latency 1, shared per memref (unchanged).
-  Problem::OperatorType memOpr =
-      problem.getOrInsertOperatorType("mem_" + key);
+
+  Problem::OperatorType memOpr = problem.getOrInsertOperatorType("mem_" + key);
   problem.setLatency(memOpr, 1);
   problem.setLinkedOperatorType(memOp, memOpr);
 
@@ -1511,41 +1275,38 @@ static void linkMemoryResource(Operation *memOp, Value memRef, bool isLoad,
   const BankProfile *prof = bramClass.getProfile(memRef);
 
   SmallVector<Problem::ResourceType> rsrcs;
-  // Fallback: untracked memref (interface argument, get_global) -> two ports.
+
   StorageMode mode = prof ? prof->mode : StorageMode::TDP;
-  Problem::ResourceType r;
+  Problem::ResourceType resultValue;
 
   switch (mode) {
   case StorageMode::OnePort:
   case StorageMode::TDP:
   case StorageMode::OneWriteNRead: {
-    // One shared pool of read-or-write slots.
-    r = problem.getOrInsertResourceType("mem_" + key + "_rsrc");
-    problem.setLimit(r, hls_analysis::storageModeSlots(mode));
-    rsrcs.push_back(r);
+
+    resultValue = problem.getOrInsertResourceType("mem_" + key + "_rsrc");
+    problem.setLimit(resultValue, hls_analysis::storageModeSlots(mode));
+    rsrcs.push_back(resultValue);
     break;
   }
   case StorageMode::SDP: {
-    // Dedicated read and write ports: split pools, each limit 1. A load only
-    // consumes the read port; a store only the write port. A shared pool of 2
-    // would wrongly let two reads issue in one cycle, which SDP cannot do.
+
     if (isLoad) {
-      r = problem.getOrInsertResourceType("mem_" + key + "_rd_rsrc");
-      problem.setLimit(r, 1);
+      resultValue = problem.getOrInsertResourceType("mem_" + key + "_rd_rsrc");
+      problem.setLimit(resultValue, 1);
     } else {
-      r = problem.getOrInsertResourceType("mem_" + key + "_wr_rsrc");
-      problem.setLimit(r, 1);
+      resultValue = problem.getOrInsertResourceType("mem_" + key + "_wr_rsrc");
+      problem.setLimit(resultValue, 1);
     }
-    rsrcs.push_back(r);
+    rsrcs.push_back(resultValue);
     break;
   }
   }
   problem.setLinkedResourceTypes(memOp, rsrcs);
- 
-  LLVM_DEBUG(llvm::dbgs()
-             << "linked " << (isLoad ? "load" : "store") << " to "
-             << stringifyStorageMode(mode) << " resource for "
-             << *memOp << "\n");
+
+  LLVM_DEBUG(llvm::dbgs() << "linked " << (isLoad ? "load" : "store") << " to "
+                          << stringifyStorageMode(mode) << " resource for "
+                          << *memOp << "\n");
 }
 
 /// Populate the scheduling problem operator types for the dialect we are
@@ -1560,17 +1321,14 @@ static void linkMemoryResource(Operation *memOp, Value memRef, bool isLoad,
 LogicalResult AffineToLoopSchedule::populateOperatorTypes(
     AffineForOp forOp, ModuloProblem &problem,
     const BRAMClassification &bramClass) {
-  
-  // Load the Calyx operator library into the problem. This is a very minimal
-  // set of arithmetic and memory operators for now. This should ultimately be
-  // pulled out into some sort of dialect interface.
+
   Problem::OperatorType combOpr = problem.getOrInsertOperatorType("comb");
   problem.setLatency(combOpr, 0);
   Problem::OperatorType seqOpr = problem.getOrInsertOperatorType("seq");
   problem.setLatency(seqOpr, 1);
   Problem::OperatorType mcOpr = problem.getOrInsertOperatorType("multicycle");
   problem.setLatency(mcOpr, 3);
- 
+
   Problem::OperatorType fpMulOpr = problem.getOrInsertOperatorType("fpmul");
   problem.setLatency(fpMulOpr, 4);
   Problem::OperatorType fpAddOpr = problem.getOrInsertOperatorType("fpaddsub");
@@ -1582,48 +1340,43 @@ LogicalResult AffineToLoopSchedule::populateOperatorTypes(
   problem.setLatency(fpSqrtOpr, 16);
   Problem::OperatorType fpTransOpr = problem.getOrInsertOperatorType("fptrans");
   problem.setLatency(fpTransOpr, 20);
- 
+
   Operation *unsupported;
   WalkResult result = forOp.getBody()->walk([&](Operation *op) {
     return TypeSwitch<Operation *, WalkResult>(op)
         .Case<IfOp, AffineYieldOp, arith::ConstantOp, CmpIOp, IndexCastOp,
-              AllocaOp, AllocOp, YieldOp, AddIOp, SubIOp,
-              SelectOp, AndIOp, OrIOp, XOrIOp, ShLIOp, ShRSIOp, ShRUIOp,
-              TruncIOp, ExtSIOp, ExtUIOp, NegFOp, CmpFOp, ExtFOp, TruncFOp,
-              SIToFPOp, UIToFPOp, FPToSIOp, FPToUIOp, BitcastOp>(
-            [&](Operation *combOp) {
-              problem.setLinkedOperatorType(combOp, combOpr);
-              return WalkResult::advance();
-            })
-        // CHANGED: store now goes through the mode-keyed helper.
+              AllocaOp, AllocOp, YieldOp, AddIOp, SubIOp, SelectOp, AndIOp,
+              OrIOp, XOrIOp, ShLIOp, ShRSIOp, ShRUIOp, TruncIOp, ExtSIOp,
+              ExtUIOp, NegFOp, CmpFOp, ExtFOp, TruncFOp, SIToFPOp, UIToFPOp,
+              FPToSIOp, FPToUIOp, BitcastOp>([&](Operation *combOp) {
+          problem.setLinkedOperatorType(combOp, combOpr);
+          return WalkResult::advance();
+        })
+
         .Case<AffineStoreOp, memref::StoreOp>([&](Operation *memOp) {
           Value memRef = isa<AffineStoreOp>(*memOp)
                              ? cast<AffineStoreOp>(*memOp).getMemRef()
                              : cast<memref::StoreOp>(*memOp).getMemRef();
-          linkMemoryResource(memOp, memRef, /*isLoad=*/false, problem,
-                             bramClass);
+          linkMemoryResource(memOp, memRef, false, problem, bramClass);
           return WalkResult::advance();
         })
-        // CHANGED: load now goes through the mode-keyed helper.
+
         .Case<AffineLoadOp, memref::LoadOp>([&](Operation *memOp) {
           Value memRef = isa<AffineLoadOp>(*memOp)
                              ? cast<AffineLoadOp>(*memOp).getMemRef()
                              : cast<memref::LoadOp>(*memOp).getMemRef();
-          linkMemoryResource(memOp, memRef, /*isLoad=*/true, problem,
-                             bramClass);
+          linkMemoryResource(memOp, memRef, true, problem, bramClass);
           return WalkResult::advance();
         })
         .Case<StoreEnableOp>([&](Operation *memOp) {
           Value memRef = cast<StoreEnableOp>(*memOp).getMemref();
-          linkMemoryResource(memOp, memRef, /*isLoad=*/false, problem,
-                             bramClass);
+          linkMemoryResource(memOp, memRef, false, problem, bramClass);
           return WalkResult::advance();
         })
-        .Case<MulIOp, DivSIOp, DivUIOp, RemSIOp, RemUIOp>(
-            [&](Operation *mcOp) {
-              problem.setLinkedOperatorType(mcOp, mcOpr);
-              return WalkResult::advance();
-            })
+        .Case<MulIOp, DivSIOp, DivUIOp, RemSIOp, RemUIOp>([&](Operation *mcOp) {
+          problem.setLinkedOperatorType(mcOp, mcOpr);
+          return WalkResult::advance();
+        })
         .Case<MulFOp>([&](Operation *fpOp) {
           problem.setLinkedOperatorType(fpOp, fpMulOpr);
           return WalkResult::advance();
@@ -1638,44 +1391,55 @@ LogicalResult AffineToLoopSchedule::populateOperatorTypes(
           return WalkResult::advance();
         })
         .Case<math::SqrtOp, math::RsqrtOp>([&](Operation *fpOp) {
-        problem.setLinkedOperatorType(fpOp, fpSqrtOpr);
-        return WalkResult::advance();
+          problem.setLinkedOperatorType(fpOp, fpSqrtOpr);
+          return WalkResult::advance();
         })
         .Case<math::ExpOp, math::Exp2Op, math::ExpM1Op, math::LogOp,
-          math::Log2Op, math::Log10Op, math::Log1pOp, math::PowFOp,
-          math::SinOp, math::CosOp, math::TanOp, math::TanhOp,
-          math::ErfOp, math::AtanOp, math::Atan2Op>(
-        [&](Operation *fpOp) {
+              math::Log2Op, math::Log10Op, math::Log1pOp, math::PowFOp,
+              math::SinOp, math::CosOp, math::TanOp, math::TanhOp, math::ErfOp,
+              math::AtanOp, math::Atan2Op>([&](Operation *fpOp) {
           problem.setLinkedOperatorType(fpOp, fpTransOpr);
           return WalkResult::advance();
         })
         .Case<math::FmaOp>([&](Operation *fpOp) {
-        problem.setLinkedOperatorType(fpOp, fpAddOpr);
-        return WalkResult::advance();
-        })
-        .Case<math::AbsFOp, math::CopySignOp, math::AbsIOp>(
-        [&](Operation *combOp) {
-          problem.setLinkedOperatorType(combOp, combOpr);
+          problem.setLinkedOperatorType(fpOp, fpAddOpr);
           return WalkResult::advance();
         })
-        .Case<math::FloorOp, math::CeilOp, math::RoundOp,
-          math::RoundEvenOp, math::TruncOp>([&](Operation *fpOp) {
-        problem.setLinkedOperatorType(fpOp, fpAddOpr);
-        return WalkResult::advance();
+        .Case<math::AbsFOp, math::CopySignOp, math::AbsIOp>(
+            [&](Operation *combOp) {
+              problem.setLinkedOperatorType(combOp, combOpr);
+              return WalkResult::advance();
+            })
+        .Case<math::FloorOp, math::CeilOp, math::RoundOp, math::RoundEvenOp,
+              math::TruncOp>([&](Operation *fpOp) {
+          problem.setLinkedOperatorType(fpOp, fpAddOpr);
+          return WalkResult::advance();
         })
         .Default([&](Operation *badOp) {
+          if (loopScheduleCallLatency >= 0 && isa<CallOpInterface>(badOp) &&
+              llvm::none_of(badOp->getOperandTypes(),
+                            llvm::IsaPred<BaseMemRefType>) &&
+              llvm::none_of(badOp->getResultTypes(),
+                            llvm::IsaPred<BaseMemRefType>)) {
+            Problem::OperatorType callOpr =
+                problem.getOrInsertOperatorType("call");
+            problem.setLatency(callOpr,
+                               static_cast<unsigned>(loopScheduleCallLatency));
+            problem.setLinkedOperatorType(badOp, callOpr);
+            return WalkResult::advance();
+          }
           unsupported = op;
           return WalkResult::interrupt();
         });
   });
- 
+
   if (result.wasInterrupted()) {
     forOp.emitWarning("not pipelined (left as a sequential loop): "
                       "unsupported operation ")
         << *unsupported;
     return failure();
   }
- 
+
   return success();
 }
 
@@ -1683,7 +1447,7 @@ LogicalResult AffineToLoopSchedule::populateOperatorTypes(
 LogicalResult
 AffineToLoopSchedule::solveSchedulingProblem(AffineForOp forOp,
                                              ModuloProblem &problem) {
-  // Optionally debug problem inputs.
+
   LLVM_DEBUG(forOp.getBody()->walk<WalkOrder::PreOrder>([&](Operation *op) {
     llvm::dbgs() << "Scheduling inputs for " << *op;
     auto opr = problem.getLinkedOperatorType(op);
@@ -1696,31 +1460,35 @@ AffineToLoopSchedule::solveSchedulingProblem(AffineForOp forOp,
     llvm::dbgs() << "\n\n";
   }));
 
-  // Verify and solve the problem.
   if (failed(problem.check()))
     return failure();
 
   auto *anchor = forOp.getBody()->getTerminator();
 
-  // MODIFIED: large bodies (more resource-limited ops than `fast-threshold`,
-  // or any body when the threshold is 0) go to the greedy resource-bound
-  // scheduler; if it cannot find a schedule it falls back to the simplex.
   unsigned limited = FastModuloScheduler::countLimitedOps(problem);
-  bool scheduled = false;
+  bool scheduled = false, triedFast = false;
   if (fastThreshold == 0 || limited > fastThreshold) {
+    triedFast = true;
     FastModuloScheduler fast(problem);
-    scheduled = succeeded(fast.schedule(/*maxIIBumps=*/4096));
+    scheduled = succeeded(fast.schedule(4096));
     LLVM_DEBUG(if (!scheduled) llvm::dbgs()
                << "fast modulo scheduler failed; falling back to simplex\n");
   }
-  if (!scheduled && failed(scheduleSimplex(problem, anchor)))
+  if (!scheduled)
+    scheduled = succeeded(scheduleSimplex(problem, anchor));
+
+  if (!scheduled && !triedFast) {
+    LLVM_DEBUG(llvm::dbgs()
+               << "simplex modulo scheduler failed; falling back to fast\n");
+    FastModuloScheduler fast(problem);
+    scheduled = succeeded(fast.schedule(4096));
+  }
+  if (!scheduled)
     return failure();
 
-  // Verify the solution.
   if (failed(problem.verify()))
     return failure();
 
-  // Optionally debug problem outputs.
   LLVM_DEBUG({
     llvm::dbgs() << "Scheduled initiation interval = "
                  << problem.getInitiationInterval() << "\n\n";
@@ -1745,63 +1513,44 @@ AffineToLoopSchedule::solveSchedulingProblem(AffineForOp forOp,
 LogicalResult
 AffineToLoopSchedule::createLoopSchedulePipeline(AffineForOp forOp,
                                                  ModuloProblem &problem) {
-  ImplicitLocOpBuilder builder(forOp.getLoc(), forOp);
+  ImplicitLocOpBuilder passBuilder(forOp.getLoc(), forOp);
 
-  // Create Values for the loop's lower and upper bounds. If the bounds
-  // depend on outer induction variables (non-coalesced nests), the expanded
-  // bound computation is inserted right before the pipeline, inside the
-  // enclosing loop, so dominance is preserved.
-  Value lowerBound = lowerAffineLowerBound(forOp, builder);
-  Value upperBound = lowerAffineUpperBound(forOp, builder);
+  Value lowerBound = lowerAffineLowerBound(forOp, passBuilder);
+  Value upperBound = lowerAffineUpperBound(forOp, passBuilder);
   int64_t stepValue = forOp.getStep().getSExtValue();
   auto step = arith::ConstantOp::create(
-      builder, IntegerAttr::get(builder.getIndexType(), stepValue));
+      passBuilder, IntegerAttr::get(passBuilder.getIndexType(), stepValue));
 
-  // Create the pipeline op, with the same result types as the loop. An
-  // iter arg is created for the induction variable.
   TypeRange resultTypes = forOp.getResultTypes();
 
-  auto ii = builder.getI64IntegerAttr(problem.getInitiationInterval().value());
+  auto ii =
+      passBuilder.getI64IntegerAttr(problem.getInitiationInterval().value());
 
   SmallVector<Value> iterArgs;
   iterArgs.push_back(lowerBound);
   iterArgs.append(forOp.getInits().begin(), forOp.getInits().end());
 
-  // If possible, attach a constant trip count attribute. This could be
-  // generalized to support non-constant trip counts by supporting an
-  // AffineMap. For loops whose bounds depend on outer IVs this is simply
-  // omitted.
   std::optional<IntegerAttr> tripCountAttr;
   if (auto tripCount = getConstantTripCount(forOp))
-    tripCountAttr = builder.getI64IntegerAttr(*tripCount);
+    tripCountAttr = passBuilder.getI64IntegerAttr(*tripCount);
 
-  auto pipeline = LoopSchedulePipelineOp::create(builder, resultTypes, ii,
+  auto pipeline = LoopSchedulePipelineOp::create(passBuilder, resultTypes, ii,
                                                  tripCountAttr, iterArgs);
 
-  // MODIFIED (T3 review fixes): carry the decision record of
-  // --auto-pipeline-unroll (hls.pipeline tag, hls.flattened_parents,
-  // hls.auto_unrolled, hls.unroll_partial) onto the pipeline op so that
-  // --bram-debug can print which loops were flattened into and unrolled for
-  // this pipeline. In-process only (the pipeline op's printer does not print
-  // discardable attributes); nothing in the estimate reads them.
-  for (StringRef name :
-       {circt::hls_analysis::kLoopPipelineAttr,
-        circt::hls_analysis::kLoopFlattenedParentsAttr,
-        circt::hls_analysis::kLoopAutoUnrolledAttr,
-        circt::hls_analysis::kLoopUnrollPartialAttr})
-    if (Attribute a = forOp->getAttr(name))
-      pipeline->setAttr(name, a);
+  for (StringRef name : {circt::hls_analysis::kLoopPipelineAttr,
+                         circt::hls_analysis::kLoopFlattenedParentsAttr,
+                         circt::hls_analysis::kLoopAutoUnrolledAttr,
+                         circt::hls_analysis::kLoopUnrollPartialAttr})
+    if (Attribute arrayValue = forOp->getAttr(name))
+      pipeline->setAttr(name, arrayValue);
 
-  // Create the condition, which currently just compares the induction
-  // variable to the upper bound.
   Block &condBlock = pipeline.getCondBlock();
-  builder.setInsertionPointToStart(&condBlock);
-  auto cmpResult = arith::CmpIOp::create(builder, builder.getI1Type(),
+  passBuilder.setInsertionPointToStart(&condBlock);
+  auto cmpResult = arith::CmpIOp::create(passBuilder, passBuilder.getI1Type(),
                                          arith::CmpIPredicate::ult,
                                          condBlock.getArgument(0), upperBound);
   condBlock.getTerminator()->insertOperands(0, {cmpResult});
 
-  // Add the non-yield operations to their start time groups.
   DenseMap<unsigned, SmallVector<Operation *>> startGroups;
   for (auto *op : problem.getOperations()) {
     if (isa<AffineYieldOp, YieldOp>(op))
@@ -1810,42 +1559,25 @@ AffineToLoopSchedule::createLoopSchedulePipeline(AffineForOp forOp,
     startGroups[*startTime].push_back(op);
   }
 
-  // MODIFIED: ensure a stage exists for *every* time slot up to the last
-  // scheduled operation, even if no op starts there. With multi-cycle
-  // operators (e.g. latency-3 remsi/divsi from floordiv/mod expansion, or
-  // latency-4/5 FP ops), the schedule can have gaps: a value produced at
-  // time t and consumed at time t+k must be registered through every
-  // intermediate stage, and that pass-through chain breaks if intermediate
-  // stages are missing. When a chain breaks, builder.clone() silently falls
-  // back to the original (soon-to-be-erased) value, producing null operands
-  // after loop erasure. Empty groups become pure register-forwarding stages;
-  // any stage with nothing to execute and nothing to forward is skipped at
-  // creation time below.
   unsigned maxStartTime = 0;
   for (auto *op : problem.getOperations()) {
     if (isa<AffineYieldOp, YieldOp>(op))
       continue;
     maxStartTime = std::max(maxStartTime, *problem.getStartTime(op));
   }
-  for (unsigned t = 0; t <= maxStartTime; ++t)
-    if (!startGroups.count(t))
-      startGroups.try_emplace(t, SmallVector<Operation *>());
+  for (unsigned typeValue = 0; typeValue <= maxStartTime; ++typeValue)
+    if (!startGroups.count(typeValue))
+      startGroups.try_emplace(typeValue, SmallVector<Operation *>());
 
-  // Maintain mappings of values in the loop body and results of stages,
-  // initially populated with the iter args. Values defined *outside* the
-  // loop (outer IVs, loop-invariant values) are intentionally not mapped:
-  // clones keep referencing them directly.
   IRMapping valueMap;
   assert(iterArgs.size() == forOp.getBody()->getNumArguments());
-  for (size_t i = 0; i < iterArgs.size(); ++i)
-    valueMap.map(forOp.getBody()->getArgument(i),
-                 pipeline.getStagesBlock().getArgument(i));
+  for (size_t loopIndex = 0; loopIndex < iterArgs.size(); ++loopIndex)
+    valueMap.map(forOp.getBody()->getArgument(loopIndex),
+                 pipeline.getStagesBlock().getArgument(loopIndex));
 
-  // Create the stages.
   Block &stagesBlock = pipeline.getStagesBlock();
-  builder.setInsertionPointToStart(&stagesBlock);
+  passBuilder.setInsertionPointToStart(&stagesBlock);
 
-  // Iterate in order of the start times.
   SmallVector<unsigned> startTimes;
   for (const auto &group : startGroups)
     startTimes.push_back(group.first);
@@ -1853,153 +1585,133 @@ AffineToLoopSchedule::createLoopSchedulePipeline(AffineForOp forOp,
 
   DominanceInfo dom(getOperation());
 
-  // Keys for translating values in each stage
   SmallVector<SmallVector<Value>> registerValues;
   SmallVector<SmallVector<Type>> registerTypes;
 
-  // The maps that ensure a stage uses the correct version of a value
   SmallVector<IRMapping> stageValueMaps;
 
-  // For storing the range of stages an operation's results need to be valid
-  // for
   DenseMap<Operation *, std::pair<unsigned, unsigned>> pipeTimes;
 
   for (auto startTime : startTimes) {
     auto group = startGroups[startTime];
 
-    // Collect the return types for this stage. Operations whose results are
-    // not used within this stage are returned.
     auto isLoopTerminator = [forOp](Operation *op) {
       return isa<AffineYieldOp>(op) && op->getParentOp() == forOp;
     };
 
-    // Initialize set of registers up until this point in time
-    for (unsigned i = registerValues.size(); i <= startTime; ++i)
+    for (unsigned loopIndex = registerValues.size(); loopIndex <= startTime;
+         ++loopIndex)
       registerValues.emplace_back(SmallVector<Value>());
 
-    // Check each operation to see if its results need plumbing
     for (auto *op : group) {
       if (op->getUsers().empty())
         continue;
 
       unsigned pipeEndTime = 0;
-      for (auto *user : op->getUsers()) {
+      for (auto *rawUser : op->getUsers()) {
+
+        Operation *user = forOp.getBody()->findAncestorOpInBlock(*rawUser);
+        if (!user)
+          user = rawUser;
         unsigned userStartTime = *problem.getStartTime(user);
         if (*problem.getStartTime(user) > startTime)
           pipeEndTime = std::max(pipeEndTime, userStartTime);
         else if (isLoopTerminator(user))
-          // Manually forward the value into the terminator's valueMap
+
           pipeEndTime = std::max(pipeEndTime, userStartTime + 1);
       }
 
-      // Insert the range of pipeline stages the value needs to be valid for
       pipeTimes[op] = std::pair(startTime, pipeEndTime);
 
-      // Add register stages for each time slice we need to pipe to
-      for (unsigned i = registerValues.size(); i <= pipeEndTime; ++i)
+      for (unsigned loopIndex = registerValues.size(); loopIndex <= pipeEndTime;
+           ++loopIndex)
         registerValues.push_back(SmallVector<Value>());
 
-      // Keep a collection of this stages results as keys to our valueMaps
       for (auto result : op->getResults())
         registerValues[startTime].push_back(result);
 
-      // Other stages that use the value will need these values as keys too
       unsigned firstUse = std::max(
           startTime + 1,
           startTime + *problem.getLatency(*problem.getLinkedOperatorType(op)));
-      for (unsigned i = firstUse; i < pipeEndTime; ++i) {
+      for (unsigned loopIndex = firstUse; loopIndex < pipeEndTime;
+           ++loopIndex) {
         for (auto result : op->getResults())
-          registerValues[i].push_back(result);
+          registerValues[loopIndex].push_back(result);
       }
     }
   }
 
-  // Now make register Types and stageValueMaps
-  for (unsigned i = 0; i < registerValues.size(); ++i) {
+  for (unsigned loopIndex = 0; loopIndex < registerValues.size(); ++loopIndex) {
     SmallVector<mlir::Type> types;
-    for (auto val : registerValues[i])
-      types.push_back(val.getType());
+    for (auto operandValue : registerValues[loopIndex])
+      types.push_back(operandValue.getType());
 
     registerTypes.push_back(types);
     stageValueMaps.push_back(valueMap);
   }
 
-  // One more map is needed for the pipeline stages terminator
   stageValueMaps.push_back(valueMap);
 
-  // Create stages along with maps
   for (auto startTime : startTimes) {
     auto group = startGroups[startTime];
-    llvm::sort(group, [&](Operation *a, Operation *b) {
-      return dom.properlyDominates(a, b);
+    llvm::sort(group, [&](Operation *arrayValue, Operation *buildPoint) {
+      return dom.properlyDominates(arrayValue, buildPoint);
     });
     auto stageTypes = registerTypes[startTime];
 
-    // MODIFIED: a gap-filling stage that has no ops to run and no values to
-    // forward is pointless; skip it. (Stage 0 is always created since it
-    // carries the induction variable increment.)
     if (group.empty() && stageTypes.empty() && startTime != 0)
       continue;
-    // Add the induction variable increment in the first stage.
+
     if (startTime == 0)
       stageTypes.push_back(lowerBound.getType());
 
-    // Create the stage itself.
-    builder.setInsertionPoint(stagesBlock.getTerminator());
-    auto startTimeAttr = builder.getIntegerAttr(
-        builder.getIntegerType(64, /*isSigned=*/true), startTime);
-    auto stage =
-        LoopSchedulePipelineStageOp::create(builder, stageTypes, startTimeAttr);
+    passBuilder.setInsertionPoint(stagesBlock.getTerminator());
+    auto startTimeAttr = passBuilder.getIntegerAttr(
+        passBuilder.getIntegerType(64, true), startTime);
+    auto stage = LoopSchedulePipelineStageOp::create(passBuilder, stageTypes,
+                                                     startTimeAttr);
     auto &stageBlock = stage.getBodyBlock();
     auto *stageTerminator = stageBlock.getTerminator();
-    builder.setInsertionPointToStart(&stageBlock);
+    passBuilder.setInsertionPointToStart(&stageBlock);
 
     for (auto *op : group) {
-      auto *newOp = builder.clone(*op, stageValueMaps[startTime]);
+      auto *newOp = passBuilder.clone(*op, stageValueMaps[startTime]);
 
-      // All further uses in this stage should used the cloned-version of
-      // values So we update the mapping in this stage
       for (auto result : op->getResults())
         stageValueMaps[startTime].map(
             result, newOp->getResult(result.getResultNumber()));
     }
 
-    // Register all values in the terminator, using their mapped value
     SmallVector<Value> stageOperands;
     unsigned resIndex = 0;
-    for (auto res : registerValues[startTime]) {
-      stageOperands.push_back(stageValueMaps[startTime].lookup(res));
-      // Additionally, update the map of the stage that will consume the
-      // registered value
+    for (auto passResult : registerValues[startTime]) {
+      stageOperands.push_back(stageValueMaps[startTime].lookup(passResult));
+
       unsigned destTime = startTime + 1;
       unsigned latency = *problem.getLatency(
-          *problem.getLinkedOperatorType(res.getDefiningOp()));
-      // Multi-cycle case
-      if (*problem.getStartTime(res.getDefiningOp()) == startTime &&
+          *problem.getLinkedOperatorType(passResult.getDefiningOp()));
+
+      if (*problem.getStartTime(passResult.getDefiningOp()) == startTime &&
           latency > 1)
         destTime = startTime + latency;
       destTime = std::min((unsigned)(stageValueMaps.size() - 1), destTime);
-      stageValueMaps[destTime].map(res, stage.getResult(resIndex++));
+      stageValueMaps[destTime].map(passResult, stage.getResult(resIndex++));
     }
-    // Add these mapped values to pipeline.register
+
     stageTerminator->insertOperands(stageTerminator->getNumOperands(),
                                     stageOperands);
 
-    // Add the induction variable increment to the first stage.
     if (startTime == 0) {
       auto incResult =
-          arith::AddIOp::create(builder, stagesBlock.getArgument(0), step);
+          arith::AddIOp::create(passBuilder, stagesBlock.getArgument(0), step);
       stageTerminator->insertOperands(stageTerminator->getNumOperands(),
                                       incResult->getResults());
     }
   }
 
-  // Add the iter args and results to the terminator.
   auto stagesTerminator =
       cast<LoopScheduleTerminatorOp>(stagesBlock.getTerminator());
 
-  // Collect iter args and results from the induction variable increment and
-  // any mapped values that were originally yielded.
   SmallVector<Value> termIterArgs;
   SmallVector<Value> termResults;
   termIterArgs.push_back(
@@ -2016,12 +1728,10 @@ AffineToLoopSchedule::createLoopSchedulePipeline(AffineForOp forOp,
   stagesTerminator.getIterArgsMutable().append(termIterArgs);
   stagesTerminator.getResultsMutable().append(termResults);
 
-  // Replace loop results with pipeline results.
-  for (size_t i = 0; i < forOp.getNumResults(); ++i)
-    forOp.getResult(i).replaceAllUsesWith(pipeline.getResult(i));
+  for (size_t loopIndex = 0; loopIndex < forOp.getNumResults(); ++loopIndex)
+    forOp.getResult(loopIndex).replaceAllUsesWith(
+        pipeline.getResult(loopIndex));
 
-  // MODIFIED: remove only this loop from the IR; enclosing loops (if any)
-  // are kept as sequential control around the new pipeline.
   forOp.walk([](Operation *op) {
     op->dropAllUses();
     op->dropAllDefinedValueUses();
@@ -2041,4 +1751,4 @@ void registerAffineToLoopScheduleAnalysisPass() {
   PassRegistration<AffineToLoopSchedule>();
 }
 
-}
+} // namespace circt::hls_analysis

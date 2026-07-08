@@ -1,21 +1,27 @@
+//===- BRAMAnalysis.cpp - estimate Vitis resources ----------------------- ===//
+
 #include "circt/Dialect/Resource/Passes/BRAMAnalysis.h"
+#include "circt/Dialect/LoopSchedule/LoopScheduleOps.h"
 #include "circt/Dialect/Resource/Interfaces/MemoryInterface.h"
 #include "circt/Dialect/Resource/Passes/LoopPragmas.h"
-#include "circt/Dialect/LoopSchedule/LoopScheduleOps.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/IR/BuiltinOps.h"
+#include "mlir/Interfaces/CallInterfaces.h"
 #include "mlir/Interfaces/LoopLikeInterface.h"
 #include "mlir/Interfaces/SideEffectInterfaces.h"
+#include "mlir/Interfaces/ViewLikeInterface.h"
 #include "mlir/Pass/Pass.h"
 
+#include "llvm/ADT/DenseSet.h"
+#include "llvm/ADT/StringMap.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/FileSystem.h"
+#include "llvm/Support/Format.h"
 #include "llvm/Support/FormatVariadic.h"
 #include "llvm/Support/JSON.h"
 #include "llvm/Support/MathExtras.h"
 #include "llvm/Support/raw_ostream.h"
-#include "llvm/Support/Format.h"
 
 #include <algorithm>
 #include <map>
@@ -30,15 +36,6 @@ using circt::loopschedule::LoopSchedulePipelineOp;
 using circt::loopschedule::LoopSchedulePipelineStageOp;
 using namespace circt::hls_analysis;
 
-//===----------------------------------------------------------------------===//
-// Debug-mode options.
-//===----------------------------------------------------------------------===//
-// Plain llvm::cl options rather than pass options so they can be appended to
-// any pipeline string (`... --bram-analysis --bram-debug`). They only add
-// output: the estimate is computed exactly as without them, and the normal
-// stdout report is byte-identical. The text form goes to stderr after the
-// report; the JSON form is what tools/hls-est-validate/compare.py diffs
-// against the Vitis per-memory table.
 static llvm::cl::opt<bool> bramDebugOpt(
     "bram-debug",
     llvm::cl::desc("After the --bram-analysis report, explain on stderr how "
@@ -52,80 +49,58 @@ static llvm::cl::opt<std::string> bramDebugJsonOpt(
                    "JSON to this path (does not change any estimate)"),
     llvm::cl::value_desc("path"), llvm::cl::init(""));
 
+static llvm::cl::opt<bool> bramAttributeGlobalsOpt(
+    "bram-attribute-globals",
+    llvm::cl::desc("--bram-analysis: attribute the accesses of a "
+                   "memref.global through its memref.get_global sites (port "
+                   "demand, RAM type, replication like an alloca; a constant "
+                   "global is priced as a ROM: read-only ports are simple "
+                   "dual port, x36 allowed). Default: globals are RAM_1P "
+                   "with unattributed accesses (OPEN_ISSUES.md O4)"),
+    llvm::cl::init(false));
+
+static llvm::cl::opt<bool> bramMaxiAdaptersOpt(
+    "bram-maxi-adapters",
+    llvm::cl::desc("--bram-analysis: add the BRAM of the m_axi adapter of "
+                   "every bundle of a public function's hls.interface "
+                   "arguments (read FIFO depth max_read_burst_length x "
+                   "num_read_outstanding, write buffer when "
+                   "max_write_burst_length > 16; VITIS_NOTES.md N1a)"),
+    llvm::cl::init(false));
+
 namespace {
 
-//===----------------------------------------------------------------------===//
-// Device model (Zynq-7020 / 7-series RAMB18E1), as Vitis HLS 2025.1 prices it
-// (VITIS_NOTES.md N6, 147 + 3 kernels; ~/hls-est-work/exp-notes/aspect.md,
-// aspect_chk.md).
-//===----------------------------------------------------------------------===//
-// A RAMB18E1 holds 18*1024 = 18432 bits *including the parity bits*, in one of
-// the aspect-ratio modes below (data bits per word x words). Vitis cuts a bank
-// of D words x W bits into ceil(W/m) columns that all use the same mode m, each
-// column takes P/depth(m) blocks with P = 2^ceil(log2 D) (the address space of
-// the core, not the word count: 2500x18 one-port = 4, not 3), and it takes the
-// cheapest mode:
-//
-//     BRAM_18K(W, D, wide) = min over m of ceil(W / m) * max(1, P / depth(m))
-//
-//     mode m (bits)  1      2     4     9     18    36
-//     depth(m)       16384  8192  4096  2048  1024  512
-//
-// The x36 mode (both ports of the block ganged into one 36-bit port) is only
-// available when at most ONE port is live per cycle (`wide`: Vitis' ram_1p, or
-// an explicit ram_s2p). When two ports are live in the same cycle (a read and
-// a write, or two reads, in one iteration of a pipelined loop: ram_2p /
-// ram_t2p) each port is at most x18. Every copy of a replicated RAM_1WNR is a
-// true-dual-port RAM (port A writes/reads, port B reads), so copies are priced
-// narrow. Parity bits count: 1024x18 = 1, 2048x9 = 1, 512x36 wide = 1.
-//
-// Data points (Vitis): 1024x32 one-port 2, 4096x32 8 (wide or narrow), 64x32
-// one-port 1 / two-port 2, 1024x40 3, 1024x72 4, 2048x24 3, 3072x20 5 (five
-// x4 columns; mixed-width columns are not used), 1024x1 1.
-constexpr int64_t kBitsPerBRAM = 18 * 1024; // incl. parity
+constexpr int64_t kBitsPerBRAM = 18 * 1024;
 
 struct AspectMode {
-  unsigned width;  // data bits per word in this mode (parity included)
-  int64_t depth;   // words per RAMB18E1 in this mode
+  unsigned width;
+  int64_t depth;
 };
-constexpr AspectMode kAspectModes[] = {{1, 16384}, {2, 8192}, {4, 4096},
+constexpr AspectMode kAspectModes[] = {{1, 16384}, {2, 8192},  {4, 4096},
                                        {9, 2048},  {18, 1024}, {36, 512}};
-constexpr unsigned kMaxPortWidthWide = 36;   // one live port (x36)
-constexpr unsigned kMaxPortWidthNarrow = 18; // two live ports (TDP, x18)
+constexpr unsigned kMaxPortWidthWide = 36;
+constexpr unsigned kMaxPortWidthNarrow = 18;
 
 struct PortDemand {
   unsigned reads = 0;
   unsigned writes = 0;
   unsigned total = 0;
-  // True iff reads and writes are partitioned across scopes -- no single scope
-  // both reads and writes this bank, and at least one scope of each exists. This
-  // is the structural precondition for simple-dual-port (one port read-only, the
-  // other write-only); only meaningful on the combined demand.
+
   bool segregated = false;
 };
 
-//===----------------------------------------------------------------------===//
-// Debug records.
-//===----------------------------------------------------------------------===//
-// Everything the debug report says about one memref. Filled while the estimate
-// is computed (from the same intermediate values the estimate uses), and only
-// ever *read* by the text/JSON printers, so collecting it cannot change a
-// number. Optional strings are JSON null when unset.
-
 struct AccessRecord {
-  std::string op;        // e.g. "memref.load", "hls.store_enable"
+  std::string op;
   bool isWrite = false;
-  std::string scopeKind; // "pipeline" | "loop" | "func" | "none"
+  std::string scopeKind;
   std::string scopeLoc;
   unsigned ii = 0;
   unsigned stageStart = 0;
-  bool storeEnable = false; // hls.store_enable: write-only, no phantom read
-  // Counters the scheduler's redundant-access cleanup left on the op
-  // (AffineToLoopScheduleModified.cpp cleanupRedundantAccesses): accesses
-  // that no longer exist because this one stands for them.
-  unsigned mergedLoads = 0;    // hls.merged_loads: same-address loads (CSE)
-  unsigned forwardedLoads = 0; // hls.forwarded_loads: loads served by the value
-  unsigned removedStores = 0;  // hls.removed_stores: stores it overwrote
+  bool storeEnable = false;
+
+  unsigned mergedLoads = 0;
+  unsigned forwardedLoads = 0;
+  unsigned removedStores = 0;
   Operation *scope = nullptr;
 };
 
@@ -138,71 +113,85 @@ struct ScopeDemandRecord {
 
 struct PartitionRecord {
   bool present = false;
-  bool applied = false; // banks exist (hls.partition) vs. spec still unbanked
+  bool applied = false;
   std::string kind, source;
-  // On a bank (`applied`): the factor and 1-based dimension banking actually
-  // used. On an unbanked memref: the pragma entry's fields as written.
+
   int64_t factor = 0, dim = 0;
   std::optional<int64_t> bankIndex, bankCount;
-  std::optional<std::string> reason; // hls.partition_reason
+  std::optional<std::string> reason;
 };
 
 struct BankMathRecord {
   bool present = false;
   int64_t bitsPerBram = kBitsPerBRAM;
-  bool wide = false;         // x36 mode allowed (one live port / RAM_S2P)
-  unsigned maxWidth = 0;     // widest mode allowed: 36 (wide) or 18 (narrow)
-  unsigned configWidth = 0;  // chosen aspect-ratio mode m (bits per word)
-  int64_t widthTiles = 0;    // columns = ceil(elemBits / m)
-  int64_t depthPerBlock = 0; // words per RAMB18 in mode m
-  int64_t addrDepth = 0;     // P = 2^ceil(log2 words): the priced depth
-  int64_t depthTiles = 0;    // blocks per column = max(1, P / depthPerBlock)
-  int64_t blocksPerCopy = 0; // widthTiles * depthTiles
-  int64_t replication = 1;   // RAM_1WNR copies (1: not replicated)
-  int64_t blocks = 0;        // blocksPerCopy * replication
+  bool wide = false;
+  unsigned maxWidth = 0;
+  unsigned configWidth = 0;
+  int64_t widthTiles = 0;
+  int64_t depthPerBlock = 0;
+  int64_t addrDepth = 0;
+  int64_t depthTiles = 0;
+  int64_t blocksPerCopy = 0;
+  int64_t replication = 1;
+  int64_t blocks = 0;
 };
 
-// Per pipelined loop, what Vitis' replication rule saw (replication.md R2).
 struct ReplicationLoopRecord {
   std::string scopeLoc;
   unsigned ii = 0;
-  unsigned reads = 0;  // loads per iteration of the loop
-  unsigned writes = 0; // stores per iteration of the loop
-  unsigned need = 0;   // ceil((reads + writes) / ii): ports the loop needs
-  unsigned copies = 0; // max(1, need - 1), capped
+  unsigned reads = 0;
+  unsigned writes = 0;
+  unsigned need = 0;
+  unsigned copies = 0;
 };
 
 struct ReplicationRecord {
-  bool present = false;     // the bank's accesses were attributed
-  bool replicable = false;  // no loop body stores to the bank twice
+  bool present = false;
+  bool replicable = false;
   unsigned maxStoresPerLoop = 0;
-  unsigned copies = 1;      // chosen copy count (1: plain RAM)
+  unsigned copies = 1;
   SmallVector<ReplicationLoopRecord> loops;
-  std::optional<std::string> limitingLoop; // scope that set `copies`
+  std::optional<std::string> limitingLoop;
+};
+
+struct AdapterRecord {
+  std::string bundle;
+  SmallVector<std::string> ports;
+  unsigned busBits = 32;
+  int64_t readBurst = 16, readOutstanding = 16;
+  int64_t writeBurst = 16, writeOutstanding = 16;
+  bool hasRead = false, hasWrite = false;
+  bool passedToCall = false;
+  int64_t readDepth = 0;
+  unsigned readBram = 0, writeBram = 0;
+  std::string readRule, writeRule;
 };
 
 struct MemrefRecord {
   std::string id;
-  std::optional<std::string> name;    // memref.global symbol
-  std::optional<std::string> varname; // polygeist.varname / hls.bank_of
-  std::string kind;                   // "alloca" | "global" | ...
+  std::optional<std::string> name;
+  std::optional<std::string> varname;
+  std::optional<std::string> fromGlobal;
+  std::string kind;
   std::optional<std::string> func;
   bool hasLoc = false;
   std::string locFile;
   unsigned locLine = 0, locCol = 0;
-  std::string locText; // printed location when no file:line:col is available
+  std::string locText;
 
   SmallVector<int64_t> shape;
   std::string elemType;
   unsigned elemBits = 0;
   std::optional<int64_t> words;
 
-  std::string status;                        // counted | excluded_small | ...
+  std::string status;
   std::optional<std::string> excludeReason;
 
   PartitionRecord partition;
   SmallVector<AccessRecord> accesses;
-  bool accessesAttributed = false; // false for globals (no SSA result)
+  bool accessesAttributed = false;
+  bool rom = false;
+  std::optional<AdapterRecord> adapter;
   PortDemand demand;
   SmallVector<ScopeDemandRecord> perScope;
 
@@ -214,64 +203,50 @@ struct MemrefRecord {
   bool infeasible = false;
 };
 
-//===----------------------------------------------------------------------===//
-// Port demand: per temporal scope, then combined across scopes.
-//===----------------------------------------------------------------------===//
-// Peak demand within ONE loop. A pipelined scope (ii>=1) overlaps iterations, so
-// accesses contend when they share a slot (stageStart % ii). A sequential scope
-// (ii==0) issues at most one memory op per cycle, so reads and writes never
-// collide regardless of how many there are.
 PortDemand scopeDemand(ArrayRef<const AccessSummary *> group) {
-  PortDemand d;
+  PortDemand dimensionIndex;
   if (group.empty())
-    return d;
+    return dimensionIndex;
 
   unsigned ii = group.front()->ii;
-  assert(llvm::all_of(group, [&](auto *a) { return a->ii == ii; }) &&
+  assert(llvm::all_of(group,
+                      [&](auto *arrayValue) { return arrayValue->ii == ii; }) &&
          "scopeDemand requires a single-II group; bucket by scope first");
 
-  // Sequential scope: the body runs to completion before the next iteration, so
-  // there is no cross-iteration overlap and at most one access is in flight
-  // regardless of latency.
   if (ii == 0) {
     bool anyR = false, anyW = false;
-    for (const auto *a : group)
-      (a->isWrite ? anyW : anyR) = true;
-    d.reads = anyR ? 1u : 0u;
-    d.writes = anyW ? 1u : 0u;
-    d.total = (anyR || anyW) ? 1u : 0u;
-    return d;
+    for (const auto *arrayValue : group)
+      (arrayValue->isWrite ? anyW : anyR) = true;
+    dimensionIndex.reads = anyR ? 1u : 0u;
+    dimensionIndex.writes = anyW ? 1u : 0u;
+    dimensionIndex.total = (anyR || anyW) ? 1u : 0u;
+    return dimensionIndex;
   }
 
-  // Pipelined scope: an access starting at `stageStart` and holding its port for
-  // `latency` cycles reserves phases stageStart .. stageStart+latency-1, each
-  // taken mod II. Looping the cycles handles wraparound, including self-overlap
-  // when latency >= II.
-  std::vector<std::pair<unsigned, unsigned>> slot(ii, {0u, 0u}); // {reads,writes}
-  for (const auto *a : group) {
-    unsigned occ = std::max(a->latency, 1u); // 0-latency access still uses a port
-    for (unsigned c = 0; c < occ; ++c) {
-      unsigned phase = (a->stageStart + c) % ii;
-      (a->isWrite ? slot[phase].second : slot[phase].first)++;
+  std::vector<std::pair<unsigned, unsigned>> slot(ii, {0u, 0u});
+  for (const auto *arrayValue : group) {
+    unsigned occ = std::max(arrayValue->latency, 1u);
+    for (unsigned candidateValue = 0; candidateValue < occ; ++candidateValue) {
+      unsigned phase = (arrayValue->stageStart + candidateValue) % ii;
+      (arrayValue->isWrite ? slot[phase].second : slot[phase].first)++;
     }
   }
 
   for (const auto &cell : slot) {
-    unsigned r = cell.first, w = cell.second;
-    d.reads = std::max(d.reads, r);
-    d.writes = std::max(d.writes, w);
-    d.total = std::max(d.total, r + w);
+    unsigned resultValue = cell.first, widthValue = cell.second;
+    dimensionIndex.reads = std::max(dimensionIndex.reads, resultValue);
+    dimensionIndex.writes = std::max(dimensionIndex.writes, widthValue);
+    dimensionIndex.total =
+        std::max(dimensionIndex.total, resultValue + widthValue);
   }
 
-  return d;
+  return dimensionIndex;
 }
 
-// Combine per-loop demand into a single requirement for the shared bank.
-//   sequential loops  -> element-wise MAX (the array is time-shared)
 static PortDemand computePortDemand(ArrayRef<AccessSummary> accesses) {
   std::map<Operation *, SmallVector<const AccessSummary *>> byScope;
-  for (const auto &a : accesses)
-    byScope[a.scope].push_back(&a);
+  for (const auto &arrayValue : accesses)
+    byScope[arrayValue.scope].push_back(&arrayValue);
 
   PortDemand combined;
   bool anyRead = false, anyWrite = false, anyReadModifyScope = false;
@@ -283,80 +258,77 @@ static PortDemand computePortDemand(ArrayRef<AccessSummary> accesses) {
     combined.reads = std::max(combined.reads, local.reads);
     combined.writes = std::max(combined.writes, local.writes);
     combined.total = std::max(combined.total, local.total);
-
   }
   combined.segregated = anyRead && anyWrite && !anyReadModifyScope;
   return combined;
 }
 
-//===----------------------------------------------------------------------===//
-// Kind naming (declared early; used in notes).
-//===----------------------------------------------------------------------===//
-const char *kindName(StorageKind k) {
-  switch (k) {
-  case StorageKind::RAM_1P:   return "RAM_1P";
-  case StorageKind::RAM_2P:   return "RAM_2P";
-  case StorageKind::RAM_S2P:  return "RAM_S2P";
-  case StorageKind::RAM_T2P:  return "RAM_T2P";
-  case StorageKind::RAM_1WNR: return "RAM_1WNR";
-  case StorageKind::LUTRAM:   return "LUTRAM";
-  case StorageKind::URAM:     return "URAM";
+const char *kindName(StorageKind keyValue) {
+  switch (keyValue) {
+  case StorageKind::RAM_1P:
+    return "RAM_1P";
+  case StorageKind::RAM_2P:
+    return "RAM_2P";
+  case StorageKind::RAM_S2P:
+    return "RAM_S2P";
+  case StorageKind::RAM_T2P:
+    return "RAM_T2P";
+  case StorageKind::RAM_1WNR:
+    return "RAM_1WNR";
+  case StorageKind::LUTRAM:
+    return "LUTRAM";
+  case StorageKind::URAM:
+    return "URAM";
+  case StorageKind::ROM_1P:
+    return "ROM_1P";
+  case StorageKind::ROM_2P:
+    return "ROM_2P";
+  case StorageKind::ROM_NP:
+    return "ROM_NP";
   }
   return "?";
 }
 
-//===----------------------------------------------------------------------===//
-// Storage-kind inference from port demand (replaces the old flat multiplier).
-//===----------------------------------------------------------------------===//
 struct KindResult {
   StorageKind kind = StorageKind::RAM_1P;
-  bool infeasible = false; // demand exceeds the 2 physical ports of one block
+  bool infeasible = false;
   std::string note;
 };
 
-// A single BRAM primitive has at most two ports. Map the per-cycle access
-// pattern to the narrowest mode that serves it; that mode then fixes whether
-// the x36 aspect ratio is allowed (isWideKind). Note this is count-only and
-// never returns RAM_S2P: from counts a read-modify array (narrow RAM_2P) and a
-// segregated producer/consumer (wide RAM_S2P) both look like 1R+1W, and Vitis'
-// automatic storage inference never picks ram_s2p either (aspect.md R2) - only
-// an explicit bind_storage pragma does.
-static KindResult selectStorageKind(const PortDemand &d) {
-  KindResult r;
-  unsigned total = d.total, w = d.writes, rd = d.reads;
+static KindResult selectStorageKind(const PortDemand &dimensionIndex) {
+  KindResult resultValue;
+  unsigned total = dimensionIndex.total, widthValue = dimensionIndex.writes,
+           rd = dimensionIndex.reads;
 
   if (total <= 1) {
-    r.kind = StorageKind::RAM_1P;          // one live port, wide x36
-    return r;
+    resultValue.kind = StorageKind::RAM_1P;
+    return resultValue;
   }
   if (total == 2) {
-    r.kind = (rd == 1 && w == 1) ? StorageKind::RAM_2P
-                                 : StorageKind::RAM_T2P;
-    return r;
+    resultValue.kind = (rd == 1 && widthValue == 1) ? StorageKind::RAM_2P
+                                                    : StorageKind::RAM_T2P;
+    return resultValue;
   }
 
-  r.kind = StorageKind::RAM_T2P;
-  r.infeasible = true;
-  r.note = "port demand " + std::to_string(total) + "/cycle (" +
-           std::to_string(rd) + "R+" + std::to_string(w) +
-           "W, multi-writer) exceeds 2 ports; needs array_partition.";
-  return r;
+  resultValue.kind = StorageKind::RAM_T2P;
+  resultValue.infeasible = true;
+  resultValue.note = "port demand " + std::to_string(total) + "/cycle (" +
+                     std::to_string(rd) + "R+" + std::to_string(widthValue) +
+                     "W, multi-writer) exceeds 2 ports; needs array_partition.";
+  return resultValue;
 }
 
-//===----------------------------------------------------------------------===//
-// Width-aware block count.
-//===----------------------------------------------------------------------===//
-// Whether the kind leaves at most one port live per cycle, so the block may
-// use the x36 aspect ratio (both ports ganged). Two live ports (true dual
-// port) cap each port at x18.
-bool isWideKind(StorageKind k) {
-  switch (k) {
-  case StorageKind::RAM_1P:   // one live port -> no TDP constraint -> wide
-  case StorageKind::RAM_S2P:  // simple dual port: dedicated R + W -> wide
+bool isWideKind(StorageKind keyValue) {
+  switch (keyValue) {
+  case StorageKind::RAM_1P:
+  case StorageKind::RAM_S2P:
+  case StorageKind::ROM_1P:
+  case StorageKind::ROM_2P:
     return true;
-  case StorageKind::RAM_2P:   // two live ports (read-modify) -> TDP x18
-  case StorageKind::RAM_T2P:  // two live ports -> TDP x18
-  case StorageKind::RAM_1WNR: // every copy is a TDP RAM -> x18
+  case StorageKind::RAM_2P:
+  case StorageKind::RAM_T2P:
+  case StorageKind::RAM_1WNR:
+  case StorageKind::ROM_NP:
   case StorageKind::LUTRAM:
   case StorageKind::URAM:
     return false;
@@ -364,21 +336,16 @@ bool isWideKind(StorageKind k) {
   return false;
 }
 
-// Widest aspect-ratio mode (data bits per port) the kind allows.
-unsigned blockDataWidth(StorageKind k) {
-  if (k == StorageKind::LUTRAM || k == StorageKind::URAM)
-    return 0; // not mapped to BRAM
-  return isWideKind(k) ? kMaxPortWidthWide : kMaxPortWidthNarrow;
+unsigned blockDataWidth(StorageKind keyValue) {
+  if (keyValue == StorageKind::LUTRAM || keyValue == StorageKind::URAM)
+    return 0;
+  return isWideKind(keyValue) ? kMaxPortWidthWide : kMaxPortWidthNarrow;
 }
 
-int64_t ceilDiv(int64_t a, int64_t b) { return (a + b - 1) / b; }
+int64_t ceilDiv(int64_t arrayValue, int64_t buildPoint) {
+  return (arrayValue + buildPoint - 1) / buildPoint;
+}
 
-// BRAM_18K blocks for ONE copy of numElems x elemBits: the min over the
-// aspect-ratio modes of ceil(elemBits / m) columns x max(1, P / depth(m))
-// blocks per column, P = 2^ceil(log2 numElems) (N6). `wide` allows the x36
-// mode. `bm`, when given, receives the intermediate values of the winning
-// mode for the debug report; it is write-only here and never feeds back into
-// the arithmetic.
 int64_t estimateBlocks(int64_t numElems, unsigned elemBits, bool wide,
                        BankMathRecord *bm = nullptr) {
   if (bm) {
@@ -389,12 +356,12 @@ int64_t estimateBlocks(int64_t numElems, unsigned elemBits, bool wide,
   if (numElems <= 0 || elemBits == 0)
     return 0;
 
-  int64_t addrDepth = static_cast<int64_t>(llvm::PowerOf2Ceil(
-      static_cast<uint64_t>(numElems)));
+  int64_t addrDepth =
+      static_cast<int64_t>(llvm::PowerOf2Ceil(static_cast<uint64_t>(numElems)));
   int64_t best = -1;
   AspectMode bestMode{0, 0};
   int64_t bestCols = 0, bestPerCol = 0;
-  // Widest mode first, so a tie is reported as the fewest-columns layout.
+
   for (const AspectMode &mode : llvm::reverse(kAspectModes)) {
     if (!wide && mode.width > kMaxPortWidthNarrow)
       continue;
@@ -421,129 +388,95 @@ int64_t estimateBlocks(int64_t numElems, unsigned elemBits, bool wide,
   return best;
 }
 
-//===----------------------------------------------------------------------===//
-// Access-summary collection (replaces the removed getAccessSummary interface
-// method). The memref interface stays dialect-neutral; this loopschedule-aware
-// analysis lives in the pass, where reaching into pipeline/stage timing is fair
-// game. It reconstructs, per access to this bank:
-//   isWrite     - from the op's memory effect on the bank value (dialect-neutral)
-//   scope       - the enclosing pipeline (pipelined) or loop (sequential); only
-//                 accesses sharing a scope contend for ports
-//   ii          - the pipeline II, or 0 for a sequential scope
-//   stageStart  - the enclosing stage's `start` cycle (the port-issue phase)
-//   latency     - port *occupancy* in cycles; a BRAM address port is held for
-//                 one cycle per access regardless of read latency
-//===----------------------------------------------------------------------===//
+unsigned portOccupancy(bool) { return 1u; }
 
-// BRAM address-port occupancy. A synchronous read presents its address for a
-// single cycle (data returns later without re-using the port), so one cycle is
-// the right contention footprint. Exposed as a hook for multi-cycle/wide ops.
-unsigned portOccupancy(bool /*isWrite*/) { return 1u; }
-
-// Classify an op's effect on `mem`. Works for memref.load/store, affine
-// load/store, or any op exposing memory effects; non-accessing aliasing ops
-// (subview, cast, dealloc) report no read/write effect and are skipped.
-bool classifyAccess(Operation *op, Value mem, bool &isWrite) {
+bool classifyAccess(Operation *op, Value memory, bool &isWrite) {
   auto eff = dyn_cast<MemoryEffectOpInterface>(op);
   if (!eff)
     return false;
   SmallVector<MemoryEffects::EffectInstance> effects;
   eff.getEffects(effects);
   bool reads = false, writes = false;
-  for (auto &e : effects) {
-    if (e.getValue() && e.getValue() != mem)
+  for (auto &entryValue : effects) {
+    if (entryValue.getValue() && entryValue.getValue() != memory)
       continue;
-    if (isa<MemoryEffects::Read>(e.getEffect()))
+    if (isa<MemoryEffects::Read>(entryValue.getEffect()))
       reads = true;
-    else if (isa<MemoryEffects::Write>(e.getEffect()))
+    else if (isa<MemoryEffects::Write>(entryValue.getEffect()))
       writes = true;
   }
   if (!reads && !writes)
     return false;
-  isWrite = writes; // a read-modify-write op needs a write port
+  isWrite = writes;
   return true;
 }
 
-// Nearest enclosing loop for a sequential (non-pipelined) access. Uses the
-// generic LoopLikeOpInterface so scf.for / affine.for / custom loops all work
-// without hard-coding a dialect; falls back to the enclosing function so that
-// straight-line accesses still share one scope.
 Operation *sequentialScope(Operation *op) {
   for (Operation *cur = op->getParentOp(); cur; cur = cur->getParentOp())
     if (isa<LoopLikeOpInterface>(cur))
       return cur;
-  if (auto fn = op->getParentOfType<func::FuncOp>())
-    return fn.getOperation();
+  if (auto function = op->getParentOfType<func::FuncOp>())
+    return function.getOperation();
   return nullptr;
 }
 
-
-SmallVector<AccessSummary>
-collectAccessSummaries(Operation *allocOp) {
+SmallVector<AccessSummary> collectAccessSummaries(ArrayRef<Value> banks) {
   SmallVector<AccessSummary> out;
-  if (allocOp->getNumResults() == 0)
-    return out;
-  Value mem = allocOp->getResult(0); // the bank's memref
+  for (Value memory : banks)
+    for (Operation *user : memory.getUsers()) {
+      bool isWrite = false;
+      if (!classifyAccess(user, memory, isWrite))
+        continue;
 
-  for (Operation *user : mem.getUsers()) {
-    bool isWrite = false;
-    if (!classifyAccess(user, mem, isWrite))
-      continue;
+      AccessSummary arrayValue;
+      arrayValue.op = user;
+      arrayValue.isWrite = isWrite;
+      arrayValue.latency = portOccupancy(isWrite);
 
-    AccessSummary a;
-    a.op = user;
-    a.isWrite = isWrite;
-    a.latency = portOccupancy(isWrite);
+      if (auto pipeline = user->getParentOfType<LoopSchedulePipelineOp>()) {
+        auto stage = user->getParentOfType<LoopSchedulePipelineStageOp>();
+        arrayValue.scope = pipeline.getOperation();
+        arrayValue.ii = static_cast<unsigned>(pipeline.getII());
+        arrayValue.stageStart =
+            stage ? static_cast<unsigned>(stage.getStart()) : 0u;
+      } else {
 
-    if (auto pipeline = user->getParentOfType<LoopSchedulePipelineOp>()) {
-      auto stage = user->getParentOfType<LoopSchedulePipelineStageOp>();
-      a.scope = pipeline.getOperation();
-      a.ii = static_cast<unsigned>(pipeline.getII());
-      a.stageStart =
-          stage ? static_cast<unsigned>(stage.getStart()) : 0u;
-    } else {
-      // Sequential: one iteration in flight, so ii=0 collapses the scope to at
-      // most one access per cycle in scopeDemand().
-      a.scope = sequentialScope(user);
-      a.ii = 0;
-      a.stageStart = 0;
+        arrayValue.scope = sequentialScope(user);
+        arrayValue.ii = 0;
+        arrayValue.stageStart = 0;
+      }
+      out.push_back(arrayValue);
     }
-    out.push_back(a);
-  }
   return out;
 }
 
-//===----------------------------------------------------------------------===//
-// Debug-record helpers (read-only views of the IR; no influence on the cost).
-//===----------------------------------------------------------------------===//
-
-// First file:line:col reachable through fused / named / call-site wrappers.
 static FileLineColLoc findFileLoc(Location loc) {
-  if (auto f = dyn_cast<FileLineColLoc>(loc))
-    return f;
-  if (auto n = dyn_cast<NameLoc>(loc))
-    return findFileLoc(n.getChildLoc());
-  if (auto c = dyn_cast<CallSiteLoc>(loc))
-    return findFileLoc(c.getCallee());
+  if (auto fieldValue = dyn_cast<FileLineColLoc>(loc))
+    return fieldValue;
+  if (auto elementCount = dyn_cast<NameLoc>(loc))
+    return findFileLoc(elementCount.getChildLoc());
+  if (auto candidateValue = dyn_cast<CallSiteLoc>(loc))
+    return findFileLoc(candidateValue.getCallee());
   if (auto fu = dyn_cast<FusedLoc>(loc))
-    for (Location l : fu.getLocations())
-      if (auto f = findFileLoc(l))
-        return f;
-  if (auto o = dyn_cast<OpaqueLoc>(loc))
-    return findFileLoc(o.getFallbackLocation());
+    for (Location lowerIndex : fu.getLocations())
+      if (auto fieldValue = findFileLoc(lowerIndex))
+        return fieldValue;
+  if (auto opHandle = dyn_cast<OpaqueLoc>(loc))
+    return findFileLoc(opHandle.getFallbackLocation());
   return {};
 }
 
 static std::string locString(Location loc) {
-  if (auto f = findFileLoc(loc))
-    return (f.getFilename().str() + ":" + std::to_string(f.getLine()) + ":" +
-            std::to_string(f.getColumn()));
+  if (auto fieldValue = findFileLoc(loc))
+    return (fieldValue.getFilename().str() + ":" +
+            std::to_string(fieldValue.getLine()) + ":" +
+            std::to_string(fieldValue.getColumn()));
   if (isa<UnknownLoc>(loc))
     return "<unknown>";
-  std::string s;
-  llvm::raw_string_ostream os(s);
+  std::string stringValue;
+  llvm::raw_string_ostream os(stringValue);
   loc.print(os);
-  return s;
+  return stringValue;
 }
 
 static std::string scopeKindName(Operation *scope) {
@@ -559,205 +492,200 @@ static std::string scopeKindName(Operation *scope) {
 }
 
 static bool isStoreEnableOp(Operation *op) {
-  StringRef n = op->getName().getStringRef();
-  return n == "hls.store_enable" || n == "hls.affine.store_enable";
+  StringRef elementCount = op->getName().getStringRef();
+  return elementCount == "hls.store_enable" ||
+         elementCount == "hls.affine.store_enable";
 }
 
 static unsigned counterAttr(Operation *op, StringRef name) {
-  if (auto a = op->getAttrOfType<IntegerAttr>(name))
-    return a.getInt() > 0 ? static_cast<unsigned>(a.getInt()) : 0u;
+  if (auto arrayValue = op->getAttrOfType<IntegerAttr>(name))
+    return arrayValue.getInt() > 0 ? static_cast<unsigned>(arrayValue.getInt())
+                                   : 0u;
   return 0;
 }
 
-// Identity: id, name, varname, kind, enclosing function, location, partition
-// provenance. All of it comes from attributes the front end / banking left on
-// the op; nothing here is derived from the estimate.
-static void describeMemref(Operation *op, unsigned index, MemrefRecord &r) {
+static void describeMemref(Operation *op, unsigned index,
+                           MemrefRecord &resultValue) {
   StringRef opName = op->getName().getStringRef();
-  if (auto g = dyn_cast<memref::GlobalOp>(op)) {
-    r.kind = "global";
-    r.name = g.getSymName().str();
-    r.id = "global#" + std::to_string(index);
+  if (auto globalOp = dyn_cast<memref::GlobalOp>(op)) {
+    resultValue.kind = "global";
+    resultValue.name = globalOp.getSymName().str();
+    resultValue.id = "global#" + std::to_string(index);
   } else {
-    r.kind = opName.starts_with("memref.") ? opName.drop_front(7).str()
-                                            : opName.str();
-    if (auto fn = op->getParentOfType<func::FuncOp>())
-      r.func = fn.getName().str();
-    r.id = (r.func ? *r.func : std::string("?")) + "#" + std::to_string(index);
+    resultValue.kind = opName.starts_with("memref.")
+                           ? opName.drop_front(7).str()
+                           : opName.str();
+    if (auto function = op->getParentOfType<func::FuncOp>())
+      resultValue.func = function.getName().str();
+    resultValue.id = (resultValue.func ? *resultValue.func : std::string("?")) +
+                     "#" + std::to_string(index);
   }
 
-  if (auto v = op->getAttrOfType<StringAttr>("polygeist.varname"))
-    r.varname = v.getValue().str();
-  else if (auto b = op->getAttrOfType<StringAttr>("hls.bank_of"))
-    r.varname = b.getValue().str();
+  if (auto valueHandle = op->getAttrOfType<StringAttr>("polygeist.varname"))
+    resultValue.varname = valueHandle.getValue().str();
+  else if (auto buildPoint = op->getAttrOfType<StringAttr>("hls.bank_of"))
+    resultValue.varname = buildPoint.getValue().str();
+  if (auto globalOp = op->getAttrOfType<StringAttr>("hls.from_global"))
+    resultValue.fromGlobal = globalOp.getValue().str();
 
-  if (auto f = findFileLoc(op->getLoc())) {
-    r.hasLoc = true;
-    r.locFile = f.getFilename().str();
-    r.locLine = f.getLine();
-    r.locCol = f.getColumn();
+  if (auto fieldValue = findFileLoc(op->getLoc())) {
+    resultValue.hasLoc = true;
+    resultValue.locFile = fieldValue.getFilename().str();
+    resultValue.locLine = fieldValue.getLine();
+    resultValue.locCol = fieldValue.getColumn();
   }
-  r.locText = locString(op->getLoc());
+  resultValue.locText = locString(op->getLoc());
 
-  // Partition provenance. Banks carry `hls.partition` (set by memory banking
-  // from the original `hls.array_partition` entry); an unbanked memref may
-  // still carry the pragma itself.
-  PartitionRecord &p = r.partition;
-  auto readFields = [&](DictionaryAttr d) {
-    if (auto k = d.getAs<StringAttr>("kind"))
-      p.kind = k.getValue().str();
-    if (auto f = d.getAs<IntegerAttr>("factor"))
-      p.factor = f.getInt();
-    if (auto dm = d.getAs<IntegerAttr>("dim"))
-      p.dim = dm.getInt();
-    if (auto s = d.getAs<StringAttr>("source"))
-      p.source = s.getValue().str();
+  PartitionRecord &portValue = resultValue.partition;
+  auto readFields = [&](DictionaryAttr dimensionIndex) {
+    if (auto keyValue = dimensionIndex.getAs<StringAttr>("kind"))
+      portValue.kind = keyValue.getValue().str();
+    if (auto fieldValue = dimensionIndex.getAs<IntegerAttr>("factor"))
+      portValue.factor = fieldValue.getInt();
+    if (auto dm = dimensionIndex.getAs<IntegerAttr>("dim"))
+      portValue.dim = dm.getInt();
+    if (auto stringValue = dimensionIndex.getAs<StringAttr>("source"))
+      portValue.source = stringValue.getValue().str();
     else
-      p.source = "pragma";
+      portValue.source = "pragma";
   };
-  if (auto d = op->getAttrOfType<DictionaryAttr>("hls.partition")) {
-    p.present = true;
-    p.applied = true;
-    readFields(d);
+  if (auto dimensionIndex =
+          op->getAttrOfType<DictionaryAttr>("hls.partition")) {
+    portValue.present = true;
+    portValue.applied = true;
+    readFields(dimensionIndex);
     if (auto bi = op->getAttrOfType<IntegerAttr>("hls.bank_index"))
-      p.bankIndex = bi.getInt();
+      portValue.bankIndex = bi.getInt();
     if (auto bc = op->getAttrOfType<IntegerAttr>("hls.bank_count"))
-      p.bankCount = bc.getInt();
+      portValue.bankCount = bc.getInt();
   } else if (auto arr = op->getAttrOfType<ArrayAttr>("hls.array_partition")) {
     if (!arr.empty())
-      if (auto d = dyn_cast<DictionaryAttr>(arr[0])) {
-        p.present = true;
-        p.applied = false;
-        readFields(d);
+      if (auto dimensionIndex = dyn_cast<DictionaryAttr>(arr[0])) {
+        portValue.present = true;
+        portValue.applied = false;
+        readFields(dimensionIndex);
       }
   }
   if (auto reason = op->getAttrOfType<StringAttr>("hls.partition_reason"))
-    p.reason = reason.getValue().str();
+    portValue.reason = reason.getValue().str();
 }
 
-// Per-access and per-scope views of the same summaries the estimate used.
-static void recordAccesses(ArrayRef<AccessSummary> accesses, MemrefRecord &r) {
-  r.accesses.clear();
-  r.perScope.clear();
-  SmallVector<Operation *> scopeOrder; // first-appearance order (deterministic)
-  for (const AccessSummary &a : accesses) {
+static void recordAccesses(ArrayRef<AccessSummary> accesses,
+                           MemrefRecord &resultValue) {
+  resultValue.accesses.clear();
+  resultValue.perScope.clear();
+  SmallVector<Operation *> scopeOrder;
+  for (const AccessSummary &arrayValue : accesses) {
     AccessRecord ar;
-    ar.op = a.op->getName().getStringRef().str();
-    ar.isWrite = a.isWrite;
-    ar.scope = a.scope;
-    ar.scopeKind = scopeKindName(a.scope);
-    ar.scopeLoc = a.scope ? locString(a.scope->getLoc()) : "<none>";
-    ar.ii = a.ii;
-    ar.stageStart = a.stageStart;
-    ar.storeEnable = isStoreEnableOp(a.op);
-    ar.mergedLoads = counterAttr(a.op, "hls.merged_loads");
-    ar.forwardedLoads = counterAttr(a.op, "hls.forwarded_loads");
-    ar.removedStores = counterAttr(a.op, "hls.removed_stores");
-    r.accesses.push_back(std::move(ar));
-    if (!llvm::is_contained(scopeOrder, a.scope))
-      scopeOrder.push_back(a.scope);
+    ar.op = arrayValue.op->getName().getStringRef().str();
+    ar.isWrite = arrayValue.isWrite;
+    ar.scope = arrayValue.scope;
+    ar.scopeKind = scopeKindName(arrayValue.scope);
+    ar.scopeLoc =
+        arrayValue.scope ? locString(arrayValue.scope->getLoc()) : "<none>";
+    ar.ii = arrayValue.ii;
+    ar.stageStart = arrayValue.stageStart;
+    ar.storeEnable = isStoreEnableOp(arrayValue.op);
+    ar.mergedLoads = counterAttr(arrayValue.op, "hls.merged_loads");
+    ar.forwardedLoads = counterAttr(arrayValue.op, "hls.forwarded_loads");
+    ar.removedStores = counterAttr(arrayValue.op, "hls.removed_stores");
+    resultValue.accesses.push_back(std::move(ar));
+    if (!llvm::is_contained(scopeOrder, arrayValue.scope))
+      scopeOrder.push_back(arrayValue.scope);
   }
   for (Operation *scope : scopeOrder) {
     SmallVector<const AccessSummary *> group;
-    for (const AccessSummary &a : accesses)
-      if (a.scope == scope)
-        group.push_back(&a);
+    for (const AccessSummary &arrayValue : accesses)
+      if (arrayValue.scope == scope)
+        group.push_back(&arrayValue);
     ScopeDemandRecord sd;
     sd.scopeKind = scopeKindName(scope);
     sd.scopeLoc = scope ? locString(scope->getLoc()) : "<none>";
     sd.ii = group.front()->ii;
     sd.demand = scopeDemand(group);
-    r.perScope.push_back(std::move(sd));
+    resultValue.perScope.push_back(std::move(sd));
   }
 }
 
-//===----------------------------------------------------------------------===//
-// Replication (RAM_1WNR), VITIS_NOTES.md N4 / replication.md R1-R3.
-//===----------------------------------------------------------------------===//
-// Per pipelined loop L with R loads and W stores of the bank per iteration at
-// II: Vitis needs ceil((R + W) / II) port-cycles per II; one true-dual-port
-// RAM gives two, every further one comes from a copy whose port B serves
-// reads while port A of all copies is the single shared write port (reading
-// when idle). So copies = max(1, ceil((R + W) / II) - 1), capped at 16, max
-// over the loops that access the bank. A bank that some loop body stores to
-// more than once is never replicated (one shared write port cannot take two
-// writes per iteration): it stays a plain 2-port RAM and the scheduler has
-// raised that loop's II to ceil((R + W) / 2) instead (MemrefBankClassification).
-// Straight-line code outside any loop does not take part (the rule was only
-// observed on loop bodies).
 static ReplicationRecord analyzeReplication(ArrayRef<AccessSummary> accesses,
                                             bool attributed) {
-  ReplicationRecord r;
-  r.present = attributed;
+  ReplicationRecord resultValue;
+  resultValue.present = attributed;
   if (!attributed)
-    return r;
+    return resultValue;
 
   struct ScopeStats {
     Operation *scope = nullptr;
     unsigned reads = 0, writes = 0, ii = 0;
   };
-  SmallVector<ScopeStats> scopes; // first-appearance order (deterministic)
-  for (const AccessSummary &a : accesses) {
+  SmallVector<ScopeStats> scopes;
+  for (const AccessSummary &arrayValue : accesses) {
     ScopeStats *st = nullptr;
-    for (ScopeStats &s : scopes)
-      if (s.scope == a.scope)
-        st = &s;
+    for (ScopeStats &stringValue : scopes)
+      if (stringValue.scope == arrayValue.scope)
+        st = &stringValue;
     if (!st) {
-      scopes.push_back({a.scope, 0, 0, a.ii});
+      scopes.push_back({arrayValue.scope, 0, 0, arrayValue.ii});
       st = &scopes.back();
     }
-    (a.isWrite ? st->writes : st->reads)++;
+    (arrayValue.isWrite ? st->writes : st->reads)++;
   }
 
-  r.maxStoresPerLoop = 0;
-  for (const ScopeStats &s : scopes) {
-    bool isLoopBody = s.scope && (isa<LoopSchedulePipelineOp>(s.scope) ||
-                                  isa<LoopLikeOpInterface>(s.scope));
+  resultValue.maxStoresPerLoop = 0;
+  for (const ScopeStats &stringValue : scopes) {
+    bool isLoopBody =
+        stringValue.scope && (isa<LoopSchedulePipelineOp>(stringValue.scope) ||
+                              isa<LoopLikeOpInterface>(stringValue.scope));
     if (isLoopBody)
-      r.maxStoresPerLoop = std::max(r.maxStoresPerLoop, s.writes);
+      resultValue.maxStoresPerLoop =
+          std::max(resultValue.maxStoresPerLoop, stringValue.writes);
   }
-  r.replicable = r.maxStoresPerLoop <= 1;
-  r.copies = 1;
-  for (const ScopeStats &s : scopes) {
-    if (!s.scope || !isa<LoopSchedulePipelineOp>(s.scope) || s.ii == 0)
+  resultValue.replicable = resultValue.maxStoresPerLoop <= 1;
+  resultValue.copies = 1;
+  for (const ScopeStats &stringValue : scopes) {
+    if (!stringValue.scope || !isa<LoopSchedulePipelineOp>(stringValue.scope) ||
+        stringValue.ii == 0)
       continue;
     ReplicationLoopRecord lr;
-    lr.scopeLoc = locString(s.scope->getLoc());
-    lr.ii = s.ii;
-    lr.reads = s.reads;
-    lr.writes = s.writes;
-    lr.need = static_cast<unsigned>(ceilDiv(s.reads + s.writes, s.ii));
-    unsigned c = lr.need > 1 ? lr.need - 1 : 1;
-    lr.copies = std::min(c, kMaxReplicationCopies);
-    if (r.replicable && lr.copies > r.copies) {
-      r.copies = lr.copies;
-      r.limitingLoop = lr.scopeLoc;
+    lr.scopeLoc = locString(stringValue.scope->getLoc());
+    lr.ii = stringValue.ii;
+    lr.reads = stringValue.reads;
+    lr.writes = stringValue.writes;
+    lr.need = static_cast<unsigned>(
+        ceilDiv(stringValue.reads + stringValue.writes, stringValue.ii));
+    unsigned candidateValue = lr.need > 1 ? lr.need - 1 : 1;
+    lr.copies = std::min(candidateValue, kMaxReplicationCopies);
+    if (resultValue.replicable && lr.copies > resultValue.copies) {
+      resultValue.copies = lr.copies;
+      resultValue.limitingLoop = lr.scopeLoc;
     }
-    r.loops.push_back(std::move(lr));
+    resultValue.loops.push_back(std::move(lr));
   }
-  if (!r.replicable)
-    r.copies = 1;
-  return r;
+  if (!resultValue.replicable)
+    resultValue.copies = 1;
+  return resultValue;
 }
 
-static std::string ramReasonFor(const PortDemand &d, const KindResult &kr,
+static std::string ramReasonFor(const PortDemand &dimensionIndex,
+                                const KindResult &kr,
                                 const ReplicationRecord &rep, bool attributed,
                                 bool anyStoreEnable, bool demandClamped) {
-  std::string s;
-  llvm::raw_string_ostream os(s);
+  std::string stringValue;
+  llvm::raw_string_ostream os(stringValue);
   if (!attributed) {
     os << "global: accesses not attributed, default " << kindName(kr.kind);
-    return s;
+    return stringValue;
   }
   if (kr.kind == StorageKind::RAM_1WNR) {
     os << "replicable (no loop body stores to it more than once)";
     if (rep.limitingLoop) {
-      for (const ReplicationLoopRecord &l : rep.loops)
-        if (l.scopeLoc == *rep.limitingLoop) {
-          os << "; pipeline @ " << l.scopeLoc << ": " << l.reads << "R+"
-             << l.writes << "W per iteration at II " << l.ii
-             << " needs ceil(" << (l.reads + l.writes) << "/" << l.ii
-             << ")=" << l.need << " port-cycles";
+      for (const ReplicationLoopRecord &lowerIndex : rep.loops)
+        if (lowerIndex.scopeLoc == *rep.limitingLoop) {
+          os << "; pipeline @ " << lowerIndex.scopeLoc << ": "
+             << lowerIndex.reads << "R+" << lowerIndex.writes
+             << "W per iteration at II " << lowerIndex.ii << " needs ceil("
+             << (lowerIndex.reads + lowerIndex.writes) << "/" << lowerIndex.ii
+             << ")=" << lowerIndex.need << " port-cycles";
           break;
         }
     }
@@ -767,86 +695,93 @@ static std::string ramReasonFor(const PortDemand &d, const KindResult &kr,
     if (rep.copies >= kMaxReplicationCopies)
       os << "; capped at " << kMaxReplicationCopies;
     os << "); each copy is a true-dual-port RAM (x18/port)";
-    return s;
+    return stringValue;
   }
-  os << "peak port demand " << d.total << "/cycle (" << d.reads << "R+"
-     << d.writes << "W, max over scopes)";
+  os << "peak port demand " << dimensionIndex.total << "/cycle ("
+     << dimensionIndex.reads << "R+" << dimensionIndex.writes
+     << "W, max over scopes)";
   if (kr.infeasible) {
     os << ": " << kr.note;
-    return s;
+    return stringValue;
   }
   if (demandClamped)
     os << ", clamped to 2 ports (replicable bank, but no pipelined loop needs "
           "more than ceil((R+W)/II) <= 2 port-cycles, so Vitis spreads the "
           "accesses over the II)";
-  if (d.total <= 1 && !demandClamped)
+  if (dimensionIndex.total <= 1 && !demandClamped)
     os << ": at most one live port -> " << kindName(kr.kind) << " (x"
        << blockDataWidth(kr.kind) << " wide, no TDP constraint)";
   else
-    os << ": two ports live in the same cycle -> " << kindName(kr.kind)
-       << " (x" << blockDataWidth(kr.kind) << "/port, true dual port)";
+    os << ": two ports live in the same cycle -> " << kindName(kr.kind) << " (x"
+       << blockDataWidth(kr.kind) << "/port, true dual port)";
   if (!rep.replicable)
     os << "; not replicable: a loop body stores to it " << rep.maxStoresPerLoop
        << " times (Vitis keeps one 2-port RAM and raises that loop's II)";
   else if (!rep.loops.empty())
     os << "; replicable, but every pipelined loop needs <= 2 port-cycles per "
           "II (no RAM_1WNR)";
-  if (d.segregated)
+  if (dimensionIndex.segregated)
     os << "; reads and writes live in different scopes (RAM_S2P-eligible) but "
           "count-only selection never picks RAM_S2P";
   if (anyStoreEnable)
     os << "; hls.store_enable counts as a write only (no phantom read port)";
-  return s;
+  return stringValue;
 }
 
-//===----------------------------------------------------------------------===//
-// Top-level estimator.
-//===----------------------------------------------------------------------===//
-// Post-banking the memref IS one bank: no partition factor, no affine bank-id
-// analysis. Geometry comes straight off the shape.
-//
-// `rec` is filled with the intermediate values of this very computation for the
-// debug report; it is never read here, so the estimate does not depend on it.
-static BRAMCost estimateBRAM(MemoryResourceOpInterface iface,
-                             MemrefRecord &rec) {
+static BRAMCost estimateBRAM(MemoryResourceOpInterface iface, MemrefRecord &rec,
+                             ArrayRef<Value> banks, bool attributed) {
   BRAMCost cost;
   cost.kind = StorageKind::RAM_1P;
   cost.bramCount = 0;
 
-  // Geometry for the record (safe for any element type; the estimate below
-  // reads the same values).
   {
     rec.shape = iface.getStaticShape();
     Type elt = iface.getElementType();
     llvm::raw_string_ostream os(rec.elemType);
     elt.print(os);
-    rec.elemBits = elt.isIntOrFloat() ? elt.getIntOrFloatBitWidth()
-                  : isa<IndexType>(elt) ? 64u
-                                        : 0u;
-    int64_t n = 1;
+    rec.elemBits = elt.isIntOrFloat()    ? elt.getIntOrFloatBitWidth()
+                   : isa<IndexType>(elt) ? 64u
+                                         : 0u;
+    int64_t elementCount = 1;
     bool dynamic = false;
-    for (int64_t d : rec.shape) {
-      if (ShapedType::isDynamic(d))
+    for (int64_t dimensionIndex : rec.shape) {
+      if (ShapedType::isDynamic(dimensionIndex))
         dynamic = true;
       else
-        n *= d;
+        elementCount *= dimensionIndex;
     }
     if (!dynamic)
-      rec.words = n;
-    rec.accessesAttributed = iface.getOperation()->getNumResults() > 0;
+      rec.words = elementCount;
+    rec.accessesAttributed = attributed;
+  }
+
+  {
+    Type elt = iface.getElementType();
+    if (!elt.isIntOrFloat() && !isa<IndexType>(elt)) {
+      cost.note = "element type " + rec.elemType +
+                  " is not an integer / float; not estimated";
+      rec.status = "excluded_type";
+      rec.excludeReason = cost.note;
+      SmallVector<AccessSummary> accesses = collectAccessSummaries(banks);
+      recordAccesses(accesses, rec);
+      rec.demand = computePortDemand(accesses);
+      rec.ramType = kindName(cost.kind);
+      rec.ramReason = "not selected: " + cost.note;
+      rec.bram = cost.bramCount;
+      return cost;
+    }
   }
 
   if (!iface.contributesToBRAMCost()) {
     cost.note = "excluded from BRAM accounting (LUTRAM / stream / zero-size)";
-    // Explain which exclusion rule fired (mirrors contributesToBRAMCostImpl).
+
     int64_t bits = iface.getStaticSizeInBits();
     auto pragmaKind = iface.getPragmaStorageKind();
     if (pragmaKind && *pragmaKind == StorageKind::LUTRAM) {
       rec.status = "excluded_small";
       rec.excludeReason = "pragma storage kind LUTRAM; not BRAM-backed";
     } else if (bits == 0 && !rec.words) {
-      // A dynamic extent makes the static size 0, which the cost interface
-      // treats as "does not contribute"; report it as what it is.
+
       rec.status = "dynamic_shape";
       rec.excludeReason = "dynamic shape; static size unknown; not estimated";
     } else if (bits == 0) {
@@ -860,21 +795,17 @@ static BRAMCost estimateBRAM(MemoryResourceOpInterface iface,
                           std::to_string(kBRAMPromotionBits) +
                           " -> BRAM); distributed RAM, 0 BRAM";
     }
-    // Still describe the accesses: useful when diagnosing a Vitis mismatch on
-    // a small array, and it does not touch the estimate.
-    SmallVector<AccessSummary> accesses =
-        collectAccessSummaries(iface.getOperation());
+
+    SmallVector<AccessSummary> accesses = collectAccessSummaries(banks);
     recordAccesses(accesses, rec);
     rec.demand = computePortDemand(accesses);
-    rec.replication =
-        analyzeReplication(accesses, rec.accessesAttributed);
+    rec.replication = analyzeReplication(accesses, rec.accessesAttributed);
     rec.ramType = kindName(cost.kind);
     rec.ramReason = "not selected: " + cost.note;
     rec.bram = cost.bramCount;
     return cost;
   }
 
-  // --- Bank geometry ---
   auto shape = iface.getStaticShape();
   int64_t numElems = 1;
   for (int64_t dim : shape) {
@@ -889,7 +820,7 @@ static BRAMCost estimateBRAM(MemoryResourceOpInterface iface,
     }
     numElems *= dim;
   }
-  unsigned elemBits = iface.getElementType().getIntOrFloatBitWidth();
+  unsigned elemBits = rec.elemBits;
   if (numElems == 0 || elemBits == 0) {
     cost.note = "zero-size";
     rec.status = "zero_size";
@@ -899,40 +830,84 @@ static BRAMCost estimateBRAM(MemoryResourceOpInterface iface,
     rec.bram = cost.bramCount;
     return cost;
   }
-  // --- Port contention -> storage kind ---
-  SmallVector<AccessSummary> accesses =
-      collectAccessSummaries(iface.getOperation());
+
+  SmallVector<AccessSummary> accesses = collectAccessSummaries(banks);
   PortDemand demand = computePortDemand(accesses);
-  ReplicationRecord rep =
-      analyzeReplication(accesses, rec.accessesAttributed);
+  ReplicationRecord rep = analyzeReplication(accesses, rec.accessesAttributed);
   KindResult kr;
   bool demandClamped = false;
   int64_t blocks;
+
+  auto global = dyn_cast<memref::GlobalOp>(iface.getOperation());
+  rec.rom = attributed && global && global.getConstant() &&
+            !global.isExternal() && !global.isUninitialized();
+  if (rec.rom) {
+    unsigned elementCount = std::max(demand.total, 1u);
+    for (const ReplicationLoopRecord &lowerIndex : rep.loops)
+      elementCount = std::max(elementCount, lowerIndex.need);
+    rep.replicable = true;
+    rep.copies = 1;
+    rep.limitingLoop.reset();
+    if (elementCount <= 2) {
+      kr.kind = elementCount <= 1 ? StorageKind::ROM_1P : StorageKind::ROM_2P;
+      blocks = estimateBlocks(numElems, elemBits, true, &rec.bankMath);
+    } else {
+      kr.kind = StorageKind::ROM_NP;
+      rep.copies =
+          std::min<unsigned>(static_cast<unsigned>(ceilDiv(elementCount, 2)),
+                             kMaxReplicationCopies);
+      int64_t perCopy =
+          estimateBlocks(numElems, elemBits, false, &rec.bankMath);
+      blocks = perCopy * rep.copies;
+      rec.bankMath.replication = rep.copies;
+      rec.bankMath.blocks = blocks;
+    }
+    cost.kind = kr.kind;
+    cost.bramCount = static_cast<unsigned>(blocks);
+    cost.note = std::to_string(numElems) + "x" + std::to_string(elemBits) +
+                "b constant global -> " + kindName(kr.kind) + " (" +
+                std::to_string(elementCount) +
+                " read port(s)/cycle) = " + std::to_string(blocks) +
+                " BRAM_18K";
+    recordAccesses(accesses, rec);
+    rec.demand = demand;
+    rec.replication = rep;
+    rec.status = "counted";
+    rec.ramType = kindName(kr.kind);
+    rec.ramReason =
+        "constant-initialised global (ROM, never written): peak " +
+        std::to_string(elementCount) + " read(s) per cycle -> " +
+        kindName(kr.kind) +
+        (elementCount <= 2
+             ? std::string(": read-only ports are simple dual port, x36 "
+                           "allowed (N8)")
+             : ", " + std::to_string(rep.copies) +
+                   " copies = ceil(n/2) at x18 (N8 ROM_nP; unconfirmed "
+                   "by a kernel)");
+    rec.bram = cost.bramCount;
+    return cost;
+  }
   if (rep.copies > 1) {
-    // RAM_1WNR: `copies` true-dual-port RAMs holding identical data.
+
     kr.kind = StorageKind::RAM_1WNR;
-    int64_t perCopy =
-        estimateBlocks(numElems, elemBits, /*wide=*/false, &rec.bankMath);
+    int64_t perCopy = estimateBlocks(numElems, elemBits, false, &rec.bankMath);
     blocks = perCopy * rep.copies;
     rec.bankMath.replication = rep.copies;
     rec.bankMath.blocks = blocks;
   } else {
-    PortDemand d = demand;
-    if (rep.replicable && d.total > 2) {
-      // The scheduler grants a replicable bank 17 slots per cycle, so it may
-      // pack more than two accesses into one cycle even when ceil((R+W)/II)
-      // <= 2 (the II was raised by something else). Vitis then spreads them
-      // over the II on the two ports of one plain RAM.
+    PortDemand dimensionIndex = demand;
+    if (rep.replicable && dimensionIndex.total > 2) {
+
       demandClamped = true;
-      d.total = 2;
-      d.reads = std::min(d.reads, 2u);
-      d.writes = std::min(d.writes, 2u);
-      if (d.reads >= 1 && d.writes >= 1)
-        d.reads = d.writes = 1;
+      dimensionIndex.total = 2;
+      dimensionIndex.reads = std::min(dimensionIndex.reads, 2u);
+      dimensionIndex.writes = std::min(dimensionIndex.writes, 2u);
+      if (dimensionIndex.reads >= 1 && dimensionIndex.writes >= 1)
+        dimensionIndex.reads = dimensionIndex.writes = 1;
     }
-    kr = selectStorageKind(d);
-    blocks = estimateBlocks(numElems, elemBits, isWideKind(kr.kind),
-                            &rec.bankMath);
+    kr = selectStorageKind(dimensionIndex);
+    blocks =
+        estimateBlocks(numElems, elemBits, isWideKind(kr.kind), &rec.bankMath);
   }
   cost.kind = kr.kind;
   cost.infeasible = kr.infeasible;
@@ -941,23 +916,24 @@ static BRAMCost estimateBRAM(MemoryResourceOpInterface iface,
     cost.note = kr.note + " => " + std::to_string(blocks) + " BRAM";
   else if (kr.kind == StorageKind::RAM_1WNR)
     cost.note = std::to_string(numElems) + "x" + std::to_string(elemBits) +
-                "b -> RAM_1WNR, " + std::to_string(rep.copies) +
-                " copies x " + std::to_string(rec.bankMath.blocksPerCopy) +
+                "b -> RAM_1WNR, " + std::to_string(rep.copies) + " copies x " +
+                std::to_string(rec.bankMath.blocksPerCopy) +
                 " (x18/port) = " + std::to_string(blocks) + " BRAM_18K";
   else
     cost.note = std::to_string(numElems) + "x" + std::to_string(elemBits) +
                 "b -> " + kindName(kr.kind) + " (x" +
-                std::to_string(blockDataWidth(kr.kind)) + "/port) = " +
-                std::to_string(blocks) + " BRAM_18K";
+                std::to_string(blockDataWidth(kr.kind)) +
+                "/port) = " + std::to_string(blocks) + " BRAM_18K";
 
-  // --- Record ---
   recordAccesses(accesses, rec);
   rec.demand = demand;
   rec.replication = rep;
   rec.status = kr.infeasible ? "infeasible" : "counted";
   rec.ramType = kindName(kr.kind);
-  bool anyStoreEnable = llvm::any_of(
-      rec.accesses, [](const AccessRecord &a) { return a.storeEnable; });
+  bool anyStoreEnable =
+      llvm::any_of(rec.accesses, [](const AccessRecord &arrayValue) {
+        return arrayValue.storeEnable;
+      });
   rec.ramReason = ramReasonFor(demand, kr, rep, rec.accessesAttributed,
                                anyStoreEnable, demandClamped);
   rec.bram = cost.bramCount;
@@ -965,102 +941,97 @@ static BRAMCost estimateBRAM(MemoryResourceOpInterface iface,
   return cost;
 }
 
-//===----------------------------------------------------------------------===//
-// Debug printers.
-//===----------------------------------------------------------------------===//
-
 static std::string shapeString(ArrayRef<int64_t> shape) {
-  std::string s = "[";
-  for (size_t i = 0; i < shape.size(); ++i) {
-    if (i)
-      s += "x";
-    s += ShapedType::isDynamic(shape[i]) ? "?" : std::to_string(shape[i]);
+  std::string stringValue = "[";
+  for (size_t loopIndex = 0; loopIndex < shape.size(); ++loopIndex) {
+    if (loopIndex)
+      stringValue += "x";
+    stringValue += ShapedType::isDynamic(shape[loopIndex])
+                       ? "?"
+                       : std::to_string(shape[loopIndex]);
   }
-  return s + "]";
+  return stringValue + "]";
 }
 
-static std::string displayName(const MemrefRecord &r) {
-  std::string n = r.varname ? *r.varname
-                  : r.name  ? *r.name
-                            : std::string("<unnamed>");
-  if (r.partition.applied && r.partition.bankIndex && r.partition.bankCount)
-    n += "[bank " + std::to_string(*r.partition.bankIndex) + "/" +
-         std::to_string(*r.partition.bankCount) + "]";
-  return n;
+static std::string displayName(const MemrefRecord &resultValue) {
+  std::string elementCount = resultValue.varname ? *resultValue.varname
+                             : resultValue.name  ? *resultValue.name
+                                                 : std::string("<unnamed>");
+  if (resultValue.partition.applied && resultValue.partition.bankIndex &&
+      resultValue.partition.bankCount)
+    elementCount += "[bank " +
+                    std::to_string(*resultValue.partition.bankIndex) + "/" +
+                    std::to_string(*resultValue.partition.bankCount) + "]";
+  return elementCount;
 }
 
 static SmallVector<const MemrefRecord *>
 sortedByBram(ArrayRef<MemrefRecord> records) {
   SmallVector<const MemrefRecord *> order;
-  for (const MemrefRecord &r : records)
-    order.push_back(&r);
-  llvm::stable_sort(order, [](const MemrefRecord *a, const MemrefRecord *b) {
-    if (a->bram != b->bram)
-      return a->bram > b->bram;
-    return a->id < b->id;
+  for (const MemrefRecord &resultValue : records)
+    order.push_back(&resultValue);
+  llvm::stable_sort(order, [](const MemrefRecord *arrayValue,
+                              const MemrefRecord *buildPoint) {
+    if (arrayValue->bram != buildPoint->bram)
+      return arrayValue->bram > buildPoint->bram;
+    return arrayValue->id < buildPoint->id;
   });
   return order;
 }
 
-// The pipeline / unroll / flatten decisions --auto-pipeline-unroll recorded
-// on each pipelined loop (carried onto the loopschedule.pipeline op by
-// --convert-affine-to-loopschedule). Read-only: the estimate never looks at
-// them. `loc` is the same string as the per-scope `scope_loc` of the memref
-// records, so the two can be joined.
 struct PipelineRecord {
   std::string loc;
   std::string func;
   unsigned ii = 0;
   std::optional<int64_t> tripCount;
-  // "auto" (tagged by --auto-pipeline-unroll), "user" (a source pragma) or
-  // "innermost" (no tag: the conversion's default of pipelining every
-  // innermost loop).
+
   std::string source = "innermost";
-  unsigned flattenedParents = 0;      // hls.flattened_parents
-  std::optional<int64_t> unrollPartial; // hls.unroll_partial (user factor)
+  unsigned flattenedParents = 0;
+  std::optional<int64_t> unrollPartial;
   struct Unrolled {
     std::string loc;
     int64_t factor = 0;
   };
-  SmallVector<Unrolled> unrolled; // hls.auto_unrolled, in unroll order
+  SmallVector<Unrolled> unrolled;
 };
 
-static SmallVector<PipelineRecord> collectPipelineRecords(ModuleOp module) {
+static SmallVector<PipelineRecord> collectPipelineRecords(ModuleOp rootModule) {
   SmallVector<PipelineRecord> out;
-  module.walk([&](LoopSchedulePipelineOp p) {
-    PipelineRecord r;
-    r.loc = locString(p.getLoc());
-    if (auto fn = p->getParentOfType<func::FuncOp>())
-      r.func = fn.getName().str();
-    r.ii = static_cast<unsigned>(p.getII());
-    if (auto tc = p.getTripCount())
-      r.tripCount = static_cast<int64_t>(*tc);
-    if (Attribute tag = p->getAttr(kLoopPipelineAttr)) {
-      r.source = "user";
+  rootModule.walk([&](LoopSchedulePipelineOp portValue) {
+    PipelineRecord resultValue;
+    resultValue.loc = locString(portValue.getLoc());
+    if (auto function = portValue->getParentOfType<func::FuncOp>())
+      resultValue.func = function.getName().str();
+    resultValue.ii = static_cast<unsigned>(portValue.getII());
+    if (auto tc = portValue.getTripCount())
+      resultValue.tripCount = static_cast<int64_t>(*tc);
+    if (Attribute tag = portValue->getAttr(kLoopPipelineAttr)) {
+      resultValue.source = "user";
       if (auto arr = dyn_cast<ArrayAttr>(tag))
         tag = arr.empty() ? Attribute() : arr[0];
       if (auto dict = dyn_cast_or_null<DictionaryAttr>(tag))
-        if (auto s = dict.getAs<StringAttr>("source"))
-          r.source = s.getValue().str();
+        if (auto stringValue = dict.getAs<StringAttr>("source"))
+          resultValue.source = stringValue.getValue().str();
     }
-    if (auto fp = p->getAttrOfType<IntegerAttr>(kLoopFlattenedParentsAttr))
+    if (auto fp =
+            portValue->getAttrOfType<IntegerAttr>(kLoopFlattenedParentsAttr))
       if (fp.getInt() > 0)
-        r.flattenedParents = static_cast<unsigned>(fp.getInt());
-    if (auto up = p->getAttrOfType<IntegerAttr>(kLoopUnrollPartialAttr))
-      r.unrollPartial = up.getInt();
-    if (auto arr = p->getAttrOfType<ArrayAttr>(kLoopAutoUnrolledAttr))
-      for (Attribute a : arr) {
-        auto dict = dyn_cast<DictionaryAttr>(a);
+        resultValue.flattenedParents = static_cast<unsigned>(fp.getInt());
+    if (auto up = portValue->getAttrOfType<IntegerAttr>(kLoopUnrollPartialAttr))
+      resultValue.unrollPartial = up.getInt();
+    if (auto arr = portValue->getAttrOfType<ArrayAttr>(kLoopAutoUnrolledAttr))
+      for (Attribute arrayValue : arr) {
+        auto dict = dyn_cast<DictionaryAttr>(arrayValue);
         if (!dict)
           continue;
-        PipelineRecord::Unrolled u;
-        if (auto f = dict.getAs<IntegerAttr>("factor"))
-          u.factor = f.getInt();
-        if (auto l = dict.getAs<LocationAttr>("loc"))
-          u.loc = locString(l);
-        r.unrolled.push_back(std::move(u));
+        PipelineRecord::Unrolled useValue;
+        if (auto fieldValue = dict.getAs<IntegerAttr>("factor"))
+          useValue.factor = fieldValue.getInt();
+        if (auto lowerIndex = dict.getAs<LocationAttr>("loc"))
+          useValue.loc = locString(lowerIndex);
+        resultValue.unrolled.push_back(std::move(useValue));
       }
-    out.push_back(std::move(r));
+    out.push_back(std::move(resultValue));
   });
   return out;
 }
@@ -1069,266 +1040,345 @@ static void printDebugText(ArrayRef<MemrefRecord> records,
                            ArrayRef<PipelineRecord> pipelines, int64_t total,
                            llvm::raw_ostream &os) {
   os << "=== bram-debug: how each BRAM number was derived ===\n";
-  for (const MemrefRecord &r : records) {
-    os << "[" << r.id << "] " << displayName(r) << " (" << r.kind;
-    if (r.name && r.varname)
-      os << " @" << *r.name;
-    os << ") @ " << r.locText << "\n";
-    os << "  shape " << shapeString(r.shape) << " x " << r.elemType << " ("
-       << r.elemBits << " bits)";
-    if (r.words)
-      os << " = " << *r.words << " words";
+  for (const MemrefRecord &resultValue : records) {
+    if (resultValue.adapter) {
+      const AdapterRecord &arrayValue = *resultValue.adapter;
+      os << "[" << resultValue.id << "] m_axi bundle '" << arrayValue.bundle
+         << "' (" << resultValue.kind << ") in @"
+         << (resultValue.func ? *resultValue.func : "?") << " @ "
+         << resultValue.locText << "\n";
+      os << "  ports:";
+      for (const std::string &portValue : arrayValue.ports)
+        os << " " << portValue;
+      os << "; bus width max(32, element bits) = " << arrayValue.busBits
+         << "\n";
+      os << "  read FIFO: "
+         << (arrayValue.hasRead ? "used" : "no load from the bundle")
+         << ", max_read_burst_length " << arrayValue.readBurst
+         << " x num_read_outstanding " << arrayValue.readOutstanding
+         << " = depth " << arrayValue.readDepth << " -> " << arrayValue.readBram
+         << " BRAM (" << arrayValue.readRule << ")\n";
+      os << "  write buffer: "
+         << (arrayValue.hasWrite ? "used" : "no store to the bundle")
+         << ", max_write_burst_length " << arrayValue.writeBurst
+         << " (num_write_outstanding " << arrayValue.writeOutstanding
+         << " has no effect) -> " << arrayValue.writeBram << " BRAM ("
+         << arrayValue.writeRule << ")\n";
+      if (arrayValue.passedToCall)
+        os << "  note: an argument of the bundle is passed to a call; assumed "
+              "read and written\n";
+      os << "  bram: " << resultValue.bram << "\n";
+      continue;
+    }
+    os << "[" << resultValue.id << "] " << displayName(resultValue) << " ("
+       << resultValue.kind;
+    if (resultValue.name && resultValue.varname)
+      os << " @" << *resultValue.name;
+    os << ") @ " << resultValue.locText << "\n";
+    if (resultValue.fromGlobal)
+      os << "  promoted from memref.global @" << *resultValue.fromGlobal
+         << " (--promote-globals-to-allocas)\n";
+    os << "  shape " << shapeString(resultValue.shape) << " x "
+       << resultValue.elemType << " (" << resultValue.elemBits << " bits)";
+    if (resultValue.words)
+      os << " = " << *resultValue.words << " words";
     os << "\n";
-    os << "  status: " << r.status;
-    if (r.excludeReason)
-      os << " -- " << *r.excludeReason;
+    os << "  status: " << resultValue.status;
+    if (resultValue.excludeReason)
+      os << " -- " << *resultValue.excludeReason;
     os << "\n";
-    if (r.partition.present) {
-      const PartitionRecord &p = r.partition;
-      os << "  partition: " << p.kind << " factor=" << p.factor
-         << " dim=" << p.dim << " source=" << p.source;
-      if (p.applied) {
+    if (resultValue.status == "eliminated_dead") {
+      os << "  bram: 0\n";
+      continue;
+    }
+    if (resultValue.partition.present) {
+      const PartitionRecord &portValue = resultValue.partition;
+      os << "  partition: " << portValue.kind << " factor=" << portValue.factor
+         << " dim=" << portValue.dim << " source=" << portValue.source;
+      if (portValue.applied) {
         os << " (bank";
-        if (p.bankIndex)
-          os << " " << *p.bankIndex;
-        if (p.bankCount)
-          os << " of " << *p.bankCount;
+        if (portValue.bankIndex)
+          os << " " << *portValue.bankIndex;
+        if (portValue.bankCount)
+          os << " of " << *portValue.bankCount;
         os << ")";
       } else {
         os << " (spec present, not banked)";
       }
-      if (p.reason)
-        os << "\n    reason: " << *p.reason;
+      if (portValue.reason)
+        os << "\n    reason: " << *portValue.reason;
       os << "\n";
     } else {
       os << "  partition: none\n";
     }
-    if (!r.accessesAttributed) {
+    if (!resultValue.accessesAttributed) {
       os << "  accesses: not attributed (memref.global has no SSA result)\n";
     } else {
-      os << "  accesses (" << r.accesses.size() << "):\n";
-      for (const AccessRecord &a : r.accesses) {
-        os << "    - " << a.op << " " << (a.isWrite ? "write" : "read ")
-           << " in " << a.scopeKind << " @ " << a.scopeLoc;
-        if (a.scopeKind == "pipeline")
-          os << " ii=" << a.ii << " stage=" << a.stageStart;
-        if (a.storeEnable)
+      os << "  accesses (" << resultValue.accesses.size() << "):\n";
+      for (const AccessRecord &arrayValue : resultValue.accesses) {
+        os << "    - " << arrayValue.op << " "
+           << (arrayValue.isWrite ? "write" : "read ") << " in "
+           << arrayValue.scopeKind << " @ " << arrayValue.scopeLoc;
+        if (arrayValue.scopeKind == "pipeline")
+          os << " ii=" << arrayValue.ii << " stage=" << arrayValue.stageStart;
+        if (arrayValue.storeEnable)
           os << " (store_enable: write-only, no read port)";
-        if (a.mergedLoads)
-          os << " (+" << a.mergedLoads
+        if (arrayValue.mergedLoads)
+          os << " (+" << arrayValue.mergedLoads
              << " same-address load(s) merged into it: CSE)";
-        if (a.forwardedLoads || a.removedStores) {
+        if (arrayValue.forwardedLoads || arrayValue.removedStores) {
           os << " (absorbed";
-          if (a.forwardedLoads)
-            os << " " << a.forwardedLoads << " forwarded load(s)";
-          if (a.removedStores)
-            os << (a.forwardedLoads ? "," : "") << " " << a.removedStores
-               << " dead store(s)";
+          if (arrayValue.forwardedLoads)
+            os << " " << arrayValue.forwardedLoads << " forwarded load(s)";
+          if (arrayValue.removedStores)
+            os << (arrayValue.forwardedLoads ? "," : "") << " "
+               << arrayValue.removedStores << " dead store(s)";
           os << ")";
         }
         os << "\n";
       }
-      os << "  port demand: reads=" << r.demand.reads
-         << " writes=" << r.demand.writes << " total=" << r.demand.total
-         << " (max over scopes"
-         << (r.demand.segregated ? "; segregated R/W" : "") << ")\n";
-      for (const ScopeDemandRecord &s : r.perScope)
-        os << "    scope " << s.scopeKind << " @ " << s.scopeLoc
-           << " ii=" << s.ii << ": reads=" << s.demand.reads
-           << " writes=" << s.demand.writes << " total=" << s.demand.total
-           << "\n";
+      os << "  port demand: reads=" << resultValue.demand.reads
+         << " writes=" << resultValue.demand.writes
+         << " total=" << resultValue.demand.total << " (max over scopes"
+         << (resultValue.demand.segregated ? "; segregated R/W" : "") << ")\n";
+      for (const ScopeDemandRecord &stringValue : resultValue.perScope)
+        os << "    scope " << stringValue.scopeKind << " @ "
+           << stringValue.scopeLoc << " ii=" << stringValue.ii
+           << ": reads=" << stringValue.demand.reads
+           << " writes=" << stringValue.demand.writes
+           << " total=" << stringValue.demand.total << "\n";
     }
-    if (r.replication.present) {
-      const ReplicationRecord &p = r.replication;
-      os << "  replication: " << (p.replicable ? "replicable" : "not replicable")
-         << " (max " << p.maxStoresPerLoop
-         << " store(s) per loop body), copies " << p.copies;
-      if (p.limitingLoop)
-        os << " set by pipeline @ " << *p.limitingLoop;
+    if (resultValue.replication.present) {
+      const ReplicationRecord &portValue = resultValue.replication;
+      os << "  replication: "
+         << (portValue.replicable ? "replicable" : "not replicable") << " (max "
+         << portValue.maxStoresPerLoop << " store(s) per loop body), copies "
+         << portValue.copies;
+      if (portValue.limitingLoop)
+        os << " set by pipeline @ " << *portValue.limitingLoop;
       os << "\n";
-      for (const ReplicationLoopRecord &l : p.loops)
-        os << "    pipeline @ " << l.scopeLoc << " ii=" << l.ii << ": "
-           << l.reads << "R+" << l.writes << "W per iteration -> ceil("
-           << (l.reads + l.writes) << "/" << l.ii << ")=" << l.need
-           << " port-cycles -> copies " << l.copies << "\n";
+      for (const ReplicationLoopRecord &lowerIndex : portValue.loops)
+        os << "    pipeline @ " << lowerIndex.scopeLoc
+           << " ii=" << lowerIndex.ii << ": " << lowerIndex.reads << "R+"
+           << lowerIndex.writes << "W per iteration -> ceil("
+           << (lowerIndex.reads + lowerIndex.writes) << "/" << lowerIndex.ii
+           << ")=" << lowerIndex.need << " port-cycles -> copies "
+           << lowerIndex.copies << "\n";
     }
-    os << "  ram type: " << r.ramType << " -- " << r.ramReason << "\n";
-    if (r.bankMath.present) {
-      const BankMathRecord &b = r.bankMath;
-      os << "  bank math: " << b.bitsPerBram << " bits/BRAM_18K (incl. parity), "
-         << (b.wide ? "one live port -> x36 allowed" : "two live ports -> x18 max")
-         << " at " << r.ramType << ", element " << r.elemBits
-         << "b -> mode x" << b.configWidth << ": columns ceil(" << r.elemBits
-         << "/" << b.configWidth << ")=" << b.widthTiles << ", depth/block "
-         << b.depthPerBlock << ", address depth 2^ceil(log2 "
-         << (r.words ? *r.words : 0) << ")=" << b.addrDepth
-         << ", blocks/column max(1," << b.addrDepth << "/" << b.depthPerBlock
-         << ")=" << b.depthTiles << " -> " << b.blocksPerCopy
-         << " per copy, replication " << b.replication << " -> " << b.blocks
-         << " block(s)\n";
+    os << "  ram type: " << resultValue.ramType << " -- "
+       << resultValue.ramReason << "\n";
+    if (resultValue.bankMath.present) {
+      const BankMathRecord &buildPoint = resultValue.bankMath;
+      os << "  bank math: " << buildPoint.bitsPerBram
+         << " bits/BRAM_18K (incl. parity), "
+         << (buildPoint.wide ? "one live port -> x36 allowed"
+                             : "two live ports -> x18 max")
+         << " at " << resultValue.ramType << ", element "
+         << resultValue.elemBits << "b -> mode x" << buildPoint.configWidth
+         << ": columns ceil(" << resultValue.elemBits << "/"
+         << buildPoint.configWidth << ")=" << buildPoint.widthTiles
+         << ", depth/block " << buildPoint.depthPerBlock
+         << ", address depth 2^ceil(log2 "
+         << (resultValue.words ? *resultValue.words : 0)
+         << ")=" << buildPoint.addrDepth << ", blocks/column max(1,"
+         << buildPoint.addrDepth << "/" << buildPoint.depthPerBlock
+         << ")=" << buildPoint.depthTiles << " -> " << buildPoint.blocksPerCopy
+         << " per copy, replication " << buildPoint.replication << " -> "
+         << buildPoint.blocks << " block(s)\n";
     }
-    os << "  bram: " << r.bram << (r.infeasible ? "  [INFEASIBLE]" : "")
-       << "\n";
+    os << "  bram: " << resultValue.bram
+       << (resultValue.infeasible ? "  [INFEASIBLE]" : "") << "\n";
   }
   os << "--- pipelines (decisions of --auto-pipeline-unroll) ---\n";
-  for (const PipelineRecord &p : pipelines) {
-    os << "  pipeline @ " << p.loc << " in @" << p.func << ": ii=" << p.ii;
-    if (p.tripCount)
-      os << " trip=" << *p.tripCount;
-    os << " source=" << p.source
-       << " flattened_parents=" << p.flattenedParents;
-    if (p.unrollPartial)
-      os << " unroll_partial=" << *p.unrollPartial;
+  for (const PipelineRecord &portValue : pipelines) {
+    os << "  pipeline @ " << portValue.loc << " in @" << portValue.func
+       << ": ii=" << portValue.ii;
+    if (portValue.tripCount)
+      os << " trip=" << *portValue.tripCount;
+    os << " source=" << portValue.source
+       << " flattened_parents=" << portValue.flattenedParents;
+    if (portValue.unrollPartial)
+      os << " unroll_partial=" << *portValue.unrollPartial;
     os << "\n";
-    for (const PipelineRecord::Unrolled &u : p.unrolled)
-      os << "    unrolled x" << u.factor << " @ " << u.loc << "\n";
+    for (const PipelineRecord::Unrolled &useValue : portValue.unrolled)
+      os << "    unrolled x" << useValue.factor << " @ " << useValue.loc
+         << "\n";
   }
   os << "--- summary (sorted by BRAM) ---\n";
-  for (const MemrefRecord *r : sortedByBram(records))
-    os << "  " << llvm::format("%6u", r->bram) << "  " << r->id << "  "
-       << displayName(*r) << "\n";
+  for (const MemrefRecord *resultValue : sortedByBram(records))
+    os << "  " << llvm::format("%6u", resultValue->bram) << "  "
+       << resultValue->id << "  " << displayName(*resultValue) << "\n";
   os << "Total BRAM: " << total << "\n";
 }
 
-static llvm::json::Value optStr(const std::optional<std::string> &s) {
-  if (s)
-    return llvm::json::Value(*s);
+static llvm::json::Value optStr(const std::optional<std::string> &stringValue) {
+  if (stringValue)
+    return llvm::json::Value(*stringValue);
   return llvm::json::Value(nullptr);
 }
 
-static llvm::json::Value optInt(const std::optional<int64_t> &v) {
-  if (v)
-    return llvm::json::Value(*v);
+static llvm::json::Value optInt(const std::optional<int64_t> &valueHandle) {
+  if (valueHandle)
+    return llvm::json::Value(*valueHandle);
   return llvm::json::Value(nullptr);
 }
 
-static llvm::json::Object toJson(const MemrefRecord &r) {
-  llvm::json::Object o;
-  o["id"] = r.id;
-  o["name"] = optStr(r.name);
-  o["varname"] = optStr(r.varname);
-  o["kind"] = r.kind;
-  o["func"] = optStr(r.func);
-  if (r.hasLoc) {
+static llvm::json::Object toJson(const MemrefRecord &resultValue) {
+  llvm::json::Object opHandle;
+  opHandle["id"] = resultValue.id;
+  opHandle["name"] = optStr(resultValue.name);
+  opHandle["varname"] = optStr(resultValue.varname);
+  opHandle["kind"] = resultValue.kind;
+  opHandle["func"] = optStr(resultValue.func);
+
+  if (resultValue.fromGlobal)
+    opHandle["from_global"] = *resultValue.fromGlobal;
+  if (resultValue.rom)
+    opHandle["rom"] = true;
+  if (resultValue.adapter) {
+    const AdapterRecord &arrayValue = *resultValue.adapter;
+    llvm::json::Object ad;
+    ad["bundle"] = arrayValue.bundle;
+    llvm::json::Array ports;
+    for (const std::string &portValue : arrayValue.ports)
+      ports.push_back(portValue);
+    ad["ports"] = std::move(ports);
+    ad["bus_bits"] = static_cast<int64_t>(arrayValue.busBits);
+    ad["has_read"] = arrayValue.hasRead;
+    ad["has_write"] = arrayValue.hasWrite;
+    ad["passed_to_call"] = arrayValue.passedToCall;
+    ad["max_read_burst_length"] = arrayValue.readBurst;
+    ad["num_read_outstanding"] = arrayValue.readOutstanding;
+    ad["read_depth"] = arrayValue.readDepth;
+    ad["read_bram"] = static_cast<int64_t>(arrayValue.readBram);
+    ad["read_rule"] = arrayValue.readRule;
+    ad["max_write_burst_length"] = arrayValue.writeBurst;
+    ad["num_write_outstanding"] = arrayValue.writeOutstanding;
+    ad["write_bram"] = static_cast<int64_t>(arrayValue.writeBram);
+    ad["write_rule"] = arrayValue.writeRule;
+    opHandle["adapter"] = std::move(ad);
+  }
+  if (resultValue.hasLoc) {
     llvm::json::Object loc;
-    loc["file"] = r.locFile;
-    loc["line"] = static_cast<int64_t>(r.locLine);
-    loc["col"] = static_cast<int64_t>(r.locCol);
-    o["loc"] = std::move(loc);
+    loc["file"] = resultValue.locFile;
+    loc["line"] = static_cast<int64_t>(resultValue.locLine);
+    loc["col"] = static_cast<int64_t>(resultValue.locCol);
+    opHandle["loc"] = std::move(loc);
   } else {
-    o["loc"] = nullptr;
+    opHandle["loc"] = nullptr;
   }
   llvm::json::Array shape;
-  for (int64_t d : r.shape)
-    shape.push_back(ShapedType::isDynamic(d) ? llvm::json::Value(nullptr)
-                                             : llvm::json::Value(d));
-  o["shape"] = std::move(shape);
-  o["elem_type"] = r.elemType;
-  o["elem_bits"] = static_cast<int64_t>(r.elemBits);
-  o["words"] = optInt(r.words);
-  o["status"] = r.status;
-  o["exclude_reason"] = optStr(r.excludeReason);
+  for (int64_t dimensionIndex : resultValue.shape)
+    shape.push_back(ShapedType::isDynamic(dimensionIndex)
+                        ? llvm::json::Value(nullptr)
+                        : llvm::json::Value(dimensionIndex));
+  opHandle["shape"] = std::move(shape);
+  opHandle["elem_type"] = resultValue.elemType;
+  opHandle["elem_bits"] = static_cast<int64_t>(resultValue.elemBits);
+  opHandle["words"] = optInt(resultValue.words);
+  opHandle["status"] = resultValue.status;
+  opHandle["exclude_reason"] = optStr(resultValue.excludeReason);
 
-  if (r.partition.present) {
-    const PartitionRecord &p = r.partition;
+  if (resultValue.partition.present) {
+    const PartitionRecord &portValue = resultValue.partition;
     llvm::json::Object part;
-    part["kind"] = p.kind;
-    part["factor"] = p.factor;
-    part["dim"] = p.dim;
-    part["source"] = p.source;
-    part["reason"] = optStr(p.reason);
-    part["bank_index"] = optInt(p.bankIndex);
-    part["bank_count"] = optInt(p.bankCount);
-    o["partition"] = std::move(part);
+    part["kind"] = portValue.kind;
+    part["factor"] = portValue.factor;
+    part["dim"] = portValue.dim;
+    part["source"] = portValue.source;
+    part["reason"] = optStr(portValue.reason);
+    part["bank_index"] = optInt(portValue.bankIndex);
+    part["bank_count"] = optInt(portValue.bankCount);
+    opHandle["partition"] = std::move(part);
   } else {
-    o["partition"] = nullptr;
+    opHandle["partition"] = nullptr;
   }
 
   llvm::json::Array accesses;
-  for (const AccessRecord &a : r.accesses) {
+  for (const AccessRecord &arrayValue : resultValue.accesses) {
     llvm::json::Object ao;
-    ao["op"] = a.op;
-    ao["rw"] = a.isWrite ? "write" : "read";
-    ao["scope"] = a.scopeKind;
-    ao["scope_loc"] = a.scopeLoc;
-    ao["ii"] = static_cast<int64_t>(a.ii);
-    ao["stage_start"] = static_cast<int64_t>(a.stageStart);
-    ao["store_enable"] = a.storeEnable;
-    ao["merged_loads"] = static_cast<int64_t>(a.mergedLoads);
-    ao["forwarded_loads"] = static_cast<int64_t>(a.forwardedLoads);
-    ao["removed_stores"] = static_cast<int64_t>(a.removedStores);
+    ao["op"] = arrayValue.op;
+    ao["rw"] = arrayValue.isWrite ? "write" : "read";
+    ao["scope"] = arrayValue.scopeKind;
+    ao["scope_loc"] = arrayValue.scopeLoc;
+    ao["ii"] = static_cast<int64_t>(arrayValue.ii);
+    ao["stage_start"] = static_cast<int64_t>(arrayValue.stageStart);
+    ao["store_enable"] = arrayValue.storeEnable;
+    ao["merged_loads"] = static_cast<int64_t>(arrayValue.mergedLoads);
+    ao["forwarded_loads"] = static_cast<int64_t>(arrayValue.forwardedLoads);
+    ao["removed_stores"] = static_cast<int64_t>(arrayValue.removedStores);
     accesses.push_back(std::move(ao));
   }
-  o["accesses"] = std::move(accesses);
+  opHandle["accesses"] = std::move(accesses);
 
   llvm::json::Object pd;
-  pd["reads"] = static_cast<int64_t>(r.demand.reads);
-  pd["writes"] = static_cast<int64_t>(r.demand.writes);
-  pd["total"] = static_cast<int64_t>(r.demand.total);
+  pd["reads"] = static_cast<int64_t>(resultValue.demand.reads);
+  pd["writes"] = static_cast<int64_t>(resultValue.demand.writes);
+  pd["total"] = static_cast<int64_t>(resultValue.demand.total);
   llvm::json::Array perScope;
-  for (const ScopeDemandRecord &s : r.perScope) {
+  for (const ScopeDemandRecord &stringValue : resultValue.perScope) {
     llvm::json::Object so;
-    so["scope"] = s.scopeKind;
-    so["scope_loc"] = s.scopeLoc;
-    so["ii"] = static_cast<int64_t>(s.ii);
-    so["reads"] = static_cast<int64_t>(s.demand.reads);
-    so["writes"] = static_cast<int64_t>(s.demand.writes);
-    so["total"] = static_cast<int64_t>(s.demand.total);
+    so["scope"] = stringValue.scopeKind;
+    so["scope_loc"] = stringValue.scopeLoc;
+    so["ii"] = static_cast<int64_t>(stringValue.ii);
+    so["reads"] = static_cast<int64_t>(stringValue.demand.reads);
+    so["writes"] = static_cast<int64_t>(stringValue.demand.writes);
+    so["total"] = static_cast<int64_t>(stringValue.demand.total);
     perScope.push_back(std::move(so));
   }
   pd["per_scope"] = std::move(perScope);
-  o["port_demand"] = std::move(pd);
+  opHandle["port_demand"] = std::move(pd);
 
-  o["ram_type"] = r.ramType;
-  o["ram_reason"] = r.ramReason;
+  opHandle["ram_type"] = resultValue.ramType;
+  opHandle["ram_reason"] = resultValue.ramReason;
 
-  if (r.replication.present) {
-    const ReplicationRecord &p = r.replication;
+  if (resultValue.replication.present) {
+    const ReplicationRecord &portValue = resultValue.replication;
     llvm::json::Object rp;
-    rp["replicable"] = p.replicable;
-    rp["max_stores_per_loop"] = static_cast<int64_t>(p.maxStoresPerLoop);
-    rp["copies"] = static_cast<int64_t>(p.copies);
-    rp["limiting_loop"] = optStr(p.limitingLoop);
+    rp["replicable"] = portValue.replicable;
+    rp["max_stores_per_loop"] =
+        static_cast<int64_t>(portValue.maxStoresPerLoop);
+    rp["copies"] = static_cast<int64_t>(portValue.copies);
+    rp["limiting_loop"] = optStr(portValue.limitingLoop);
     llvm::json::Array loops;
-    for (const ReplicationLoopRecord &l : p.loops) {
+    for (const ReplicationLoopRecord &lowerIndex : portValue.loops) {
       llvm::json::Object lo;
-      lo["scope_loc"] = l.scopeLoc;
-      lo["ii"] = static_cast<int64_t>(l.ii);
-      lo["reads"] = static_cast<int64_t>(l.reads);
-      lo["writes"] = static_cast<int64_t>(l.writes);
-      lo["need"] = static_cast<int64_t>(l.need);
-      lo["copies"] = static_cast<int64_t>(l.copies);
+      lo["scope_loc"] = lowerIndex.scopeLoc;
+      lo["ii"] = static_cast<int64_t>(lowerIndex.ii);
+      lo["reads"] = static_cast<int64_t>(lowerIndex.reads);
+      lo["writes"] = static_cast<int64_t>(lowerIndex.writes);
+      lo["need"] = static_cast<int64_t>(lowerIndex.need);
+      lo["copies"] = static_cast<int64_t>(lowerIndex.copies);
       loops.push_back(std::move(lo));
     }
     rp["loops"] = std::move(loops);
-    o["replication"] = std::move(rp);
+    opHandle["replication"] = std::move(rp);
   } else {
-    o["replication"] = nullptr;
+    opHandle["replication"] = nullptr;
   }
 
-  if (r.bankMath.present) {
-    const BankMathRecord &b = r.bankMath;
+  if (resultValue.bankMath.present) {
+    const BankMathRecord &buildPoint = resultValue.bankMath;
     llvm::json::Object bm;
-    bm["bits_per_bram"] = b.bitsPerBram;
-    bm["wide"] = b.wide;
-    bm["max_width"] = static_cast<int64_t>(b.maxWidth);
-    bm["config_width"] = static_cast<int64_t>(b.configWidth); // mode m
-    bm["width_tiles"] = b.widthTiles;         // columns = ceil(bits / m)
-    bm["depth_per_block"] = b.depthPerBlock;  // words per RAMB18 in mode m
-    bm["addr_depth"] = b.addrDepth;           // 2^ceil(log2 words)
-    bm["depth_tiles"] = b.depthTiles;         // blocks per column
-    bm["blocks_per_copy"] = b.blocksPerCopy;
-    bm["replication"] = b.replication;
-    bm["blocks"] = b.blocks;
-    o["bank_math"] = std::move(bm);
+    bm["bits_per_bram"] = buildPoint.bitsPerBram;
+    bm["wide"] = buildPoint.wide;
+    bm["max_width"] = static_cast<int64_t>(buildPoint.maxWidth);
+    bm["config_width"] = static_cast<int64_t>(buildPoint.configWidth);
+    bm["width_tiles"] = buildPoint.widthTiles;
+    bm["depth_per_block"] = buildPoint.depthPerBlock;
+    bm["addr_depth"] = buildPoint.addrDepth;
+    bm["depth_tiles"] = buildPoint.depthTiles;
+    bm["blocks_per_copy"] = buildPoint.blocksPerCopy;
+    bm["replication"] = buildPoint.replication;
+    bm["blocks"] = buildPoint.blocks;
+    opHandle["bank_math"] = std::move(bm);
   } else {
-    o["bank_math"] = nullptr;
+    opHandle["bank_math"] = nullptr;
   }
-  o["bram"] = static_cast<int64_t>(r.bram);
-  return o;
+  opHandle["bram"] = static_cast<int64_t>(resultValue.bram);
+  return opHandle;
 }
 
-// Returns the error code of the failed open, or a default (success) code.
 static std::error_code writeDebugJson(ArrayRef<MemrefRecord> records,
                                       ArrayRef<PipelineRecord> pipelineRecords,
                                       int64_t total, StringRef path) {
@@ -1338,33 +1388,33 @@ static std::error_code writeDebugJson(ArrayRef<MemrefRecord> records,
 
   llvm::json::Array functions;
   SmallVector<std::string> seen;
-  for (const MemrefRecord &r : records)
-    if (r.func && !llvm::is_contained(seen, *r.func)) {
-      seen.push_back(*r.func);
-      functions.push_back(*r.func);
+  for (const MemrefRecord &resultValue : records)
+    if (resultValue.func && !llvm::is_contained(seen, *resultValue.func)) {
+      seen.push_back(*resultValue.func);
+      functions.push_back(*resultValue.func);
     }
   root["functions"] = std::move(functions);
 
   llvm::json::Array memrefs;
-  for (const MemrefRecord &r : records)
-    memrefs.push_back(toJson(r));
+  for (const MemrefRecord &resultValue : records)
+    memrefs.push_back(toJson(resultValue));
   root["memrefs"] = std::move(memrefs);
 
   llvm::json::Array pipelines;
-  for (const PipelineRecord &p : pipelineRecords) {
+  for (const PipelineRecord &portValue : pipelineRecords) {
     llvm::json::Object po;
-    po["scope_loc"] = p.loc;
-    po["func"] = p.func;
-    po["ii"] = static_cast<int64_t>(p.ii);
-    po["trip_count"] = optInt(p.tripCount);
-    po["source"] = p.source;
-    po["flattened_parents"] = static_cast<int64_t>(p.flattenedParents);
-    po["unroll_partial"] = optInt(p.unrollPartial);
+    po["scope_loc"] = portValue.loc;
+    po["func"] = portValue.func;
+    po["ii"] = static_cast<int64_t>(portValue.ii);
+    po["trip_count"] = optInt(portValue.tripCount);
+    po["source"] = portValue.source;
+    po["flattened_parents"] = static_cast<int64_t>(portValue.flattenedParents);
+    po["unroll_partial"] = optInt(portValue.unrollPartial);
     llvm::json::Array unrolled;
-    for (const PipelineRecord::Unrolled &u : p.unrolled) {
+    for (const PipelineRecord::Unrolled &useValue : portValue.unrolled) {
       llvm::json::Object uo;
-      uo["loc"] = u.loc;
-      uo["factor"] = u.factor;
+      uo["loc"] = useValue.loc;
+      uo["factor"] = useValue.factor;
       unrolled.push_back(std::move(uo));
     }
     po["unrolled"] = std::move(unrolled);
@@ -1373,12 +1423,12 @@ static std::error_code writeDebugJson(ArrayRef<MemrefRecord> records,
   root["pipelines"] = std::move(pipelines);
 
   llvm::json::Array summary;
-  for (const MemrefRecord *r : sortedByBram(records)) {
-    llvm::json::Object s;
-    s["id"] = r->id;
-    s["varname"] = optStr(r->varname);
-    s["bram"] = static_cast<int64_t>(r->bram);
-    summary.push_back(std::move(s));
+  for (const MemrefRecord *resultValue : sortedByBram(records)) {
+    llvm::json::Object stringValue;
+    stringValue["id"] = resultValue->id;
+    stringValue["varname"] = optStr(resultValue->varname);
+    stringValue["bram"] = static_cast<int64_t>(resultValue->bram);
+    summary.push_back(std::move(stringValue));
   }
   root["summary"] = std::move(summary);
 
@@ -1390,9 +1440,217 @@ static std::error_code writeDebugJson(ArrayRef<MemrefRecord> records,
   return std::error_code();
 }
 
-//===----------------------------------------------------------------------===//
-// Pass.
-//===----------------------------------------------------------------------===//
+static unsigned fifoBlocksNarrow(unsigned bits, int64_t depth) {
+  if (depth > 8192)
+    return static_cast<unsigned>(
+        llvm::PowerOf2Ceil(static_cast<uint64_t>(ceilDiv(depth, 16384))) *
+        bits);
+  if (depth > 4096)
+    return static_cast<unsigned>(ceilDiv(bits, 2));
+  if (depth > 2048)
+    return static_cast<unsigned>(
+        std::min(ceilDiv(bits, 4), 2 * ceilDiv(bits, 9)));
+  if (depth > 1024)
+    return static_cast<unsigned>(ceilDiv(bits, 9));
+  return static_cast<unsigned>(ceilDiv(bits, 18));
+}
+
+static void scanArgUses(Value valueHandle, AdapterRecord &arrayValue) {
+  SmallVector<Value> work{valueHandle};
+  DenseSet<Value> seen{valueHandle};
+  while (!work.empty()) {
+    Value cur = work.pop_back_val();
+    for (OpOperand &use : cur.getUses()) {
+      Operation *user = use.getOwner();
+      if (auto view = dyn_cast<ViewLikeOpInterface>(user))
+        if (view.getViewSource() == cur) {
+          for (Value resultValue : user->getResults())
+            if (isa<BaseMemRefType>(resultValue.getType()) &&
+                seen.insert(resultValue).second)
+              work.push_back(resultValue);
+          continue;
+        }
+      if (isa<CallOpInterface>(user)) {
+        arrayValue.passedToCall = arrayValue.hasRead = arrayValue.hasWrite =
+            true;
+        continue;
+      }
+      bool isWrite = false;
+      if (classifyAccess(user, cur, isWrite))
+        (isWrite ? arrayValue.hasWrite : arrayValue.hasRead) = true;
+    }
+  }
+}
+
+static int64_t intField(DictionaryAttr dimensionIndex, StringRef name,
+                        int64_t dflt) {
+  if (auto loopIndex = dimensionIndex.getAs<IntegerAttr>(name))
+    return loopIndex.getInt();
+  return dflt;
+}
+
+static SmallVector<std::pair<func::FuncOp, AdapterRecord>>
+collectAdapters(ModuleOp rootModule) {
+  SmallVector<std::pair<func::FuncOp, AdapterRecord>> out;
+  for (auto function : rootModule.getOps<func::FuncOp>()) {
+    if (function.isPrivate() || function.isExternal())
+      continue;
+    SmallVector<AdapterRecord> bundles;
+    for (unsigned loopIndex = 0, entryValue = function.getNumArguments();
+         loopIndex < entryValue; ++loopIndex) {
+      auto ifaces =
+          function.getArgAttrOfType<ArrayAttr>(loopIndex, "hls.interface");
+      if (!ifaces)
+        continue;
+      for (Attribute attr : ifaces) {
+        auto dimensionIndex = dyn_cast<DictionaryAttr>(attr);
+        auto mode = dimensionIndex ? dimensionIndex.getAs<StringAttr>("mode")
+                                   : StringAttr();
+        if (!mode || mode.getValue() != "m_axi")
+          continue;
+        std::string bundle = "gmem";
+        if (auto buildPoint = dimensionIndex.getAs<StringAttr>("bundle"))
+          bundle = buildPoint.getValue().str();
+        AdapterRecord *arrayValue = nullptr;
+        for (AdapterRecord &exprValue : bundles)
+          if (exprValue.bundle == bundle)
+            arrayValue = &exprValue;
+        if (!arrayValue) {
+          bundles.emplace_back();
+          arrayValue = &bundles.back();
+          arrayValue->bundle = bundle;
+          arrayValue->readBurst = arrayValue->readOutstanding = 0;
+          arrayValue->writeBurst = arrayValue->writeOutstanding = 0;
+        }
+        if (auto portValue = dimensionIndex.getAs<StringAttr>("port"))
+          arrayValue->ports.push_back(portValue.getValue().str());
+        Value arg = function.getArgument(loopIndex);
+        unsigned bits = 32;
+        if (auto mt = dyn_cast<BaseMemRefType>(arg.getType())) {
+          Type elt = mt.getElementType();
+          bits = elt.isIntOrFloat()    ? elt.getIntOrFloatBitWidth()
+                 : isa<IndexType>(elt) ? 64u
+                                       : 32u;
+        } else if (arg.getType().isIntOrFloat()) {
+          bits = arg.getType().getIntOrFloatBitWidth();
+        }
+        arrayValue->busBits =
+            std::max(arrayValue->busBits, std::max(32u, bits));
+
+        arrayValue->readBurst =
+            std::max(arrayValue->readBurst,
+                     intField(dimensionIndex, "max_read_burst_length", 0));
+        arrayValue->readOutstanding =
+            std::max(arrayValue->readOutstanding,
+                     intField(dimensionIndex, "num_read_outstanding", 0));
+        arrayValue->writeBurst =
+            std::max(arrayValue->writeBurst,
+                     intField(dimensionIndex, "max_write_burst_length", 0));
+        arrayValue->writeOutstanding =
+            std::max(arrayValue->writeOutstanding,
+                     intField(dimensionIndex, "num_write_outstanding", 0));
+        scanArgUses(arg, *arrayValue);
+      }
+    }
+    for (AdapterRecord &arrayValue : bundles) {
+      if (!arrayValue.readBurst)
+        arrayValue.readBurst = 16;
+      if (!arrayValue.readOutstanding)
+        arrayValue.readOutstanding = 16;
+      if (!arrayValue.writeBurst)
+        arrayValue.writeBurst = 16;
+      if (!arrayValue.writeOutstanding)
+        arrayValue.writeOutstanding = 16;
+      arrayValue.readDepth = arrayValue.readBurst * arrayValue.readOutstanding;
+
+      if (!arrayValue.hasRead) {
+        arrayValue.readBram = 0;
+        arrayValue.readRule = "no load: no read FIFO cost";
+      } else if (arrayValue.readDepth <= 32) {
+        arrayValue.readBram = 0;
+        arrayValue.readRule = "depth <= 32: shift-register FIFO, 0 BRAM";
+      } else {
+        arrayValue.readBram =
+            fifoBlocksNarrow(arrayValue.busBits, arrayValue.readDepth);
+        arrayValue.readRule =
+            "depth > 32: BRAM FIFO, two ports (x18 bands of N8)";
+        if (arrayValue.readDepth > 4096)
+          arrayValue.readRule += "; depth > 4096 unconfirmed";
+      }
+
+      if (!arrayValue.hasWrite) {
+        arrayValue.writeBram = 0;
+        arrayValue.writeRule = "no store: no write buffer cost";
+      } else if (arrayValue.writeBurst <= 16) {
+        arrayValue.writeBram = 0;
+        arrayValue.writeRule = "max_write_burst_length <= 16: 0 BRAM";
+      } else {
+        arrayValue.writeBram =
+            static_cast<unsigned>(ceilDiv(arrayValue.busBits, 18));
+        arrayValue.writeRule = "max_write_burst_length > 16: ceil(W/18)";
+        if (arrayValue.writeBurst < 32)
+          arrayValue.writeRule += " (bursts 17..31 unconfirmed)";
+      }
+      out.push_back({function, std::move(arrayValue)});
+    }
+  }
+  return out;
+}
+
+static void appendDeadRecords(ModuleOp rootModule, unsigned &index,
+                              std::vector<MemrefRecord> &records) {
+  auto arr = rootModule->getAttrOfType<ArrayAttr>("hls.dead_memrefs");
+  if (!arr)
+    return;
+  for (Attribute attr : arr) {
+    auto dimensionIndex = dyn_cast<DictionaryAttr>(attr);
+    if (!dimensionIndex)
+      continue;
+    MemrefRecord resultValue;
+    auto str = [&](StringRef keyValue) -> std::optional<std::string> {
+      if (auto stringValue = dimensionIndex.getAs<StringAttr>(keyValue))
+        return stringValue.getValue().str();
+      return std::nullopt;
+    };
+    resultValue.kind = str("kind").value_or("alloca");
+    resultValue.func = str("func");
+    if (resultValue.kind == "global")
+      resultValue.name = str("symbol");
+    resultValue.varname = str("name");
+    resultValue.fromGlobal = str("from_global");
+    resultValue.id = (resultValue.func ? *resultValue.func : std::string("?")) +
+                     "#dead" + std::to_string(index++);
+    if (auto lowerIndex = dimensionIndex.getAs<LocationAttr>("loc")) {
+      if (auto fieldValue = findFileLoc(Location(lowerIndex))) {
+        resultValue.hasLoc = true;
+        resultValue.locFile = fieldValue.getFilename().str();
+        resultValue.locLine = fieldValue.getLine();
+        resultValue.locCol = fieldValue.getColumn();
+      }
+      resultValue.locText = locString(Location(lowerIndex));
+    }
+    if (auto typeValue = dimensionIndex.getAs<TypeAttr>("type"))
+      if (auto mt = dyn_cast<MemRefType>(typeValue.getValue())) {
+        resultValue.shape = llvm::to_vector(mt.getShape());
+        Type elt = mt.getElementType();
+        llvm::raw_string_ostream os(resultValue.elemType);
+        elt.print(os);
+        resultValue.elemBits = elt.isIntOrFloat() ? elt.getIntOrFloatBitWidth()
+                               : isa<IndexType>(elt) ? 64u
+                                                     : 0u;
+        if (mt.hasStaticShape())
+          resultValue.words = mt.getNumElements();
+      }
+    resultValue.status = "eliminated_dead";
+    resultValue.excludeReason = "removed by --dead-memory-elimination: " +
+                                str("reason").value_or("dead");
+    resultValue.ramType = "none";
+    resultValue.ramReason = "eliminated";
+    resultValue.bram = 0;
+    records.push_back(std::move(resultValue));
+  }
+}
+
 struct BRAMAnalysisLoopSchedule
     : PassWrapper<BRAMAnalysisLoopSchedule, OperationPass<ModuleOp>> {
 
@@ -1404,17 +1662,38 @@ struct BRAMAnalysisLoopSchedule
   }
 
   void runOnOperation() override {
+    ModuleOp rootModule = getOperation();
     int64_t total = 0;
-    // One record per memref, in walk order, kept for the debug report.
+
     std::vector<MemrefRecord> records;
     unsigned index = 0;
-    getOperation().walk([&](Operation *op) {
+
+    llvm::StringMap<SmallVector<Value>> globalSites;
+    if (bramAttributeGlobalsOpt)
+      rootModule.walk([&](memref::GetGlobalOp globalUse) {
+        globalSites[globalUse.getName()].push_back(globalUse.getResult());
+      });
+    rootModule.walk([&](Operation *op) {
       auto iface = dyn_cast<MemoryResourceOpInterface>(op);
       if (!iface)
         return;
+      SmallVector<Value> banks;
+      bool attributed;
+      if (auto globalOp = dyn_cast<memref::GlobalOp>(op)) {
+        attributed = bramAttributeGlobalsOpt;
+        if (attributed) {
+          auto it = globalSites.find(globalOp.getSymName());
+          if (it != globalSites.end())
+            banks = it->second;
+        }
+      } else {
+        attributed = op->getNumResults() > 0;
+        if (attributed)
+          banks.push_back(op->getResult(0));
+      }
       MemrefRecord rec;
       describeMemref(op, index++, rec);
-      BRAMCost cost = estimateBRAM(iface, rec);
+      BRAMCost cost = estimateBRAM(iface, rec, banks, attributed);
       llvm::outs() << op->getName() << " @ " << op->getLoc() << "\n"
                    << "  kind=" << kindName(cost.kind)
                    << "  bram=" << cost.bramCount
@@ -1423,12 +1702,46 @@ struct BRAMAnalysisLoopSchedule
       total += cost.bramCount;
       records.push_back(std::move(rec));
     });
-    llvm::outs() << "Total BRAM: " << total << "\n";
 
-    // Debug output only; nothing above depends on these flags. The estimate
-    // and the stdout report are complete by now; a JSON path that cannot be
-    // opened is still an error (non-zero exit), so a harness that asked for
-    // the file never mistakes its absence for an empty result.
+    if (bramMaxiAdaptersOpt)
+      for (auto &[function, arrayValue] : collectAdapters(rootModule)) {
+        unsigned bram = arrayValue.readBram + arrayValue.writeBram;
+        llvm::outs() << "m_axi.adapter bundle=" << arrayValue.bundle
+                     << " func=@" << function.getName() << " bram=" << bram
+                     << " (read FIFO " << arrayValue.readDepth << "x"
+                     << arrayValue.busBits << "b -> " << arrayValue.readBram
+                     << ", write burst " << arrayValue.writeBurst << " -> "
+                     << arrayValue.writeBram << ")\n";
+        total += bram;
+        MemrefRecord rec;
+        rec.id = function.getName().str() + "#m_axi:" + arrayValue.bundle;
+        rec.kind = "m_axi_adapter";
+        rec.name = arrayValue.bundle;
+        rec.varname = arrayValue.bundle + "_m_axi";
+        rec.func = function.getName().str();
+        rec.locText = locString(function.getLoc());
+        if (auto fieldValue = findFileLoc(function.getLoc())) {
+          rec.hasLoc = true;
+          rec.locFile = fieldValue.getFilename().str();
+          rec.locLine = fieldValue.getLine();
+          rec.locCol = fieldValue.getColumn();
+        }
+        rec.shape = {arrayValue.readDepth};
+        rec.elemType = "i" + std::to_string(arrayValue.busBits);
+        rec.elemBits = arrayValue.busBits;
+        rec.words = arrayValue.readDepth;
+        rec.status = "counted";
+        rec.ramType = "M_AXI_ADAPTER";
+        rec.ramReason = "read FIFO: " + arrayValue.readRule +
+                        "; write buffer: " + arrayValue.writeRule;
+        rec.bram = bram;
+        rec.adapter = std::move(arrayValue);
+        records.push_back(std::move(rec));
+      }
+    llvm::outs() << "Total BRAM: " << total << "\n";
+    if (bramDebugOpt || !bramDebugJsonOpt.empty())
+      appendDeadRecords(rootModule, index, records);
+
     SmallVector<PipelineRecord> pipelines;
     if (bramDebugOpt || !bramDebugJsonOpt.empty())
       pipelines = collectPipelineRecords(getOperation());
@@ -1437,7 +1750,7 @@ struct BRAMAnalysisLoopSchedule
     if (!bramDebugJsonOpt.empty())
       if (std::error_code ec =
               writeDebugJson(records, pipelines, total, bramDebugJsonOpt)) {
-        // Location-based emitError: no "see current operation" module dump.
+
         mlir::emitError(getOperation().getLoc(),
                         "bram-debug-json: cannot write '")
             << bramDebugJsonOpt << "': " << ec.message();
@@ -1457,4 +1770,4 @@ std::unique_ptr<Pass> createBRAMAnalysisPass() {
 void registerBRAMLoopscheduleAnalysisPass() {
   PassRegistration<BRAMAnalysisLoopSchedule>();
 }
-}
+} // namespace circt::hls_analysis

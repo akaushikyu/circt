@@ -40,10 +40,22 @@ def vitis_arrays(v):
         if m.get("core"):
             a["cores"].add(m["core"])
         a["modules"].add(m.get("module", ""))
+    # m_axi adapters: instance rows `<bundle>_m_axi_U` (module `<bundle>_m_axi`). They are not
+    # memories, but `--bram-maxi-adapters` reports each bundle as a pseudo-memref with varname
+    # `<bundle>_m_axi`, so list them under that name for the per-array diff (totals unchanged).
+    for inst in v.get("instances", []):
+        mod = inst.get("Module") or ""
+        if not mod.endswith("_m_axi"):
+            continue
+        a = out.setdefault(mod, {"name": mod, "vitis_bram": 0, "banks": 0, "rows": 0,
+                                 "words": 0, "bits": None, "cores": set(), "modules": set()})
+        a["vitis_bram"] += inst.get("BRAM_18K") or 0
+        a["rows"] += 1
+        a["cores"].add("m_axi_adapter")
+        a["modules"].add(inst.get("parent", ""))
     for a in out.values():
         a["cores"] = sorted(a["cores"])
         a["modules"] = sorted(a["modules"])
-    # instances (sub-module BRAM such as m_axi adapters) are not arrays; keep separately
     return out
 
 

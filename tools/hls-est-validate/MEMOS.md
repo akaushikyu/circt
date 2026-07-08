@@ -110,6 +110,91 @@ be ported into hls-est C++ without your decision.
 
 **Cost.** A small C++ change plus lit tests; every baseline stays valid (3 rows move).
 
+## M5 — T4 front-end cleanups and model extensions: dead-memory elimination, Vitis integer folds, globals as locals, m_axi adapters
+
+**Question.** T4 added opt-in mechanisms (VITIS_NOTES.md N1a; CHANGELOG 2026-10-10 T4 entries). Which of them should join the
+default pipeline or become `--bram-analysis` defaults?
+
+| mechanism | how to turn it on | what it models |
+|---|---|---|
+| integer folds | `--vitis-fold` (pass), then `--canonicalize --sccp` | Vitis folds x/0 to 0 (dg_d_fold_steps); x*0 -> 0 follows from the canonicalization folds |
+| dead-memory elimination | `--dead-memory-elimination` (pass) | arrays (locals and globals) whose loads reach no output are gone at a.o.1 (R1, R2, R5, R6) |
+| globals as locals | `--promote-globals-to-allocas` (pass) + `--bram-attribute-globals` (flag) | R6: file-scope arrays get the banking, ports, replication and elimination of locals; constant globals are priced as ROMs (N8) |
+| m_axi adapters | `--bram-maxi-adapters` (flag) | the `<bundle>_m_axi_U` instance BRAM (27 kernels: R8 plus 14 new `mx_*`) |
+| calls in loop bodies | `--loopschedule-call-latency=1` (flag) | a math call no longer keeps its loop sequential |
+
+The passes are meant to run right after the top selection (`experiment_pipeline.py` ABLATION rows `with-dme*`).
+
+**Before / after** (harness subset, `-j 8 --timeout 120`, hls-est = the T4 commit, runs in `~/hls-est-work/t4/<run>.json`. "pre-T4
+designs" = the designs the pre-T4 binary compared under the scalar shim (73 no split, 72 default), so newly compiling designs do not
+hide changes. The exact and exactclass rows have no pre-T4 run; their "T4, nothing enabled" row is the reference. exactclass is
+the harness-local integer ap_fixed shim of another track (`shim/exactclass`, `--scalar-wrapper-abi`, committed in c733e425e, opt-in). Designs
+that hit the simplex assertion (O9) were re-run with the fallback build and merged (`_meta.t4_o9_patch` in each file).)
+
+| shim | pipeline | configuration | run | exact / compared | abs err | exact / compared on the pre-T4 designs | abs err there |
+|---|---|---|---|---|---|---|---|
+| scalar | no split | pre-T4 binary | `base_nos` | 39 / 73 | 4283 | 39 / 73 | 4283 |
+| scalar | no split | T4, nothing enabled (robustness only) | `new_nos` | 41 / 79 | 29197 | 39 / 72 | 4253 |
+| scalar | no split | + `--bram-maxi-adapters` | `maxi_nos` | 41 / 80 | 29281 | 39 / 73 | 4327 |
+| scalar | no split | + fold + DME | `dmeonly_nos` | 41 / 80 | 29227 | 39 / 73 | 4283 |
+| scalar | no split | + promote + `--bram-attribute-globals` | `glob_nos` | 41 / 81 | 31119 | 39 / 73 | 6112 |
+| scalar | no split | + `--bram-attribute-globals` only | `attr_nos` | 41 / 80 | 29262 | 39 / 73 | 4313 |
+| scalar | no split | + all (with-dme) | `full_nos` | 41 / 80 | 22587 | 39 / 73 | 6168 |
+| scalar | no split | + `--canonicalize --sccp` only | `canon_nos` | 41 / 80 | 29227 | 39 / 73 | 4283 |
+| scalar | no split | + `--loopschedule-call-latency=1` | `call_nos` | 41 / 80 | 29227 | 39 / 73 | 4283 |
+| scalar | default | pre-T4 binary | `base_def` | 33 / 72 | 5023 | 33 / 72 | 5023 |
+| scalar | default | T4, nothing enabled | `new_def` | 35 / 77 | 14546 | 33 / 72 | 5023 |
+| scalar | default | + all (with-dme) | `full_def` | 36 / 81 | 15892 | 33 / 72 | 6166 |
+| exact | no split | T4, nothing enabled | `x_new_nos` | 44 / 79 | 3576 | 42 / 73 | 1439 |
+| exact | no split | + `--bram-maxi-adapters` | `x_maxi_nos` | 46 / 80 | 5308 | 44 / 73 | 1437 |
+| exact | no split | + fold + DME | `x_dmeonly_nos` | 44 / 80 | 5308 | 42 / 73 | 1439 |
+| exact | no split | + all | `x_full_nos` | 46 / 80 | 3874 | 44 / 73 | 1707 |
+| exact | default | T4, nothing enabled | `x_new_def` | 38 / 79 | 3047 | 36 / 72 | 2066 |
+| exact | default | + `--bram-maxi-adapters` | `x_maxi_def` | 40 / 79 | 3033 | 38 / 72 | 2062 |
+| exact | default | + all | `x_full_def` | 42 / 82 | 3904 | 39 / 72 | 2471 |
+| exactclass | no split | T4, nothing enabled | `xc_new_nos` | 45 / 81 | 6219 | 42 / 73 | 1390 |
+| exactclass | no split | + fold + DME | `xc_dmeonly_nos` | 45 / 81 | 6061 | 42 / 73 | 1232 |
+| exactclass | no split | + fold + DME + `--bram-maxi-adapters` | `xc_dmemaxi_nos` | 49 / 81 | 6043 | 47 / 73 | 1210 |
+| exactclass | no split | + all | `xc_full_nos` | 49 / 81 | 7063 | 47 / 73 | 2202 |
+| exactclass | default | T4, nothing enabled | `xc_new_def` | 39 / 80 | 2886 | 36 / 72 | 2011 |
+| exactclass | default | + fold + DME + `--bram-maxi-adapters` | `xc_dmemaxi_def` | 41 / 80 | 2634 | 39 / 72 | 1759 |
+| exactclass | default | + all | `xc_full_def` | 42 / 81 | 3366 | 39 / 72 | 2052 |
+
+**What changes, per array.**
+- *m_axi adapters* are exact per bundle wherever hls-est finishes (all adapter rows of the subset; 27 / 27 kernels per bundle and in
+  total). With exact widths they make activation_module / op2 / op3 (256 -> 258) and diff_dims_module_small (1152 -> 1154) exact.
+  mult_op_p2, mult_op_p3 and vec_mtx_p1 stop being exact: they matched only because two globals that Vitis does not keep as
+  memories (their partition pragmas sit on two dimensions or on a callee parameter, O17 items 2-3) cancelled the missing adapter.
+  Under the scalar shim every forgebench top moves by +2 and none becomes exact (2x widths, O6).
+- *Folds + DME* change nothing under the scalar and exact shims: cgeist already deletes the dead C-int arrays, and an ap_fixed that
+  is f32 / f16 cannot fold the attention scale. With integer ap_fixed (exactclass) they remove Q, K and the q/k weights exactly as
+  Vitis does: attention_op_p1 203 -> 71, tiled_attn_p1 203 -> 71, tiled_attn_p2 55 -> 21 (Vitis 73 / 73 / 23 = these + the adapter).
+  tiled_attn_module 304 -> 108 against Vitis 270: Vitis keeps four arrays written by non-inlined `load_*` calls as 0R0W memories
+  (N1a, O16; an inlining difference, O10).
+- *Globals as locals* is right in isolation (R6) but exposes O17: callees Vitis keeps as modules make the promoted weight arrays
+  RAM_1WNR with 15 copies (attention_op_p2/p3 18 -> 202 exact shim), two-dimension pragmas are banked on one dimension (vec_mtx_p1),
+  callee-parameter pragmas are lost after inlining (mult_op_p2). It adds 1800-1900 |err| under the scalar shim and ~270 under the
+  exact shim, and the only exact design it adds over folds + DME + adapters (attn_breakdown_op1, exact shim, default pipeline: 10) is a
+  cancellation: the split pass banks the promoted weight buffers below the LUTRAM threshold (0 vs Vitis 1 each) and Q/K_buffer into
+  four 1-BRAM banks each (4 vs Vitis 1).
+- *Robustness* (on by default, not part of this proposal): conv_block_op2/3 and conv_module (and conv_block_module / op1 when they
+  finish in 120 s) give numbers instead of an assertion; sobel_filter_x/y give 0 = Vitis; with the exact / exactclass shims machsuite
+  viterbi gives 128 = Vitis instead of the simplex assertion.
+
+**Recommendation.**
+1. Adopt `--vitis-fold --canonicalize --sccp --dead-memory-elimination` (right after the top selection) and `--bram-maxi-adapters`
+   together with an integer-backed ap_fixed frontend (exactclass, i.e. M3 route A / M2): +5 exact without split (42 -> 47 on the
+   pre-T4 designs, |err| 1390 -> 1210) and +3 with the default pipeline (36 -> 39, |err| 2011 -> 1759). The three designs that stop
+   matching are per-array cancellations of O17.
+2. If the harness stays on `--shim exact`: `--bram-maxi-adapters` alone is +2 exact in both pipelines at the same error; the folds and
+   DME are neutral there.
+3. Under the scalar shim none of the mechanisms gains an exact design; do not change the default for it.
+4. Do not adopt `--promote-globals-to-allocas` / `--bram-attribute-globals` before O10 (callee instances) and O17 items 2-3.
+5. `--loopschedule-call-latency=1` is neutral on the subset; keep it off until a kernel pins the call latency.
+
+**Cost.** Flags and passes only; re-running the subset takes ~7 minutes per pipeline. No Vitis runs (the 14 `mx_*` kernels are
+cached under `~/hls-est-work/experiments/mx_*`). The lit RUN lines and `common.py DEFAULT_PIPELINE` are unchanged.
+
 ## M7 — O12: let `--bram-analysis` cost only what the top function reaches
 
 **Question.** Today the harness selects the top with `--symbol-privatize=exclude=<top> --symbol-dce` before the
