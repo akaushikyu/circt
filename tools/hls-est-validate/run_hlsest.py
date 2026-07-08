@@ -7,7 +7,8 @@
 
 Per design:
   1. cgeist <sources> --function=<top> -S --hls-annotate --raise-scf-to-affine
-     --memref-fullrank -I <shim> -I <design includes> -o <mlir>     (cached by hash)
+     --memref-fullrank [<shim>/cgeist_flags] -I <shim> -I <design includes> -o <mlir>
+     (cached by hash of sources, shim files and the shim's cgeist flags)
   2. hls-est <mlir> --symbol-privatize=exclude=<top> --symbol-dce <pipeline>
      (the privatize/dce pair keeps only the top and what it calls, which is how
      the inlining double count was fixed)
@@ -47,9 +48,21 @@ def resolve_shim(s):
 
 # ---------------------------------------------------------------- cgeist ----
 
+def shim_cgeist_flags(shim):
+    """Extra cgeist flags a shim needs, from <shim dir>/cgeist_flags (whitespace-separated,
+    '#' starts a comment); e.g. shim/exactclass needs --scalar-wrapper-abi. [] without the file."""
+    p = Path(shim) / "cgeist_flags"
+    if not p.is_file():
+        return []
+    flags = []
+    for line in p.read_text().splitlines():
+        flags += line.split("#", 1)[0].split()
+    return flags
+
+
 def cgeist_cmd(d, shim, out, func):
     cmd = [C.CGEIST, *d["sources"], f"--function={func}", "-S", "--hls-annotate",
-           "--raise-scf-to-affine", "--memref-fullrank",
+           "--raise-scf-to-affine", "--memref-fullrank", *shim_cgeist_flags(shim),
            f"-resource-dir={C.CLANG_RESOURCE_DIR}", "-I", str(shim), "-I", "."]
     for inc in d.get("includes", []):
         if inc != ".":
@@ -72,6 +85,9 @@ def source_hash(d, shim):
             files.append(p)
     extra = "|".join([d["top"], " ".join(d.get("includes", [])), " ".join(d.get("defines", [])),
                       str(shim), "cgeist-v3"])
+    flags = shim_cgeist_flags(shim)
+    if flags:   # only then, so that the keys of shims without cgeist_flags do not change
+        extra += "|cgeist-flags:" + " ".join(flags)
     return C.sha256_of_files(files, extra)[:16]
 
 

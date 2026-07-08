@@ -59,9 +59,19 @@ old numbers. Decide together with M3.
   an option to disable that hoist for HLS inputs.
 - **Route A:** lower classes with one scalar member (through base classes) to the scalar in cgeist, so an integer-backed
   `ap_fixed`/`ap_int` shim gives `iW` memrefs and bit-exact folds (design in `~/hls-est-work/feas/A/design.md`; the
-  alternative, scalarizing struct memrefs inside hls-est, needs about 2000 lines). Lands as `--scalar-wrapper-abi`
-  (off by default) plus the harness-local shim `exactclass`; the attention Q/K dead-code case (CLAUDE.md priority 1)
-  depends on it. Not covered: assignable range references (`x.range(h,l) = v`, 125 corpus lines).
+  alternative, scalarizing struct memrefs inside hls-est, needs about 2000 lines). **Landed opt-in (2026-10-10):**
+  Polygeist 8b07bf43 `--scalar-wrapper-abi` (default off; option-off output identical to the previous binary on all
+  957 HLS lit RUN lines and the 783 harness designs, exact and scalar shims) and the harness-local shim
+  `shim/exactclass` (selected with `--shim exactclass`; its `cgeist_flags` passes the option; 0 mismatches against
+  g++ + the Vitis headers on 138 406 values, `hls::exp` within 1 LSB). Coverage, 7 datasets / 208 designs, current
+  hls-est, default pipeline (CHANGELOG 2026-10-10): `--shim exact` ok 95 / exact matches 31 -> `--shim exactclass`
+  ok 92 / exact 32 (sum |err| on the 57 designs compared by both 1911 -> 1750); new blockers: assignable range
+  references (O15, 23 designs, 14 with ground truth, all failing with `exact` too), the O9 simplex assertion on
+  forgebench attn_breakdown_* (3), 3 cgeist timeouts. The attention Q/K dead-code case (CLAUDE.md priority 1) still
+  needs the hls-est side (track T8: inliner registration, Vitis-undef fold of `divsi x, 0`, dead-memory
+  elimination). **For Peter:** (1) make `exactclass` (+ `--scalar-wrapper-abi`) the harness default? (2) switch
+  Polygeist's `Test/HLS/Inputs/vitis` to it? (3) turn the option on by default in cgeist? Each is a separate decision;
+  none is done.
 
 Each needs Peter's OK before it becomes default behaviour of cgeist or of the harness.
 
