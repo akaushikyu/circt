@@ -60,7 +60,8 @@ POLYBENCH_UTIL_INCLUDE = "/mnt/d/HLS/Polygeist/tools/cgeist/Test/polybench/utili
 
 # HLS_EST_BIN overrides the binary (e.g. a frozen copy, so that a rebuild
 # during a long run cannot mix two builds in one result file).
-HLS_EST = os.environ.get("HLS_EST_BIN") or str(CIRCT / "build/clion/bin/hls-est")
+HLS_EST_DEFAULT = str(CIRCT / "build/clion/bin/hls-est")
+HLS_EST = os.environ.get("HLS_EST_BIN") or HLS_EST_DEFAULT
 
 # The canonical hls-est pipeline (CLAUDE.md).  Experiments vary this string.
 DEFAULT_PIPELINE = ("--affine-loop-normalize --auto-pipeline-unroll --infer-vitis-split-array "
@@ -101,6 +102,38 @@ def git_hash(repo=CIRCT):
                               capture_output=True, text=True, check=True).stdout.strip()
     except Exception:
         return "unknown"
+
+
+def file_sha256(p, n=16):
+    try:
+        h = hashlib.sha256()
+        with open(p, "rb") as f:
+            for chunk in iter(lambda: f.read(1 << 20), b""):
+                h.update(chunk)
+        return h.hexdigest()[:n]
+    except OSError:
+        return "unknown"
+
+
+def hls_est_identity(binary=None):
+    """(git, sha256) describing the hls-est binary a run uses.
+
+    The repo HEAD only describes the repo's own build.  A binary given by
+    HLS_EST_BIN (a frozen copy) is labelled by a `<binary>.git` sidecar file
+    if one exists (first word: the commit it was built from), otherwise as
+    unknown; the sha256 of the binary is recorded either way, so two result
+    files can be checked for having used the same build.
+    """
+    binary = str(binary or HLS_EST)
+    sha = file_sha256(binary)
+    if os.path.realpath(binary) == os.path.realpath(HLS_EST_DEFAULT):
+        return git_hash(), sha
+    side = Path(binary + ".git")
+    if side.exists():
+        words = side.read_text().split()
+        if words:
+            return words[0], sha
+    return f"unknown (HLS_EST_BIN={binary})", sha
 
 
 def load_json(p, default=None):

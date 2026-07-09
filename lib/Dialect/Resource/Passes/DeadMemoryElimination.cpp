@@ -18,6 +18,7 @@
 
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/SetVector.h"
+#include "llvm/Support/Path.h"
 #include "llvm/Support/raw_ostream.h"
 
 #include <string>
@@ -62,6 +63,45 @@ static StringRef objectName(Operation *def) {
     return globalOp.getSymName();
   return "<unnamed>";
 }
+
+/// file:line:col (file name without directories) of the first file location
+/// inside `loc`, for the debug reasons.
+static std::string shortLoc(Location loc) {
+  if (auto fieldValue = dyn_cast<FileLineColLoc>(loc))
+    return (llvm::sys::path::filename(fieldValue.getFilename().getValue()) +
+            ":" + Twine(fieldValue.getLine()) + ":" +
+            Twine(fieldValue.getColumn()))
+        .str();
+  if (auto elementCount = dyn_cast<NameLoc>(loc))
+    return shortLoc(elementCount.getChildLoc());
+  if (auto candidateValue = dyn_cast<CallSiteLoc>(loc))
+    return shortLoc(candidateValue.getCallee());
+  if (auto fu = dyn_cast<FusedLoc>(loc))
+    for (Location lowerIndex : fu.getLocations()) {
+      std::string stringValue = shortLoc(lowerIndex);
+      if (stringValue != "?")
+        return stringValue;
+    }
+  return "?";
+}
+
+/// What the overwritten-store step deleted, kept for the debug reasons of the
+/// arrays that die because of it (CLAUDE.md step 3: the chain of ops that made
+/// an array dead). `byValueDef`: the op whose result a deleted store wrote
+/// (its value then reaches nothing); `byObject`: the first deleted store of an
+/// array. Entries of ops that are erased are dropped.
+struct DeathNotes {
+  DenseMap<Operation *, std::string> byValueDef;
+  DenseMap<Operation *, std::string> byObject;
+  DenseMap<Operation *, unsigned> killedStores;
+  void forget(Operation *op) {
+    op->walk([&](Operation *opHandle) {
+      byValueDef.erase(opHandle);
+      byObject.erase(opHandle);
+      killedStores.erase(opHandle);
+    });
+  }
+};
 
 void ObjectTable::build(ModuleOp rootModule) {
   rootModule.walk([&](Operation *op) {
@@ -331,7 +371,8 @@ static Operation *findKiller(Operation *store, const ObjectTable &table,
   }
 }
 
-static unsigned killOverwrittenStores(ModuleOp rootModule, bool remarks) {
+static unsigned killOverwrittenStores(ModuleOp rootModule, bool remarks,
+                                      DeathNotes &notes) {
   ObjectTable table;
   table.build(rootModule);
   SmallVector<Operation *> dead;
@@ -350,6 +391,21 @@ static unsigned killOverwrittenStores(ModuleOp rootModule, bool remarks) {
               << "' is overwritten before any read by the store "
                  "at "
               << keyValue->getLoc();
+        Value stored =
+            isa<affine::AffineStoreOp>(widthValue)
+                ? cast<affine::AffineStoreOp>(widthValue).getValueToStore()
+                : cast<memref::StoreOp>(widthValue).getValueToStore();
+        if (Operation *def = stored.getDefiningOp())
+          notes.byValueDef.try_emplace(
+              def, "its store to '" + objectName(opHandle.def).str() + "' at " +
+                       shortLoc(widthValue->getLoc()) +
+                       " is overwritten by the store at " +
+                       shortLoc(keyValue->getLoc()) + " before any read");
+        if (++notes.killedStores[opHandle.def] == 1)
+          notes.byObject[opHandle.def] =
+              "store at " + shortLoc(widthValue->getLoc()) +
+              " overwritten by the store at " + shortLoc(keyValue->getLoc()) +
+              " before any read";
         dead.push_back(widthValue);
       }
     }
@@ -380,6 +436,13 @@ public:
     return liveIdx.contains({op, loopIndex});
   }
   bool isConservative(Operation *op) const { return conservative.contains(op); }
+  /// Live, or a terminator that stays because its parent does (a function
+  /// block's terminator, or a yield of a live loop / if).
+  bool survives(Operation *op) const;
+  /// Makes live every op result that an op which survives still uses (the
+  /// stand-in constants, and anything a liveness gap left out), propagating
+  /// as usual. Returns the number of values it had to add.
+  unsigned closeOverSurvivors();
 
 private:
   void markOp(Operation *op) {
@@ -425,6 +488,7 @@ void Liveness::markVal(Value valueHandle) {
   }
   auto arrayValue = cast<BlockArgument>(valueHandle);
   Operation *owningFunction = arrayValue.getOwner()->getParentOp();
+
   if (!owningFunction || isa<func::FuncOp>(owningFunction))
     return;
   if (isHandledLoop(owningFunction) && !conservative.contains(owningFunction)) {
@@ -510,7 +574,8 @@ void Liveness::run() {
       return;
     if (!op->getParentOfType<func::FuncOp>())
       return;
-    if (op->hasTrait<OpTrait::ReturnLike>() &&
+
+    if (op->hasTrait<OpTrait::IsTerminator>() &&
         isa_and_present<func::FuncOp>(op->getParentOp())) {
       markOp(op);
       return;
@@ -543,6 +608,39 @@ void Liveness::run() {
 
   while (!opWork.empty())
     processOp(opWork.pop_back_val());
+}
+
+bool Liveness::survives(Operation *op) const {
+  if (liveOps.contains(op))
+    return true;
+  if (!op->hasTrait<OpTrait::IsTerminator>())
+    return false;
+  Operation *parent = op->getParentOp();
+  return parent && (isa<func::FuncOp>(parent) || liveOps.contains(parent));
+}
+
+unsigned Liveness::closeOverSurvivors() {
+  unsigned added = 0;
+  bool grew = true;
+  while (grew) {
+    grew = false;
+    rootModule.walk([&](Operation *op) {
+      if (isa<func::FuncOp, ModuleOp, memref::GlobalOp>(op) ||
+          !op->getParentOfType<func::FuncOp>() || !survives(op))
+        return;
+      for (Value valueHandle : op->getOperands()) {
+        auto resultValue = dyn_cast<OpResult>(valueHandle);
+        if (!resultValue || liveOps.contains(resultValue.getOwner()))
+          continue;
+        markVal(valueHandle);
+        ++added;
+        grew = true;
+      }
+    });
+    while (!opWork.empty())
+      processOp(opWork.pop_back_val());
+  }
+  return added;
 }
 
 struct DeadMemoryEliminationPass
@@ -578,7 +676,95 @@ struct DeadMemoryEliminationPass
 
 private:
   bool eliminateOnce(ModuleOp rootModule, SmallVectorImpl<Attribute> &records);
+  DeathNotes notes;
 };
+
+/// The def-use path along which the value that `load` reads stops
+/// mattering, e.g. "affine.load at k.cpp:12:9 -> arith.muli (k.cpp:12:20) ->
+/// arith.addi (k.cpp:12:17) -> out of affine.for (k.cpp:11:7) -> result
+/// unused (its store to 'scores' at k.cpp:14:5 is overwritten by the store at
+/// k.cpp:15:5 before any read)". Called on the IR as the liveness saw it
+/// (before the stand-ins and the erase step); follows the first user at each
+/// step, and a value yielded by a loop / if continues as that op's result.
+static std::string deadChain(Operation *load, const ObjectTable &typeValue,
+                             const DeathNotes &notes) {
+  std::string out;
+  llvm::raw_string_ostream os(out);
+  os << load->getName().getStringRef() << " at " << shortLoc(load->getLoc());
+  if (load->getNumResults() != 1)
+    return out;
+  Value cur = load->getResult(0);
+  DenseSet<Value> seen{cur};
+  auto objText = [&](Value memoryOp) {
+    std::string stringValue;
+    if (std::optional<unsigned> id = typeValue.lookup(memoryOp)) {
+      const MemObject &opHandle = typeValue.objs[*id];
+      stringValue = "'" + objectName(opHandle.def).str() + "'" +
+                    (opHandle.live ? "" : " (dead)");
+    } else {
+      stringValue = "an untracked memref";
+    }
+    return stringValue;
+  };
+  for (unsigned step = 0; step < 12; ++step) {
+    if (cur.use_empty()) {
+      os << " -> result unused";
+      if (Operation *def = cur.getDefiningOp()) {
+        auto it = notes.byValueDef.find(def);
+        if (it != notes.byValueDef.end())
+          os << " (" << it->second << ")";
+      }
+      return out;
+    }
+    Value next;
+    for (OpOperand &useValue : cur.getUses()) {
+      Operation *user = useValue.getOwner();
+      if (Value memoryOp = storedMemref(user)) {
+        bool asValue = useValue.getOperandNumber() == 0;
+        os << " -> " << (asValue ? "stored into " : "an index of a store into ")
+           << objText(memoryOp) << " at " << shortLoc(user->getLoc());
+        return out;
+      }
+      if (user->hasTrait<OpTrait::IsTerminator>()) {
+        Operation *parent = user->getParentOp();
+        unsigned loopIndex = useValue.getOperandNumber();
+        if (parent && (isHandledLoop(parent) || isHandledIf(parent)) &&
+            loopIndex < parent->getNumResults()) {
+          if (!next && !seen.contains(parent->getResult(loopIndex))) {
+            next = parent->getResult(loopIndex);
+            os << " -> out of " << parent->getName().getStringRef() << " ("
+               << shortLoc(parent->getLoc()) << ")";
+            break;
+          }
+          continue;
+        }
+        os << " -> " << user->getName().getStringRef() << " of "
+           << (parent ? parent->getName().getStringRef() : StringRef("?"))
+           << " at " << (parent ? shortLoc(parent->getLoc()) : "?");
+        return out;
+      }
+      if (!next && user->getNumResults() > 0 &&
+          !seen.contains(user->getResult(0))) {
+        next = user->getResult(0);
+        os << " -> " << user->getName().getStringRef() << " ("
+           << shortLoc(user->getLoc()) << ")";
+        break;
+      }
+    }
+    if (!next)
+      break;
+
+    if (Operation *def = next.getDefiningOp()) {
+      auto it = notes.byValueDef.find(def);
+      if (it != notes.byValueDef.end() && !next.use_empty())
+        os << " [" << it->second << "]";
+    }
+    seen.insert(next);
+    cur = next;
+  }
+  os << " -> ...";
+  return out;
+}
 
 static Attribute describeDead(Builder &buildPoint, const MemObject &opHandle,
                               StringRef reason) {
@@ -627,33 +813,44 @@ bool DeadMemoryEliminationPass::eliminateOnce(
   Liveness live(rootModule, table);
   live.run();
 
-  Builder buildPoint(rootModule.getContext());
   bool changed = false;
 
-  for (const MemObject &opHandle : table.objs) {
+  std::vector<std::string> reasons(table.objs.size());
+  for (unsigned id = 0; id < table.objs.size(); ++id) {
+    const MemObject &opHandle = table.objs[id];
     if (opHandle.live)
       continue;
-    std::string reason;
-    if (opHandle.writers.empty() && opHandle.anchors.size() <= 1 &&
-        isa<memref::GlobalOp>(opHandle.def) && opHandle.aliases.empty())
-      reason = "never accessed";
-    else if (llvm::none_of(opHandle.aliases, [](Value valueHandle) {
-               return llvm::any_of(
-                   valueHandle.getUsers(), [](Operation *useValue) {
-                     auto eff = dyn_cast<MemoryEffectOpInterface>(useValue);
-                     return eff && eff.hasEffect<MemoryEffects::Read>();
-                   });
-             }))
-      reason = "write-only: never read";
-    else
-      reason = "no load from it reaches a side effect that leaves the "
-               "function (store to an argument, call, return)";
+    SmallVector<Operation *> reads;
+    unsigned nWrites = 0;
+    for (Value valueHandle : opHandle.aliases)
+      for (Operation *useValue : valueHandle.getUsers()) {
+        auto eff = dyn_cast<MemoryEffectOpInterface>(useValue);
+        if (!eff)
+          continue;
+        if (eff.hasEffect<MemoryEffects::Read>())
+          reads.push_back(useValue);
+        else if (eff.hasEffect<MemoryEffects::Write>())
+          ++nWrites;
+      }
+    llvm::raw_string_ostream os(reasons[id]);
+    if (opHandle.writers.empty() && reads.empty() &&
+        isa<memref::GlobalOp>(opHandle.def) && opHandle.aliases.empty()) {
+      os << "never accessed";
+    } else if (reads.empty()) {
+      os << "write-only: never read (" << nWrites << " store(s))";
+    } else {
+      os << "no load from it reaches a side effect that leaves the function "
+            "(store to an argument, call, return): "
+         << deadChain(reads.front(), table, notes);
+      if (reads.size() > 1)
+        os << "; " << reads.size() - 1 << " more load(s)";
+    }
+    auto kn = notes.byObject.find(opHandle.def);
+    if (kn != notes.byObject.end())
+      os << "; " << notes.killedStores.lookup(opHandle.def)
+         << " overwritten store(s) deleted, first: " << kn->second;
     if (opHandle.def->hasAttr("hls.preserve"))
-      reason += "; hls.preserve does not keep a dead array (Vitis removes it)";
-    records.push_back(describeDead(buildPoint, opHandle, reason));
-    if (remarks)
-      opHandle.def->emitRemark() << "dead-memory-elimination: removed '"
-                                 << objectName(opHandle.def) << "': " << reason;
+      os << "; hls.preserve does not keep a dead array (Vitis removes it)";
   }
 
   rootModule.walk([&](Operation *op) {
@@ -708,26 +905,33 @@ bool DeadMemoryEliminationPass::eliminateOnce(
     }
   });
 
+  live.closeOverSurvivors();
+
+  Builder buildPoint(rootModule.getContext());
+  for (unsigned id = 0; id < table.objs.size(); ++id) {
+    const MemObject &opHandle = table.objs[id];
+    if (opHandle.live)
+      continue;
+    records.push_back(describeDead(buildPoint, opHandle, reasons[id]));
+    if (remarks)
+      opHandle.def->emitRemark()
+          << "dead-memory-elimination: removed '" << objectName(opHandle.def)
+          << "': " << reasons[id];
+  }
+
   SmallVector<Operation *> dead;
   for (auto function : rootModule.getOps<func::FuncOp>()) {
     if (function.isExternal())
       continue;
     function.getBody().walk<WalkOrder::PreOrder>([&](Operation *op) {
-      if (live.isLive(op))
+      if (live.survives(op))
         return WalkResult::advance();
-      if (op->hasTrait<OpTrait::IsTerminator>())
-        return WalkResult::advance();
-
-      if (op->getNumRegions() == 0 && isMemoryEffectFree(op) &&
-          llvm::any_of(op->getUsers(), [&](Operation *useValue) {
-            return live.isLive(useValue) ||
-                   useValue->hasTrait<OpTrait::IsTerminator>();
-          }))
-        return WalkResult::skip();
       dead.push_back(op);
       return WalkResult::skip();
     });
   }
+  for (Operation *op : dead)
+    notes.forget(op);
   for (Operation *op : dead)
     op->dropAllReferences();
   for (Operation *op : dead) {
@@ -738,6 +942,7 @@ bool DeadMemoryEliminationPass::eliminateOnce(
 
   for (const MemObject &opHandle : table.objs)
     if (!opHandle.live && isa<memref::GlobalOp>(opHandle.def)) {
+      notes.forget(opHandle.def);
       opHandle.def->erase();
       changed = true;
     }
@@ -746,6 +951,7 @@ bool DeadMemoryEliminationPass::eliminateOnce(
 
 void DeadMemoryEliminationPass::runOnOperation() {
   ModuleOp rootModule = getOperation();
+  notes = DeathNotes();
   SmallVector<Attribute> records;
   if (auto prev = rootModule->getAttrOfType<ArrayAttr>("hls.dead_memrefs"))
     records.append(prev.begin(), prev.end());
@@ -753,7 +959,7 @@ void DeadMemoryEliminationPass::runOnOperation() {
   for (unsigned round = 0; round < 16; ++round) {
     bool changed = false;
     if (overwrittenStores)
-      changed |= killOverwrittenStores(rootModule, remarks) > 0;
+      changed |= killOverwrittenStores(rootModule, remarks, notes) > 0;
     changed |= eliminateOnce(rootModule, records);
     if (!changed)
       break;

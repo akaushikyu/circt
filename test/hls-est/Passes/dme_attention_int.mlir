@@ -44,6 +44,9 @@
 // DBG: bram: 1
 // DBG: [attn#dead{{[0-9]+}}] Q (alloca)
 // DBG: status: eliminated_dead -- removed by --dead-memory-elimination: no load from it reaches a side effect that leaves the function
+// DBG-SAME: affine.load at dme_attention_int.mlir:{{[0-9]+}}:{{[0-9]+}} -> arith.extsi
+// DBG-SAME: -> arith.addi (dme_attention_int.mlir:{{[0-9]+}}:{{[0-9]+}}) [its store to 'scores' at dme_attention_int.mlir:{{[0-9]+}}:{{[0-9]+}} is overwritten by the store at dme_attention_int.mlir:{{[0-9]+}}:{{[0-9]+}} before any read]
+// DBG-SAME: -> out of affine.for (dme_attention_int.mlir:{{[0-9]+}}:{{[0-9]+}}) -> stored into 'scores_tmp' (dead)
 // DBG: bram: 0
 // DBG: [attn#dead{{[0-9]+}}] K (alloca)
 // DBG: status: eliminated_dead

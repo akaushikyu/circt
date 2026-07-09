@@ -162,6 +162,7 @@ struct AdapterRecord {
   int64_t writeBurst = 16, writeOutstanding = 16;
   bool hasRead = false, hasWrite = false;
   bool passedToCall = false;
+  bool unresolvedCall = false;
   int64_t readDepth = 0;
   unsigned readBram = 0, writeBram = 0;
   std::string readRule, writeRule;
@@ -448,6 +449,44 @@ SmallVector<AccessSummary> collectAccessSummaries(ArrayRef<Value> banks) {
       out.push_back(arrayValue);
     }
   return out;
+}
+
+static bool neverWritten(ArrayRef<Value> accessSites) {
+  SmallVector<Value> work(accessSites.begin(), accessSites.end());
+  DenseSet<Value> seen(accessSites.begin(), accessSites.end());
+  while (!work.empty()) {
+    Value cur = work.pop_back_val();
+    for (OpOperand &use : cur.getUses()) {
+      Operation *user = use.getOwner();
+      if (auto view = dyn_cast<ViewLikeOpInterface>(user))
+        if (view.getViewSource() == cur) {
+          for (Value resultValue : user->getResults())
+            if (isa<BaseMemRefType>(resultValue.getType()) &&
+                seen.insert(resultValue).second)
+              work.push_back(resultValue);
+          continue;
+        }
+      if (isa<memref::DimOp>(user))
+        continue;
+      auto eff = dyn_cast<MemoryEffectOpInterface>(user);
+      if (!eff)
+        return false;
+      SmallVector<MemoryEffects::EffectInstance> effects;
+      eff.getEffects(effects);
+      bool named = false;
+      for (auto &entryValue : effects) {
+        if (entryValue.getValue() != cur)
+          continue;
+        named = true;
+        if (isa<MemoryEffects::Write, MemoryEffects::Free>(
+                entryValue.getEffect()))
+          return false;
+      }
+      if (!named)
+        return false;
+    }
+  }
+  return true;
 }
 
 static FileLineColLoc findFileLoc(Location loc) {
@@ -839,8 +878,9 @@ static BRAMCost estimateBRAM(MemoryResourceOpInterface iface, MemrefRecord &rec,
   int64_t blocks;
 
   auto global = dyn_cast<memref::GlobalOp>(iface.getOperation());
-  rec.rom = attributed && global && global.getConstant() &&
-            !global.isExternal() && !global.isUninitialized();
+  rec.rom = attributed && global && !global.isExternal() &&
+            !global.isUninitialized() &&
+            (global.getConstant() || neverWritten(banks));
   if (rec.rom) {
     unsigned elementCount = std::max(demand.total, 1u);
     for (const ReplicationLoopRecord &lowerIndex : rep.loops)
@@ -865,8 +905,10 @@ static BRAMCost estimateBRAM(MemoryResourceOpInterface iface, MemrefRecord &rec,
     cost.kind = kr.kind;
     cost.bramCount = static_cast<unsigned>(blocks);
     cost.note = std::to_string(numElems) + "x" + std::to_string(elemBits) +
-                "b constant global -> " + kindName(kr.kind) + " (" +
-                std::to_string(elementCount) +
+                (global.getConstant() ? "b constant global -> "
+                                      : "b initialised global, never "
+                                        "written -> ") +
+                kindName(kr.kind) + " (" + std::to_string(elementCount) +
                 " read port(s)/cycle) = " + std::to_string(blocks) +
                 " BRAM_18K";
     recordAccesses(accesses, rec);
@@ -875,8 +917,11 @@ static BRAMCost estimateBRAM(MemoryResourceOpInterface iface, MemrefRecord &rec,
     rec.status = "counted";
     rec.ramType = kindName(kr.kind);
     rec.ramReason =
-        "constant-initialised global (ROM, never written): peak " +
-        std::to_string(elementCount) + " read(s) per cycle -> " +
+        std::string(global.getConstant()
+                        ? "constant-initialised global (ROM, never written)"
+                        : "initialised global that no get_global site writes "
+                          "(ROM)") +
+        ": peak " + std::to_string(elementCount) + " read(s) per cycle -> " +
         kindName(kr.kind) +
         (elementCount <= 2
              ? std::string(": read-only ports are simple dual port, x36 "
@@ -1064,9 +1109,12 @@ static void printDebugText(ArrayRef<MemrefRecord> records,
          << " (num_write_outstanding " << arrayValue.writeOutstanding
          << " has no effect) -> " << arrayValue.writeBram << " BRAM ("
          << arrayValue.writeRule << ")\n";
-      if (arrayValue.passedToCall)
-        os << "  note: an argument of the bundle is passed to a call; assumed "
-              "read and written\n";
+      if (arrayValue.unresolvedCall)
+        os << "  note: an argument of the bundle is passed to a call without "
+              "a body in the module; assumed read and written\n";
+      else if (arrayValue.passedToCall)
+        os << "  note: an argument of the bundle is passed to a call; its "
+              "accesses in the callee are counted\n";
       os << "  bram: " << resultValue.bram << "\n";
       continue;
     }
@@ -1247,6 +1295,7 @@ static llvm::json::Object toJson(const MemrefRecord &resultValue) {
     ad["has_read"] = arrayValue.hasRead;
     ad["has_write"] = arrayValue.hasWrite;
     ad["passed_to_call"] = arrayValue.passedToCall;
+    ad["unresolved_call"] = arrayValue.unresolvedCall;
     ad["max_read_burst_length"] = arrayValue.readBurst;
     ad["num_read_outstanding"] = arrayValue.readOutstanding;
     ad["read_depth"] = arrayValue.readDepth;
@@ -1470,8 +1519,21 @@ static void scanArgUses(Value valueHandle, AdapterRecord &arrayValue) {
               work.push_back(resultValue);
           continue;
         }
-      if (isa<CallOpInterface>(user)) {
-        arrayValue.passedToCall = arrayValue.hasRead = arrayValue.hasWrite =
+      if (auto callSite = dyn_cast<CallOpInterface>(user)) {
+        arrayValue.passedToCall = true;
+        auto callee =
+            dyn_cast_or_null<func::FuncOp>(callSite.resolveCallable());
+        auto args = callSite.getArgOperands();
+        unsigned first = args.getBeginOperandIndex();
+        unsigned elementCount = use.getOperandNumber();
+        if (callee && !callee.isExternal() && elementCount >= first &&
+            elementCount - first < callee.getNumArguments()) {
+          Value inner = callee.getArgument(elementCount - first);
+          if (seen.insert(inner).second)
+            work.push_back(inner);
+          continue;
+        }
+        arrayValue.unresolvedCall = arrayValue.hasRead = arrayValue.hasWrite =
             true;
         continue;
       }

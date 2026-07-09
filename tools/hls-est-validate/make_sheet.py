@@ -138,7 +138,9 @@ def main():
     vers = sorted({(v or {}).get("vitis_version") for v in V.values() if v and v.get("vitis_version")})
     cfg = [["part", C.PART], ["clock", C.CLOCK], ["flow_target", C.FLOW_TARGET],
            ["extra hls config", "; ".join(C.EXTRA_HLS_CFG)], ["Vitis version(s)", ", ".join(map(str, vers)) or C.VITIS_VERSION],
-           ["hls-est git hash", meta.get("hls_est_git", "")], ["hls-est pipeline", meta.get("pipeline", "")],
+           ["hls-est git hash", meta.get("hls_est_git", "")],
+           ["hls-est binary sha256", meta.get("hls_est_sha256", "")],
+           ["hls-est pipeline", meta.get("pipeline", "")],
            ["hls-est timeout (s)", meta.get("timeout", "")], ["shim include dir", meta.get("shim", "")],
            ["hls-est binary", meta.get("hls_est", "")], ["designs", len(keys)],
            ["exact matches", CMP.get("summary", {}).get("exact", "")],

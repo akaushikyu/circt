@@ -4,6 +4,7 @@
     python3 run_hlsest.py [--datasets a,b] [--benchmarks x,y] [-j 8] [--timeout 120]
                           [--pipeline "<hls-est flags>"] [--shim polygeist|<dir>]
                           [--out results/hlsest.json] [--force-cgeist] [--debug-json]
+                          [--mlir-from <earlier result json>]
 
 Per design:
   1. cgeist <sources> --function=<top> -S --hls-annotate --raise-scf-to-affine
@@ -12,6 +13,9 @@ Per design:
   2. hls-est <mlir> --symbol-privatize=exclude=<top> --symbol-dce <pipeline>
      (the privatize/dce pair keeps only the top and what it calls, which is how
      the inlining double count was fixed)
+--mlir-from reuses the MLIR files (and cgeist outcomes) an earlier result file
+recorded instead of running cgeist, so two hls-est builds or pipelines can be
+compared on byte-identical inputs even after a shim or cgeist change.
 Status strings follow CLAUDE.md: ok | cgeist crash | cgeist error: ... |
 hls-est error: <status> | hls-est timeout <N>s.
 """
@@ -264,7 +268,13 @@ def process(d, args, shim, run_id):
     key = C.design_key(d)
     r = {"dataset": d["dataset"], "benchmark": d["benchmark"], "top": d["top"], "mode": d.get("mode"),
          "pipeline": args.pipeline, "shim": str(shim)}
-    st, mlir, note = run_cgeist(d, shim, args.force_cgeist)
+    prev = (args.mlir_from_records or {}).get(key)
+    if prev and prev.get("mlir") and Path(prev["mlir"]).exists():
+        st, mlir, note = "ok", Path(prev["mlir"]), f"from {args.mlir_from}"
+    elif prev and str(prev.get("cgeist_status", "ok")) != "ok":
+        st, mlir, note = prev["cgeist_status"], None, f"from {args.mlir_from}"
+    else:
+        st, mlir, note = run_cgeist(d, shim, args.force_cgeist)
     r["cgeist_status"], r["cgeist_note"] = st, note
     if st != "ok":
         r["status"] = st
@@ -293,6 +303,8 @@ def main():
     ap.add_argument("--out", default=str(C.RESULTS_DIR / "hlsest.json"))
     ap.add_argument("--run-id", default=None)
     ap.add_argument("--force-cgeist", action="store_true")
+    ap.add_argument("--mlir-from", default=None,
+                    help="earlier run_hlsest result json: reuse its MLIR files instead of running cgeist")
     ap.add_argument("--no-privatize", action="store_true")
     ap.add_argument("--debug-json", action="store_true", help="(default now; kept for compatibility)")
     ap.add_argument("--no-debug-json", action="store_true")
@@ -300,6 +312,10 @@ def main():
     args = ap.parse_args()
 
     shim = resolve_shim(args.shim)
+    args.mlir_from_records = None
+    if args.mlir_from:
+        prev = C.load_json(args.mlir_from, {}) or {}
+        args.mlir_from_records = {k: v for k, v in prev.items() if k != "_meta"}
     designs = D.load_designs()
     if args.datasets:
         ds = set(args.datasets.split(","))
@@ -308,8 +324,9 @@ def main():
         bs = set(args.benchmarks.split(","))
         designs = [d for d in designs if d["benchmark"] in bs]
     run_id = args.run_id or time.strftime("%Y%m%d-%H%M%S")
-    ghash = C.git_hash()
+    ghash, bsha = C.hls_est_identity()
     results = {"_meta": {"pipeline": args.pipeline, "shim": str(shim), "hls_est_git": ghash,
+                         "hls_est_sha256": bsha, "mlir_from": args.mlir_from,
                          "top_passes": ("none" if args.no_privatize else
                                         "--symbol-privatize=exclude=<top> --symbol-dce prepended per design"),
                          "timeout": args.timeout, "run_id": run_id, "hls_est": C.HLS_EST}}

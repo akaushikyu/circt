@@ -20,6 +20,7 @@ import argparse
 import csv
 import hashlib
 import json
+import os
 import subprocess
 import sys
 import time
@@ -76,7 +77,11 @@ ABLATION = [
 
 
 def run_config(name, flags, args):
-    cid = hashlib.sha1((flags + C.git_hash()).encode()).hexdigest()[:10]
+    ghash, bsha = C.hls_est_identity()
+    # The cache key names the binary: the repo HEAD for the repo's build (as
+    # before), plus the binary's hash when HLS_EST_BIN points elsewhere.
+    key = flags + ghash + (bsha if os.environ.get("HLS_EST_BIN") else "")
+    cid = hashlib.sha1(key.encode()).hexdigest()[:10]
     out = EXP_DIR / "runs" / f"{cid}.json"
     out.parent.mkdir(parents=True, exist_ok=True)
     cmd = [sys.executable, str(C.HERE / "run_hlsest.py"), "--pipeline", flags, "-j", str(args.j),

@@ -117,7 +117,7 @@ default pipeline or become `--bram-analysis` defaults?
 
 | mechanism | how to turn it on | what it models |
 |---|---|---|
-| integer folds | `--vitis-fold` (pass), then `--canonicalize --sccp` | Vitis folds x/0 to 0 (dg_d_fold_steps); x*0 -> 0 follows from the canonicalization folds |
+| integer folds | `--vitis-fold` (pass), then `--canonicalize --sccp` | x/0 -> 0: what Vitis does for ap_fixed division (dg_d_fold_steps, dg_d_fold_divrem0b) and unsigned `%`; a refinement of Vitis' undef for C int `/`, `%` and unsigned `/` (dg_d_fold_divrem0, N1a); x*0 -> 0 follows from the canonicalization folds |
 | dead-memory elimination | `--dead-memory-elimination` (pass) | arrays (locals and globals) whose loads reach no output are gone at a.o.1 (R1, R2, R5, R6) |
 | globals as locals | `--promote-globals-to-allocas` (pass) + `--bram-attribute-globals` (flag) | R6: file-scope arrays get the banking, ports, replication and elimination of locals; constant globals are priced as ROMs (N8) |
 | m_axi adapters | `--bram-maxi-adapters` (flag) | the `<bundle>_m_axi_U` instance BRAM (27 kernels: R8 plus 14 new `mx_*`) |
@@ -194,6 +194,35 @@ that hit the simplex assertion (O9) were re-run with the fallback build and merg
 
 **Cost.** Flags and passes only; re-running the subset takes ~7 minutes per pipeline. No Vitis runs (the 14 `mx_*` kernels are
 cached under `~/hls-est-work/experiments/mx_*`). The lit RUN lines and `common.py DEFAULT_PIPELINE` are unchanged.
+
+**Addendum (T4 review fixes, 2026-10-10).** The independent review of 77e9ca1fa found two medium and four low defects in the
+opt-in mechanisms; all are fixed (CHANGELOG "T4 review fixes"): DME on multi-block function bodies (an inlined callee with an
+early return gave `null operand found` and treated a live array as dead), ROM pricing of initialised tables cgeist emits without
+`constant` (Vitis rom2r_int 1, hls-est was 2 with `--bram-attribute-globals`, now 1), m_axi ports used through a sub-function
+(followed into the callee; Vitis mx_call_rw: write-only 0, read-only 2), the x/0 folds restricted to the four C operators with
+the Vitis behaviour measured per operator (N1a "Division by a constant 0"), the harness labels a frozen `HLS_EST_BIN` binary
+correctly, and the dead-array reasons list the chain of ops. Re-measured on byte-identical inputs (`run_hlsest.py --mlir-from` the
+T4 run files; fixed binary `~/hls-est-work/t4fix/hls-est.t4fix`, runs `~/hls-est-work/t4fix/runs/`, `-j 6 --timeout 120`; the
+counts are over the designs that finished in both runs; the 10 design/run pairs that hit the 120 s limit under load in the replay
+(conv_block_module, conv_block_op1 / op3, conv_module, diff_dims_p3) were re-run with 900 s (`<run>.retry.json`) and are identical
+too):
+
+| shim | pipeline | configuration | T4 run | exact (designs ok in both) | abs err there | totals changed |
+|---|---|---|---|---|---|---|
+| scalar | default | nothing enabled | `new_def` | 35 -> 35 / 77 | 14546 -> 14546 | none |
+| scalar | no split | nothing enabled | `new_nos` | 41 -> 41 / 78 | 20600 -> 20600 | none |
+| scalar | default | + all (with-dme) | `full_def` | 36 -> 36 / 79 | 10472 -> 10472 | none |
+| scalar | no split | + all (with-dme) | `full_nos` | 41 -> 41 / 80 | 22587 -> 22587 | none |
+| exactclass | no split | fold + DME + adapters (recommendation 1) | `xc_dmemaxi_nos` | 49 -> 49 / 79 | 3765 -> 3765 | none |
+| exactclass | default | fold + DME + adapters (recommendation 1) | `xc_dmemaxi_def` | 41 -> 41 / 78 | 2404 -> 2404 | none |
+| exactclass | no split | + all | `xc_full_nos` | 49 -> 49 / 80 | 4945 -> 4945 | none |
+| exactclass | default | + all | `xc_full_def` | 42 -> 42 / 79 | 3149 -> 3149 | none |
+
+No subset design has a function-level branch, a C division by a constant 0, an m_axi port used inside a call that survives
+cgeist's inlining (O10), or an initialised table read more than once per cycle, so the recommendation and its numbers stand.
+The kernels: rom2r_int 2 -> 1 (= Vitis), mx_call_rw2 3 = Vitis, dg_d_fold_divrem0 12 (Vitis 6, O16: C-int x/0 is undef in
+Vitis). Still open for recommendation 4: a constant table read more than twice per cycle is scheduled at a raised II instead of
+replicated (O4 "ROM tables": rom3r_int 1 vs Vitis 4).
 
 ## M7 — O12: let `--bram-analysis` cost only what the top function reaches
 

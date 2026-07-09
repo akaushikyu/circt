@@ -59,10 +59,8 @@ struct VitisFoldPass : PassWrapper<VitisFoldPass, OperationPass<>> {
     RewritePatternSet patterns(context);
     patterns
         .add<FoldIntDivByZero<arith::DivSIOp>, FoldIntDivByZero<arith::DivUIOp>,
-             FoldIntDivByZero<arith::RemSIOp>, FoldIntDivByZero<arith::RemUIOp>,
-             FoldIntDivByZero<arith::CeilDivSIOp>,
-             FoldIntDivByZero<arith::CeilDivUIOp>,
-             FoldIntDivByZero<arith::FloorDivSIOp>>(context);
+             FoldIntDivByZero<arith::RemSIOp>,
+             FoldIntDivByZero<arith::RemUIOp>>(context);
     if (canonicalize) {
       for (Dialect *targetDialect : context->getLoadedDialects())
         targetDialect->getCanonicalizationPatterns(patterns);
