@@ -10,6 +10,8 @@
 
 #include <llvm/ADT/TypeSwitch.h>
 
+#include <limits>
+
 #define DEBUG_TYPE "bram-classification"
 
 using namespace mlir;
@@ -26,6 +28,8 @@ StringRef stringifyStorageMode(StorageMode mode) {
     return "tdp";
   case StorageMode::OneWriteNRead:
     return "1wnr";
+  case StorageMode::Registers:
+    return "registers";
   }
   return "?";
 }
@@ -39,6 +43,8 @@ unsigned storageModeSlots(StorageMode mode) {
     return kDualPortSlots;
   case StorageMode::OneWriteNRead:
     return kReplicatedPortSlots;
+  case StorageMode::Registers:
+    return std::numeric_limits<unsigned>::max(); // no memory, no limit
   }
   return kDualPortSlots;
 }
@@ -111,6 +117,9 @@ void BRAMClassification::enumerateBanks(Operation *root) {
     prof.memref = bank;
     prof.width = elt.isIntOrFloat() ? elt.getIntOrFloatBitWidth() : 64u;
     prof.depth = static_cast<unsigned>(memTy.getNumElements());
+    prof.registers = alloca->hasAttr(kRegistersAttrName);
+    if (prof.registers)
+      prof.mode = StorageMode::Registers;
     banks.try_emplace(bank, prof);
   });
 }
@@ -148,7 +157,8 @@ void BRAMClassification::profileAccesses(Operation *root) {
         maxStoresPerLoop = std::max(maxStoresPerLoop, writes);
     }
     prof.replicable = maxStoresPerLoop <= 1;
-    prof.mode = classifyMode(maxStoresPerLoop);
+    prof.mode = prof.registers ? StorageMode::Registers
+                               : classifyMode(maxStoresPerLoop);
     prof.type = classifyStorageKind(prof.maxReads, prof.maxWrites);
   }
 }

@@ -28,6 +28,31 @@ future td=auto mode (T5 adds a `td=auto|off` option to it; under td=off it then 
 **Recommendation.** Remove `--infer-vitis-split-array` from the default string, or keep it with `td=off` once T5 lands
 (same effect). Either way the lit RUN lines and the Compiler Explorer integration need the new string.
 
+**Addendum (T5, 2026-10-10): the alternative `--infer-vitis-split-array=td=off`.** The pass now has `td=auto|off`
+(default `auto` = the inference above, output unchanged). `td=off` infers no port-pressure partition and only Vitis'
+automatic td=off partitions (N7: <= 4 elements and all-constant arrays -> registers, a dimension indexed only by
+constants -> complete). Harness subset, scalar shim, hls-est 7c5a8aae0 + T5, MLIR reused (`--mlir-from`), runs
+`~/hls-est-work/t5/runs/`; exact / |err| on the 77 designs every run compares:
+
+| pipeline | float-loads-perfect (M8) | exact | total abs error | changed vs. "without split" (Vitis) |
+|---|---|---|---|---|
+| default (with split, td=auto) | off | 35 / 77 | 14546 | - |
+| without split | off | 41 / 77 | 17232 | - |
+| with `--infer-vitis-split-array=td=off` | off | 41 / 77 | 17224 | gesummv 20 -> 134 (135), atax 11 -> 68 (13), bicg 12 -> 69 (14) |
+| without split | on | 41 / 77 | 17230 | atax 11 -> 12, bicg 12 -> 13 |
+| with `--infer-vitis-split-array=td=off` | on | 41 / 77 | 17116 | atax 12, bicg 13, gesummv 134 |
+
+gesummv is Vitis' own `[HLS 214-449]` on buff_A and buff_B (64 + 64 banks; per array buff_A, buff_B, tmp1, tmp2 now
+equal Vitis, buff_x is O3). atax / bicg regress only with the current T3 default: `--auto-pipeline-unroll` unrolls
+lp4 / lp2 where Vitis flattens the float nest (O13), so every buff_A index on dimension 2 becomes a constant and the
+rule fires; with `float-loads-perfect=true` the nest is flattened, j stays a variable and buff_A stays one RAM, as in
+Vitis. Regression gates exact in every row. Kernels (CHANGELOG T5 entry): partition topic 126 / 136 exact with td=off
+vs 119 without split and 116 with the default; T2's replication inputs 13 / 13 either way (td=auto 11 / 13).
+
+**Recommendation (T5).** Keep the pass with `td=off` rather than dropping it, and only together with M8
+(`float-loads-perfect=true`); without M8, dropping the pass is the safer of the two. Either way the lit RUN lines and the
+Compiler Explorer integration need the new string. Not applied: the default pipeline is Peter's decision.
+
 ## M2 — O6: make `--shim exact` the harness default
 
 **Question.** `scalar` widens `ap_int<W>` to 8/16/32/64 bits and maps `ap_fixed` to `float`; `exact` uses `_BitInt(W)`

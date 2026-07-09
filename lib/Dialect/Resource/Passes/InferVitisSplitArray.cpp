@@ -41,11 +41,35 @@
 // induction variables are loop-variant for the pipeline, so a load indexed by
 // them is not hoisted and counts (LoopPragmas.h, getFlattenedRoot).
 //
+// Two modes, after Vitis' `syn.array_partition.throughput_driven` (option
+// `td`):
+//   td=auto (default)  the port-pressure inference above. With
+//                      `auto-partitions` it also applies the three rules of
+//                      td=off first (Vitis does them in either mode); off by
+//                      default, so the default output is what it always was.
+//   td=off             no port-pressure partitions at all - Vitis replicates
+//                      instead (RAM_1WNR, priced by --bram-analysis) - only
+//                      the automatic partitions Vitis still makes
+//                      (VITIS_NOTES.md N7, exp-notes/partition.md R5):
+//     (a) [HLS 214-421] an array of at most `complete-threshold` (4) elements
+//         in total, any width or rank -> registers;
+//     (b) [HLS 214-449] a dimension that EVERY access of the array indexes
+//         with a constant (in every loop, pipelined or not, after the
+//         unrolling auto-pipeline-unroll did) -> `complete` on that dimension,
+//         one bank per index (source = "constant-index");
+//     (c) an array that every access indexes with constants in every
+//         dimension -> scalarised (registers).
+//   "Registers" is the unit attribute `hls.registers` on the alloca:
+//   --bram-analysis counts 0 BRAM (status "registers") and the scheduler puts
+//   no port limit on it. Everything else stays one memory, and an array a
+//   user pragma already describes is left alone.
+//
 //===----------------------------------------------------------------------===//
 #include "circt/Dialect/Resource/Passes/InferVitisSplitArray.h"
 #include "circt/Dialect/Resource/Passes/LoopPragmas.h"
 #include "mlir/Dialect/Affine/Analysis/LoopAnalysis.h"
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
+#include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/Utils/StaticValueUtils.h"
@@ -91,6 +115,15 @@ constexpr StringLiteral kReasonAttr = "hls.partition_reason";
 constexpr StringLiteral kPipelineAttr = "hls.pipeline";
 constexpr StringLiteral kPipelineOffAttr = "hls.pipeline_off";
 constexpr StringLiteral kVarNameAttr = "polygeist.varname";
+/// `source` of an inferred spec entry: port pressure (td=auto) or the
+/// constant-index rule (b).
+constexpr StringLiteral kSourcePressure = "infer-from-design";
+constexpr StringLiteral kSourceConstantIndex = "constant-index";
+/// Pragmas that already decide how an array is stored; such an array is left
+/// to them by the automatic partitions (a)-(c).
+constexpr StringLiteral kUserStoragePragmas[] = {
+    "hls.array_partition", "hls.array_reshape", "hls.bind_storage",
+    "hls.stream"};
 
 // Factors above this are never scanned one by one. Purely a guard against
 // degenerate inputs (a[i] next to a[i + 2^40]); real factors are tiny.
@@ -659,11 +692,12 @@ static StringRef kindName(const PartitionChoice &part,
   return part.factor == shape[part.dim] ? "complete" : "cyclic";
 }
 
-/// Same encoding as a user pragma, tagged with Vitis' own provenance string
+/// Same encoding as a user pragma, tagged with a provenance string (`source`)
 /// so user and inferred partitions stay distinguishable.
 static ArrayAttr buildPartitionAttr(Builder &b, ArrayRef<PartitionChoice> parts,
                                     ArrayRef<int64_t> shape,
-                                    StringAttr varName) {
+                                    StringAttr varName,
+                                    StringRef source = kSourcePressure) {
   SmallVector<Attribute, 2> entries;
   for (const PartitionChoice &part : parts) {
     SmallVector<NamedAttribute, 5> fields;
@@ -673,8 +707,7 @@ static ArrayAttr buildPartitionAttr(Builder &b, ArrayRef<PartitionChoice> parts,
         "factor", b.getI32IntegerAttr(static_cast<int32_t>(part.factor))));
     fields.push_back(
         b.getNamedAttr("kind", b.getStringAttr(kindName(part, shape))));
-    fields.push_back(
-        b.getNamedAttr("source", b.getStringAttr("infer-from-design")));
+    fields.push_back(b.getNamedAttr("source", b.getStringAttr(source)));
     if (varName)
       fields.push_back(b.getNamedAttr("variable", varName));
     entries.push_back(b.getDictionaryAttr(fields));
@@ -724,6 +757,182 @@ static ArrayAttr buildPressureAttr(Builder &b,
          b.getNamedAttr("reads", b.getI32IntegerAttr(region.reads)),
          b.getNamedAttr("writes", b.getI32IntegerAttr(region.writes))}));
   return b.getArrayAttr(entries);
+}
+
+//===----------------------------------------------------------------------===//
+// Automatic partitions independent of throughput (td=off rules (a)-(c))
+//===----------------------------------------------------------------------===//
+
+/// The value of an index operand if it is a compile-time constant by the time
+/// Vitis partitions: an integer constant (also through an index cast), or the
+/// counter of a loop that runs exactly once.
+static std::optional<int64_t> getConstantIndex(Value v) {
+  if (std::optional<int64_t> c = getConstantIntValue(v))
+    return c;
+  if (auto cast = v.getDefiningOp<arith::IndexCastOp>())
+    return getConstantIndex(cast.getIn());
+  if (auto cast = v.getDefiningOp<arith::IndexCastUIOp>())
+    return getConstantIndex(cast.getIn());
+  if (isAffineForInductionVar(v)) {
+    AffineForOp owner = getForInductionVarOwner(v);
+    if (owner.hasConstantLowerBound() &&
+        getConstantTripCount(owner) == uint64_t(1))
+      return owner.getConstantLowerBound();
+  }
+  return std::nullopt;
+}
+
+/// Per memref dimension: whether the access's index is a constant.
+static SmallVector<bool> constantDimsOfAffine(AffineMap map,
+                                              ValueRange mapOperands) {
+  SmallVector<Value, 8> operands(mapOperands.begin(), mapOperands.end());
+  // Through affine.apply producers (unrolling leaves `apply (d0 + 1)(%c0)`).
+  fullyComposeAffineMapAndOperands(&map, &operands);
+  MLIRContext *ctx = map.getContext();
+  unsigned numDims = map.getNumDims(), numSyms = map.getNumSymbols();
+  SmallVector<AffineExpr, 8> dimRepl, symRepl;
+  for (unsigned i = 0; i < numDims; ++i) {
+    std::optional<int64_t> c = getConstantIndex(operands[i]);
+    dimRepl.push_back(c ? getAffineConstantExpr(*c, ctx)
+                        : getAffineDimExpr(i, ctx));
+  }
+  for (unsigned i = 0; i < numSyms; ++i) {
+    std::optional<int64_t> c = getConstantIndex(operands[numDims + i]);
+    symRepl.push_back(c ? getAffineConstantExpr(*c, ctx)
+                        : getAffineSymbolExpr(i, ctx));
+  }
+  SmallVector<bool> dims;
+  for (AffineExpr expr : map.getResults()) {
+    AffineExpr folded = simplifyAffineExpr(
+        expr.replaceDimsAndSymbols(dimRepl, symRepl), numDims, numSyms);
+    dims.push_back(isa<AffineConstantExpr>(folded));
+  }
+  return dims;
+}
+
+static SmallVector<bool> constantDimsOfIndices(ValueRange indices) {
+  SmallVector<bool> dims;
+  for (Value idx : indices)
+    dims.push_back(getConstantIndex(idx).has_value());
+  return dims;
+}
+
+/// What the accesses of one array say about constant indices.
+struct ConstantIndexInfo {
+  /// Every use is a plain load or store whose indices could be read; false
+  /// when the array escapes (call, cast, view, return) or is accessed by an
+  /// op this analysis does not know: then nothing is concluded.
+  bool complete = true;
+  unsigned accesses = 0;
+  /// Per dimension: every access indexes it with a constant.
+  SmallVector<bool> constantDim;
+};
+
+static ConstantIndexInfo analyzeConstantIndices(Value mem, unsigned rank) {
+  ConstantIndexInfo info;
+  info.constantDim.assign(rank, true);
+  for (OpOperand &use : mem.getUses()) {
+    Operation *user = use.getOwner();
+    SmallVector<bool> dims;
+    if (auto load = dyn_cast<AffineLoadOp>(user)) {
+      dims = constantDimsOfAffine(load.getAffineMap(), load.getMapOperands());
+    } else if (auto store = dyn_cast<AffineStoreOp>(user);
+               store && store.getMemRef() == mem &&
+               store.getValueToStore() != mem) {
+      dims = constantDimsOfAffine(store.getAffineMap(),
+                                  store.getMapOperands());
+    } else if (auto load = dyn_cast<memref::LoadOp>(user)) {
+      dims = constantDimsOfIndices(load.getIndices());
+    } else if (auto store = dyn_cast<memref::StoreOp>(user);
+               store && store.getMemRef() == mem &&
+               store.getValueToStore() != mem) {
+      dims = constantDimsOfIndices(store.getIndices());
+    } else {
+      info.complete = false;
+      return info;
+    }
+    if (dims.size() != rank) {
+      info.complete = false;
+      return info;
+    }
+    ++info.accesses;
+    for (unsigned d = 0; d < rank; ++d)
+      info.constantDim[d] = info.constantDim[d] && dims[d];
+  }
+  return info;
+}
+
+/// The decision for one array under rules (a)-(c).
+struct AutomaticPartition {
+  enum Kind { None, Registers, ConstantDims } kind = None;
+  SmallVector<PartitionChoice, 2> parts; // ConstantDims: complete, per dim
+  std::string reason;
+};
+
+static AutomaticPartition decideAutomaticPartition(memref::AllocaOp alloca,
+                                                   int64_t completeThreshold) {
+  AutomaticPartition decision;
+  MemRefType ty = alloca.getType();
+  if (!ty.hasStaticShape())
+    return decision;
+  Type elt = ty.getElementType();
+  if (!elt.isIntOrFloat() && !isa<IndexType>(elt))
+    return decision; // pointer variables, structs: not an array of words
+  Operation *def = alloca.getOperation();
+  for (StringRef pragma : kUserStoragePragmas)
+    if (def->hasAttr(pragma))
+      return decision; // the user decided
+
+  // (a) Small arrays, whatever their accesses (also those passed on to a
+  // call): complete_threshold counts elements, not bits (int[4] fires,
+  // char[5] does not; partition_chk.md R5).
+  int64_t elements = ty.getNumElements();
+  if (elements > 0 && elements <= completeThreshold) {
+    decision.kind = AutomaticPartition::Registers;
+    decision.reason = std::to_string(elements) +
+                      " element(s) <= complete-threshold " +
+                      std::to_string(completeThreshold) +
+                      ": completely partitioned into registers (Vitis [HLS "
+                      "214-421] 'Automatically partitioning small array ... "
+                      "completely based on array size')";
+    return decision;
+  }
+
+  unsigned rank = ty.getRank();
+  ConstantIndexInfo info = analyzeConstantIndices(alloca.getResult(), rank);
+  if (!info.complete || info.accesses == 0)
+    return decision; // escapes, or nothing to look at (dead: not ours)
+
+  // (c) Every access constant in every dimension: scalarised.
+  if (llvm::all_of(info.constantDim, [](bool c) { return c; })) {
+    decision.kind = AutomaticPartition::Registers;
+    decision.reason = "every one of the " + std::to_string(info.accesses) +
+                      " access(es) uses a constant index in every dimension: "
+                      "scalarised into registers (Vitis front end, alloca "
+                      "gone in a.o.1; partition.md R5)";
+    return decision;
+  }
+
+  // (b) Dimensions that only ever see constants, extent >= 2.
+  for (unsigned d = 0; d < rank; ++d)
+    if (info.constantDim[d] && ty.getDimSize(d) >= 2)
+      decision.parts.push_back({d, ty.getDimSize(d)});
+  if (decision.parts.empty())
+    return decision;
+  decision.kind = AutomaticPartition::ConstantDims;
+  std::string dims;
+  llvm::raw_string_ostream os(dims);
+  llvm::interleave(
+      decision.parts, os,
+      [&](const PartitionChoice &p) { os << (p.dim + 1); }, ", ");
+  decision.reason = "every one of the " + std::to_string(info.accesses) +
+                    " access(es) indexes dimension(s) " + os.str() +
+                    " with a constant: complete partition (Vitis [HLS "
+                    "214-449] 'Automatically partitioning array ... dimension "
+                    "d completely based on constant index')";
+  if (decision.parts.size() > 1)
+    decision.reason += "; memory banking applies only the first entry";
+  return decision;
 }
 
 //===----------------------------------------------------------------------===//
@@ -796,17 +1005,105 @@ struct InferVitisSplitArray
       llvm::cl::desc("Print a Vitis-style 'Inferring pragma' remark per "
                      "decision, and one for every loop left port-limited"),
       llvm::cl::init(false)};
+  Option<std::string> throughputDriven{
+      *this, "td",
+      llvm::cl::desc("Vitis syn.array_partition.throughput_driven. 'auto' "
+                     "(default): partitions from port pressure. 'off': only "
+                     "the automatic partitions Vitis still makes with "
+                     "throughput_driven=off - arrays of at most "
+                     "complete-threshold elements and arrays indexed only by "
+                     "constants become registers (hls.registers), a "
+                     "dimension indexed only by constants is completely "
+                     "partitioned (VITIS_NOTES.md N7)"),
+      llvm::cl::init("auto")};
+  Option<bool> autoPartitions{
+      *this, "auto-partitions",
+      llvm::cl::desc("With td=auto, also apply the automatic partitions of "
+                     "td=off (small arrays, constant indices) before the "
+                     "port-pressure inference, as Vitis does in both modes. "
+                     "Off by default so that td=auto keeps its earlier "
+                     "output; always on with td=off"),
+      llvm::cl::init(false)};
+  Option<unsigned> completeThreshold{
+      *this, "complete-threshold",
+      llvm::cl::desc("Vitis syn.array_partition.complete_threshold: arrays "
+                     "with at most this many elements become registers under "
+                     "the automatic partitions (Vitis default 4)"),
+      llvm::cl::init(4)};
 
   Statistic numRegions{this, "pipelined-loops", "Pipelined loops analysed"};
   Statistic numPartitioned{this, "arrays-partitioned",
                            "Arrays given an inferred partition"};
   Statistic numUnresolved{this, "arrays-still-limited",
                           "Arrays whose ports still limit a loop's II"};
+  Statistic numRegisters{this, "arrays-registers",
+                         "Arrays turned into registers (small or all "
+                         "constant indices)"};
+  Statistic numConstantDims{this, "arrays-constant-index",
+                            "Arrays completely partitioned on a dimension "
+                            "indexed only by constants"};
+  Statistic numMultiConstantDims{
+      this, "arrays-constant-index-multi",
+      "Arrays with more than one constant-indexed dimension (banking applies "
+      "the first)"};
 
   StringRef getArgument() const final { return "infer-vitis-split-array"; }
   StringRef getDescription() const final {
     return "Infer hls.array_partition for arrays whose memory ports limit the "
-           "II of a pipelined loop";
+           "II of a pipelined loop (td=auto), or only Vitis' automatic "
+           "small-array / constant-index partitions (td=off)";
+  }
+
+  /// Rules (a)-(c) on every local array of `func`. Returns the arrays they
+  /// decided, which the port-pressure inference then leaves alone.
+  DenseSet<Value> applyAutomaticPartitions(func::FuncOp func) {
+    DenseSet<Value> decided;
+    Builder builder(&getContext());
+    func.walk([&](memref::AllocaOp alloca) {
+      Operation *def = alloca.getOperation();
+      if (def->hasAttr(kRegistersAttrName)) {
+        decided.insert(alloca.getResult());
+        return;
+      }
+      AutomaticPartition decision =
+          decideAutomaticPartition(alloca, completeThreshold);
+      if (decision.kind == AutomaticPartition::None)
+        return;
+      decided.insert(alloca.getResult());
+      auto varName = def->getAttrOfType<StringAttr>(kVarNameAttr);
+      std::string name =
+          varName ? varName.getValue().str() : std::string("<unnamed>");
+      if (decision.kind == AutomaticPartition::Registers) {
+        def->setAttr(kRegistersAttrName, builder.getUnitAttr());
+        def->setAttr(kRegistersReasonAttrName,
+                     builder.getStringAttr(decision.reason));
+        ++numRegisters;
+        LLVM_DEBUG(llvm::dbgs() << "array '" << name
+                                << "': registers (" << decision.reason
+                                << ")\n");
+        if (emitRemarks)
+          mlir::emitRemark(alloca.getLoc())
+              << "array '" << name << "' -> registers: " << decision.reason;
+        return;
+      }
+      ArrayRef<int64_t> shape = alloca.getType().getShape();
+      def->setAttr(kPartitionAttr,
+                   buildPartitionAttr(builder, decision.parts, shape, varName,
+                                      kSourceConstantIndex));
+      def->setAttr(kReasonAttr, builder.getStringAttr(decision.reason));
+      ++numConstantDims;
+      if (decision.parts.size() > 1)
+        ++numMultiConstantDims;
+      LLVM_DEBUG(llvm::dbgs() << "array '" << name << "': "
+                              << decision.reason << "\n");
+      if (emitRemarks)
+        for (const PartitionChoice &part : decision.parts)
+          mlir::emitRemark(alloca.getLoc())
+              << "Automatically partitioning array '" << name
+              << "' dimension " << part.dim + 1
+              << " completely based on constant index";
+    });
+    return decided;
   }
 
   /// Target II of `loop` if it is a pipelined region.
@@ -858,7 +1155,19 @@ struct InferVitisSplitArray
                      "write-ports and max-dims must be positive");
       return signalPassFailure();
     }
+    if (throughputDriven != "auto" && throughputDriven != "off") {
+      func.emitError("infer-vitis-split-array: td must be 'auto' or 'off', "
+                     "got '")
+          << throughputDriven << "'";
+      return signalPassFailure();
+    }
+    bool tdOff = throughputDriven == "off";
     PortModel pm{ports, readPorts, writePorts};
+
+    // 0. Vitis' automatic partitions that do not depend on throughput.
+    DenseSet<Value> decided;
+    if (tdOff || autoPartitions)
+      decided = applyAutomaticPartitions(func);
 
     // 1. Port pressure per (memory, pipelined loop).
     TermTable terms;
@@ -886,6 +1195,11 @@ struct InferVitisSplitArray
         else if (isFuncArg)
           func.setArgAttr(arg.getArgNumber(), kPressureAttr, attr);
       }
+
+      // td=off: Vitis replicates instead of partitioning (RAM_1WNR), which
+      // --bram-analysis prices; an array (a)-(c) decided is settled.
+      if (tdOff || decided.contains(mem))
+        continue;
 
       auto memTy = dyn_cast<MemRefType>(mem.getType());
       if (!memTy || memTy.getRank() == 0)

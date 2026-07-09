@@ -27,6 +27,16 @@ namespace circt::hls_analysis {
     /// replicated, and an interface memref, offers this many slots per cycle.
     inline constexpr unsigned kDualPortSlots = 2;
 
+    /// Unit attribute on a memref.alloca whose array Vitis implements as
+    /// registers (completely partitioned / scalarised, no memory): set by
+    /// --infer-vitis-split-array's automatic partitions (td=off, or td=auto
+    /// with auto-partitions; VITIS_NOTES.md N7). --bram-analysis counts 0
+    /// BRAM (status "registers") and the scheduler gives it no port limit.
+    /// `kRegistersReasonAttrName` (string) says which rule fired.
+    inline constexpr llvm::StringLiteral kRegistersAttrName = "hls.registers";
+    inline constexpr llvm::StringLiteral kRegistersReasonAttrName =
+        "hls.registers_reason";
+
     enum class StorageKind {
       RAM_1P,
       RAM_2P,

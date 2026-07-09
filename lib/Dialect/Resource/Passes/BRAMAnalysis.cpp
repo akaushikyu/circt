@@ -811,6 +811,27 @@ static BRAMCost estimateBRAM(MemoryResourceOpInterface iface, MemrefRecord &rec,
     }
   }
 
+  // Completely partitioned / scalarised by Vitis (hls.registers, set by
+  // --infer-vitis-split-array's automatic partitions, VITIS_NOTES.md N7): no
+  // memory at all, whatever its size.
+  if (iface.getOperation()->hasAttr(kRegistersAttrName)) {
+    std::string why = "automatic complete partition";
+    if (auto r = iface.getOperation()->getAttrOfType<StringAttr>(
+            kRegistersReasonAttrName))
+      why = r.getValue().str();
+    cost.note = "hls.registers: " + why + " -> registers, 0 BRAM";
+    rec.status = "registers";
+    rec.excludeReason = "registers (hls.registers): " + why;
+    SmallVector<AccessSummary> accesses = collectAccessSummaries(banks);
+    recordAccesses(accesses, rec);
+    rec.demand = computePortDemand(accesses);
+    rec.ramType = "none";
+    rec.ramReason = "not selected: registers, no memory (no port limit in "
+                    "the schedule)";
+    rec.bram = cost.bramCount;
+    return cost;
+  }
+
   if (!iface.contributesToBRAMCost()) {
     cost.note = "excluded from BRAM accounting (LUTRAM / stream / zero-size)";
 

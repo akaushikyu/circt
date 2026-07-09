@@ -1301,8 +1301,11 @@ static void linkMemoryResource(Operation *memOp, Value memRef, bool isLoad,
     rsrcs.push_back(resultValue);
     break;
   }
+  case StorageMode::Registers:
+    break;
   }
-  problem.setLinkedResourceTypes(memOp, rsrcs);
+  if (!rsrcs.empty())
+    problem.setLinkedResourceTypes(memOp, rsrcs);
 
   LLVM_DEBUG(llvm::dbgs() << "linked " << (isLoad ? "load" : "store") << " to "
                           << stringifyStorageMode(mode) << " resource for "

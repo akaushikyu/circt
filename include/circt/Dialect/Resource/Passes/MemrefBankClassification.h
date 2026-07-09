@@ -37,16 +37,22 @@ namespace circt::hls_analysis {
 ///                  memrefs (function arguments) and anything untracked.
 ///   OnePort / SDP  kept for completeness (one r/w port; dedicated R + W);
 ///                  no longer produced by classifyMode.
+///   Registers      an alloca marked `hls.registers` (completely partitioned
+///                  or scalarised by Vitis, VITIS_NOTES.md N7): no memory,
+///                  so no port limit at all.
 enum class StorageMode {
   OnePort,       // 1 R/W port. Reads and writes contend.
   SDP,           // 1 dedicated read + 1 dedicated write.
   TDP,           // 2 ports, each R or W.
   OneWriteNRead, // replicable: kReplicatedPortSlots read-or-write slots.
+  Registers,     // hls.registers: unlimited.
 };
 
 llvm::StringRef stringifyStorageMode(StorageMode mode);
 
-/// Port slots per cycle the scheduler grants a bank in `mode`.
+/// Port slots per cycle the scheduler grants a bank in `mode`
+/// (std::numeric_limits<unsigned>::max() for Registers: no limit; the
+/// scheduler links no resource to such accesses).
 unsigned storageModeSlots(StorageMode mode);
 
 /// Classification rule from the per-loop-body access profile (the number
@@ -64,6 +70,8 @@ struct BankProfile {
   // Every loop body stores to the bank at most once, so Vitis may serve extra
   // reads from replicated copies (RAM_1WNR) instead of raising the II.
   bool replicable = true;
+  // The alloca carries hls.registers: mode is Registers whatever the profile.
+  bool registers = false;
   StorageMode mode = StorageMode::OneWriteNRead;
   StorageKind type = StorageKind::RAM_1P;
 };
