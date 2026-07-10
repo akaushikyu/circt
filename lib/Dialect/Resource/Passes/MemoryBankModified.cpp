@@ -19,6 +19,7 @@
 #include "circt/Transforms/Passes.h"
 #include "circt/Dialect/Resource/Interfaces/MemoryDS.h"
 #include "circt/Dialect/Resource/HLS/HLSOps.h"
+#include "circt/Dialect/Resource/Passes/ConstantIndex.h"
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
@@ -108,7 +109,9 @@ computeMemrefBankAccess(OpBuilder &b, Location loc, ValueRange indices,
   MemrefBankAccess mba;
   mba.bankedIndices.assign(indices.begin(), indices.end());
 
-  if (auto c = getConstantIntValue(idx)) {
+  // The same constants infer-vitis-split-array sees (ConstantIndex.h): also
+  // through an index cast, and the counter of a loop that runs once.
+  if (auto c = getConstantIndexValue(idx)) {
     int64_t v = *c;
     int64_t bank = bankIsDiv ? v / divisor : v % divisor;
     int64_t off  = bankIsDiv ? v % divisor : v / divisor;
@@ -728,6 +731,13 @@ struct BankAffineLoadPattern
     // this fold `(d0) -> (d0 mod f)` with d0 = %c0 looked like a rotating
     // access, expanding into f loads + (f-1) selects per access.
     affine::canonicalizeMapAndOperands(&accessMap, &operands);
+    // Also the operands that are constant without being arith.constant (an
+    // index cast of one, the counter of a single-trip loop): the constants
+    // infer-vitis-split-array's td=off rule (b) partitions on
+    // (ConstantIndex.h). Exact at run time; the second canonicalization drops
+    // the operands that no longer appear.
+    accessMap = foldConstantIndexOperands(accessMap, operands);
+    affine::canonicalizeMapAndOperands(&accessMap, &operands);
     accessMap = simplifyAffineMap(accessMap);
     BankAccess ba = computeBankAccess(accessMap, spec, origTy,
                                       rewriter.getContext());
@@ -880,6 +890,13 @@ struct BankAffineStorePattern
     affine::fullyComposeAffineMapAndOperands(&accessMap, &operands);
     // See BankAffineLoadPattern: fold constant operands (unrolled iterations)
     // so a constant bank is recognised instead of demuxed into f store_enables.
+    affine::canonicalizeMapAndOperands(&accessMap, &operands);
+    // Also the operands that are constant without being arith.constant (an
+    // index cast of one, the counter of a single-trip loop): the constants
+    // infer-vitis-split-array's td=off rule (b) partitions on
+    // (ConstantIndex.h). Exact at run time; the second canonicalization drops
+    // the operands that no longer appear.
+    accessMap = foldConstantIndexOperands(accessMap, operands);
     affine::canonicalizeMapAndOperands(&accessMap, &operands);
     accessMap = simplifyAffineMap(accessMap);
     BankAccess ba = computeBankAccess(accessMap, spec, origTy,

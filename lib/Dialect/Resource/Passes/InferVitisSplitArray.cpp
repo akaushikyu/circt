@@ -56,7 +56,10 @@
 //     (b) [HLS 214-449] a dimension that EVERY access of the array indexes
 //         with a constant (in every loop, pipelined or not, after the
 //         unrolling auto-pipeline-unroll did) -> `complete` on that dimension,
-//         one bank per index (source = "constant-index");
+//         one bank per index (source = "constant-index"); only for an array
+//         with at least one affine access, the ones memory banking splits.
+//         "Constant" is ConstantIndex.h, which banking shares, so every such
+//         access then reads a single bank;
 //     (c) an array that every access indexes with constants in every
 //         dimension -> scalarised (registers).
 //   "Registers" is the unit attribute `hls.registers` on the alloca:
@@ -66,6 +69,7 @@
 //
 //===----------------------------------------------------------------------===//
 #include "circt/Dialect/Resource/Passes/InferVitisSplitArray.h"
+#include "circt/Dialect/Resource/Passes/ConstantIndex.h"
 #include "circt/Dialect/Resource/Passes/LoopPragmas.h"
 #include "mlir/Dialect/Affine/Analysis/LoopAnalysis.h"
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
@@ -763,24 +767,11 @@ static ArrayAttr buildPressureAttr(Builder &b,
 // Automatic partitions independent of throughput (td=off rules (a)-(c))
 //===----------------------------------------------------------------------===//
 
-/// The value of an index operand if it is a compile-time constant by the time
-/// Vitis partitions: an integer constant (also through an index cast), or the
-/// counter of a loop that runs exactly once.
-static std::optional<int64_t> getConstantIndex(Value v) {
-  if (std::optional<int64_t> c = getConstantIntValue(v))
-    return c;
-  if (auto cast = v.getDefiningOp<arith::IndexCastOp>())
-    return getConstantIndex(cast.getIn());
-  if (auto cast = v.getDefiningOp<arith::IndexCastUIOp>())
-    return getConstantIndex(cast.getIn());
-  if (isAffineForInductionVar(v)) {
-    AffineForOp owner = getForInductionVarOwner(v);
-    if (owner.hasConstantLowerBound() &&
-        getConstantTripCount(owner) == uint64_t(1))
-      return owner.getConstantLowerBound();
-  }
-  return std::nullopt;
-}
+// What counts as a constant index (an integer constant, also through an index
+// cast, or the counter of a loop that runs exactly once) is defined once, in
+// ConstantIndex.h, and memory banking resolves exactly the same indices to a
+// constant bank: a dimension split here because only constants index it is
+// then read one bank at a time.
 
 /// Per memref dimension: whether the access's index is a constant.
 static SmallVector<bool> constantDimsOfAffine(AffineMap map,
@@ -788,32 +779,17 @@ static SmallVector<bool> constantDimsOfAffine(AffineMap map,
   SmallVector<Value, 8> operands(mapOperands.begin(), mapOperands.end());
   // Through affine.apply producers (unrolling leaves `apply (d0 + 1)(%c0)`).
   fullyComposeAffineMapAndOperands(&map, &operands);
-  MLIRContext *ctx = map.getContext();
-  unsigned numDims = map.getNumDims(), numSyms = map.getNumSymbols();
-  SmallVector<AffineExpr, 8> dimRepl, symRepl;
-  for (unsigned i = 0; i < numDims; ++i) {
-    std::optional<int64_t> c = getConstantIndex(operands[i]);
-    dimRepl.push_back(c ? getAffineConstantExpr(*c, ctx)
-                        : getAffineDimExpr(i, ctx));
-  }
-  for (unsigned i = 0; i < numSyms; ++i) {
-    std::optional<int64_t> c = getConstantIndex(operands[numDims + i]);
-    symRepl.push_back(c ? getAffineConstantExpr(*c, ctx)
-                        : getAffineSymbolExpr(i, ctx));
-  }
+  AffineMap folded = foldConstantIndexOperands(map, operands);
   SmallVector<bool> dims;
-  for (AffineExpr expr : map.getResults()) {
-    AffineExpr folded = simplifyAffineExpr(
-        expr.replaceDimsAndSymbols(dimRepl, symRepl), numDims, numSyms);
-    dims.push_back(isa<AffineConstantExpr>(folded));
-  }
+  for (AffineExpr expr : folded.getResults())
+    dims.push_back(isa<AffineConstantExpr>(expr));
   return dims;
 }
 
 static SmallVector<bool> constantDimsOfIndices(ValueRange indices) {
   SmallVector<bool> dims;
   for (Value idx : indices)
-    dims.push_back(getConstantIndex(idx).has_value());
+    dims.push_back(getConstantIndexValue(idx).has_value());
   return dims;
 }
 
@@ -824,6 +800,10 @@ struct ConstantIndexInfo {
   /// op this analysis does not know: then nothing is concluded.
   bool complete = true;
   unsigned accesses = 0;
+  /// Of those, affine.load / affine.store. Memory banking only splits an
+  /// array that has at least one (collectMemRefs in MemoryBankModified.cpp);
+  /// it then rewrites its memref.load / memref.store as well.
+  unsigned affineAccesses = 0;
   /// Per dimension: every access indexes it with a constant.
   SmallVector<bool> constantDim;
 };
@@ -836,11 +816,13 @@ static ConstantIndexInfo analyzeConstantIndices(Value mem, unsigned rank) {
     SmallVector<bool> dims;
     if (auto load = dyn_cast<AffineLoadOp>(user)) {
       dims = constantDimsOfAffine(load.getAffineMap(), load.getMapOperands());
+      ++info.affineAccesses;
     } else if (auto store = dyn_cast<AffineStoreOp>(user);
                store && store.getMemRef() == mem &&
                store.getValueToStore() != mem) {
       dims = constantDimsOfAffine(store.getAffineMap(),
                                   store.getMapOperands());
+      ++info.affineAccesses;
     } else if (auto load = dyn_cast<memref::LoadOp>(user)) {
       dims = constantDimsOfIndices(load.getIndices());
     } else if (auto store = dyn_cast<memref::StoreOp>(user);
@@ -867,6 +849,9 @@ struct AutomaticPartition {
   enum Kind { None, Registers, ConstantDims } kind = None;
   SmallVector<PartitionChoice, 2> parts; // ConstantDims: complete, per dim
   std::string reason;
+  /// None although rule (b) applies: memory banking could not split the
+  /// array (no affine access), so no spec is written. `reason` says why.
+  bool unbankable = false;
 };
 
 static AutomaticPartition decideAutomaticPartition(memref::AllocaOp alloca,
@@ -919,12 +904,24 @@ static AutomaticPartition decideAutomaticPartition(memref::AllocaOp alloca,
       decision.parts.push_back({d, ty.getDimSize(d)});
   if (decision.parts.empty())
     return decision;
-  decision.kind = AutomaticPartition::ConstantDims;
   std::string dims;
   llvm::raw_string_ostream os(dims);
   llvm::interleave(
       decision.parts, os,
       [&](const PartitionChoice &p) { os << (p.dim + 1); }, ", ");
+  if (info.affineAccesses == 0) {
+    // Vitis would split it, but memory banking never rewrites an array
+    // without an affine access: a spec would only be priced as one memory
+    // carrying a partition nobody applied. Leave it whole, and say so.
+    decision.parts.clear();
+    decision.unbankable = true;
+    decision.reason = "every one of the " + std::to_string(info.accesses) +
+                      " access(es) indexes dimension(s) " + os.str() +
+                      " with a constant, but none is an affine access, so "
+                      "memory banking cannot split the array: left whole";
+    return decision;
+  }
+  decision.kind = AutomaticPartition::ConstantDims;
   decision.reason = "every one of the " + std::to_string(info.accesses) +
                     " access(es) indexes dimension(s) " + os.str() +
                     " with a constant: complete partition (Vitis [HLS "
@@ -1046,6 +1043,10 @@ struct InferVitisSplitArray
       this, "arrays-constant-index-multi",
       "Arrays with more than one constant-indexed dimension (banking applies "
       "the first)"};
+  Statistic numUnbankable{
+      this, "arrays-constant-index-unbanked",
+      "Arrays with a constant-indexed dimension left whole because they have "
+      "no affine access for memory banking to split"};
 
   StringRef getArgument() const final { return "infer-vitis-split-array"; }
   StringRef getDescription() const final {
@@ -1067,12 +1068,20 @@ struct InferVitisSplitArray
       }
       AutomaticPartition decision =
           decideAutomaticPartition(alloca, completeThreshold);
-      if (decision.kind == AutomaticPartition::None)
-        return;
-      decided.insert(alloca.getResult());
       auto varName = def->getAttrOfType<StringAttr>(kVarNameAttr);
       std::string name =
           varName ? varName.getValue().str() : std::string("<unnamed>");
+      if (decision.unbankable) {
+        ++numUnbankable;
+        LLVM_DEBUG(llvm::dbgs() << "array '" << name << "': "
+                                << decision.reason << "\n");
+        if (emitRemarks)
+          mlir::emitRemark(alloca.getLoc())
+              << "array '" << name << "' left whole: " << decision.reason;
+      }
+      if (decision.kind == AutomaticPartition::None)
+        return;
+      decided.insert(alloca.getResult());
       if (decision.kind == AutomaticPartition::Registers) {
         def->setAttr(kRegistersAttrName, builder.getUnitAttr());
         def->setAttr(kRegistersReasonAttrName,

@@ -2,6 +2,7 @@
 // RUN: hls-est %s '--infer-vitis-split-array=annotate-pressure=false' | FileCheck %s --check-prefix=AUTO
 // RUN: hls-est %s '--infer-vitis-split-array=td=auto auto-partitions=true annotate-pressure=false' | FileCheck %s --check-prefix=AUTOP
 // RUN: not hls-est %s --infer-vitis-split-array=td=on 2>&1 | FileCheck %s --check-prefix=BAD
+// RUN: hls-est %s '--infer-vitis-split-array=td=off annotate-pressure=false emit-remarks=true' 2>&1 | FileCheck %s --check-prefix=REMARK
 
 // --infer-vitis-split-array td=off: only the automatic partitions Vitis 2025.1
 // still makes with syn.array_partition.throughput_driven=off (VITIS_NOTES.md
@@ -271,5 +272,36 @@ func.func @left_alone(%in: memref<4xi32>) {
   %v = affine.load %in[0] : memref<4xi32>
   affine.store %v, %E[0, 0] : memref<16x8xi32>
   func.call @use(%E, %S) : (memref<16x8xi32>, memref<3xi32>) -> ()
+  return
+}
+
+// Rule (b) needs an affine access: memory banking only splits an array that
+// has one (and then rewrites its memref.load / memref.store too), so an array
+// reached only through memref.load / memref.store gets no spec - it would be
+// priced as one memory anyway - and the decision is reported as a remark.
+// Rule (c) needs no banking and still applies to such an array.
+// OFF-LABEL: func.func @memref_only
+// OFF: memref.alloca() {polygeist.varname = "M"} : memref<64x8xi32>
+// OFF: memref.alloca() {hls.registers, {{.*}}polygeist.varname = "N"} : memref<8xi32>
+// REMARK: remark: array 'M' left whole: every one of the 4 access(es) indexes dimension(s) 2 with a constant, but none is an affine access, so memory banking cannot split the array: left whole
+func.func @memref_only(%in: memref<64x8xi32>, %out: memref<64xi32>) {
+  %c0 = arith.constant 0 : index
+  %c3 = arith.constant 3 : index
+  %M = memref.alloca() {polygeist.varname = "M"} : memref<64x8xi32>
+  %N = memref.alloca() {polygeist.varname = "N"} : memref<8xi32>
+  affine.for %i = 0 to 64 {
+    %v = memref.load %in[%i, %c0] : memref<64x8xi32>
+    memref.store %v, %M[%i, %c0] : memref<64x8xi32>
+    memref.store %v, %M[%i, %c3] : memref<64x8xi32>
+    memref.store %v, %N[%c3] : memref<8xi32>
+  }
+  affine.for %i = 0 to 64 {
+    %a = memref.load %M[%i, %c0] : memref<64x8xi32>
+    %b = memref.load %M[%i, %c3] : memref<64x8xi32>
+    %n = memref.load %N[%c3] : memref<8xi32>
+    %s = arith.addi %a, %b : i32
+    %t = arith.addi %s, %n : i32
+    memref.store %t, %out[%i] : memref<64xi32>
+  }
   return
 }
