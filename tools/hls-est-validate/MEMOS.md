@@ -88,7 +88,7 @@ old numbers. Decide together with M3.
   Polygeist 8b07bf43 `--scalar-wrapper-abi` (default off; option-off output identical to the previous binary on all
   957 HLS lit RUN lines and the 783 harness designs, exact and scalar shims) and the harness-local shim
   `shim/exactclass` (selected with `--shim exactclass`; its `cgeist_flags` passes the option; 0 mismatches against
-  g++ + the Vitis headers on 138 406 values, `hls::exp` within 1 LSB). Coverage, 7 datasets / 208 designs, current
+  g++ + the Vitis headers on 138 406 values, `hls::exp` within 1 LSB). *Corrected after the review (CHANGELOG "Route A review fixes"): that check used the host compiler only; through cgeist the MLIR had wrong constants on integers wider than 64 bits (Polygeist `SubToAdd`, fixed in Polygeist 28236352) and the shim had two Vitis differences (`ap_int` from a double >= 2^24, signed 1-bit types; fixed). `check_shim_cgeist.py` now checks through cgeist: 412 expressions x 3 paths, 0 mismatches. The ok count of `--shim exact` below (95) is about 97: two of its failures were hls-est timeouts under load.* Coverage, 7 datasets / 208 designs, current
   hls-est, default pipeline (CHANGELOG 2026-10-10): `--shim exact` ok 95 / exact matches 31 -> `--shim exactclass`
   ok 92 / exact 32 (sum |err| on the 57 designs compared by both 1911 -> 1750); new blockers: assignable range
   references (O15, 23 designs, 14 with ground truth, all failing with `exact` too), the O9 simplex assertion on

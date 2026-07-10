@@ -12,6 +12,10 @@ and the raw bit patterns printed by the two binaries are compared line by
 line.  Every category must match exactly except `exp`, where the Vitis table
 algorithm is allowed to differ from floor(exp(x)*2^F) by one LSB (counted and
 reported, not failed).  Exit status 1 when any other category mismatches.
+
+This compiles the shim with the HOST clang++ only: it validates the shim's C++,
+not what cgeist makes of it (a frontend bug on wide integers is invisible here).
+check_shim_cgeist.py runs expressions through cgeist as well.
 """
 import argparse
 import math
@@ -36,9 +40,10 @@ FIXED_TYPES = [
     (12, 4, True, "AP_RND_ZERO", "AP_WRAP"), (12, 4, True, "AP_RND_INF", "AP_WRAP"),
     (12, 4, True, "AP_RND_MIN_INF", "AP_SAT"), (12, 4, False, "AP_RND", "AP_SAT"),
     (32, 16, False, "AP_TRN", "AP_WRAP"), (40, 8, False, "AP_TRN", "AP_WRAP"), (34, 20, True, "AP_TRN", "AP_WRAP"),
+    (1, 1, True, "AP_TRN", "AP_WRAP"), (1, 0, True, "AP_TRN", "AP_WRAP"), (2, 1, True, "AP_RND", "AP_SAT"),
 ]
-INT_TYPES = [(4, True), (8, True), (13, True), (16, True), (32, True), (48, True), (64, True),
-             (1, False), (4, False), (8, False), (12, False), (16, False), (32, False), (64, False)]
+INT_TYPES = [(1, True), (2, True), (4, True), (8, True), (13, True), (16, True), (32, True), (48, True), (64, True),
+             (1, False), (4, False), (8, False), (12, False), (16, False), (32, False), (40, False), (64, False)]
 
 
 def ftype(t):
@@ -60,6 +65,48 @@ def frand(t, rng, small=False):
         lo, hi = max(lo, -(1 << min(W - 1, 12))), min(hi, (1 << min(W - 1, 12)))
     raw = rng.randint(lo, hi)
     return f"{ftype(t)}(ldexp((double){raw}, {-F}))", raw
+
+
+def wrap_raw(v, t):
+    """The raw value v wrapped into the W-bit raw of fixed type t."""
+    W, S = t[0], t[2]
+    v &= (1 << W) - 1
+    return v - (1 << W) if S and v >> (W - 1) else v
+
+
+def div_csim_overflow(a, ra, b, rb):
+    """True when Vitis' C-simulation division (etc/ap_fixed_base.h operator/, not
+    __SYNTHESIS__) overflows: it divides in _W1 = max(W + max(F2,0) + (S2 && !S),
+    W2 + (S && !S2)) bits, so (min << F2) / -1 wraps. csynth computes the quotient
+    exactly (kernel rfx_divk_overflow: a.o.3.ll stores 128 for ap_fixed<8,8>(-128) /
+    ap_fixed<8,8>(-1), g++ prints -128); the shim follows csynth."""
+    W, I, S = a[0], a[1], a[2]
+    W2, I2, S2 = b[0], b[1], b[2]
+    F2 = W2 - I2
+    w1 = max(W + max(F2, 0) + (1 if S2 and not S else 0), W2 + (1 if S and not S2 else 0))
+    if rb == 0:
+        return False
+    num = ra << max(F2, 0)
+    q = abs(num) // abs(rb) * (1 if (num >= 0) == (rb > 0) else -1)
+    if S or S2:
+        return not (-(1 << (w1 - 1)) <= q < (1 << (w1 - 1)))
+    return not (0 <= q < (1 << w1))
+
+
+def sqrt_table_branch(t):
+    """hls::sqrt's lookup-table branches (etc/hls_sqrt_apfixed.h: F == 0 && I <= 13,
+    F <= 4 && I <= 5): their threshold and result constants wrap in small types, which
+    the shim does not reproduce (the header is not ported: All Rights Reserved)."""
+    W, I = t[0], t[1]
+    F = W - I
+    return (F == 0 and I <= 13) or (F <= 4 and I <= 5)
+
+
+# Categories whose mismatches are known, explained deviations: reported, not failed.
+KNOWN = {
+    "divcsim": "Vitis C simulation wraps the quotient of min / -1LSB in _W1 bits; csynth and the shim do not",
+    "sqrttbl": "hls::sqrt table branch: Vitis' constants wrap in small types (not ported)",
+}
 
 
 def irand(t, rng, nonzero=False):
@@ -171,6 +218,17 @@ def gen(seed, n):
     L('    auto mix = (data_t)1.5 * ap_int<8>(-3); P("tbl_fixed*ap_int", mix); auto mix2 = (data_t)1.5 + 2; P("tbl_fixed+int", mix2);')
     L('    data_t neg = -(data_t)16; P("tbl_neg16", neg); auto negw = -(data_t)-16; P("tbl_negwide", negw);')
     L('    data_t inc = 15.5; inc++; P("tbl_inc_wrap", inc);')
+    # ap_int_base(double): the shifted mantissa passes through ap_int_base<25, true> (Vitis
+    # etc/ap_int_base.h; confirmed by csynth); the float constructor is exact
+    L('    ap_int<32> q30 = 1073741824.0; P("tbl_dbl2int32_2^30", q30); ap_int<32> q24 = 16777219.0; P("tbl_dbl2int32_2^24+3", q24);')
+    L('    ap_uint<40> q32 = 4294967295.0; P("tbl_dbl2uint40_2^32-1", q32); ap_int<32> f30 = 1073741824.0f; P("tbl_flt2int32_2^30", f30);')
+    L('    ap_int<64> q52 = 4503599627370497.0; P("tbl_dbl2int64_2^52+1", q52); ap_int<32> qn = -33554431.0; P("tbl_dbl2int32_-(2^25-1)", qn);')
+    # signed 1-bit types: one stored bit, value 0 or -1
+    L('    ap_int<1> m1 = 1; ap_int<8> m1w = m1; P("tbl_int1_widen", m1w); auto m1s = m1 + m1; P("tbl_int1_add", m1s);')
+    L('    auto m1m = m1 * m1; P("tbl_int1_mul", m1m); auto m1n = -m1; P("tbl_int1_neg", m1n); PB("tbl_int1_lt0", m1 < 0);')
+    L('    PI("tbl_int1_to_int", m1.to_int()); PI("tbl_int1_ll", (long long)m1); ap_int<1> m1r = m1 >> 4; P("tbl_int1_shr", m1r);')
+    L('    ap_fixed<1,1> f1 = -1; ap_fixed<8,4> f1w = f1; P("tbl_fixed1_widen", f1w); PD("tbl_fixed1_double", f1.to_double());')
+    L('    PI("tbl_fixed1_to_int", f1.to_int()); auto f1a = f1 + (data_t)2.5; P("tbl_fixed1_add", f1a);')
     L('  }')
 
     # ---- random categories ----
@@ -190,19 +248,23 @@ def gen(seed, n):
     for _ in range(2 * n):  # binary
         a, b = rng.choice(FIXED_TYPES), rng.choice(FIXED_TYPES)
         op = rng.choice(["+", "-", "*", "/", "&", "|", "^"])
-        ea, _ = frand(a, rng)
+        ea, ra = frand(a, rng)
         eb, rb = frand(b, rng)
         if op == "/" and rb == 0:
             eb = f"{ftype(b)}(ldexp((double)1, {-(b[0] - b[1])}))"
-        L(f'  {{ {ftype(a)} a = {ea}; {ftype(b)} b = {eb}; auto r = a {op} b; P("{nm("binop_" + op)}", r); }}')
+            rb = wrap_raw(1, b)
+        cat = "divcsim" if op == "/" and div_csim_overflow(a, ra, b, rb) else "binop_" + op
+        L(f'  {{ {ftype(a)} a = {ea}; {ftype(b)} b = {eb}; auto r = a {op} b; P("{nm(cat)}", r); }}')
     for _ in range(n):  # compound
         a, b = rng.choice(FIXED_TYPES), rng.choice(FIXED_TYPES)
         op = rng.choice(["+=", "-=", "*=", "/="])
-        ea, _ = frand(a, rng)
+        ea, ra = frand(a, rng)
         eb, rb = frand(b, rng, small=True)
         if op == "/=" and rb == 0:
             eb = f"{ftype(b)}(ldexp((double)3, {-(b[0] - b[1])}))"
-        L(f'  {{ {ftype(a)} a = {ea}; {ftype(b)} b = {eb}; a {op} b; P("{nm("compound")}", a); }}')
+            rb = wrap_raw(3, b)
+        cat = "divcsim" if op == "/=" and div_csim_overflow(a, ra, b, rb) else "compound"
+        L(f'  {{ {ftype(a)} a = {ea}; {ftype(b)} b = {eb}; a {op} b; P("{nm(cat)}", a); }}')
     for _ in range(n):  # compare
         a, b = rng.choice(FIXED_TYPES), rng.choice(FIXED_TYPES)
         op = rng.choice(["<", ">", "<=", ">=", "==", "!="])
@@ -228,7 +290,9 @@ def gen(seed, n):
         op = rng.choice(["+", "-", "*", "/", "%"])
         ea, _ = irand(a, rng, nonzero=True)
         c = rng.randint(-100, 100) or 7
-        d = rng.uniform(-300, 300)
+        # small values and the 2^24 <= |d| < 2^52 range of ap_int_base(double)'s 25-bit path
+        d = rng.choice([rng.uniform(-300, 300), rng.uniform(-2.0 ** 40, 2.0 ** 40),
+                        rng.choice([-1, 1]) * (2.0 ** rng.randint(20, 60) + rng.randint(0, 1 << 20))])
         L(f'  {{ {itype(a)} a = {ea}; auto r = a {op} {c}; P("{nm("int_mix")}", r); auto r2 = {c} {op} a; P("{nm("int_mix2")}", r2);'
           f' {itype(a)} fd = {d!r}; P("{nm("int_from_double")}", fd); PB("{nm("int_cmp")}", a < {c}); auto m = -a; P("{nm("int_neg")}", m); auto t = ~a; P("{nm("int_not")}", t); }}')
     for _ in range(n):  # bit selects / concat on ap_int and ap_fixed
@@ -255,9 +319,9 @@ def gen(seed, n):
     L('  for (int v = -32768; v < 32768; v += 1) { ap_fixed<16,5> x = ldexp((double)v, -11); ap_fixed<16,5> r = hls::sqrt(x);'
       ' char nb[32]; snprintf(nb, sizeof nb, "sqrt16_5#%d", v); P(nb, r); }')
     for _ in range(n):
-        t = rng.choice([t for t in FIXED_TYPES if t[3] == "AP_TRN" and t[4] == "AP_WRAP" and t[0] <= 32 and t[1] >= 1 and t[1] <= t[0]])
+        t = rng.choice([t for t in FIXED_TYPES if t[3] == "AP_TRN" and t[4] == "AP_WRAP" and 2 <= t[0] <= 32 and t[1] >= 1 and t[1] <= t[0]])
         et, _ = frand(t, rng)
-        L(f'  {{ {ftype(t)} a = {et}; auto r = hls::sqrt(a); P("{nm("sqrt")}", r); }}')
+        L(f'  {{ {ftype(t)} a = {et}; auto r = hls::sqrt(a); P("{nm("sqrttbl" if sqrt_table_branch(t) else "sqrt")}", r); }}')
     for _ in range(6 * n):  # exp (tolerance 1 LSB)
         t = rng.choice([(16, 5, True, "AP_TRN", "AP_WRAP"), (32, 8, True, "AP_TRN", "AP_WRAP"), (16, 8, True, "AP_TRN", "AP_WRAP"), (12, 4, True, "AP_TRN", "AP_WRAP")])
         et, _ = frand(t, rng, small=True)
@@ -314,7 +378,7 @@ def main():
     cats = {}
     for key in v:
         cat = key.split("#")[0] if "#" in key else key.split("_")[0]
-        c = cats.setdefault(cat, {"n": 0, "mismatch": 0, "lsb1": 0, "missing": 0, "examples": []})
+        c = cats.setdefault(cat, {"n": 0, "mismatch": 0, "lsb1": 0, "known": 0, "missing": 0, "examples": []})
         c["n"] += 1
         if key not in s:
             c["missing"] += 1
@@ -327,16 +391,23 @@ def main():
             if len(c["examples"]) < 3:
                 c["examples"].append(f"{key}: shim {s[key]} vitis {v[key]} (1 LSB)")
             continue
+        if cat in KNOWN:
+            c["known"] += 1
+            if len(c["examples"]) < 5:
+                c["examples"].append(f"{key}: shim {s[key]} vitis {v[key]} (known: {KNOWN[cat]})")
+            continue
         c["mismatch"] += 1
         if len(c["examples"]) < 5:
             c["examples"].append(f"{key}: shim {s[key]} vitis {v[key]}")
     total = sum(c["n"] for c in cats.values())
     bad = sum(c["mismatch"] + c["missing"] for c in cats.values())
-    print(f"shim={args.shim}\nvitis={args.vitis_include}\nseed={args.seed} n={args.n}: {total} values compared, {bad} mismatches")
-    print(f"{'category':14} {'values':>7} {'mismatch':>8} {'1-LSB(exp)':>10}")
+    known = sum(c["known"] for c in cats.values())
+    print(f"shim={args.shim}\nvitis={args.vitis_include}\nseed={args.seed} n={args.n}: {total} values compared, {bad} mismatches"
+          f" ({known} known deviations: {', '.join(f'{k} = {v}' for k, v in KNOWN.items())})")
+    print(f"{'category':14} {'values':>7} {'mismatch':>8} {'1-LSB(exp)':>10} {'known':>6}")
     for cat in sorted(cats):
         c = cats[cat]
-        print(f"{cat:14} {c['n']:7d} {c['mismatch'] + c['missing']:8d} {c['lsb1']:10d}")
+        print(f"{cat:14} {c['n']:7d} {c['mismatch'] + c['missing']:8d} {c['lsb1']:10d} {c['known']:6d}")
         for e in c["examples"]:
             print(f"    {e}")
     sys.exit(1 if bad else 0)

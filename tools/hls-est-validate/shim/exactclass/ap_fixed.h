@@ -16,14 +16,16 @@
 //     AP_WRAP_SM are not implemented (treated as AP_WRAP / N = 0);
 //   * int -> fixed: value << F then wrap/saturate; double -> fixed: the IEEE
 //     mantissa is shifted exactly (floor for AP_TRN), then wrap/saturate;
-//   * a / b: truncation toward zero of (a.V << max(F2,0)) / b.V (the synthesis
-//     path; the C simulation path traps on a zero divisor, Vitis synthesis
-//     treats the quotient as undef - hls-est's --vitis-fold models that);
+//   * a / b: truncation toward zero of (a.V << max(F2,0)) / b.V, exact (the
+//     synthesis path; the C simulation path divides in fewer bits, so
+//     min / -1 LSB wraps there - VITIS_NOTES N11 - and traps on a zero
+//     divisor; Vitis synthesis treats the quotient as undef - hls-est's
+//     --vitis-fold models that);
 //   * comparisons are exact (operands aligned to the larger F);
-//   * the only implicit conversion to a built-in type is `operator double()`
-//     (Vitis has no ap_fixed OP double: such expressions are computed in
-//     double, as here; `(int)x` truncates toward zero through double, while
-//     to_int() takes the floor, as in Vitis).
+//   * Vitis has no ap_fixed OP double: such expressions are computed in
+//     double through `operator double()`, as here; `(int)x` and to_int()
+//     both truncate toward zero (to_int() through to_ap_int_base(), the
+//     integer part, as in Vitis).
 #ifndef HLSEST_EXACTCLASS_AP_FIXED_H
 #define HLSEST_EXACTCLASS_AP_FIXED_H
 #ifdef __cplusplus
@@ -43,6 +45,10 @@ struct ap_fixed_base {
   static const int F = W - I; // fractional bits (may be negative or > W)
 
   raw_t V; // the only data member (uninitialised by default, like Vitis)
+
+  /// The value of V (sign-extends the bit of a signed 1-bit type).
+  typedef typename ap_detail::bits<W, S>::vtype val_t;
+  constexpr val_t rval() const { return ap_detail::bits<W, S>::val(V); }
 
   /// Result types of the binary operators (ap_fixed_base.h RType).
   template <int W2, int I2, bool S2> struct RType {
@@ -86,7 +92,7 @@ struct ap_fixed_base {
   // dropped), then apply the overflow mode O. The exact value is kept in a
   // signed type wide enough for the shift, so AP_SAT is an exact clamp.
   template <int W2, bool S2>
-  static constexpr raw_t from_raw(typename ap_detail::bits<W2, S2>::type v2, int F2) {
+  static constexpr raw_t from_raw(typename ap_detail::bits<W2, S2>::vtype v2, int F2) {
     const int CW = W2 + W + 3;
     typedef ap_detail::sbits<CW> wide;
     wide v = (wide)v2;
@@ -132,7 +138,7 @@ struct ap_fixed_base {
     return big ? (raw_t)0 : (raw_t)q; // AP_WRAP_SM: not modelled, plain wrap
   }
   template <int W2, int I2, bool S2, ap_q_mode Q2, ap_o_mode O2, int N2>
-  static constexpr raw_t from(const ap_fixed_base<W2, I2, S2, Q2, O2, N2> &o) { return from_raw<W2, S2>(o.V, W2 - I2); }
+  static constexpr raw_t from(const ap_fixed_base<W2, I2, S2, Q2, O2, N2> &o) { return from_raw<W2, S2>(o.rval(), W2 - I2); }
   // double -> fixed: the IEEE mantissa (negated if negative) has 52 - exp
   // fractional bits; NaN/inf are not special-cased (Vitis warns and goes on).
   static constexpr raw_t from_double(double d) {
@@ -154,11 +160,11 @@ struct ap_fixed_base {
   template <int W2, int I2, bool S2, ap_q_mode Q2, ap_o_mode O2, int N2>
   constexpr ap_fixed_base(const ap_fixed_base<W2, I2, S2, Q2, O2, N2> &o) : V(from(o)) {}
   template <int W2, bool S2>
-  constexpr ap_fixed_base(const ap_int_base<W2, S2> &o) : V(from_raw<W2, S2>(o.V, 0)) {}
+  constexpr ap_fixed_base(const ap_int_base<W2, S2> &o) : V(from_raw<W2, S2>(o.rval(), 0)) {}
   template <class T, class = typename ap_detail::ctype<T>::type>
   constexpr ap_fixed_base(T v)
       : V(from_raw<ap_detail::ctype<T>::W, ap_detail::ctype<T>::S>(
-            (typename ap_detail::bits<ap_detail::ctype<T>::W, ap_detail::ctype<T>::S>::type)v, 0)) {}
+            (typename ap_detail::bits<ap_detail::ctype<T>::W, ap_detail::ctype<T>::S>::vtype)v, 0)) {}
   constexpr ap_fixed_base(double d) : V(from_double(d)) {}
   constexpr ap_fixed_base(float d) : V(from_double((double)d)) {}
   constexpr ap_fixed_base(_Float16 d) : V(from_double((double)d)) {}
@@ -166,14 +172,14 @@ struct ap_fixed_base {
   template <int W2, int I2, bool S2, ap_q_mode Q2, ap_o_mode O2, int N2>
   constexpr ap_fixed_base &operator=(const ap_fixed_base<W2, I2, S2, Q2, O2, N2> &o) { V = from(o); return *this; }
   template <int W2, bool S2>
-  constexpr ap_fixed_base &operator=(const ap_int_base<W2, S2> &o) { V = from_raw<W2, S2>(o.V, 0); return *this; }
+  constexpr ap_fixed_base &operator=(const ap_int_base<W2, S2> &o) { V = from_raw<W2, S2>(o.rval(), 0); return *this; }
   template <class T, class = typename ap_detail::ctype<T>::type>
   constexpr ap_fixed_base &operator=(T v) { V = ap_fixed_base(v).V; return *this; }
   constexpr ap_fixed_base &operator=(double d) { V = from_double(d); return *this; }
   constexpr ap_fixed_base &operator=(float d) { V = from_double((double)d); return *this; }
 
   // ---- conversions ---------------------------------------------------------
-  constexpr double to_double() const { return (double)V * ap_detail::pow2<-F>::v; }
+  constexpr double to_double() const { return (double)rval() * ap_detail::pow2<-F>::v; }
   constexpr operator double() const { return to_double(); }
   // The other implicit conversions Vitis provides (ap_fixed_base.h:1184-1217):
   // the integer ones truncate toward zero through to_int() and friends. With
@@ -194,7 +200,7 @@ struct ap_fixed_base {
   constexpr operator unsigned long long() const { return to_uint64(); }
   constexpr float to_float() const { return (float)to_double(); }
   constexpr _Float16 to_half() const { return (_Float16)to_float(); }
-  // integer part (floor), as Vitis to_ap_int_base(): the I bits above F.
+  // integer part, as Vitis to_ap_int_base(): truncated toward zero (see ipart()).
   constexpr ap_int_base<ap_detail::max(I, 1), S> to_ap_int_base() const {
     ap_int_base<ap_detail::max(I, 1), S> r;
     r.V = (typename ap_int_base<ap_detail::max(I, 1), S>::raw_t)ipart();
@@ -214,8 +220,8 @@ struct ap_fixed_base {
   constexpr int wl() const { return W; }
   constexpr int iwl() const { return I; }
   constexpr bool is_zero() const { return V == 0; }
-  constexpr bool is_neg() const { return S && V < 0; }
-  constexpr bool sign() const { return S && V < 0; }
+  constexpr bool is_neg() const { return S && rval() < 0; }
+  constexpr bool sign() const { return S && rval() < 0; }
 
   // ---- bit and slice selects on the raw bits (value-returning) -------------
   constexpr bool operator[](int i) const { return (((ap_detail::ubits<W>)V >> i) & 1) != 0; }
@@ -241,7 +247,7 @@ struct ap_fixed_base {
   // ---- unary ---------------------------------------------------------------
   constexpr typename _ap_fixed_factory<W + 1, I + 1, true>::type operator-() const {
     ap_fixed_base<W + 1, I + 1, true> r;
-    r.V = (typename ap_fixed_base<W + 1, I + 1, true>::raw_t)(-(ap_detail::sbits<W + 2>)V);
+    r.V = (typename ap_fixed_base<W + 1, I + 1, true>::raw_t)(-(ap_detail::sbits<W + 2>)rval());
     return typename _ap_fixed_factory<W + 1, I + 1, true>::type(r);
   }
   constexpr typename _ap_fixed_factory<W, I, S>::type operator+() const { return typename _ap_fixed_factory<W, I, S>::type(*this); }
@@ -264,8 +270,8 @@ struct ap_fixed_base {
   }
   constexpr ap_fixed_base operator>>(unsigned sh) const {
     ap_fixed_base r;
-    if (sh < (unsigned)W) r.V = (raw_t)(V >> sh);
-    else r.V = (S && V < 0) ? (raw_t)-1 : (raw_t)0;
+    if (sh < (unsigned)W) r.V = (raw_t)(rval() >> sh);
+    else r.V = (S && rval() < 0) ? (raw_t)-1 : (raw_t)0;
     return r;
   }
   constexpr ap_fixed_base operator<<(int sh) const { return sh < 0 ? operator>>((unsigned)-sh) : operator<<((unsigned)sh); }
@@ -282,7 +288,7 @@ struct ap_fixed_base {
   constexpr typename RType<W2, I2, S2>::mult operator*(const ap_fixed_base<W2, I2, S2, Q2, O2, N2> &o) const {
     typename RType<W2, I2, S2>::mult_base r;
     typedef typename RType<W2, I2, S2>::mult_base::raw_t mr;
-    r.V = (mr)((mr)V * (mr)o.V); // W + W2 bits hold the product exactly
+    r.V = (mr)((mr)rval() * (mr)o.rval()); // W + W2 bits hold the product exactly
     return typename RType<W2, I2, S2>::mult(r);
   }
   template <int W2, int I2, bool S2, ap_q_mode Q2, ap_o_mode O2, int N2>
@@ -291,7 +297,7 @@ struct ap_fixed_base {
     const int F2 = W2 - I2;
     typedef ap_detail::sbits<ap_detail::max(W + ap_detail::max(F2, 0), W2) + 2> wide;
     R r;
-    r.V = (typename R::raw_t)(((wide)V << ap_detail::max(F2, 0)) / (wide)o.V); // truncation toward zero
+    r.V = (typename R::raw_t)(((wide)rval() << ap_detail::max(F2, 0)) / (wide)o.rval()); // truncation toward zero
     return typename RType<W2, I2, S2>::div(r);
   }
   template <int W2, int I2, bool S2, ap_q_mode Q2, ap_o_mode O2, int N2>
@@ -300,7 +306,7 @@ struct ap_fixed_base {
     const int F2 = W2 - I2, F3 = ap_detail::max(F, F2);
     typedef ap_detail::sbits<ap_detail::max(W + (F3 - F), W2 + (F3 - F2)) + 2> wide;
     R r;
-    r.V = (typename R::raw_t)(((wide)V << (F3 - F)) + ((wide)o.V << (F3 - F2)));
+    r.V = (typename R::raw_t)(((wide)rval() << (F3 - F)) + ((wide)o.rval() << (F3 - F2)));
     return typename RType<W2, I2, S2>::plus(r);
   }
   template <int W2, int I2, bool S2, ap_q_mode Q2, ap_o_mode O2, int N2>
@@ -309,7 +315,7 @@ struct ap_fixed_base {
     const int F2 = W2 - I2, F3 = ap_detail::max(F, F2);
     typedef ap_detail::sbits<ap_detail::max(W + (F3 - F), W2 + (F3 - F2)) + 2> wide;
     R r;
-    r.V = (typename R::raw_t)(((wide)V << (F3 - F)) - ((wide)o.V << (F3 - F2)));
+    r.V = (typename R::raw_t)(((wide)rval() << (F3 - F)) - ((wide)o.rval() << (F3 - F2)));
     return typename RType<W2, I2, S2>::minus(r);
   }
   // Bitwise: both operands converted to the logic type first (Vitis OP_BIN_AF).
@@ -338,7 +344,7 @@ struct ap_fixed_base {
     const int F3 = ap_detail::max(F, F2);
     const int MW = ap_detail::max(WL, WR) + 1;
     typedef ap_detail::sbits<MW> sw;
-    return ap_detail::cmp_lt<WL, S, WR, S2, MW>((sw)((sw)V << (F3 - F)), (sw)((sw)o.V << (F3 - F2)));
+    return ap_detail::cmp_lt<WL, S, WR, S2, MW>((sw)((sw)rval() << (F3 - F)), (sw)((sw)o.rval() << (F3 - F2)));
   }
   template <int W2, int I2, bool S2, ap_q_mode Q2, ap_o_mode O2, int N2>
   constexpr bool eq_(const ap_fixed_base<W2, I2, S2, Q2, O2, N2> &o) const {
@@ -348,7 +354,7 @@ struct ap_fixed_base {
     const int F3 = ap_detail::max(F, F2);
     const int MW = ap_detail::max(WL, WR) + 1;
     typedef ap_detail::sbits<MW> sw;
-    return ap_detail::cmp_eq<WL, S, WR, S2, MW>((sw)((sw)V << (F3 - F)), (sw)((sw)o.V << (F3 - F2)));
+    return ap_detail::cmp_eq<WL, S, WR, S2, MW>((sw)((sw)rval() << (F3 - F)), (sw)((sw)o.rval() << (F3 - F2)));
   }
 #define HLSEST_AF_CMP(SYM, EXPR)                                                             \
   template <int W2, int I2, bool S2, ap_q_mode Q2, ap_o_mode O2, int N2>                     \
@@ -381,9 +387,9 @@ private:
   constexpr ap_detail::sbits<ap_detail::max(W, I) + 2> ipart() const {
     typedef ap_detail::sbits<ap_detail::max(W, I) + 2> wide;
     const int shr = F >= 0 ? (F < W + 2 ? F : 0) : 0, shl = F < 0 ? -F : 0;
-    if (I <= 0) return (S && V < 0) ? (wide)-1 : (wide)0; // 1-bit field: 0, or 0 + 1 wrapped
-    wide r = (F >= 0 && F >= W + 2) ? (wide)((S && V < 0) ? -1 : 0) : (wide)(((wide)V >> shr) << shl);
-    if (S && V < 0 && F > 0) {
+    if (I <= 0) return (S && rval() < 0) ? (wide)-1 : (wide)0; // 1-bit field: 0, or 0 + 1 wrapped
+    wide r = (F >= 0 && F >= W + 2) ? (wide)((S && rval() < 0) ? -1 : 0) : (wide)(((wide)rval() >> shr) << shl);
+    if (S && rval() < 0 && F > 0) {
       bool frac = F >= W ? (V != 0) : (((ap_detail::ubits<W>)V & (ap_detail::ubits<W>)((((ap_detail::ubits<W + 1>)1) << F) - 1)) != 0);
       if (frac) r += 1;
     }
@@ -395,7 +401,7 @@ private:
 template <int W, bool S>
 template <int W2, int I2, bool S2, ap_q_mode Q2, ap_o_mode O2, int N2>
 constexpr ap_int_base<W, S>::ap_int_base(const ap_fixed_base<W2, I2, S2, Q2, O2, N2> &o)
-    : V((raw_t)o.to_ap_int_base().V) {}
+    : V((raw_t)o.to_ap_int_base().rval()) {}
 
 // ---- mixed operators: C integer -> ap_fixed_base<ctype::W, ctype::W, ctype::S>,
 // ap_int_base<W2,S2> -> ap_fixed_base<W2,W2,S2> (Vitis AF_BIN_OP_WITH_INT /

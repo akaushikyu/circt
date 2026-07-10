@@ -153,7 +153,7 @@ HLSEST_FB constexpr ap_fixed_base<W, I, S> sqrt(const HLSEST_FBT &x) {
   const int F = W - I;
   const bool table = (F == 0 && I <= 13) || (F <= 4 && I <= 5);
   double xv = x.to_double();
-  if (S && x.V < 0) {
+  if (S && x.rval() < 0) {
     if (!table) { r.V = 0; return r; }
     xv = (double)((ap_detail::ubits<W>)x.V & (ap_detail::ubits<W>)((((ap_detail::ubits<W + 1>)1) << (W - 1)) - 1)) * ap_detail::pow2<-(W - I)>::v;
   } else if (!table && I <= 0) {
@@ -240,7 +240,7 @@ HLSEST_FB constexpr ap_fixed_base<W, I, S> ceil(const HLSEST_FBT &x) {
 }
 HLSEST_FB constexpr ap_fixed_base<W, I, S> trunc(const HLSEST_FBT &x) {
   ap_fixed_base<W, I, S> r = floor(x);
-  if (S && x.V < 0 && r.V != x.V) r += 1;
+  if (S && x.rval() < 0 && r.V != x.V) r += 1;
   return r;
 }
 HLSEST_FB constexpr ap_fixed_base<W, I, S> round(const HLSEST_FBT &x) {
@@ -251,7 +251,7 @@ HLSEST_FB constexpr ap_fixed_base<W, I, S> rint(const HLSEST_FBT &x) {
 }
 HLSEST_FB constexpr ap_fixed_base<W, I, S> fabs(const HLSEST_FBT &x) {
   ap_fixed_base<W, I, S> r;
-  r.V = (S && x.V < 0) ? (typename HLSEST_FBT::raw_t)(-x.V) : x.V;
+  r.V = (S && x.rval() < 0) ? (typename HLSEST_FBT::raw_t)(-x.rval()) : x.V;
   return r;
 }
 HLSEST_FB constexpr ap_fixed_base<W, I, S> abs(const HLSEST_FBT &x) { return fabs(x); }
@@ -264,10 +264,10 @@ HLSEST_FB constexpr ap_fixed_base<W, I, S> fdim(const HLSEST_FBT &a, const HLSES
 }
 HLSEST_FB constexpr ap_fixed_base<W, I, S> copysign(const HLSEST_FBT &a, const HLSEST_FBT &b) {
   ap_fixed_base<W, I, S> r = fabs(a);
-  if (S && b.V < 0) r.V = (typename HLSEST_FBT::raw_t)(-r.V);
+  if (S && b.rval() < 0) r.V = (typename HLSEST_FBT::raw_t)(-r.rval());
   return r;
 }
-HLSEST_FB constexpr bool signbit(const HLSEST_FBT &x) { return S && x.V < 0; }
+HLSEST_FB constexpr bool signbit(const HLSEST_FBT &x) { return S && x.rval() < 0; }
 HLSEST_FB constexpr bool isnan(const HLSEST_FBT &) { return false; }
 HLSEST_FB constexpr bool isinf(const HLSEST_FBT &) { return false; }
 HLSEST_FB constexpr bool isfinite(const HLSEST_FBT &) { return true; }

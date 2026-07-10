@@ -34,15 +34,21 @@ This directory is used by the harness only. It does **not** replace
 stand-in the lit tests use) nor `shim/exact`; whether to switch either over is
 Peter's decision.
 
-## What is modelled (validated by `../../check_shim.py`)
+## What is modelled (validated by `../../check_shim.py` and `../../check_shim_cgeist.py`)
 
 `check_shim.py` generates one C++ program (the design-table expressions plus
-seeded random constants and operations per category), compiles it with
-clang++ against this shim and with g++ against the real
+seeded random constants and operations per category), compiles it with the
+HOST clang++ against this shim and with g++ against the real
 `/mnt/a/Vitis/2025.1/Vitis/include`, and compares every raw bit pattern
-(2026-10-09: `--seed 11 --n 40` 67 113 values, `--seed 12 --n 150` 71 293
-values, 0 mismatches outside the `hls::exp` LSB differences below; 65 536 of
-them are the exhaustive `ap_fixed<16,5>` sqrt):
+(65 536 of the values are the exhaustive `ap_fixed<16,5>` sqrt). That checks
+the shim's C++ only. `check_shim_cgeist.py` compiles a targeted + random list
+of expressions through **cgeist** (harness flags + `cgeist_flags`,
+`-emit-llvm`), with the inputs both as run-time arguments and as constants
+cgeist folds, and compares those bits, the host clang++ bits and the Vitis
+bits: that is what hls-est receives. The first round of this shim was only
+checked with the host compiler and missed a cgeist bug (Polygeist's `x - C`
+canonicalisation on integers wider than 64 bits, fixed in Polygeist) and the
+two shim errors listed under "Fixed" below. Results are in CHANGELOG.md.
 
 - int -> fixed, double -> fixed (exact IEEE mantissa shift), fixed -> fixed
   with all quantization modes (`AP_TRN`, `AP_RND`, `AP_RND_ZERO`,
@@ -54,9 +60,18 @@ them are the exhaustive `ap_fixed<16,5>` sqrt):
   comparisons with double; `(int)x` / `to_int()` (truncation toward zero, and
   the Vitis quirk that a negative fraction in a type with I <= 0 gives -1),
   `to_double()`;
-- `ap_int` arithmetic (`+ - * / % & | ^ << >>`), from double (truncation),
-  implicit conversion to `long long` / `unsigned long long` (Vitis
-  `operator RetType()`);
+- `ap_int` arithmetic (`+ - * / % & | ^ << >>`), implicit conversion to
+  `long long` / `unsigned long long` (Vitis `operator RetType()`); from float
+  (truncation toward zero, then wrap); from double the same, except that
+  Vitis' `ap_int_base(double)` keeps the shifted mantissa of a value with
+  1 <= |d| < 2^52 in an `ap_int_base<FLOAT_MAN + 2, true>` (25 bits, signed)
+  before assigning it: `ap_int<32>(1073741824.0)` is 0,
+  `ap_int<32>(16777219.0)` is -16777213, `ap_uint<40>(4294967295.0)` is
+  0xFFFFFFFFFF (g++ with the Vitis headers and csynth agree: the a.o.3.ll of
+  a csynth run stores these constants; `ap_fixed` from double has no such
+  step);
+- the signed 1-bit types `ap_int<1>`, `ap_fixed<1,I>`: one stored bit (`i1`
+  in the MLIR, as in Vitis), read as 0 or -1;
 - value-returning `range()`, `operator()`, `operator[]`, `bit()`, `(a, b)`;
 - `hls::sqrt` (exhaustively for `ap_fixed<16,5>`: negative -> 0, round-half-up),
   `hls::exp` (floor of the exact value, saturating like the Vitis tables;
@@ -75,10 +90,28 @@ them are the exhaustive `ap_fixed<16,5>` sqrt):
   `--seed 11 --n 40`). `log/tanh/sin/cos/atan/pow/rsqrt/...` are
   evaluated in double and floored to the Vitis result type (Vitis uses
   CORDIC / table algorithms: last-bit differences possible, unconfirmed).
+- `hls::sqrt` lookup-table branches (`F == 0 && I <= 13`, `F <= 4 && I <= 5`):
+  Vitis compares against hand-written constants of type `ap_ufixed<W-1,I-1>`
+  and returns constants of the result type; they wrap when `I` is small
+  (`ap_fixed<8,4>(7.9375)`: Vitis 0, shim 2.8125). The shim returns the
+  round-half-up root there; `etc/hls_sqrt_apfixed.h` is "All Rights Reserved",
+  so the tables are not ported. `check_shim.py` reports these inputs in the
+  known category `sqrttbl`.
+- Fixed-point division follows **csynth**: the exact quotient. Vitis' C
+  simulation path (what g++ with the headers runs) divides in
+  `_W1 = max(W + max(F2,0) + (S2 && !S), W2 + (S && !S2))` bits, so the
+  minimum divided by a raw -1 wraps there; csynth does not
+  (`ap_fixed<8,8>(-128) / ap_fixed<8,8>(-1)` is 128 in csynth, -128 in g++;
+  VITIS_NOTES.md N11). `check_shim.py` / `check_shim_cgeist.py` report these
+  inputs in the known category `divcsim`.
 - `N != 0` saturation bits and `AP_WRAP_SM` (0 corpus uses): plain wrap.
-- `ap_int<1>`: clang rejects a signed `_BitInt(1)`, so the signed 1-bit type
-  is stored as a 2-bit `_BitInt(2)` (value semantics of a 2-bit int, storage
-  width 2 instead of 1); `ap_uint<1>` is exact.
+- (fixed) `ap_int<1>` / `ap_fixed<1,I>`: clang rejects a signed `_BitInt(1)`;
+  the first round stored them as `_BitInt(2)`, which made arrays of them 2
+  bits wide and gave `ap_int<1> x = 1` the value 1 instead of -1. They are now
+  stored in an `unsigned _BitInt(1)` and every read goes through `rval()`,
+  which sign-extends the bit.
+- (fixed) the 25-bit step of `ap_int_base(double)` described above was
+  missing (the conversion was exact).
 - Assignable bit / range selects and concatenations (`x.range(7,0) = v`,
   `x(7,0) = v`, `x[i] = b`, `(a, b) = v`): Vitis uses reference-proxy classes
   there; here the selects return `const` values, so those lines are compile
