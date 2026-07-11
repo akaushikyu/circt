@@ -76,6 +76,46 @@ hls-est runs, no new Vitis runs). The forgebench totals move substantially (e.g.
 **Recommendation.** Make `exact` (or `exactclass` once route A is accepted) the default; keep `scalar` selectable for the
 old numbers. Decide together with M3.
 
+**Addendum (2026-10-10, hls-est 9389b61bc + T5/T6, cgeist 28236352 with route A).** Harness subset, all opt-in flags
+off, MLIR reused from the T4/T6 runs (`~/hls-est-work/t6/runs/{base,xbase,cbase}_{def,nos}.cmp.json`), restricted to the
+designs every shim compares. The `exactclass` column also has the M5 front end prepended (`--promote-globals-to-allocas
+--vitis-fold --canonicalize --sccp --dead-memory-elimination` plus the m_axi adapter cost), so it measures M2 + M3 + M5
+together; the `exact` column is the shim alone. Cells: exact / total |err|.
+
+Default pipeline (79 designs):
+
+| dataset | n | scalar | exact | exactclass + M5 |
+|---|---|---|---|---|
+| forgebench | 30 | 0 / 17330 | 2 / 2113 | 5 / 1698 |
+| machsuite | 11 | 9 / 104 | 10 / 40 | 10 / 40 |
+| polybench | 9 | 0 / 873 | 0 / 873 | 0 / 873 |
+| polybench_pragmas | 7 | 6 / 16 | 6 / 16 | 6 / 16 |
+| spector_hls | 8 | 7 / 4 | 7 / 4 | 7 / 4 |
+| vitis_examples | 14 | 13 / 1 | 13 / 1 | 13 / 1 |
+| **all** | 79 | **35 / 18328** | **38 / 3047** | **41 / 2632** |
+
+Without `--infer-vitis-split-array` (80 designs):
+
+| dataset | n | scalar | exact | exactclass + M5 |
+|---|---|---|---|---|
+| forgebench | 31 | 0 / 29009 | 2 / 5154 | 7 / 5887 |
+| machsuite | 11 | 9 / 80 | 10 / 16 | 10 / 16 |
+| polybench | 9 | 5 / 121 | 5 / 121 | 5 / 121 |
+| polybench_pragmas | 7 | 6 / 16 | 6 / 16 | 6 / 16 |
+| spector_hls | 8 | 8 / 0 | 8 / 0 | 8 / 0 |
+| vitis_examples | 14 | 13 / 1 | 13 / 1 | 13 / 1 |
+| **all** | 80 | **41 / 29227** | **44 / 5308** | **49 / 6041** |
+
+The large scalar errors come from the forgebench conv_block designs, which compile since T4's robustness fixes and are
+2x too large with `float` elements. The shim changes only forgebench and machsuite; polybench, spector_hls and
+vitis_examples are identical across shims. No design that is exact under `scalar` stops being exact under `exact`.
+The regression gates hold in every run (T6). Route A's coverage run (7 datasets, default pipeline, no M5) gave
+`exact` 31 vs `exactclass` 32 exact matches, with soda compiling again (CHANGELOG route A entry).
+
+**Updated recommendation.** Make `exactclass` the harness default (with cgeist `--scalar-wrapper-abi` from its
+`cgeist_flags`, M3), keep `scalar` selectable; the M5 front end is decided separately. Re-measuring every baseline
+takes about an hour of hls-est runs and no Vitis runs.
+
 ## M3 — frontend changes beyond C-semantics fixes (O10, O5, route A)
 
 - **O10:** cgeist inlines callees marked `#pragma HLS inline off`; Vitis keeps one instance and charges its arrays once.
