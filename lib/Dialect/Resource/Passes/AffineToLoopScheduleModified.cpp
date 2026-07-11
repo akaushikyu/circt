@@ -1206,16 +1206,37 @@ private:
 /// conversion: innermost ifs first (post-order), each branch's ops moved in
 /// front of the if in order (then-branch, then else-branch), leaving the
 /// yields.
+/// MODIFIED (T6): a memory access moved out of an arm records it in
+/// `hls.if_arms` (LoopPragmas.h), so that --bram-analysis still knows that the
+/// two arms of one if never run together (Vitis predicates them and binds the
+/// two to one port: sp_o_ifarms / sp_o_ifst, VITIS_NOTES.md N12). Read only by
+/// the opt-in --bram-seq-dual-port; no estimate depends on it otherwise.
 static void hoistIfBodies(Operation *root) {
   SmallVector<IfOp> ifs;
   root->walk<WalkOrder::PostOrder>([&](IfOp op) { ifs.push_back(op); });
+  int64_t ifId = 0;
   for (IfOp op : ifs) {
+    ++ifId;
+    int64_t arm = -1;
     for (Block *blk : {op.thenBlock(), op.elseBlock()}) {
+      ++arm;
       if (!blk)
         continue;
       for (Operation &inner :
-           llvm::make_early_inc_range(blk->without_terminator()))
+           llvm::make_early_inc_range(blk->without_terminator())) {
+        if (isa<memref::LoadOp, memref::StoreOp, hls_analysis::StoreEnableOp>(
+                inner)) {
+          SmallVector<int64_t> arms;
+          if (auto prev = inner.getAttrOfType<DenseI64ArrayAttr>(
+                  circt::hls_analysis::kIfArmsAttr))
+            arms.append(prev.asArrayRef().begin(), prev.asArrayRef().end());
+          arms.push_back(ifId);
+          arms.push_back(arm);
+          inner.setAttr(circt::hls_analysis::kIfArmsAttr,
+                        DenseI64ArrayAttr::get(inner.getContext(), arms));
+        }
         inner.moveBefore(op);
+      }
     }
   }
 }

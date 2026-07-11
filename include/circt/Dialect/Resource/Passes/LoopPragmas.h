@@ -26,6 +26,12 @@ namespace circt::hls_analysis {
 constexpr llvm::StringLiteral kLoopPipelineAttr = "hls.pipeline";
 /// `hls.pipeline_off` (unit): `#pragma HLS pipeline off`.
 constexpr llvm::StringLiteral kLoopPipelineOffAttr = "hls.pipeline_off";
+/// `hls.if_arms` (DenseI64ArrayAttr, pairs [if id, arm number, ...]) on a
+/// memory access that --convert-affine-to-loopschedule hoisted out of the arms
+/// of an scf.if (hoistIfBodies), innermost if first. Ids are unique within the
+/// function. Two accesses that carry the same if id with different arm numbers
+/// never execute together (--bram-seq-dual-port, VITIS_NOTES.md N12).
+constexpr llvm::StringLiteral kIfArmsAttr = "hls.if_arms";
 /// `hls.unroll = [{factor = F : i32, ...}]`, F = 0 for a complete unroll.
 constexpr llvm::StringLiteral kLoopUnrollAttr = "hls.unroll";
 /// `hls.unroll_off` (unit): `#pragma HLS unroll off`.

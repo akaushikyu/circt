@@ -249,6 +249,62 @@ The kernels: rom2r_int 2 -> 1 (= Vitis), mx_call_rw2 3 = Vitis, dg_d_fold_divrem
 Vitis). Still open for recommendation 4: a constant table read more than twice per cycle is scheduled at a raised II instead of
 replicated (O4 "ROM tables": rom3r_int 1 vs Vitis 4).
 
+## M6 — O3 + O7: turn on `--bram-seq-dual-port`; `forward-stores` only together with dead-memory elimination
+
+**Question.** In a non-pipelined region Vitis issues up to two accesses of one array per state and binds the array
+ram_2p / ram_t2p (x18 columns) as soon as one state holds two (VITIS_NOTES.md N12, 33 kernels). hls-est charged every
+sequential scope one live port. The T6 entry implements the rule behind `--bram-seq-dual-port` (a `--bram-analysis`
+cl option, default off). It also re-measured `--convert-affine-to-loopschedule=forward-stores=true`, which O7 had tied
+to this fix.
+
+**Before / after** (harness subset, 110 designs with a Vitis total; `-j 8 --timeout 120`; frozen binary
+`~/hls-est-work/t6/bin/hls-est.seq2`; runs `~/hls-est-work/t6/runs/`; scalar = the T5 run's cgeist outputs, exact /
+exactclass = the cgeist outputs of `t4/x_full_def` / `t4rev/rxc_dme_def`; "M5 front" = `--vitis-fold --canonicalize
+--sccp --dead-memory-elimination` before and `--bram-maxi-adapters` after the pipeline; cells: exact matches,
+total abs error over the designs that ran):
+
+| shim | pipeline | flags off | + `--bram-seq-dual-port` | + `forward-stores` as well |
+|---|---|---|---|---|
+| scalar | default | 35, 18328 | **37**, 18334 | 37, 18334 |
+| scalar | no split | 41, 29227 | **44**, 29230 | 44, 29654 |
+| exact | default | 38, 3047 | **40**, 3048 | 40, 3048 |
+| exact | no split | 44, 5308 | **47**, 5301 (1) | 47, 5489 |
+| exactclass + M5 front | default | 41, 2634 | **43**, 2635 | 43, 2635 |
+| exactclass + M5 front | no split | 49, 6043 | **52**, 6036 | **55**, 6026 |
+
+(1) In the suite run forgebench/conv_block_module hit the 120 s limit under load (two harness runs in parallel); run alone
+it gives 6871, unchanged (`x2seq_nos_cbm.json`).
+
+**What `--bram-seq-dual-port` changes** (identical on every shim and front end; per array from the debug JSON):
+- newly exact: polybench mvt (12 -> 14, default and no split), gesummv (134 -> 135, default), atax (11 -> 13) and bicg
+  (12 -> 14) without split. Every changed polybench array is Vitis-exact: atax `buff_x`, bicg `buff_p`, gesummv `buff_x`,
+  mvt `buff_y1` / `buff_y2` (the 64 hoisted invariant reads, two per state) and atax `buff_y_out`, bicg `buff_s_out`
+  1 -> 2 = Vitis. For the last two the reason differs from Vitis' (O3 item 3: the promoted loads of the unrolled-j decision
+  vs. Vitis' flattened II-1 pipeline; with `float-loads-perfect=true`, M8, they are 2 for Vitis' reason and the totals stay
+  13 / 14).
+- farther: atax 68 -> 70 and bicg 69 -> 71 with `--infer-vitis-split-array` (the same arrays, now right; the 64-bank
+  buff_A split, O2, dominates); scalar shim only: forgebench conv_block_module / op2 / op3 +5 / +2 / +3 from `localWeights`
+  RAM_1P -> RAM_T2P. Vitis binds `localWeights` ram_2p too (256x16, 1 BRAM); the scalar shim makes it f32, which needs two
+  x18 columns; with the exact shims 256x16 costs 1 either way and these designs do not change.
+- nothing that matched stops matching; gates polybench_pragmas bicg 8, gesummv 16, mvt 8, syrk 32 exact in every run; no
+  status changes; `--bram-analysis` time on conv_block_op1 0.21 s with or without it.
+- kernels (N12): 16 / 19 of the kernels whose region hls-est keeps sequential match Vitis per array with it, 10 / 19
+  without; the 3 misses are over-estimates where Vitis spreads two accesses over the slack around an inner-loop call (O21).
+
+**What `forward-stores` changes on top:** nothing in the default pipeline on any shim. Without split it makes attention
+Q / K replicable (the unrolled `Q[i][j] +=` becomes one store): 3 copies = Vitis RAM_1WNR where Q / K are live
+(attention_op_p2 / p3, gpt_transformer_p1: exact per array with the exact shims; 2 x18 columns per copy with the scalar
+shim's f32), but 2 -> 30 BRAM each where Vitis deletes Q / K (attention_op_p1, tiled_attn_*: N1). With the M5 front end
+those are gone: +3 exact designs (attention_op_p2 / p3, gpt_transformer_p1), one design farther (Llama_GPT_module 29 -> 33,
+Vitis 30: one of its two hls-est Q / K instances becomes RAM_1WNR where Vitis has one ram_t2p Q / K; not investigated).
+
+**Recommendation.**
+1. Make `--bram-seq-dual-port` part of the default (append it to `DEFAULT_PIPELINE` and the lit RUN lines, or flip its
+   init): +2 exact (default pipeline) / +3 (no split) on every shim, nothing lost. The Estimation expectations of
+   polybench atax / bicg / gesummv / mvt would be regenerated (70 / 71 / 135 / 14 under the default RUN pipeline).
+2. Keep `forward-stores` off until the M5 front end (exactclass shim + `--dead-memory-elimination`) is the default; adopt
+   it together with that (+3 exact there), after a look at Llama_GPT_module's Q / K.
+
 ## M7 — O12: let `--bram-analysis` cost only what the top function reaches
 
 **Question.** Today the harness selects the top with `--symbol-privatize=exclude=<top> --symbol-dce` before the

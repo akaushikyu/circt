@@ -18,10 +18,10 @@
 // cleanup the body stores to acc 9 times, acc is not replicable, the loop
 // runs at II 9 and acc is a true-dual-port 64x32 RAM = 2 BRAM.
 // `forward-stores` is OFF by default (last RUN line = NOFWD): per array it is
-// what Vitis does (atax tmp1, bicg buff_q_out, gesummv tmp1/tmp2 become 1 =
-// Vitis), but it removes the error that cancels the one-port
-// sequential-scope rule (OPEN_ISSUES.md O3: mvt buff_x1/x2 1 vs Vitis 2), so
-// the atax / bicg / mvt totals stop matching; it is adopted with O3.
+// what Vitis does where the array is live (an unrolled accumulator becomes one
+// store; attention Q/K become replicable, 3 copies = Vitis), but it also
+// replicates arrays Vitis deletes unless --dead-memory-elimination runs, so it
+// is proposed together with that pass (MEMOS.md M6, OPEN_ISSUES.md O7).
 // @mayalias: `b[i] = v; x = b[j]; b[i] = w` with i and j both functions of
 // the flattened induction variable: the difference of the two addresses is
 // not a constant, so the load may read either store's address. Nothing is

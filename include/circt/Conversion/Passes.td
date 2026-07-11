@@ -63,8 +63,9 @@ def AffineToLoopSchedule : Pass<"convert-affine-to-loopschedule", "mlir::func::F
            "address with no intervening may-alias read (Vitis store-to-load "
            "forwarding / dead-store elimination): an unrolled accumulator "
            "becomes one load and one store per iteration. Off by default: "
-           "it is right per array but exposes the sequential two-port gap "
-           "(OPEN_ISSUES.md O3) and loses exact totals until that is fixed.">
+           "it is right per array where the array is live, but it makes "
+           "arrays that Vitis deletes replicable (MEMOS.md M6: proposed "
+           "together with --dead-memory-elimination; OPEN_ISSUES.md O7).">
   ];
 }
 
