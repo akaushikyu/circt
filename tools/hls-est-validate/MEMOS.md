@@ -108,7 +108,10 @@ Without `--infer-vitis-split-array` (80 designs):
 
 The large scalar errors come from the forgebench conv_block designs, which compile since T4's robustness fixes and are
 2x too large with `float` elements. The shim changes only forgebench and machsuite; polybench, spector_hls and
-vitis_examples are identical across shims. No design that is exact under `scalar` stops being exact under `exact`.
+vitis_examples are identical across shims. No design that is exact under `scalar` stops being exact under `exact` (checked per design, both pipelines).
+Two designs exact under `exact` stop matching in the `exactclass + M5` column: forgebench mult_op_p2 and vec_mtx_p1
+(2 -> 4, Vitis 2). Per array they were exact only by cancellation: globals that Vitis does not keep as memories
+offset the missing m_axi adapter (T4 CHANGELOG entry); the adapter cost added by M5 exposes the global error.
 The regression gates hold in every run (T6). Route A's coverage run (7 datasets, default pipeline, no M5) gave
 `exact` 31 vs `exactclass` 32 exact matches, with soda compiling again (CHANGELOG route A entry).
 
