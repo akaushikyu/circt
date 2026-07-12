@@ -69,7 +69,9 @@ module {
 // CHECK:        - memref.load read  in pipeline @ {{.*}} ii=1 stage={{[0-9]+}} (+3 same-address load(s) merged into it: CSE)
 // CHECK:        replication: replicable (max 1 store(s) per loop body), copies 1
 // CHECK:          ii=1: 2R+0W per iteration -> ceil(2/1)=2 port-cycles -> copies 1
-// CHECK:        ram type: RAM_T2P
+// Two reads per cycle (one write elsewhere) bind ram_2p in Vitis; only two
+// writes per cycle need ram_t2p. Both are x18 per port: 8 BRAM either way.
+// CHECK:        ram type: RAM_2P
 // CHECK:        bram: 8
 // CHECK:      Total BRAM: 16
 

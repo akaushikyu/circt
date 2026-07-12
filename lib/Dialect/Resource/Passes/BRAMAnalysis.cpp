@@ -78,8 +78,10 @@ static llvm::cl::opt<bool> bramSeqDualPortOpt(
     llvm::cl::desc("--bram-analysis: in a sequential (non-pipelined) scope, "
                    "two accesses of a bank that lie in one straight-line "
                    "stretch (no loop or pipeline between them) and do not "
-                   "depend on each other share a state and keep both ports "
-                   "live (RAM_2P / RAM_T2P, x18 columns; VITIS_NOTES.md N12). "
+                   "depend on each other (SSA or memory order through any "
+                   "array) share a state and keep both ports live (RAM_2P, "
+                   "or RAM_T2P for two writes; x18 columns; VITIS_NOTES.md "
+                   "N12). "
                    "Default: a sequential scope has one live port "
                    "(OPEN_ISSUES.md O3)"),
     llvm::cl::init(false));
@@ -350,6 +352,88 @@ static AddrRelation compareAddresses(Operation *arrayValue,
   return same ? AddrRelation::Same : AddrRelation::Unknown;
 }
 
+static const void *storageKey(Value valueHandle) {
+  for (unsigned guard = 0; guard < 64; ++guard) {
+    auto view = valueHandle.getDefiningOp<ViewLikeOpInterface>();
+    if (!view)
+      break;
+    valueHandle = view.getViewSource();
+  }
+  if (auto globalOp = valueHandle.getDefiningOp<memref::GetGlobalOp>())
+    return globalOp.getNameAttr().getAttr().getAsOpaquePointer();
+  if (valueHandle.getDefiningOp<memref::AllocaOp>() ||
+      valueHandle.getDefiningOp<memref::AllocOp>())
+    return valueHandle.getAsOpaquePointer();
+  if (auto arg = dyn_cast<BlockArgument>(valueHandle))
+    if (arg.getOwner()->isEntryBlock() &&
+        isa<FunctionOpInterface>(arg.getOwner()->getParentOp()))
+      return valueHandle.getAsOpaquePointer();
+  return nullptr;
+}
+
+struct MemTouch {
+  const void *key = nullptr;
+  Value memref;
+  bool write = false;
+};
+
+static void memTouches(Operation *op, SmallVectorImpl<MemTouch> &out) {
+  if (op->hasTrait<OpTrait::HasRecursiveMemoryEffects>())
+    return;
+  auto iface = dyn_cast<MemoryEffectOpInterface>(op);
+  if (!iface || isa<CallOpInterface>(op)) {
+    out.push_back({nullptr, Value(), true});
+    return;
+  }
+  SmallVector<MemoryEffects::EffectInstance, 2> effects;
+  iface.getEffects(effects);
+  for (const MemoryEffects::EffectInstance &entryValue : effects) {
+    if (isa<MemoryEffects::Allocate>(entryValue.getEffect()))
+      continue;
+    bool write = !isa<MemoryEffects::Read>(entryValue.getEffect());
+    Value valueHandle = entryValue.getValue();
+    if (!valueHandle || !isa<BaseMemRefType>(valueHandle.getType()))
+      out.push_back({nullptr, Value(), write});
+    else
+      out.push_back({storageKey(valueHandle), valueHandle, write});
+  }
+}
+
+static bool mayConflict(Operation *arrayValue, const MemTouch &ta,
+                        Operation *buildPoint, const MemTouch &tb) {
+  if (!ta.write && !tb.write)
+    return false;
+  if (ta.key && tb.key && ta.key != tb.key)
+    return false;
+  if (ta.memref && ta.memref == tb.memref &&
+      compareAddresses(arrayValue, buildPoint) == AddrRelation::Disjoint)
+    return false;
+  return true;
+}
+
+static bool inExclusiveArms(const SeqScopeIndex::OpInfo &exprValue,
+                            ArrayRef<int64_t> hoistedX,
+                            const SeqScopeIndex::OpInfo &rowValue,
+                            ArrayRef<int64_t> hoistedY) {
+  for (const auto &ax : exprValue.arms)
+    for (const auto &ay : rowValue.arms)
+      if (ax.first == ay.first && ax.second != ay.second)
+        return true;
+  for (size_t arrayValue = 0; arrayValue + 1 < hoistedX.size(); arrayValue += 2)
+    for (size_t buildPoint = 0; buildPoint + 1 < hoistedY.size();
+         buildPoint += 2)
+      if (hoistedX[arrayValue] == hoistedY[buildPoint] &&
+          hoistedX[arrayValue + 1] != hoistedY[buildPoint + 1])
+        return true;
+  return false;
+}
+
+static ArrayRef<int64_t> hoistedArmsOf(Operation *op) {
+  if (auto arrayValue = op->getAttrOfType<DenseI64ArrayAttr>(kIfArmsAttr))
+    return arrayValue.asArrayRef();
+  return {};
+}
+
 static std::optional<std::pair<const AccessSummary *, const AccessSummary *>>
 findSameStatePair(ArrayRef<const AccessSummary *> accs,
                   const SeqScopeIndex::Scope &stringValue, unsigned stretch,
@@ -371,23 +455,20 @@ findSameStatePair(ArrayRef<const AccessSummary *> accs,
 
   SmallVector<ArrayRef<int64_t>> hoistedArms(keyValue);
   for (unsigned innerIndex = 0; innerIndex < keyValue; ++innerIndex)
-    if (auto arrayValue =
-            accs[innerIndex]->op->getAttrOfType<DenseI64ArrayAttr>(kIfArmsAttr))
-      hoistedArms[innerIndex] = arrayValue.asArrayRef();
+    hoistedArms[innerIndex] = hoistedArmsOf(accs[innerIndex]->op);
   auto exclusive = [&](unsigned loopIndex, unsigned innerIndex) {
-    for (const auto &exprValue : info[loopIndex]->arms)
-      for (const auto &rowValue : info[innerIndex]->arms)
-        if (exprValue.first == rowValue.first &&
-            exprValue.second != rowValue.second)
-          return true;
-    ArrayRef<int64_t> ti = hoistedArms[loopIndex], tj = hoistedArms[innerIndex];
-    for (size_t arrayValue = 0; arrayValue + 1 < ti.size(); arrayValue += 2)
-      for (size_t buildPoint = 0; buildPoint + 1 < tj.size(); buildPoint += 2)
-        if (ti[arrayValue] == tj[buildPoint] &&
-            ti[arrayValue + 1] != tj[buildPoint + 1])
-          return true;
-    return false;
+    return inExclusiveArms(*info[loopIndex], hoistedArms[loopIndex],
+                           *info[innerIndex], hoistedArms[innerIndex]);
   };
+
+  struct MemEvent {
+    Operation *op;
+    unsigned pos;
+    int acc;
+    SmallVector<MemTouch, 2> touches;
+  };
+  std::vector<MemEvent> events;
+  SmallVector<MemTouch, 2> touches;
   for (unsigned portValue = lo; portValue <= hi; ++portValue) {
     Operation *op = ops[portValue];
     llvm::BitVector &dimensionIndex = deps[portValue - lo];
@@ -412,7 +493,39 @@ findSameStatePair(ArrayRef<const AccessSummary *> accs,
           for (Value valueHandle : block.back().getOperands())
             addValue(valueHandle);
     auto self = accIdx.find(op);
-    if (self == accIdx.end()) {
+    int selfAcc = self == accIdx.end() ? -1 : static_cast<int>(self->second);
+
+    touches.clear();
+    memTouches(op, touches);
+    if (!touches.empty() && !events.empty()) {
+      const SeqScopeIndex::OpInfo &opInfo = stringValue.info.find(op)->second;
+      ArrayRef<int64_t> opHoisted = hoistedArmsOf(op);
+      for (const MemEvent &entryValue : events) {
+        if (selfAcc >= 0 && entryValue.acc >= 0)
+          continue;
+        const llvm::BitVector &ed = deps[entryValue.pos - lo];
+        if (!ed.test(dimensionIndex) &&
+            !(entryValue.acc >= 0 && !dimensionIndex.test(entryValue.acc)))
+          continue;
+        if (inExclusiveArms(stringValue.info.find(entryValue.op)->second,
+                            hoistedArmsOf(entryValue.op), opInfo, opHoisted))
+          continue;
+        bool conflict =
+            llvm::any_of(entryValue.touches, [&](const MemTouch &arrayValue) {
+              return llvm::any_of(touches, [&](const MemTouch &buildPoint) {
+                return mayConflict(entryValue.op, arrayValue, op, buildPoint);
+              });
+            });
+        if (!conflict)
+          continue;
+        dimensionIndex |= ed;
+        if (entryValue.acc >= 0)
+          dimensionIndex.set(entryValue.acc);
+      }
+    }
+    if (!touches.empty() && (selfAcc >= 0 || dimensionIndex.any()))
+      events.push_back({op, portValue, selfAcc, touches});
+    if (selfAcc < 0) {
 
       if (llvm::any_of(op->getOperands(), [&](Value valueHandle) {
             return bankValues.contains(valueHandle);
@@ -610,8 +723,8 @@ static KindResult selectStorageKind(const PortDemand &dimensionIndex) {
     return resultValue;
   }
   if (total == 2) {
-    resultValue.kind = (rd == 1 && widthValue == 1) ? StorageKind::RAM_2P
-                                                    : StorageKind::RAM_T2P;
+    resultValue.kind =
+        widthValue >= 2 ? StorageKind::RAM_T2P : StorageKind::RAM_2P;
     return resultValue;
   }
 

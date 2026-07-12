@@ -318,6 +318,12 @@ total abs error over the designs that ran):
 (1) In the suite run forgebench/conv_block_module hit the 120 s limit under load (two harness runs in parallel); run alone
 it gives 6871, unchanged (`x2seq_nos_cbm.json`).
 
+*Re-measured after the T6 review fixes* (memory order through other arrays, RAM_2P for two reads; binary
+`~/hls-est-work/t6fix/hls-est.fix1`, runs `~/hls-est-work/t6fix/runs/`, same MLIR): every option cell of the table re-run,
+and the scalar "flags off" cells too. Totals, statuses and per-array BRAM are identical to the table on all 112 designs
+(the exact / no split cell now completes conv_block_module inside the limit: 47, 5301 over 80 designs); only the debug
+RAM type changes (RAM_T2P -> RAM_2P on the arrays with two reads and at most one write per cycle).
+
 **What `--bram-seq-dual-port` changes** (identical on every shim and front end; per array from the debug JSON):
 - newly exact: polybench mvt (12 -> 14, default and no split), gesummv (134 -> 135, default), atax (11 -> 13) and bicg
   (12 -> 14) without split. Every changed polybench array is Vitis-exact: atax `buff_x`, bicg `buff_p`, gesummv `buff_x`,
@@ -327,12 +333,15 @@ it gives 6871, unchanged (`x2seq_nos_cbm.json`).
   13 / 14).
 - farther: atax 68 -> 70 and bicg 69 -> 71 with `--infer-vitis-split-array` (the same arrays, now right; the 64-bank
   buff_A split, O2, dominates); scalar shim only: forgebench conv_block_module / op2 / op3 +5 / +2 / +3 from `localWeights`
-  RAM_1P -> RAM_T2P. Vitis binds `localWeights` ram_2p too (256x16, 1 BRAM); the scalar shim makes it f32, which needs two
+  RAM_1P -> RAM_2P. Vitis binds `localWeights` ram_2p too (256x16, 1 BRAM); the scalar shim makes it f32, which needs two
   x18 columns; with the exact shims 256x16 costs 1 either way and these designs do not change.
 - nothing that matched stops matching; gates polybench_pragmas bicg 8, gesummv 16, mvt 8, syrk 32 exact in every run; no
   status changes; `--bram-analysis` time on conv_block_op1 0.21 s with or without it.
-- kernels (N12): 16 / 19 of the kernels whose region hls-est keeps sequential match Vitis per array with it, 10 / 19
-  without; the 3 misses are over-estimates where Vitis spreads two accesses over the slack around an inner-loop call (O21).
+- kernels (N12): 20 / 24 of the kernels whose region hls-est keeps sequential match Vitis per array with it, 13 / 24
+  without (19 seqports + 5 t6rev kernels; before the review fixes the option broke rv_memdep / rv_memdep2, where a memory
+  order through a second array keeps the two loads apart). The 4 misses: 3 over-estimates where Vitis spreads two
+  accesses over the slack around an inner-loop call, and 1 under-estimate (rv_sib2: Vitis starts two independent outlined
+  inner loops together and loads for both in one state; the option ends the stretch at the first loop). Both are O21.
 
 **What `forward-stores` changes on top:** nothing in the default pipeline on any shim. Without split it makes attention
 Q / K replicable (the unrolled `Q[i][j] +=` becomes one store): 3 copies = Vitis RAM_1WNR where Q / K are live
