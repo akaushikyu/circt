@@ -411,3 +411,34 @@ designs' loop tables; by N3 those three decision changes are wrong.
 element type is the type Vitis decides on; until then keep it off (one global pipeline: no per-dataset switch).
 Either way the lit RUN lines stay as they are (the option is tested in
 `test/hls-est/Passes/auto_pipeline_float_loads.mlir` in both settings).
+
+## M9 — cgeist: may unsigned 32-bit index arithmetic be assumed not to wrap? (`-affine-cfg-assume-nowrap-width`)
+
+**Question.** Since cgeist round 4 (Polygeist 763b0046 + review fixes cbc105e0), AffineCFG turns integer add / sub / mul
+into affine index expressions only when the exact result provably fits its type, except for integers of at least
+`-affine-cfg-assume-nowrap-width` bits (hidden option, default 32), which are raised without a proof as before. For
+signed `int` that matches C (overflow is undefined). For `unsigned int` it does not: unsigned arithmetic wraps, and the
+IR (`arith.addi/subi/muli` on i32) cannot tell the two apart. Reproducer from the round-4 recheck (wrong with every
+cgeist binary so far, correct with width 64):
+
+```c
+void t1(int A[8], int O[8]) { for (unsigned i = 0; i < 4; i++) O[i] = A[(i * 0x7FFFFFFFu) / 0x7FFFFFFFu]; }
+// cgeist: affine.load %arg0[%iv] -> reads A[3] at i = 3; C reads A[0] (3 * (2^31 - 1) wraps to 2147483645)
+```
+
+**Options.**
+
+| option | C semantics | effect on the harness (112 designs, scalar shim) |
+|---|---|---|
+| keep 32 (current) | wrong only for unsigned 32-bit arithmetic that wraps inside an index | none |
+| 64: every i32 add / sub / mul needs a range proof | exact | 19 designs' cgeist output changes (forgebench attention / attn_breakdown / conv / gpt / llama / tiled_attn / diff_dims_module_small, spector_hls dct / fir): index arithmetic on `int` arguments such as `h * 4 + j` becomes a non-affine `memref.load`; all 112 statuses and BRAM totals unchanged |
+| frontend marks signed arithmetic as non-wrapping (`overflow<nsw>` flags), AffineCFG trusts only those | exact for unsigned, keeps signed `int` affine | expected: none (not implemented; a cgeist change of moderate size) |
+
+**Related, from the same reports (not wrong code):** a narrow counter passed to a call is treated as read both
+signed and unsigned, so a loop whose counter crosses 2^(N-1) and is passed to an external function keeps an iter_arg;
+narrow `*=` computes in `int` + `trunci` again, so an in-range narrow product (`k *= 8`) is no longer affine.
+
+**Recommendation.** The third option is the faithful one and keeps today's IR for signed code. Until then keep 32;
+switching to 64 costs nothing in BRAM today but makes 19 designs' accesses non-affine, which weakens banking and
+scheduling. Evidence: CHANGELOG entries for Polygeist 763b0046 and cbc105e0; probes in the session scratchpad `r4\`,
+`r6\` and `verify3\`.
