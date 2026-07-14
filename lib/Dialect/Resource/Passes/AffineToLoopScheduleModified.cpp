@@ -1603,6 +1603,10 @@ AffineToLoopSchedule::createLoopSchedulePipeline(AffineForOp forOp,
       continue;
     maxStartTime = std::max(maxStartTime, *problem.getStartTime(op));
   }
+
+  if (auto termStart = problem.getStartTime(forOp.getBody()->getTerminator());
+      termStart && *termStart > 0)
+    maxStartTime = std::max(maxStartTime, *termStart - 1);
   for (unsigned typeValue = 0; typeValue <= maxStartTime; ++typeValue)
     if (!startGroups.count(typeValue))
       startGroups.try_emplace(typeValue, SmallVector<Operation *>());
