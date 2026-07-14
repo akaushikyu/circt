@@ -1368,14 +1368,16 @@ LogicalResult AffineToLoopSchedule::populateOperatorTypes(
   Operation *unsupported;
   WalkResult result = forOp.getBody()->walk([&](Operation *op) {
     return TypeSwitch<Operation *, WalkResult>(op)
+
         .Case<IfOp, AffineYieldOp, arith::ConstantOp, CmpIOp, IndexCastOp,
-              AllocaOp, AllocOp, YieldOp, AddIOp, SubIOp, SelectOp, AndIOp,
-              OrIOp, XOrIOp, ShLIOp, ShRSIOp, ShRUIOp, TruncIOp, ExtSIOp,
-              ExtUIOp, NegFOp, CmpFOp, ExtFOp, TruncFOp, SIToFPOp, UIToFPOp,
-              FPToSIOp, FPToUIOp, BitcastOp>([&](Operation *combOp) {
-          problem.setLinkedOperatorType(combOp, combOpr);
-          return WalkResult::advance();
-        })
+              IndexCastUIOp, AllocaOp, AllocOp, YieldOp, AddIOp, SubIOp,
+              SelectOp, AndIOp, OrIOp, XOrIOp, ShLIOp, ShRSIOp, ShRUIOp,
+              TruncIOp, ExtSIOp, ExtUIOp, NegFOp, CmpFOp, ExtFOp, TruncFOp,
+              SIToFPOp, UIToFPOp, FPToSIOp, FPToUIOp, BitcastOp>(
+            [&](Operation *combOp) {
+              problem.setLinkedOperatorType(combOp, combOpr);
+              return WalkResult::advance();
+            })
 
         .Case<AffineStoreOp, memref::StoreOp>([&](Operation *memOp) {
           Value memRef = isa<AffineStoreOp>(*memOp)
