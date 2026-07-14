@@ -1,4 +1,7 @@
 // RUN: hls-est %s --symbol-privatize=exclude=viterbi --symbol-dce --affine-loop-normalize --auto-pipeline-unroll --memory-banking-bram --convert-affine-to-loopschedule --bram-analysis -o /dev/null | FileCheck %s
+// RUN: hls-est %s --symbol-privatize=exclude=viterbi --symbol-dce --affine-loop-normalize --auto-pipeline-unroll --memory-banking-bram --convert-affine-to-loopschedule --bram-analysis --bram-debug --bram-debug-json=%t.json -o /dev/null 2> %t.err | FileCheck %s
+// RUN: FileCheck %s --check-prefix=TEXT --input-file=%t.err
+// RUN: FileCheck %s --check-prefix=JSON --input-file=%t.json
 
 // OPEN_ISSUES.md O9: the simplex modulo scheduler asserted (`succeeded(solved)`)
 // when an II bump left an infeasible tableau. It now reports the failure and
@@ -7,6 +10,19 @@
 // (`--shim exact`), unchanged; Vitis td=off gives 128 BRAM (results/vitis.json).
 
 // CHECK: Total BRAM: 128
+
+// T7: --bram-debug names the scheduler of each pipeline. The two loops whose
+// simplex II bump failed are the II-32 ones: the 64-trip inner loop flattened
+// into its parent and the 139-trip outer loop.
+// TEXT: pipeline @ {{.*}} in @viterbi: ii=1 trip=64 {{.*}} scheduler=simplex{{$}}
+// TEXT: pipeline @ {{.*}} in @viterbi: ii=32 trip=64 {{.*}} scheduler=greedy (simplex failed){{$}}
+// TEXT: pipeline @ {{.*}} in @viterbi: ii=1 trip=63 {{.*}} scheduler=simplex{{$}}
+// TEXT: pipeline @ {{.*}} in @viterbi: ii=32 trip=139 {{.*}} scheduler=greedy (simplex failed){{$}}
+// JSON: "pipelines": [
+// JSON: "scheduler": "simplex",
+// JSON: "scheduler": "greedy (simplex failed)",
+// JSON: "scheduler": "simplex",
+// JSON: "scheduler": "greedy (simplex failed)",
 
 module {
   func.func @viterbi(%arg0: memref<140xi8>, %arg1: memref<64xf64>, %arg2: memref<4096xf64>, %arg3: memref<4096xf64>, %arg4: memref<140xi8>) -> i32 attributes {hls.orig_name = "viterbi", llvm.linkage = #llvm.linkage<external>} {

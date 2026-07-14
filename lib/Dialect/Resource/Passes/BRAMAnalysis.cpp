@@ -1472,6 +1472,8 @@ struct PipelineRecord {
   std::string source = "innermost";
   unsigned flattenedParents = 0;
   std::optional<int64_t> unrollPartial;
+
+  std::string scheduler;
   struct Unrolled {
     std::string loc;
     int64_t factor = 0;
@@ -1503,6 +1505,9 @@ static SmallVector<PipelineRecord> collectPipelineRecords(ModuleOp rootModule) {
         resultValue.flattenedParents = static_cast<unsigned>(fp.getInt());
     if (auto up = portValue->getAttrOfType<IntegerAttr>(kLoopUnrollPartialAttr))
       resultValue.unrollPartial = up.getInt();
+    if (auto stringValue =
+            portValue->getAttrOfType<StringAttr>(kLoopSchedulerAttr))
+      resultValue.scheduler = stringValue.getValue().str();
     if (auto arr = portValue->getAttrOfType<ArrayAttr>(kLoopAutoUnrolledAttr))
       for (Attribute arrayValue : arr) {
         auto dict = dyn_cast<DictionaryAttr>(arrayValue);
@@ -1689,6 +1694,8 @@ static void printDebugText(ArrayRef<MemrefRecord> records,
        << " flattened_parents=" << portValue.flattenedParents;
     if (portValue.unrollPartial)
       os << " unroll_partial=" << *portValue.unrollPartial;
+    if (!portValue.scheduler.empty())
+      os << " scheduler=" << portValue.scheduler;
     os << "\n";
     for (const PipelineRecord::Unrolled &useValue : portValue.unrolled)
       os << "    unrolled x" << useValue.factor << " @ " << useValue.loc
@@ -1903,6 +1910,9 @@ static std::error_code writeDebugJson(ArrayRef<MemrefRecord> records,
     po["source"] = portValue.source;
     po["flattened_parents"] = static_cast<int64_t>(portValue.flattenedParents);
     po["unroll_partial"] = optInt(portValue.unrollPartial);
+    po["scheduler"] = portValue.scheduler.empty()
+                          ? llvm::json::Value(nullptr)
+                          : llvm::json::Value(portValue.scheduler);
     llvm::json::Array unrolled;
     for (const PipelineRecord::Unrolled &useValue : portValue.unrolled) {
       llvm::json::Object uo;

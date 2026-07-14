@@ -1493,27 +1493,38 @@ AffineToLoopSchedule::solveSchedulingProblem(AffineForOp forOp,
 
   unsigned limited = FastModuloScheduler::countLimitedOps(problem);
   bool scheduled = false, triedFast = false;
+
+  StringRef scheduler;
   if (fastThreshold == 0 || limited > fastThreshold) {
     triedFast = true;
     FastModuloScheduler fast(problem);
     scheduled = succeeded(fast.schedule(4096));
+    if (scheduled)
+      scheduler = "greedy";
     LLVM_DEBUG(if (!scheduled) llvm::dbgs()
                << "fast modulo scheduler failed; falling back to simplex\n");
   }
-  if (!scheduled)
+  if (!scheduled) {
     scheduled = succeeded(scheduleSimplex(problem, anchor));
+    if (scheduled)
+      scheduler = triedFast ? "simplex (greedy failed)" : "simplex";
+  }
 
   if (!scheduled && !triedFast) {
     LLVM_DEBUG(llvm::dbgs()
                << "simplex modulo scheduler failed; falling back to fast\n");
     FastModuloScheduler fast(problem);
     scheduled = succeeded(fast.schedule(4096));
+    if (scheduled)
+      scheduler = "greedy (simplex failed)";
   }
   if (!scheduled)
     return failure();
 
   if (failed(problem.verify()))
     return failure();
+  forOp->setAttr(circt::hls_analysis::kLoopSchedulerAttr,
+                 StringAttr::get(forOp.getContext(), scheduler));
 
   LLVM_DEBUG({
     llvm::dbgs() << "Scheduled initiation interval = "
@@ -1566,7 +1577,8 @@ AffineToLoopSchedule::createLoopSchedulePipeline(AffineForOp forOp,
   for (StringRef name : {circt::hls_analysis::kLoopPipelineAttr,
                          circt::hls_analysis::kLoopFlattenedParentsAttr,
                          circt::hls_analysis::kLoopAutoUnrolledAttr,
-                         circt::hls_analysis::kLoopUnrollPartialAttr})
+                         circt::hls_analysis::kLoopUnrollPartialAttr,
+                         circt::hls_analysis::kLoopSchedulerAttr})
     if (Attribute arrayValue = forOp->getAttr(name))
       pipeline->setAttr(name, arrayValue);
 

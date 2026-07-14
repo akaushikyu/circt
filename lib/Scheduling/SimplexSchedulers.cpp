@@ -45,6 +45,13 @@ protected:
   /// The objective is to minimize the start time of this operation.
   Operation *lastOp;
 
+  /// MODIFIED (hls-est T7, OPEN_ISSUES O9): set when scheduleAt() could not
+  /// restore a feasible tableau after rolling back a failed fixation (an
+  /// assertion before). Every later result of the tableau is meaningless, so
+  /// the modulo scheduler reports a failure and its caller falls back to
+  /// another scheduler.
+  bool tableauInvalid = false;
+
   /// S is part of a mechanism to assign fixed values to the LP variables.
   int parameterS;
 
@@ -158,7 +165,7 @@ protected:
   LogicalResult solveTableau();
   LogicalResult restoreDualFeasibility();
   bool isInBasis(unsigned startTimeVariable);
-  unsigned freeze(unsigned startTimeVariable, unsigned timeStep);
+  std::optional<unsigned> freeze(unsigned startTimeVariable, unsigned timeStep);
   void translate(unsigned column, int factor1, int factorS, int factorT);
   LogicalResult scheduleAt(unsigned startTimeVariable, unsigned timeStep);
   void moveBy(unsigned startTimeVariable, unsigned amount);
@@ -583,8 +590,8 @@ bool SimplexSchedulerBase::isInBasis(unsigned startTimeVariable) {
   llvm_unreachable("Invalid variable location");
 }
 
-unsigned SimplexSchedulerBase::freeze(unsigned startTimeVariable,
-                                      unsigned timeStep) {
+std::optional<unsigned> SimplexSchedulerBase::freeze(unsigned startTimeVariable,
+                                                     unsigned timeStep) {
   assert(startTimeVariable < startTimeLocations.size());
   assert(!frozenVariables.count(startTimeVariable));
 
@@ -597,7 +604,10 @@ unsigned SimplexSchedulerBase::freeze(unsigned startTimeVariable,
   unsigned pivotRow = -startTimeLocations[startTimeVariable];
 
   auto pivotCol = findDualPivotColumn(pivotRow, true);
-  assert(pivotCol);
+  if (!pivotCol) {
+    frozenVariables.erase(startTimeVariable);
+    return std::nullopt;
+  }
 
   pivot(pivotRow, *pivotCol);
 
@@ -623,7 +633,10 @@ LogicalResult SimplexSchedulerBase::scheduleAt(unsigned startTimeVariable,
   assert(startTimeVariable < startTimeLocations.size());
   assert(!frozenVariables.count(startTimeVariable));
 
-  unsigned frozenCol = freeze(startTimeVariable, timeStep);
+  std::optional<unsigned> maybeFrozenCol = freeze(startTimeVariable, timeStep);
+  if (!maybeFrozenCol)
+    return failure();
+  unsigned frozenCol = *maybeFrozenCol;
   translate(frozenCol, 0, 1, 0);
 
   parameterS = timeStep;
@@ -634,9 +647,9 @@ LogicalResult SimplexSchedulerBase::scheduleAt(unsigned startTimeVariable,
 
     translate(frozenCol, 0, -1, 0);
     frozenVariables.erase(startTimeVariable);
-    auto solvedAfterRollback = solveTableau();
-    assert(succeeded(solvedAfterRollback));
-    (void)solvedAfterRollback;
+
+    if (failed(solveTableau()))
+      tableauInvalid = true;
     return failure();
   }
 
@@ -953,6 +966,9 @@ ModuloSimplexScheduler::scheduleOperation(Operation *elementCount) {
       mrt.release(elementCount);
       break;
     }
+
+  if (tableauInvalid)
+    return failure();
 
   LLVM_DEBUG(dbgs() << "Incrementing II to " << (parameterT + 1)
                     << " to resolve resource conflict for " << *elementCount

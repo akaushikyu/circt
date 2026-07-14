@@ -52,6 +52,13 @@ constexpr llvm::StringLiteral kLoopFlattenedParentsAttr = "hls.flattened_parents
 /// their trip counts. A decision record for --bram-debug; no estimate reads
 /// it.
 constexpr llvm::StringLiteral kLoopAutoUnrolledAttr = "hls.auto_unrolled";
+/// `hls.scheduler = "<name>"` on a pipelined loop (written by
+/// --convert-affine-to-loopschedule, carried onto the loopschedule.pipeline
+/// op): the modulo scheduler that produced its schedule, "simplex" or
+/// "greedy", with " (simplex failed)" / " (greedy failed)" when the other one
+/// was tried first and failed (OPEN_ISSUES O9). A record for --bram-debug; no
+/// estimate reads it.
+constexpr llvm::StringLiteral kLoopSchedulerAttr = "hls.scheduler";
 /// Value of the `source` key of an automatic `hls.pipeline` tag.
 constexpr llvm::StringLiteral kLoopPipelineAutoSource = "auto";
 
