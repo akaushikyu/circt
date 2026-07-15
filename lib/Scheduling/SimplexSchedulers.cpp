@@ -119,6 +119,14 @@ protected:
   /// Non-basic variables can be "frozen" to a specific value, which prevents
   /// them from being pivoted into basis again.
   DenseMap<unsigned, unsigned> frozenVariables;
+  /// MODIFIED (hls-est T7): `frozenVariables.count(var)` as a flag per variable
+  /// (start time and slack variables), so that the pivot searches do not hash
+  /// once per column. Kept in sync with `frozenVariables` by freeze() and
+  /// scheduleAt().
+  SmallVector<char> frozenFlags;
+  bool isFrozen(unsigned var) const {
+    return var < frozenFlags.size() && frozenFlags[var];
+  }
 
   /// Number of rows in the tableau = |obj| + |deps|.
   unsigned nRows;
@@ -380,10 +388,11 @@ void SimplexSchedulerBase::buildTableau() {
   }
 
   nRows = tableau.size();
+  frozenFlags.assign(var, 0);
 }
 
 int SimplexSchedulerBase::getParametricConstant(unsigned row) {
-  auto &rowVec = tableau[row];
+  const int *rowVec = tableau[row].data();
 
   return rowVec[parameter1Column] + rowVec[parameterSColumn] * parameterS +
          rowVec[parameterTColumn] * parameterT;
@@ -412,24 +421,32 @@ SimplexSchedulerBase::findDualPivotColumn(unsigned pivotRow,
   SmallVector<int> maxQuot(nObjectives, std::numeric_limits<int>::min());
   std::optional<unsigned> pivotCol;
 
+  SmallVector<const int *, 4> objRows;
+  for (unsigned obj = 0; obj < nObjectives; ++obj)
+    objRows.push_back(tableau[obj].data());
+  const int *pivotRowVec = tableau[pivotRow].data();
+
   for (unsigned col = firstNonBasicVariableColumn; col < nColumns; ++col) {
-    if (frozenVariables.count(
-            nonBasicVariables[col - firstNonBasicVariableColumn]))
+    if (isFrozen(nonBasicVariables[col - firstNonBasicVariableColumn]))
       continue;
 
-    int pivotCand = tableau[pivotRow][col];
+    int pivotCand = pivotRowVec[col];
 
     if (pivotCand < 0 || (allowPositive && pivotCand > 0)) {
 
       assert(pivotCand * pivotCand == 1);
 
-      SmallVector<int> quot;
-      for (unsigned obj = 0; obj < nObjectives; ++obj)
-        quot.push_back(tableau[obj][col] / pivotCand);
-
-      if (std::lexicographical_compare(maxQuot.begin(), maxQuot.end(),
-                                       quot.begin(), quot.end())) {
-        maxQuot = quot;
+      bool greater = false;
+      for (unsigned obj = 0; obj < nObjectives; ++obj) {
+        int quot = objRows[obj][col] / pivotCand;
+        if (quot != maxQuot[obj]) {
+          greater = maxQuot[obj] < quot;
+          break;
+        }
+      }
+      if (greater) {
+        for (unsigned obj = 0; obj < nObjectives; ++obj)
+          maxQuot[obj] = objRows[obj][col] / pivotCand;
         pivotCol = col;
       }
     }
@@ -440,16 +457,20 @@ SimplexSchedulerBase::findDualPivotColumn(unsigned pivotRow,
 
 std::optional<unsigned> SimplexSchedulerBase::findPrimalPivotColumn() {
 
-  SmallVector<int> zeroVec(nObjectives, 0);
+  SmallVector<const int *, 4> objRows;
+  for (unsigned obj = 0; obj < nObjectives; ++obj)
+    objRows.push_back(tableau[obj].data());
   for (unsigned col = firstNonBasicVariableColumn; col < nColumns; ++col) {
-    if (frozenVariables.count(
-            nonBasicVariables[col - firstNonBasicVariableColumn]))
+    if (isFrozen(nonBasicVariables[col - firstNonBasicVariableColumn]))
       continue;
 
-    SmallVector<int> objVec = getObjectiveVector(col);
-    if (std::lexicographical_compare(objVec.begin(), objVec.end(),
-                                     zeroVec.begin(), zeroVec.end()))
-      return col;
+    for (unsigned obj = 0; obj < nObjectives; ++obj) {
+      int cost = objRows[obj][col];
+      if (cost < 0)
+        return col;
+      if (cost > 0)
+        break;
+    }
   }
 
   return std::nullopt;
@@ -478,8 +499,9 @@ SimplexSchedulerBase::findPrimalPivotRow(unsigned pivotColumn) {
 
 void SimplexSchedulerBase::multiplyRow(unsigned row, int factor) {
   assert(factor != 0);
+  int *rowVec = tableau[row].data();
   for (unsigned col = 0; col < nColumns; ++col)
-    tableau[row][col] *= factor;
+    rowVec[col] *= factor;
 
   implicitBasicVariableColumnVector[row] *= factor;
 }
@@ -487,8 +509,10 @@ void SimplexSchedulerBase::multiplyRow(unsigned row, int factor) {
 void SimplexSchedulerBase::addMultipleOfRow(unsigned sourceRow, int factor,
                                             unsigned targetRow) {
   assert(factor != 0 && sourceRow != targetRow);
+  const int *src = tableau[sourceRow].data();
+  int *dst = tableau[targetRow].data();
   for (unsigned col = 0; col < nColumns; ++col)
-    tableau[targetRow][col] += tableau[sourceRow][col] * factor;
+    dst[col] += src[col] * factor;
 
   implicitBasicVariableColumnVector[targetRow] +=
       implicitBasicVariableColumnVector[sourceRow] * factor;
@@ -509,15 +533,28 @@ void SimplexSchedulerBase::pivot(unsigned pivotRow, unsigned pivotColumn) {
 
   multiplyRow(pivotRow, 1 / pivotElem);
 
+  const int *pivotRowVec = tableau[pivotRow].data();
+  SmallVector<unsigned> nonZeroCols;
+  for (unsigned col = 0; col < nColumns; ++col)
+    if (pivotRowVec[col] != 0)
+      nonZeroCols.push_back(col);
+  const unsigned *nzBegin = nonZeroCols.data();
+  const unsigned *nzEnd = nzBegin + nonZeroCols.size();
+  int pivotImplicit = implicitBasicVariableColumnVector[pivotRow];
+
   for (unsigned row = 0; row < nRows; ++row) {
     if (row == pivotRow)
       continue;
 
-    int elem = tableau[row][pivotColumn];
+    int *rowVec = tableau[row].data();
+    int elem = rowVec[pivotColumn];
     if (elem == 0)
       continue;
 
-    addMultipleOfRow(pivotRow, -elem, row);
+    int factor = -elem;
+    for (const unsigned *col = nzBegin; col != nzEnd; ++col)
+      rowVec[*col] += pivotRowVec[*col] * factor;
+    implicitBasicVariableColumnVector[row] += pivotImplicit * factor;
   }
 
   for (unsigned row = 0; row < nRows; ++row) {
@@ -596,6 +633,7 @@ std::optional<unsigned> SimplexSchedulerBase::freeze(unsigned startTimeVariable,
   assert(!frozenVariables.count(startTimeVariable));
 
   frozenVariables[startTimeVariable] = timeStep;
+  frozenFlags[startTimeVariable] = 1;
 
   if (!isInBasis(startTimeVariable))
 
@@ -606,6 +644,7 @@ std::optional<unsigned> SimplexSchedulerBase::freeze(unsigned startTimeVariable,
   auto pivotCol = findDualPivotColumn(pivotRow, true);
   if (!pivotCol) {
     frozenVariables.erase(startTimeVariable);
+    frozenFlags[startTimeVariable] = 0;
     return std::nullopt;
   }
 
@@ -647,6 +686,7 @@ LogicalResult SimplexSchedulerBase::scheduleAt(unsigned startTimeVariable,
 
     translate(frozenCol, 0, -1, 0);
     frozenVariables.erase(startTimeVariable);
+    frozenFlags[startTimeVariable] = 0;
 
     if (failed(solveTableau()))
       tableauInvalid = true;
