@@ -32,8 +32,11 @@ circt::hls_analysis::CyclicSchedulingAnalysis::CyclicSchedulingAnalysis(
     Operation *op, AnalysisManager &am) {
   auto funcOp = cast<func::FuncOp>(op);
 
+  // MODIFIED (T7): only the dependences inside innermost loops, the only
+  // loops --convert-affine-to-loopschedule pipelines (analyzeForOp inserts
+  // the dependences of the ops in a loop's body into that loop's problem).
   analysis::MemoryDependenceAnalysis &memoryAnalysis =
-      am.getAnalysis<analysis::MemoryDependenceAnalysis>();
+      am.getAnalysis<analysis::InnermostLoopDependenceAnalysis>();
 
   // Find the innermost loop of every perfectly nested band, regardless of
   // enclosing control flow (scf.if/scf.for, etc.). Walk pre-order and skip

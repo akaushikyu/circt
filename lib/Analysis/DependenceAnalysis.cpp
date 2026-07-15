@@ -19,7 +19,9 @@
 //   * only actual dependences are recorded (every consumer filters on
 //     hasDependence());
 //   * replaceOp() re-keys the destination properly and retargets sources
-//     through an inverted index instead of rescanning every list.
+//     through an inverted index instead of rescanning every list;
+// and adds a restricted scope (InnermostLoopDependenceAnalysis): only the
+// pairs inside one innermost loop, at that loop's depth.
 //
 //===----------------------------------------------------------------------===//
 
@@ -33,6 +35,7 @@
 #include "mlir/Dialect/Affine/LoopUtils.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/BuiltinOps.h"
+#include "mlir/Interfaces/LoopLikeInterface.h"
 #include "llvm/ADT/Hashing.h"
 #include "llvm/ADT/MapVector.h"
 #include "llvm/Support/Debug.h"
@@ -158,8 +161,8 @@ void MemoryDependenceAnalysis::checkMemrefDependence(
   }
 
   DenseMap<PairKey, PairResult, PairKeyInfo> memo;
-  [[maybe_unused]] unsigned numPairs = 0, numDisjoint = 0, numHits = 0,
-                            numTests = 0, numDeps = 0;
+  uint64_t numPairs = 0, numTests = 0, numDeps = 0;
+  [[maybe_unused]] uint64_t numDisjoint = 0, numHits = 0;
 
   for (auto &group : byMemref) {
     SmallVectorImpl<Operation *> &ops = group.second;
@@ -292,6 +295,9 @@ void MemoryDependenceAnalysis::checkMemrefDependence(
       }
     }
   }
+  counters.pairs += numPairs;
+  counters.tests += numTests;
+  counters.dependences += numDeps;
   LLVM_DEBUG(llvm::dbgs() << "memory dependence analysis, depth " << depth
                           << ": " << memoryOps.size() << " accesses, "
                           << byMemref.size() << " memrefs, " << numPairs
@@ -317,8 +323,59 @@ void MemoryDependenceAnalysis::record(
 /// checks for memory access dependences. Results are captured in a
 /// MemoryDependenceResult, which can by queried by Operation.
 circt::analysis::MemoryDependenceAnalysis::MemoryDependenceAnalysis(
-    Operation *op) {
+    Operation *op)
+    : MemoryDependenceAnalysis(op, Scope::Function) {}
+
+/// True if `forOp` has no loop (affine or not) in its body.
+static bool hasNoNestedLoop(AffineForOp forOp) {
+  return !forOp.getBody()
+              ->walk([](LoopLikeOpInterface) { return WalkResult::interrupt(); })
+              .wasInterrupted();
+}
+
+circt::analysis::MemoryDependenceAnalysis::MemoryDependenceAnalysis(
+    Operation *op, Scope scope) {
   auto funcOp = cast<func::FuncOp>(op);
+  [[maybe_unused]] auto t0 = std::chrono::steady_clock::now();
+
+  if (scope == Scope::InnermostLoops) {
+    // Group the accesses by their innermost enclosing affine.for and keep the
+    // loops without a nested loop. checkMemrefDependence at the loop's depth D
+    // examines exactly the pairs the function scope examines at depth D for
+    // these destinations: a pair needs D common loops there, i.e. the same
+    // innermost loop. Recording order per destination is kept (sources in
+    // program order), so each list equals the function scope's list with its
+    // entries of depths < D left out.
+    llvm::MapVector<Operation *, SmallVector<Operation *>> byLoop;
+    DenseMap<Operation *, unsigned> depthOf;
+    DenseMap<Operation *, bool> isInnermost;
+    funcOp.walk([&](Operation *op) {
+      if (!isa<AffineReadOpInterface, AffineWriteOpInterface>(op))
+        return;
+      SmallVector<AffineForOp, 4> loops;
+      getAffineForIVs(*op, &loops);
+      if (loops.empty())
+        return;
+      Operation *loop = loops.back();
+      auto [it, fresh] = isInnermost.try_emplace(loop, false);
+      if (fresh)
+        it->second = hasNoNestedLoop(loops.back());
+      if (!it->second)
+        return;
+      byLoop[loop].push_back(op);
+      depthOf[loop] = loops.size();
+    });
+    for (auto &[loop, ops] : byLoop)
+      checkMemrefDependence(ops, depthOf[loop]);
+    LLVM_DEBUG(llvm::dbgs()
+               << "memory dependence analysis (" << byLoop.size()
+               << " innermost loops) took "
+               << std::chrono::duration<double>(
+                      std::chrono::steady_clock::now() - t0)
+                      .count()
+               << " s\n");
+    return;
+  }
 
   // Collect affine loops grouped by nesting depth.
   std::vector<SmallVector<AffineForOp, 2>> depthToLoops;
@@ -332,7 +389,6 @@ circt::analysis::MemoryDependenceAnalysis::MemoryDependenceAnalysis(
   });
 
   // For each depth, check memref accesses.
-  [[maybe_unused]] auto t0 = std::chrono::steady_clock::now();
   for (unsigned depth = 1, e = depthToLoops.size(); depth <= e; ++depth)
     checkMemrefDependence(memoryOps, depth);
   LLVM_DEBUG(llvm::dbgs()

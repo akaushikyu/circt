@@ -75,12 +75,34 @@ struct MemoryDependenceAnalysis {
   // Replaces the dependences, if any, from the oldOp to the newOp.
   void replaceOp(Operation *oldOp, Operation *newOp);
 
+  // MODIFIED for hls-est: what the construction did, for pass statistics.
+  struct Counters {
+    uint64_t pairs = 0;        // same-memref access pairs enumerated
+    uint64_t tests = 0;        // dependence tests run (memo misses)
+    uint64_t dependences = 0;  // dependences recorded
+  };
+  const Counters &getCounters() const { return counters; }
+
+protected:
+  // MODIFIED for hls-est: which pairs of accesses the analysis examines.
+  enum class Scope {
+    // Every pair of accesses to one memref in the function, at every loop
+    // depth the two have in common (the upstream analysis).
+    Function,
+    // Only pairs of accesses inside one innermost affine.for (a loop with no
+    // loop in its body), at that loop's depth; see
+    // InnermostLoopDependenceAnalysis.
+    InnermostLoops,
+  };
+  MemoryDependenceAnalysis(Operation *funcOp, Scope scope);
+
 private:
   // Dependences are stored per destination in stable slots, so replaceOp()
   // re-keys an operation without copying its list; `bySource` is the inverted
   // index that lets replaceOp() retarget the dependences leaving an operation
   // without rescanning every list.
   std::vector<SmallVector<MemoryDependence>> slots;
+  Counters counters;
   DenseMap<Operation *, unsigned> slotOf;
   DenseMap<Operation *, SmallVector<unsigned>> bySource;
 
@@ -90,6 +112,22 @@ private:
               ArrayRef<mlir::affine::DependenceComponent> components);
   void checkMemrefDependence(SmallVectorImpl<Operation *> &memoryOps,
                              unsigned depth);
+};
+
+/// MODIFIED for hls-est: the dependences a modulo schedule of an innermost
+/// affine.for can use. For every access inside an innermost loop L (an
+/// affine.for whose body holds no loop) at depth D, it records exactly the
+/// depth-D entries of MemoryDependenceAnalysis: the dependences carried by L
+/// and those within one iteration of L, all of whose sources are inside L.
+/// The dependences carried by loops enclosing L, and those of accesses outside
+/// innermost loops, are not computed: a modulo schedule of L (where enclosing
+/// loops run sequentially) has no use for them, and on bodies unrolled by a
+/// user pragma they are almost all of the work (forgebench conv_B: 1.45M
+/// access pairs per depth, 637 of 641 s; OPEN_ISSUES O1 notes that the
+/// scheduler does not receive them yet).
+struct InnermostLoopDependenceAnalysis : public MemoryDependenceAnalysis {
+  explicit InnermostLoopDependenceAnalysis(Operation *funcOp)
+      : MemoryDependenceAnalysis(funcOp, Scope::InnermostLoops) {}
 };
 
 } // namespace analysis

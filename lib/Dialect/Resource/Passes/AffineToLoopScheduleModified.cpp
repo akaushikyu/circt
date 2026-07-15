@@ -80,6 +80,11 @@ namespace {
 
 struct AffineToLoopSchedule
     : public circt::impl::AffineToLoopScheduleBase<AffineToLoopSchedule> {
+
+  AffineToLoopSchedule() = default;
+  AffineToLoopSchedule(const AffineToLoopSchedule &other)
+      : circt::impl::AffineToLoopScheduleBase<AffineToLoopSchedule>(other) {}
+
   void unrollInnerReductions();
   void runOnOperation() override;
 
@@ -102,6 +107,13 @@ private:
   void cleanupRedundantAccesses();
 
   CyclicSchedulingAnalysis *schedulingAnalysis;
+
+  Statistic numDepPairs{this, "dependence-pairs",
+                        "Same-memref access pairs the memory dependence "
+                        "analysis enumerated"};
+  Statistic numDepTests{this, "dependence-tests",
+                        "Dependence tests it ran (memo misses)"};
+  Statistic numDeps{this, "dependences", "Memory dependences it recorded"};
 };
 
 } // namespace
@@ -1018,7 +1030,10 @@ void AffineToLoopSchedule::runOnOperation() {
       op->erase();
   }
 
-  auto dependenceAnalysis = getAnalysis<MemoryDependenceAnalysis>();
+  auto dependenceAnalysis = getAnalysis<InnermostLoopDependenceAnalysis>();
+  numDepPairs += dependenceAnalysis.getCounters().pairs;
+  numDepTests += dependenceAnalysis.getCounters().tests;
+  numDeps += dependenceAnalysis.getCounters().dependences;
 
   if (failed(lowerAffineStructures(dependenceAnalysis)))
     return signalPassFailure();
