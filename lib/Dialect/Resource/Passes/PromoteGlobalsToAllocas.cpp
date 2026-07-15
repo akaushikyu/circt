@@ -1,4 +1,4 @@
-//===- PromoteGlobalsToAllocas.cpp - localize single-function globals ---- ===//
+
 
 #include "circt/Dialect/Resource/Passes/VitisCleanup.h"
 

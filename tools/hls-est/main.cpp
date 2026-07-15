@@ -1,4 +1,4 @@
-//===- main.cpp - estimate Vitis resources ------------------------------- ===//
+
 
 #include "circt/Dialect/LoopSchedule/LoopScheduleDialect.h"
 #include "circt/Dialect/Resource/Interfaces/MemoryInterface.h"

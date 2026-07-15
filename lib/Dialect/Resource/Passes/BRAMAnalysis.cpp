@@ -1,4 +1,4 @@
-//===- BRAMAnalysis.cpp - estimate Vitis resources ----------------------- ===//
+
 
 #include "circt/Dialect/Resource/Passes/BRAMAnalysis.h"
 #include "circt/Dialect/LoopSchedule/LoopScheduleOps.h"

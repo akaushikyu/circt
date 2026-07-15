@@ -1,4 +1,4 @@
-//===- DeadMemoryElimination.cpp - drop memory results nobody uses ------- ===//
+
 
 #include "circt/Dialect/Resource/Passes/VitisCleanup.h"
 

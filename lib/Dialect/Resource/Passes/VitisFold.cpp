@@ -1,4 +1,4 @@
-//===- VitisFold.cpp - fold the forms Vitis optimizes -------------------- ===//
+
 
 #include "circt/Dialect/Resource/Passes/VitisCleanup.h"
 

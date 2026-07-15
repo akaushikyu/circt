@@ -1,4 +1,4 @@
-//===- MemrefBankClassification.cpp - estimate Vitis resources ----------- ===//
+
 
 #include "circt/Dialect/Resource/Passes/MemrefBankClassification.h"
 #include "circt/Dialect/Resource/HLS/HLSOps.h"
@@ -44,7 +44,7 @@ unsigned storageModeSlots(StorageMode mode) {
   case StorageMode::OneWriteNRead:
     return kReplicatedPortSlots;
   case StorageMode::Registers:
-    return std::numeric_limits<unsigned>::max(); // no memory, no limit
+    return std::numeric_limits<unsigned>::max();
   }
   return kDualPortSlots;
 }
@@ -117,7 +117,7 @@ void BRAMClassification::enumerateBanks(Operation *root) {
     prof.memref = bank;
     prof.width = elt.isIntOrFloat() ? elt.getIntOrFloatBitWidth() : 64u;
     prof.depth = static_cast<unsigned>(memTy.getNumElements());
-    prof.registers = alloca->hasAttr(kRegistersAttrName);
+    prof.registers = localAlloca->hasAttr(kRegistersAttrName);
     if (prof.registers)
       prof.mode = StorageMode::Registers;
     banks.try_emplace(bank, prof);

@@ -1,4 +1,4 @@
-//===- AffineToLoopScheduleModified.cpp - estimate Vitis resources ------- ===//
+
 
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
@@ -45,6 +45,7 @@
 #include <limits>
 #include <mlir/IR/IntegerSet.h>
 #include <queue>
+#include <unordered_map>
 
 #define DEBUG_TYPE "affine-to-loopschedule"
 
@@ -114,9 +115,116 @@ private:
   Statistic numDepTests{this, "dependence-tests",
                         "Dependence tests it ran (memo misses)"};
   Statistic numDeps{this, "dependences", "Memory dependences it recorded"};
+
+  Option<bool> reuseSchedules{
+      *this, "reuse-schedules",
+      llvm::cl::desc("Give a loop whose scheduling problem is identical to an "
+                     "already scheduled loop's (same operations in the same "
+                     "order, operator latencies, resource limits and sharing, "
+                     "dependences and distances) that loop's II and start "
+                     "times instead of solving it again. Both schedulers are "
+                     "deterministic functions of these inputs, so the result "
+                     "is the same."),
+      llvm::cl::init(true)};
+  Option<bool> verifyScheduleReuse{
+      *this, "verify-schedule-reuse",
+      llvm::cl::desc("With reuse-schedules: solve every reused loop anyway, "
+                     "keep the solved schedule and warn if it differs from "
+                     "the reused one."),
+      llvm::cl::init(false)};
+  Statistic numSchedulesSolved{this, "schedules-solved",
+                               "Loops whose scheduling problem was solved"};
+  Statistic numSchedulesReused{
+      this, "schedules-reused",
+      "Loops that reused the schedule of an identical scheduling problem"};
+  Statistic numReuseMismatches{
+      this, "schedule-reuse-mismatches",
+      "verify-schedule-reuse: reused schedules that differ from a new solve"};
+
+  struct CachedSchedule {
+    SmallVector<int64_t> signature;
+    unsigned ii = 0;
+    SmallVector<unsigned> startTimes;
+    std::string scheduler;
+    std::string loc;
+  };
+
+  std::unordered_map<size_t, SmallVector<CachedSchedule, 1>> scheduleCache;
 };
 
 } // namespace
+
+/// MODIFIED (T7): everything the modulo schedulers (ModuloSimplexScheduler,
+/// FastModuloScheduler) read from a ModuloProblem, with operations numbered by
+/// their position in the problem and operator / resource types by their first
+/// use: per operation its name, linked operator type and latency, linked
+/// resource types and limits, and its dependences (source position, kind,
+/// operand indices, distance); plus the anchor's position. Both schedulers
+/// only compare operator / resource types for identity, iterate operations and
+/// dependences in problem order and break ties by that order, so two problems
+/// with equal signatures get the same II and the same start time per
+/// position. The typical case is a body that a user unroll of an outer loop
+/// copied N times: the copies differ in the memrefs (of one type) they access
+/// and in the constants of their outer-index arithmetic, so their problems
+/// are identical (forgebench diff_orders_p1: 137 of 140 innermost loops
+/// reuse a schedule) unless such a constant enters the body (diff_orders_module
+/// with --infer-vitis-split-array: copy k reads a bank at `[(%iv + j) floordiv
+/// 16, %outer + k]`, and its problem differs from copy k+1's; 278 of 417 loops
+/// reuse).
+static SmallVector<int64_t> scheduleSignature(ModuloProblem &prob,
+                                              Operation *anchor) {
+  SmallVector<int64_t> widthValue;
+  DenseMap<Operation *, int64_t> index;
+  int64_t elementCount = 0;
+  for (Operation *op : prob.getOperations())
+    index[op] = elementCount++;
+  DenseMap<const void *, int64_t> oprIds, rsrcIds;
+  auto idOf = [](DenseMap<const void *, int64_t> &ids, const void *key) {
+    auto [it, fresh] = ids.try_emplace(key, ids.size());
+    (void)fresh;
+    return it->second;
+  };
+  auto optToWord = [](auto opt) -> int64_t {
+    return opt ? static_cast<int64_t>(*opt) : -1;
+  };
+  auto position = [&](Operation *op) -> int64_t {
+    auto it = index.find(op);
+    return it == index.end() ? -1 : it->second;
+  };
+  widthValue.push_back(elementCount);
+  widthValue.push_back(position(anchor));
+  for (Operation *op : prob.getOperations()) {
+    widthValue.push_back(
+        reinterpret_cast<intptr_t>(op->getName().getAsOpaquePointer()));
+    if (auto opr = prob.getLinkedOperatorType(op)) {
+      widthValue.push_back(idOf(oprIds, opr->getAttr().getAsOpaquePointer()));
+      widthValue.push_back(optToWord(prob.getLatency(*opr)));
+    } else {
+      widthValue.append({-1, -1});
+    }
+    if (auto rsrcs = prob.getLinkedResourceTypes(op)) {
+      widthValue.push_back(rsrcs->size());
+      for (Problem::ResourceType resultValue : *rsrcs) {
+        widthValue.push_back(
+            idOf(rsrcIds, resultValue.getAttr().getAsOpaquePointer()));
+        widthValue.push_back(optToWord(prob.getLimit(resultValue)));
+      }
+    } else {
+      widthValue.push_back(-1);
+    }
+    int64_t numDeps = 0;
+    for (auto &dep : prob.getDependences(op)) {
+      widthValue.push_back(position(dep.getSource()));
+      widthValue.push_back(dep.isAuxiliary());
+      widthValue.push_back(optToWord(dep.getSourceIndex()));
+      widthValue.push_back(optToWord(dep.getDestinationIndex()));
+      widthValue.push_back(optToWord(prob.getDistance(dep)));
+      ++numDeps;
+    }
+    widthValue.push_back(-2 - numDeps);
+  }
+  return widthValue;
+}
 
 static bool isInnermostAffineFor(AffineForOp forOp);
 
@@ -1056,6 +1164,7 @@ void AffineToLoopSchedule::runOnOperation() {
       innermostLoops.push_back(forOp);
   });
 
+  scheduleCache.clear();
   for (AffineForOp loop : innermostLoops) {
     ModuloProblem moduloProblem =
         getModuloProblem(schedulingAnalysis->getProblem(loop));
@@ -1506,6 +1615,47 @@ AffineToLoopSchedule::solveSchedulingProblem(AffineForOp forOp,
 
   auto *anchor = forOp.getBody()->getTerminator();
 
+  SmallVector<int64_t> signature;
+  size_t signatureHash = 0;
+  const CachedSchedule *reused = nullptr;
+  if (reuseSchedules) {
+    signature = scheduleSignature(problem, anchor);
+    signatureHash =
+        llvm::hash_combine_range(signature.begin(), signature.end());
+    auto it = scheduleCache.find(signatureHash);
+    if (it != scheduleCache.end())
+      for (const CachedSchedule &candidateValue : it->second)
+        if (candidateValue.signature == signature)
+          reused = &candidateValue;
+    DEBUG_WITH_TYPE("schedule-reuse", {
+      llvm::dbgs() << "schedule signature " << forOp.getLoc() << " ops "
+                   << problem.getOperations().size() << " hash "
+                   << signatureHash << (reused ? " reused" : " new") << ":";
+      for (int64_t exprValue : signature)
+        llvm::dbgs() << " " << (exprValue > 1000000 ? 999 : exprValue);
+      llvm::dbgs() << "\n";
+    });
+  }
+  auto applyReused = [&]() {
+    problem.setInitiationInterval(reused->ii);
+    for (auto [op, typeValue] :
+         llvm::zip(problem.getOperations(), reused->startTimes))
+      problem.setStartTime(op, typeValue);
+  };
+  if (reused && !verifyScheduleReuse) {
+    applyReused();
+    if (succeeded(problem.verify())) {
+      ++numSchedulesReused;
+      forOp->setAttr(circt::hls_analysis::kLoopSchedulerAttr,
+                     StringAttr::get(forOp.getContext(),
+                                     reused->scheduler + " (reused from " +
+                                         reused->loc + ")"));
+      return success();
+    }
+
+    reused = nullptr;
+  }
+
   unsigned limited = FastModuloScheduler::countLimitedOps(problem);
   bool scheduled = false, triedFast = false;
 
@@ -1538,8 +1688,37 @@ AffineToLoopSchedule::solveSchedulingProblem(AffineForOp forOp,
 
   if (failed(problem.verify()))
     return failure();
+  ++numSchedulesSolved;
   forOp->setAttr(circt::hls_analysis::kLoopSchedulerAttr,
                  StringAttr::get(forOp.getContext(), scheduler));
+
+  if (reuseSchedules) {
+    SmallVector<unsigned> startTimes;
+    for (Operation *op : problem.getOperations())
+      startTimes.push_back(*problem.getStartTime(op));
+    if (reused) {
+      ++numSchedulesReused;
+      if (reused->ii != *problem.getInitiationInterval() ||
+          reused->startTimes != startTimes) {
+        ++numReuseMismatches;
+        forOp.emitWarning()
+            << "schedule reuse mismatch: the identical loop at " << reused->loc
+            << " has II " << reused->ii << ", this one solves to II "
+            << *problem.getInitiationInterval();
+      }
+    } else {
+      std::string loc;
+      llvm::raw_string_ostream os(loc);
+      if (auto fl = dyn_cast<FileLineColLoc>(forOp.getLoc()))
+        os << fl.getFilename().getValue() << ":" << fl.getLine() << ":"
+           << fl.getColumn();
+      else
+        forOp.getLoc().print(os);
+      scheduleCache[signatureHash].push_back(
+          {std::move(signature), *problem.getInitiationInterval(),
+           std::move(startTimes), scheduler.str(), std::move(loc)});
+    }
+  }
 
   LLVM_DEBUG({
     llvm::dbgs() << "Scheduled initiation interval = "
