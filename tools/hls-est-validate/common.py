@@ -52,7 +52,9 @@ CACHE_ROOT = Path.home() / "hls-est-work" / "vitis-cache"   # harvested Vitis ar
 RESULTS_DIR = HERE / "results"                        # small JSON/CSV summaries (committed)
 
 # ---- frontend ----------------------------------------------------------------------
-CGEIST = "/mnt/d/HLS/Polygeist/build/bin/cgeist"
+# CGEIST_BIN overrides the frontend binary (a private build under test, or a frozen copy, so that
+# a reinstall during a long run cannot mix two cgeist versions in one result file).
+CGEIST = os.environ.get("CGEIST_BIN") or "/mnt/d/HLS/Polygeist/build/bin/cgeist"
 CLANG_RESOURCE_DIR = "/mnt/d/HLS/Polygeist/llvm-project/build/lib/clang/18"
 POLYGEIST_TEST_HLS = "/mnt/d/HLS/Polygeist/tools/cgeist/Test/HLS"
 SHIM_INCLUDE = POLYGEIST_TEST_HLS + "/Inputs/vitis"   # Polygeist's Vitis header stand-ins
