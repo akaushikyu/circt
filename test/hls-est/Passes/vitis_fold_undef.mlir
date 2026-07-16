@@ -420,3 +420,29 @@ func.func @narrowed_short_sum(%x: i32, %y: i32, %out16: memref<1xi16>) {
   memref.store %st, %out16[%i0] : memref<1xi16>
   return
 }
+
+// -----
+
+// A write through a memref whose base is not known storage (here an if
+// result that may be the local) may write the local: the load after it is
+// not forwarded and the output store stays.
+// CHECK-LABEL: func.func @local_escape
+// CHECK: affine.store %c5_i32, %{{.*}}[0]
+// CHECK: %[[L:.*]] = affine.load %alloca[0]
+// CHECK: affine.store %[[L]], %arg3[0]
+func.func @local_escape(%x: i32, %c: i1, %other: memref<1xi32>, %out: memref<1xi32>) {
+  %c0 = arith.constant 0 : i32
+  %c5 = arith.constant 5 : i32
+  %loc = memref.alloca() : memref<1xi32>
+  %u = arith.divsi %x, %c0 : i32
+  affine.store %u, %loc[0] : memref<1xi32>
+  %v = scf.if %c -> (memref<1xi32>) {
+    scf.yield %loc : memref<1xi32>
+  } else {
+    scf.yield %other : memref<1xi32>
+  }
+  affine.store %c5, %v[0] : memref<1xi32>
+  %l = affine.load %loc[0] : memref<1xi32>
+  affine.store %l, %out[0] : memref<1xi32>
+  return
+}

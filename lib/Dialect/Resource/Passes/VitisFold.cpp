@@ -109,8 +109,11 @@ static bool isFunctionArgument(Value base) {
   return isa<FunctionOpInterface>(arg.getOwner()->getParentOp());
 }
 
-/// Two memrefs whose bases are different allocations (alloca / alloc) or an
-/// allocation and anything else cannot alias.
+/// Two memrefs whose bases are known, different storage: an allocation
+/// (alloca / alloc) and any other known root (another allocation, a global,
+/// a function argument), or two different globals. A base that is not such
+/// a root (an if / loop result, a block argument of a region, an unknown op
+/// such as polygeist.subindex) may be any of them, so it may alias.
 static bool provablyDistinct(Value arrayValue, Value buildPoint) {
   Value ba = memrefBase(arrayValue), bb = memrefBase(buildPoint);
   if (ba == bb)
@@ -120,11 +123,21 @@ static bool provablyDistinct(Value arrayValue, Value buildPoint) {
     return dimensionIndex &&
            isa<memref::AllocaOp, memref::AllocOp>(dimensionIndex);
   };
+  auto isGlobal = [](Value valueHandle) {
+    return static_cast<bool>(valueHandle.getDefiningOp<memref::GetGlobalOp>());
+  };
+  auto isRoot = [&](Value valueHandle) {
+    return isAlloc(valueHandle) || isGlobal(valueHandle) ||
+           isFunctionArgument(valueHandle);
+  };
+  if (!isRoot(ba) || !isRoot(bb))
+    return false;
   if (isAlloc(ba) || isAlloc(bb))
     return true;
-  auto ga = ba.getDefiningOp<memref::GetGlobalOp>();
-  auto gb = bb.getDefiningOp<memref::GetGlobalOp>();
-  return ga && gb && ga.getName() != gb.getName();
+  if (isGlobal(ba) && isGlobal(bb))
+    return ba.getDefiningOp<memref::GetGlobalOp>().getName() !=
+           bb.getDefiningOp<memref::GetGlobalOp>().getName();
+  return false;
 }
 
 /// Store value operand / memref / "same access as" helpers for affine and
@@ -482,10 +495,8 @@ struct VitisFoldPass : PassWrapper<VitisFoldPass, OperationPass<>> {
   void recordNotes(ArrayRef<FoldNote> notes) {
     if (notes.empty())
       return;
-    Operation *top = getOperation();
-    auto rootModule = dyn_cast<ModuleOp>(top);
-    if (!rootModule)
-      rootModule = top->getParentOfType<ModuleOp>();
+
+    auto rootModule = dyn_cast<ModuleOp>(getOperation());
     if (!rootModule)
       return;
     MLIRContext *context = &getContext();
