@@ -1,14 +1,15 @@
 // RUN: hls-est %s --symbol-privatize=exclude=attn --symbol-dce --inline --symbol-dce --vitis-fold --canonicalize --sccp --dead-memory-elimination | FileCheck %s --check-prefix=IR
 // RUN: hls-est %s --symbol-privatize=exclude=attn_ctrl --symbol-dce --inline --symbol-dce --vitis-fold --canonicalize --sccp --dead-memory-elimination | FileCheck %s --check-prefix=CTRL
-// RUN: hls-est %s --symbol-privatize=exclude=attn --symbol-dce --inline --symbol-dce --vitis-fold --canonicalize --sccp --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --memory-banking-bram --convert-affine-to-loopschedule --bram-analysis --bram-debug -o /dev/null > %t.out 2> %t.err
+// RUN: hls-est %s --symbol-privatize=exclude=attn --symbol-dce --inline --symbol-dce --vitis-fold --canonicalize --sccp --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --memory-banking-bram --convert-affine-to-loopschedule --bram-analysis --bram-debug --bram-debug-json=%t.json -o /dev/null > %t.out 2> %t.err
 // RUN: FileCheck %s --input-file=%t.err --check-prefix=DBG
+// RUN: FileCheck %s --input-file=%t.json --check-prefix=JSON
 // RUN: hls-est %s --symbol-privatize=exclude=attn_ctrl --symbol-dce --inline --symbol-dce --vitis-fold --canonicalize --sccp --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --memory-banking-bram --convert-affine-to-loopschedule --bram-analysis -o /dev/null | FileCheck %s --check-prefix=CTRLBRAM
 
 // The forgebench attention kernel (CLAUDE.md step 2, VITIS_NOTES.md N1/N1a,
 // dead_globals.md R5, kernels dg_d_apfixed16 / dg_d_apfixed4) in the integer
 // form Vitis sees: data_t = ap_fixed<16,5> is an i16 with 11 fraction bits.
 //   (data_t)16 wraps to raw 0x8000 = -16; hls::sqrt(-16) = 0 (raw 0x0);
-//   scale = (data_t)1.0 / 0 = 2048 / 0 -> 0 (Vitis folds x/0 to 0, a.o.1.ll:50);
+//   scale = (data_t)1.0 / 0 = 2048 / 0 -> U (Vitis: undef, an extension of it 0, a.o.1.ll:50);
 //   scores[i][j] = sum(Q*K) ... scores[i][j] *= scale -> store 0;
 // (cgeist inlines every callee into the top, O10; here --inline does it) so
 // the Q.K accumulation is overwritten before any read, the Q / K arrays
@@ -52,7 +53,16 @@
 // DBG: status: eliminated_dead
 // DBG: [attn#dead{{[0-9]+}}] scores_tmp (alloca)
 // DBG: status: eliminated_dead -- removed by --dead-memory-elimination: write-only: never read
+// The scale is the undefined value of 2048 / 0 (VITIS_NOTES.md N13); the
+// product sign-extends it, which gives 0 (`scores *= scale` -> store 0).
+// DBG: --- vitis-fold: 1 rewrites of the undefined value of an integer x / 0
+// DBG-NEXT: counts: ext-zero=1
+// DBG-NEXT: ext-zero @ {{.*}}dme_attention_int.mlir:{{[0-9]+}}:{{[0-9]+}}; undefined value from @ {{.*}}dme_attention_int.mlir:{{[0-9]+}}:{{[0-9]+}}
 // DBG: Total BRAM: 3
+// JSON: "vitis_fold": {
+// JSON-NEXT: "counts": {
+// JSON-NEXT: "ext-zero": 1
+// JSON: "rule": "ext-zero",
 
 // The control keeps Q and K (2 BRAM each): 7 BRAM in all.
 // CTRLBRAM-COUNT-4: kind=

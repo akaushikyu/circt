@@ -13,6 +13,7 @@ target_link_libraries(hls-est PRIVATE
         MLIRMathDialect
         MLIRDLTIDialect
         MLIRLLVMDialect
+        MLIRLLVMIRTransforms
         MLIRTransforms
 
         # CIRCT dialects

@@ -7,15 +7,17 @@
 //   --promote-globals-to-allocas  a non-constant memref.global used by one
 //                                 function becomes an alloca there, so every
 //                                 later pass treats it like a local array
-//   --vitis-fold                  folds Vitis folds and MLIR does not
-//                                 (integer division by a constant zero -> 0),
-//                                 plus the canonicalization folds
+//   --vitis-fold                  folds Vitis folds and MLIR does not: the
+//                                 undefined value of an integer division by
+//                                 a constant zero, per use (N13; option
+//                                 `undef=false`: x / 0 -> 0), plus the
+//                                 canonicalization folds
 //   --dead-memory-elimination     removes arrays whose values never reach a
 //                                 side effect that leaves the function
 //
 // They are meant to run early, before --auto-pipeline-unroll:
-//   --promote-globals-to-allocas --vitis-fold --canonicalize --sccp
-//   --dead-memory-elimination
+//   --inline --canonicalize --sccp --vitis-fold --dead-memory-elimination
+// (MEMOS.md M5; --promote-globals-to-allocas only after O10 / O17)
 // None of them is part of the default pipeline (Peter decides; MEMOS.md M5).
 //
 //===----------------------------------------------------------------------===//

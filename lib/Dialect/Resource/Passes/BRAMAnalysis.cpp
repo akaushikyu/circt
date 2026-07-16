@@ -808,7 +808,7 @@ int64_t estimateBlocks(int64_t numElems, unsigned elemBits, bool wide,
 
 unsigned portOccupancy(bool) { return 1u; }
 
-bool classifyAccess(Operation *op, Value memory, bool &isWrite) {
+bool classifyAccess(Operation *op, Value mem, bool &isWrite) {
   auto eff = dyn_cast<MemoryEffectOpInterface>(op);
   if (!eff)
     return false;
@@ -816,7 +816,7 @@ bool classifyAccess(Operation *op, Value memory, bool &isWrite) {
   eff.getEffects(effects);
   bool reads = false, writes = false;
   for (auto &entryValue : effects) {
-    if (entryValue.getValue() && entryValue.getValue() != memory)
+    if (entryValue.getValue() && entryValue.getValue() != mem)
       continue;
     if (isa<MemoryEffects::Read>(entryValue.getEffect()))
       reads = true;
@@ -840,10 +840,10 @@ Operation *sequentialScope(Operation *op) {
 
 SmallVector<AccessSummary> collectAccessSummaries(ArrayRef<Value> banks) {
   SmallVector<AccessSummary> out;
-  for (Value memory : banks)
-    for (Operation *user : memory.getUsers()) {
+  for (Value mem : banks)
+    for (Operation *user : mem.getUsers()) {
       bool isWrite = false;
-      if (!classifyAccess(user, memory, isWrite))
+      if (!classifyAccess(user, mem, isWrite))
         continue;
 
       AccessSummary arrayValue;
@@ -1525,9 +1525,73 @@ static SmallVector<PipelineRecord> collectPipelineRecords(ModuleOp rootModule) {
   return out;
 }
 
+struct FoldSummary {
+  struct Rewrite {
+    std::string rule, loc, source, detail;
+  };
+  SmallVector<std::pair<std::string, int64_t>> counts;
+  SmallVector<Rewrite> rewrites;
+  bool present = false;
+};
+
+static FoldSummary collectFoldSummary(ModuleOp rootModule) {
+  FoldSummary stringValue;
+  auto dimensionIndex =
+      rootModule->getAttrOfType<DictionaryAttr>("hls.vitis_fold");
+  if (!dimensionIndex)
+    return stringValue;
+  stringValue.present = true;
+  if (auto candidateValue = dimensionIndex.getAs<DictionaryAttr>("counts"))
+    for (NamedAttribute na : candidateValue)
+      if (auto loopIndex = dyn_cast<IntegerAttr>(na.getValue()))
+        stringValue.counts.push_back({na.getName().str(), loopIndex.getInt()});
+  if (auto resultValue = dimensionIndex.getAs<ArrayAttr>("rewrites"))
+    for (Attribute arrayValue : resultValue) {
+      auto rd = dyn_cast<DictionaryAttr>(arrayValue);
+      if (!rd)
+        continue;
+      FoldSummary::Rewrite widthValue;
+      if (auto exprValue = rd.getAs<StringAttr>("rule"))
+        widthValue.rule = exprValue.str();
+      if (auto exprValue = rd.getAs<LocationAttr>("loc"))
+        widthValue.loc = locString(Location(exprValue));
+      if (auto exprValue = rd.getAs<LocationAttr>("source"))
+        widthValue.source = locString(Location(exprValue));
+      if (auto exprValue = rd.getAs<StringAttr>("detail"))
+        widthValue.detail = exprValue.str();
+      stringValue.rewrites.push_back(std::move(widthValue));
+    }
+  return stringValue;
+}
+
+static void printFoldSummary(const FoldSummary &fieldValue,
+                             llvm::raw_ostream &os) {
+  if (!fieldValue.present)
+    return;
+  int64_t elementCount = 0;
+  for (auto &candidateValue : fieldValue.counts)
+    elementCount += candidateValue.second;
+  os << "--- vitis-fold: " << elementCount
+     << " rewrites of the undefined value of an integer x / 0 "
+        "(VITIS_NOTES.md N13) ---\n  counts:";
+  for (auto &candidateValue : fieldValue.counts)
+    os << " " << candidateValue.first << "=" << candidateValue.second;
+  os << "\n";
+  for (const FoldSummary::Rewrite &widthValue : fieldValue.rewrites) {
+    os << "  " << widthValue.rule << " @ " << widthValue.loc;
+    if (!widthValue.detail.empty())
+      os << " (" << widthValue.detail << ")";
+    os << "; undefined value from @ " << widthValue.source << "\n";
+  }
+  if (static_cast<int64_t>(fieldValue.rewrites.size()) < elementCount)
+    os << "  ... "
+       << (elementCount - static_cast<int64_t>(fieldValue.rewrites.size()))
+       << " more not recorded\n";
+}
+
 static void printDebugText(ArrayRef<MemrefRecord> records,
                            ArrayRef<PipelineRecord> pipelines, int64_t total,
-                           llvm::raw_ostream &os) {
+                           const FoldSummary &fold, llvm::raw_ostream &os) {
   os << "=== bram-debug: how each BRAM number was derived ===\n";
   for (const MemrefRecord &resultValue : records) {
     if (resultValue.adapter) {
@@ -1701,6 +1765,7 @@ static void printDebugText(ArrayRef<MemrefRecord> records,
       os << "    unrolled x" << useValue.factor << " @ " << useValue.loc
          << "\n";
   }
+  printFoldSummary(fold, os);
   os << "--- summary (sorted by BRAM) ---\n";
   for (const MemrefRecord *resultValue : sortedByBram(records))
     os << "  " << llvm::format("%6u", resultValue->bram) << "  "
@@ -1881,7 +1946,8 @@ static llvm::json::Object toJson(const MemrefRecord &resultValue) {
 
 static std::error_code writeDebugJson(ArrayRef<MemrefRecord> records,
                                       ArrayRef<PipelineRecord> pipelineRecords,
-                                      int64_t total, StringRef path) {
+                                      int64_t total, const FoldSummary &fold,
+                                      StringRef path) {
   llvm::json::Object root;
   root["version"] = 2;
   root["total_bram"] = total;
@@ -1934,6 +2000,28 @@ static std::error_code writeDebugJson(ArrayRef<MemrefRecord> records,
     summary.push_back(std::move(stringValue));
   }
   root["summary"] = std::move(summary);
+
+  if (fold.present) {
+    llvm::json::Object fo, counts;
+    for (auto &candidateValue : fold.counts)
+      counts[candidateValue.first] = candidateValue.second;
+    fo["counts"] = std::move(counts);
+    llvm::json::Array rewrites;
+    for (const FoldSummary::Rewrite &widthValue : fold.rewrites) {
+      llvm::json::Object wo;
+      wo["rule"] = widthValue.rule;
+      wo["loc"] = widthValue.loc;
+      wo["source"] = widthValue.source;
+      wo["detail"] = widthValue.detail.empty()
+                         ? llvm::json::Value(nullptr)
+                         : llvm::json::Value(widthValue.detail);
+      rewrites.push_back(std::move(wo));
+    }
+    fo["rewrites"] = std::move(rewrites);
+    root["vitis_fold"] = std::move(fo);
+  } else {
+    root["vitis_fold"] = nullptr;
+  }
 
   std::error_code ec;
   llvm::raw_fd_ostream os(path, ec, llvm::sys::fs::OF_Text);
@@ -2264,11 +2352,14 @@ struct BRAMAnalysisLoopSchedule
     SmallVector<PipelineRecord> pipelines;
     if (bramDebugOpt || !bramDebugJsonOpt.empty())
       pipelines = collectPipelineRecords(getOperation());
+    FoldSummary fold;
+    if (bramDebugOpt || !bramDebugJsonOpt.empty())
+      fold = collectFoldSummary(rootModule);
     if (bramDebugOpt)
-      printDebugText(records, pipelines, total, llvm::errs());
+      printDebugText(records, pipelines, total, fold, llvm::errs());
     if (!bramDebugJsonOpt.empty())
-      if (std::error_code ec =
-              writeDebugJson(records, pipelines, total, bramDebugJsonOpt)) {
+      if (std::error_code ec = writeDebugJson(records, pipelines, total, fold,
+                                              bramDebugJsonOpt)) {
 
         mlir::emitError(getOperation().getLoc(),
                         "bram-debug-json: cannot write '")

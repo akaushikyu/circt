@@ -2,33 +2,421 @@
 
 #include "circt/Dialect/Resource/Passes/VitisCleanup.h"
 
+#include "mlir/Dialect/Affine/IR/AffineOps.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
+#include "mlir/Dialect/MemRef/IR/MemRef.h"
+#include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/Matchers.h"
 #include "mlir/IR/PatternMatch.h"
+#include "mlir/Interfaces/FunctionInterfaces.h"
+#include "mlir/Interfaces/SideEffectInterfaces.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
+#include "llvm/ADT/MapVector.h"
+#include "llvm/ADT/SetVector.h"
+#include "llvm/ADT/StringMap.h"
+
+#include <type_traits>
 
 using namespace mlir;
 
 namespace {
 
-/// x / 0 and x % 0 (integer or index, scalar or splat) -> 0.
 template <typename OpTy>
 struct FoldIntDivByZero : OpRewritePattern<OpTy> {
-  using OpRewritePattern<OpTy>::OpRewritePattern;
+  FoldIntDivByZero(MLIRContext *context, bool undefRules)
+      : OpRewritePattern<OpTy>(context), undefRules(undefRules) {}
 
   LogicalResult matchAndRewrite(OpTy op,
                                 PatternRewriter &rewriter) const override {
     if (!matchPattern(op.getRhs(), m_Zero()))
       return failure();
     Type memRefType = op.getType();
+
+    if (undefRules && isa<IntegerType>(memRefType) &&
+        !std::is_same_v<OpTy, arith::RemUIOp>)
+      return failure();
     TypedAttr zero = rewriter.getZeroAttr(memRefType);
     if (!zero)
       return failure();
     rewriter.replaceOpWithNewOp<arith::ConstantOp>(op, memRefType, zero);
     return success();
   }
+
+  bool undefRules;
 };
+
+struct FoldNote {
+  std::string rule;
+  Location loc;
+  Location source;
+  std::string detail;
+};
+
+/// divsi / divui / remsi of an integer by a constant 0.
+static bool isUndefSource(Operation *op) {
+  if (!isa<arith::DivSIOp, arith::DivUIOp, arith::RemSIOp>(op))
+    return false;
+  if (!isa<IntegerType>(op->getResult(0).getType()))
+    return false;
+  return matchPattern(op->getOperand(1), m_Zero());
+}
+
+static bool isOddConstant(Value valueHandle) {
+  APInt candidateValue;
+  return matchPattern(valueHandle, m_ConstantInt(&candidateValue)) &&
+         candidateValue[0];
+}
+
+static bool isTrueWhenEqual(arith::CmpIPredicate portValue) {
+  switch (portValue) {
+  case arith::CmpIPredicate::eq:
+  case arith::CmpIPredicate::sle:
+  case arith::CmpIPredicate::sge:
+  case arith::CmpIPredicate::ule:
+  case arith::CmpIPredicate::uge:
+    return true;
+  default:
+    return false;
+  }
+}
+
+/// The memref a view / cast chain starts from.
+static Value memrefBase(Value memoryOp) {
+  while (Operation *def = memoryOp.getDefiningOp()) {
+    if (auto candidateValue = dyn_cast<memref::CastOp>(def))
+      memoryOp = candidateValue.getSource();
+    else if (auto stringValue = dyn_cast<memref::SubViewOp>(def))
+      memoryOp = stringValue.getSource();
+    else if (auto resultValue = dyn_cast<memref::ReinterpretCastOp>(def))
+      memoryOp = resultValue.getSource();
+    else if (auto entryValue = dyn_cast<memref::ExpandShapeOp>(def))
+      memoryOp = entryValue.getSrc();
+    else if (auto c2 = dyn_cast<memref::CollapseShapeOp>(def))
+      memoryOp = c2.getSrc();
+    else
+      break;
+  }
+  return memoryOp;
+}
+
+/// A memref argument of a function (a port of the top, or of a callee that
+/// was not inlined).
+static bool isFunctionArgument(Value base) {
+  auto arg = dyn_cast<BlockArgument>(base);
+  if (!arg || !arg.getOwner()->isEntryBlock())
+    return false;
+  return isa<FunctionOpInterface>(arg.getOwner()->getParentOp());
+}
+
+/// Two memrefs whose bases are different allocations (alloca / alloc) or an
+/// allocation and anything else cannot alias.
+static bool provablyDistinct(Value arrayValue, Value buildPoint) {
+  Value ba = memrefBase(arrayValue), bb = memrefBase(buildPoint);
+  if (ba == bb)
+    return false;
+  auto isAlloc = [](Value valueHandle) {
+    Operation *dimensionIndex = valueHandle.getDefiningOp();
+    return dimensionIndex &&
+           isa<memref::AllocaOp, memref::AllocOp>(dimensionIndex);
+  };
+  if (isAlloc(ba) || isAlloc(bb))
+    return true;
+  auto ga = ba.getDefiningOp<memref::GetGlobalOp>();
+  auto gb = bb.getDefiningOp<memref::GetGlobalOp>();
+  return ga && gb && ga.getName() != gb.getName();
+}
+
+/// Store value operand / memref / "same access as" helpers for affine and
+/// memref stores and loads.
+static std::optional<std::pair<Value, Value>>
+storeValueAndMemref(Operation *op) {
+  if (auto stringValue = dyn_cast<affine::AffineStoreOp>(op))
+    return std::make_pair(stringValue.getValueToStore(),
+                          stringValue.getMemRef());
+  if (auto stringValue = dyn_cast<memref::StoreOp>(op))
+    return std::make_pair(stringValue.getValueToStore(),
+                          stringValue.getMemRef());
+  return std::nullopt;
+}
+
+static bool sameAccess(Operation *store, Operation *load) {
+  if (auto stringValue = dyn_cast<affine::AffineStoreOp>(store)) {
+    auto lowerIndex = dyn_cast<affine::AffineLoadOp>(load);
+    return lowerIndex && lowerIndex.getMemRef() == stringValue.getMemRef() &&
+           lowerIndex.getAffineMap() == stringValue.getAffineMap() &&
+           llvm::equal(lowerIndex.getMapOperands(),
+                       stringValue.getMapOperands());
+  }
+  if (auto stringValue = dyn_cast<memref::StoreOp>(store)) {
+    auto lowerIndex = dyn_cast<memref::LoadOp>(load);
+    return lowerIndex && lowerIndex.getMemRef() == stringValue.getMemRef() &&
+           llvm::equal(lowerIndex.getIndices(), stringValue.getIndices());
+  }
+  return false;
+}
+
+static const char *const kNoteAttr = "hls.vitis_fold";
+static constexpr unsigned kMaxRecords = 256;
+
+class UndefFolder {
+public:
+  explicit UndefFolder(Operation *root) : root(root) {}
+
+  /// One round: find U, rewrite its uses. True if the IR changed.
+  bool run(SmallVectorImpl<FoldNote> &notes);
+
+private:
+  void addUndef(Value valueHandle, Location src) {
+    if (!isa<IntegerType>(valueHandle.getType()))
+      return;
+    if (undef.insert({valueHandle, src}).second)
+      work.push_back(valueHandle);
+  }
+  bool isU(Value valueHandle) const { return undef.count(valueHandle); }
+  Location srcOf(Value valueHandle) const {
+    return undef.find(valueHandle)->second;
+  }
+  /// The result of `op` is U given which of its operands are U.
+  bool producesUndef(Operation *op) const;
+  void forwardStore(Operation *store, Value useValue);
+
+  Operation *root;
+  llvm::MapVector<Value, Location> undef;
+  SmallVector<Value> work;
+};
+
+bool UndefFolder::producesUndef(Operation *op) const {
+  if (op->getNumResults() != 1 || !isa<IntegerType>(op->getResult(0).getType()))
+    return false;
+  if (isa<arith::TruncIOp>(op))
+    return isU(op->getOperand(0));
+  if (isa<arith::AddIOp, arith::SubIOp, arith::XOrIOp>(op))
+    return isU(op->getOperand(0)) || isU(op->getOperand(1));
+  if (isa<arith::DivSIOp, arith::DivUIOp, arith::RemSIOp>(op))
+    return isU(op->getOperand(1));
+  if (isa<arith::ShLIOp>(op))
+    return isU(op->getOperand(1));
+  if (isa<arith::MulIOp>(op))
+    return (isU(op->getOperand(0)) && isOddConstant(op->getOperand(1))) ||
+           (isU(op->getOperand(1)) && isOddConstant(op->getOperand(0)));
+  if (auto sel = dyn_cast<arith::SelectOp>(op))
+    return isU(sel.getTrueValue()) && isU(sel.getFalseValue());
+  return false;
+}
+
+/// `op` or an op nested in it may write `mem` (or has an unknown effect).
+static bool mayWrite(Operation *op, Value mem) {
+  WalkResult resultValue = op->walk([&](Operation *elementCount) {
+    if (isa<affine::AffineLoadOp, memref::LoadOp>(elementCount))
+      return WalkResult::advance();
+    if (auto sv = storeValueAndMemref(elementCount))
+      return provablyDistinct(sv->second, mem) ? WalkResult::advance()
+                                               : WalkResult::interrupt();
+
+    if (elementCount->getNumRegions() &&
+        elementCount->hasTrait<OpTrait::HasRecursiveMemoryEffects>())
+      return WalkResult::advance();
+    return isMemoryEffectFree(elementCount) ? WalkResult::advance()
+                                            : WalkResult::interrupt();
+  });
+  return resultValue.wasInterrupted();
+}
+
+/// Loads of the element `store` writes that follow it in its block (also
+/// inside a loop / if there), up to the first op that may write that memory,
+/// read U: what mem2reg gives Vitis for a local scalar.
+void UndefFolder::forwardStore(Operation *store, Value useValue) {
+  Value mem = storeValueAndMemref(store)->second;
+  for (Operation *op = store->getNextNode(); op; op = op->getNextNode()) {
+    if (mayWrite(op, mem))
+      break;
+    op->walk([&](Operation *elementCount) {
+      if (isa<affine::AffineLoadOp, memref::LoadOp>(elementCount) &&
+          sameAccess(store, elementCount))
+        addUndef(elementCount->getResult(0), srcOf(useValue));
+    });
+  }
+}
+
+bool UndefFolder::run(SmallVectorImpl<FoldNote> &notes) {
+  undef.clear();
+  work.clear();
+  root->walk([&](Operation *op) {
+    if (isUndefSource(op))
+      addUndef(op->getResult(0), op->getLoc());
+  });
+  if (undef.empty())
+    return false;
+
+  while (!work.empty()) {
+    Value valueHandle = work.pop_back_val();
+    for (OpOperand &use : valueHandle.getUses()) {
+      Operation *user = use.getOwner();
+      if (producesUndef(user)) {
+        addUndef(user->getResult(0), srcOf(valueHandle));
+        continue;
+      }
+      if (auto sv = storeValueAndMemref(user))
+        if (sv->first == valueHandle &&
+            !isFunctionArgument(memrefBase(sv->second)))
+          forwardStore(user, valueHandle);
+    }
+  }
+
+  llvm::SetVector<Operation *> users;
+  for (auto &[valueHandle, src] : undef)
+    for (Operation *useValue : valueHandle.getUsers())
+      if (!producesUndef(useValue))
+        users.insert(useValue);
+  if (users.empty())
+    return false;
+
+  OpBuilder buildPoint(root->getContext());
+  auto note = [&](StringRef rule, Operation *op, Value useValue,
+                  std::string dimensionIndex = {}) {
+    notes.push_back(
+        {rule.str(), op->getLoc(), srcOf(useValue), std::move(dimensionIndex)});
+  };
+  auto firstU = [&](Operation *op) -> Value {
+    for (Value opHandle : op->getOperands())
+      if (isU(opHandle))
+        return opHandle;
+    return {};
+  };
+  auto replaceWithConstant = [&](Operation *op, TypedAttr attr) {
+    buildPoint.setInsertionPoint(op);
+    Value candidateValue = arith::ConstantOp::create(buildPoint, op->getLoc(),
+                                                     attr.getType(), attr);
+    op->getResult(0).replaceAllUsesWith(candidateValue);
+  };
+  llvm::SmallPtrSet<Operation *, 16> done;
+  SmallVector<Operation *> toErase;
+  auto replaceAndErase = [&](Operation *op, TypedAttr attr) {
+    replaceWithConstant(op, attr);
+    toErase.push_back(op);
+    done.insert(op);
+  };
+  auto zeroOperands = [&](Operation *op) {
+    for (OpOperand &opHandle : op->getOpOperands())
+      if (isU(opHandle.get())) {
+        buildPoint.setInsertionPoint(op);
+        Value depthValue = arith::ConstantOp::create(
+            buildPoint, op->getLoc(), opHandle.get().getType(),
+            buildPoint.getZeroAttr(opHandle.get().getType()));
+        opHandle.set(depthValue);
+      }
+  };
+
+  for (Operation *op : users) {
+    if (done.contains(op))
+      continue;
+    Value useValue = firstU(op);
+    if (!useValue)
+      continue;
+    if (auto sv = storeValueAndMemref(op)) {
+      if (sv->first == useValue && isFunctionArgument(memrefBase(sv->second))) {
+        note("store-deleted", op, useValue);
+        toErase.push_back(op);
+        done.insert(op);
+      } else {
+        note("store-local-zero", op, useValue);
+        zeroOperands(op);
+      }
+      continue;
+    }
+    if (isa<arith::ExtSIOp, arith::ExtUIOp>(op)) {
+
+      Type src = op->getOperand(0).getType();
+      for (Operation *cmpUser : op->getResult(0).getUsers()) {
+        auto cmp = dyn_cast<arith::CmpIOp>(cmpUser);
+        if (!cmp || done.contains(cmp))
+          continue;
+        Value other =
+            cmp.getLhs() == op->getResult(0) ? cmp.getRhs() : cmp.getLhs();
+        Operation *od = other.getDefiningOp();
+        if (!od || od->getName() != op->getName() ||
+            od->getOperand(0).getType() != src)
+          continue;
+        bool operandValue = isTrueWhenEqual(cmp.getPredicate());
+        note("cmp-through-ext", cmp, useValue, operandValue ? "true" : "false");
+        replaceAndErase(cmp, buildPoint.getBoolAttr(operandValue));
+      }
+      note("ext-zero", op, useValue);
+      replaceAndErase(op, buildPoint.getZeroAttr(op->getResult(0).getType()));
+      continue;
+    }
+    if (isa<arith::SIToFPOp, arith::UIToFPOp>(op)) {
+      note("itofp-zero", op, useValue);
+      replaceAndErase(op, buildPoint.getZeroAttr(op->getResult(0).getType()));
+      continue;
+    }
+    if (isa<arith::MulIOp, arith::AndIOp>(op)) {
+      note(isa<arith::MulIOp>(op) ? "mul-zero" : "and-zero", op, useValue);
+      replaceAndErase(op, buildPoint.getZeroAttr(op->getResult(0).getType()));
+      continue;
+    }
+    if (isa<arith::OrIOp>(op)) {
+      auto memRefType = cast<IntegerType>(op->getResult(0).getType());
+      note("or-ones", op, useValue);
+      replaceAndErase(
+          op, buildPoint.getIntegerAttr(
+                  memRefType, APInt::getAllOnes(memRefType.getWidth())));
+      continue;
+    }
+    if (isa<arith::ShLIOp, arith::ShRSIOp, arith::ShRUIOp, arith::DivSIOp,
+            arith::DivUIOp, arith::RemSIOp, arith::RemUIOp>(op) &&
+        isU(op->getOperand(0)) && !isU(op->getOperand(1))) {
+      note(isa<arith::ShLIOp, arith::ShRSIOp, arith::ShRUIOp>(op)
+               ? "shift-of-undef-zero"
+               : "div-of-undef-zero",
+           op, useValue);
+      replaceAndErase(op, buildPoint.getZeroAttr(op->getResult(0).getType()));
+      continue;
+    }
+    if (auto cmp = dyn_cast<arith::CmpIOp>(op)) {
+      bool operandValue = isTrueWhenEqual(cmp.getPredicate());
+      note("cmp-true-when-equal", op, useValue,
+           operandValue ? "true" : "false");
+      replaceAndErase(op, buildPoint.getBoolAttr(operandValue));
+      continue;
+    }
+    if (auto sel = dyn_cast<arith::SelectOp>(op)) {
+      if (!isU(sel.getCondition())) {
+        Value keep =
+            isU(sel.getTrueValue()) ? sel.getFalseValue() : sel.getTrueValue();
+        note("select-other-arm", op, useValue);
+        sel.getResult().replaceAllUsesWith(keep);
+        toErase.push_back(op);
+        done.insert(op);
+        continue;
+      }
+    }
+
+    note("use-zero", op, useValue, op->getName().getStringRef().str());
+    zeroOperands(op);
+  }
+
+  llvm::SetVector<Operation *> producers;
+  for (auto &[valueHandle, src] : undef)
+    if (Operation *def = valueHandle.getDefiningOp())
+      producers.insert(def);
+  for (Operation *op : toErase)
+    op->erase();
+  llvm::SmallPtrSet<Operation *, 16> erased;
+  for (bool again = true; again;) {
+    again = false;
+    for (Operation *def : llvm::reverse(producers)) {
+      if (erased.contains(def) || !def->use_empty() ||
+          !wouldOpBeTriviallyDead(def))
+        continue;
+      erased.insert(def);
+      def->erase();
+      again = true;
+    }
+  }
+  return true;
+}
 
 struct VitisFoldPass : PassWrapper<VitisFoldPass, OperationPass<>> {
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(VitisFoldPass)
@@ -41,14 +429,22 @@ struct VitisFoldPass : PassWrapper<VitisFoldPass, OperationPass<>> {
       llvm::cl::desc("Also apply every loaded dialect's canonicalization "
                      "patterns and the op folders in the same greedy rewrite, "
                      "so a folded zero propagates (x*0 -> 0 for integers); "
-                     "false: only x/0 -> 0"),
+                     "false: only the division rules"),
+      llvm::cl::init(true)};
+  Option<bool> undefRules{
+      *this, "undef",
+      llvm::cl::desc("Vitis' undefined value for an integer divsi / divui / "
+                     "remsi by a constant 0 (VITIS_NOTES.md N13: stores of it "
+                     "into outputs deleted, add / sub / trunc keep it, "
+                     "extensions / mul / and fold to 0, compares to "
+                     "isTrueWhenEqual, ...); false: x/0 -> 0 (the T4 rule)"),
       llvm::cl::init(true)};
 
   StringRef getArgument() const final { return "vitis-fold"; }
   StringRef getDescription() const final {
     return "Fold what Vitis HLS folds but MLIR does not: integer division / "
-           "remainder by a constant zero -> 0 (VITIS_NOTES.md N1a), then the "
-           "canonicalization folds";
+           "remainder by a constant zero and the undefined value it gives "
+           "(VITIS_NOTES.md N1a, N13), then the canonicalization folds";
   }
   void getDependentDialects(DialectRegistry &targetRegistry) const override {
     targetRegistry.insert<arith::ArithDialect>();
@@ -60,17 +456,77 @@ struct VitisFoldPass : PassWrapper<VitisFoldPass, OperationPass<>> {
     patterns
         .add<FoldIntDivByZero<arith::DivSIOp>, FoldIntDivByZero<arith::DivUIOp>,
              FoldIntDivByZero<arith::RemSIOp>,
-             FoldIntDivByZero<arith::RemUIOp>>(context);
+             FoldIntDivByZero<arith::RemUIOp>>(context, undefRules);
     if (canonicalize) {
       for (Dialect *targetDialect : context->getLoadedDialects())
         targetDialect->getCanonicalizationPatterns(patterns);
       for (RegisteredOperationName op : context->getRegisteredOperations())
         op.getCanonicalizationPatterns(patterns, context);
     }
+    FrozenRewritePatternSet frozen(std::move(patterns));
 
     GreedyRewriteConfig config;
     config.enableFolding(canonicalize);
-    (void)applyPatternsGreedily(getOperation(), std::move(patterns), config);
+    SmallVector<FoldNote> notes;
+    UndefFolder folder(getOperation());
+    for (unsigned round = 0; round < 16; ++round) {
+      (void)applyPatternsGreedily(getOperation(), frozen, config);
+      if (!undefRules || !folder.run(notes))
+        break;
+    }
+    recordNotes(notes);
+  }
+
+  /// `hls.vitis_fold` on the module: {counts = {rule = n}, rewrites = [{rule,
+  /// loc, source, detail}]} (first kMaxRecords), merged with an earlier run.
+  void recordNotes(ArrayRef<FoldNote> notes) {
+    if (notes.empty())
+      return;
+    Operation *top = getOperation();
+    auto rootModule = dyn_cast<ModuleOp>(top);
+    if (!rootModule)
+      rootModule = top->getParentOfType<ModuleOp>();
+    if (!rootModule)
+      return;
+    MLIRContext *context = &getContext();
+    Builder buildPoint(context);
+    llvm::StringMap<int64_t> counts;
+    SmallVector<Attribute> records;
+    if (auto prev = rootModule->getAttrOfType<DictionaryAttr>(kNoteAttr)) {
+      if (auto candidateValue = prev.getAs<DictionaryAttr>("counts"))
+        for (NamedAttribute na : candidateValue)
+          if (auto loopIndex = dyn_cast<IntegerAttr>(na.getValue()))
+            counts[na.getName().getValue()] += loopIndex.getInt();
+      if (auto resultValue = prev.getAs<ArrayAttr>("rewrites"))
+        records.append(resultValue.begin(), resultValue.end());
+    }
+    for (const FoldNote &elementCount : notes) {
+      ++counts[elementCount.rule];
+      if (records.size() >= kMaxRecords)
+        continue;
+      SmallVector<NamedAttribute> fieldValue;
+      fieldValue.push_back(buildPoint.getNamedAttr(
+          "rule", buildPoint.getStringAttr(elementCount.rule)));
+      fieldValue.push_back(
+          buildPoint.getNamedAttr("loc", LocationAttr(elementCount.loc)));
+      fieldValue.push_back(
+          buildPoint.getNamedAttr("source", LocationAttr(elementCount.source)));
+      if (!elementCount.detail.empty())
+        fieldValue.push_back(buildPoint.getNamedAttr(
+            "detail", buildPoint.getStringAttr(elementCount.detail)));
+      records.push_back(buildPoint.getDictionaryAttr(fieldValue));
+    }
+    SmallVector<NamedAttribute> cs;
+    for (auto &entryValue : counts)
+      cs.push_back(buildPoint.getNamedAttr(
+          entryValue.getKey(),
+          buildPoint.getI64IntegerAttr(entryValue.getValue())));
+    rootModule->setAttr(
+        kNoteAttr, buildPoint.getDictionaryAttr(
+                       {buildPoint.getNamedAttr(
+                            "counts", buildPoint.getDictionaryAttr(cs)),
+                        buildPoint.getNamedAttr(
+                            "rewrites", buildPoint.getArrayAttr(records))}));
   }
 };
 

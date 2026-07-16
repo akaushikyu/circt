@@ -31,6 +31,7 @@
 #include "circt/Dialect/Seq/SeqDialect.h"
 #include "mlir/Dialect/DLTI/DLTI.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
+#include "mlir/Dialect/LLVMIR/Transforms/InlinerInterfaceImpl.h"
 #include "mlir/Dialect/Math/IR/Math.h"
 
 int main(int argc, char **argv) {
@@ -49,6 +50,8 @@ int main(int argc, char **argv) {
       circt::calyx::CalyxDialect, circt::hls_analysis::HLSDialect>();
 
   mlir::func::registerInlinerExtension(targetRegistry);
+
+  mlir::LLVM::registerInlinerInterface(targetRegistry);
   circt::hls_analysis::registerBRAMInterfaceExternalModels(targetRegistry);
   circt::hls_analysis::registerBRAMLoopscheduleAnalysisPass();
   circt::hls_analysis::registerAffineToLoopScheduleAnalysisPass();

@@ -1,12 +1,23 @@
-// RUN: hls-est %s --vitis-fold | FileCheck %s
-// RUN: hls-est %s --vitis-fold=canonicalize=false | FileCheck %s --check-prefix=NOCANON
+// RUN: hls-est %s --vitis-fold=undef=false | FileCheck %s
+// RUN: hls-est %s --vitis-fold='undef=false canonicalize=false' | FileCheck %s --check-prefix=NOCANON
+// RUN: hls-est %s --vitis-fold | FileCheck %s --check-prefix=UNDEF
 
-// --vitis-fold: integer division / remainder by a constant zero -> 0
-// (VITIS_NOTES.md N1a "Division by a constant 0"). Vitis gives 0 for an
-// ap_fixed division (dg_d_fold_steps a.o.1.ll:50 `in + 1.0/0` -> `in`;
-// dg_d_fold_divrem0b) and an unsigned remainder (dg_d_fold_divrem0), and undef
-// for a C int division / signed remainder, of which 0 is a refinement. MLIR
-// keeps x/0 (undefined behaviour), so the chain never folds without it.
+// --vitis-fold=undef=false (the T4 rule): integer division / remainder by a
+// constant zero -> 0 (VITIS_NOTES.md N1a "Division by a constant 0"). Vitis
+// gives 0 for an ap_fixed division (dg_d_fold_steps a.o.1.ll:50 `in + 1.0/0`
+// -> `in`; dg_d_fold_divrem0b) and an unsigned remainder (dg_d_fold_divrem0),
+// and undef for a C int division / signed remainder, of which 0 is a
+// refinement. MLIR keeps x/0 (undefined behaviour), so the chain never folds
+// without it. The default (`undef`, N13, vitis_fold_undef.mlir) models the
+// undefined value: here the stores of x/0, x/0u, x%0 and of the C int sum
+// x + 2048/0 are deleted (dg_d_fold_divrem0), x%0u is 0 and x * (2048/0) is 0.
+
+// UNDEF-LABEL: func.func @int_div_by_zero
+// UNDEF-DAG: %[[Z:.*]] = arith.constant 0 : i32
+// UNDEF-NOT: arith.divsi
+// UNDEF: memref.store %[[Z]], %arg1[%c3]
+// UNDEF-NEXT: memref.store %[[Z]], %arg1[%c5]
+// UNDEF-NEXT: return
 
 // CHECK-LABEL: func.func @int_div_by_zero
 // CHECK-NOT: arith.divsi

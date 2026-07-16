@@ -119,6 +119,57 @@ The regression gates hold in every run (T6). Route A's coverage run (7 datasets,
 `cgeist_flags`, M3), keep `scalar` selectable; the M5 front end is decided separately. Re-measuring every baseline
 takes about an hour of hls-est runs and no Vitis runs.
 
+**Addendum (T8, 2026-10-10, hls-est 957b1bd22 + T8 = `~/hls-est-work/t8/hls-est.t8a`, cgeist cbc105e0).** `exactclass` vs
+`exact`, each shim's MLIR from one cgeist pass and every configuration on it (`--mlir-from`), runs in `~/hls-est-work/t8/runs/`
+(`<x2|xc2>_<config>_<def|nos>.json`); the scalar column is T7's final run replayed with the T8 binary (identical, `s_*`).
+"B" = `--inline --canonicalize --sccp --vitis-fold --dead-memory-elimination` after the top selection and `--bram-maxi-adapters`
+(M5 recommendation 1 with T8's `--inline`); "A" = B plus `--promote-globals-to-allocas` (the T8 task prefix). Cells: exact / total |err|.
+
+Without `--infer-vitis-split-array` (89 designs compared in every column):
+
+| dataset | n | scalar | exact | exactclass | exact + B | exactclass + B | exact + A | exactclass + A |
+|---|---|---|---|---|---|---|---|---|
+| polybench | 9 | 5 / 121 | 5 / 121 | 5 / 121 | 5 / 121 | 5 / 121 | 5 / 121 | 5 / 121 |
+| polybench_pragmas | 7 | 6 / 16 | 6 / 16 | 6 / 16 | 6 / 16 | 6 / 16 | 6 / 16 | 6 / 16 |
+| forgebench | 40 | 1 / 31349 | 3 / 8559 | 3 / 8462 | 4 / 8563 | 7 / 8288 | 4 / 8872 | 7 / 9319 |
+| machsuite | 11 | 10 / 16 | 10 / 16 | 10 / 16 | 10 / 16 | 10 / 16 | 10 / 16 | 10 / 16 |
+| spector_hls | 8 | 8 / 0 | 8 / 0 | 8 / 0 | 8 / 0 | 8 / 0 | 8 / 0 | 8 / 0 |
+| vitis_examples | 14 | 13 / 1 | 13 / 1 | 13 / 1 | 13 / 1 | 13 / 1 | 13 / 1 | 13 / 1 |
+| **subset** | 89 | **43 / 31503** | **45 / 8713** | **45 / 8616** | **46 / 8717** | **49 / 8442** | **46 / 9026** | **49 / 9473** |
+
+Default pipeline:
+
+| dataset | n | scalar | exact | exactclass | exact + B | exactclass + B | exact + A | exactclass + A |
+|---|---|---|---|---|---|---|---|---|
+| polybench | 9 | 0 / 873 | 0 / 873 | 0 / 873 | 0 / 873 | 0 / 873 | 0 / 873 | 0 / 873 |
+| polybench_pragmas | 7 | 6 / 16 | 6 / 16 | 6 / 16 | 6 / 16 | 6 / 16 | 6 / 16 | 6 / 16 |
+| forgebench | 40 | 1 / 26363 | 3 / 6250 | 3 / 6857 | 4 / 6242 | 5 / 6609 | 6 / 6590 | 6 / 6837 |
+| machsuite | 11 | 10 / 40 | 10 / 40 | 10 / 40 | 10 / 40 | 10 / 40 | 10 / 40 | 10 / 40 |
+| spector_hls | 8 | 7 / 4 | 7 / 4 | 7 / 4 | 7 / 4 | 7 / 4 | 7 / 4 | 7 / 4 |
+| vitis_examples | 14 | 13 / 1 | 13 / 1 | 13 / 1 | 13 / 1 | 13 / 1 | 13 / 1 | 13 / 1 |
+| **subset** | 89 | **37 / 27297** | **39 / 7184** | **39 / 7791** | **40 / 7176** | **41 / 7543** | **42 / 7524** | **42 / 7771** |
+
+Coverage on the two extra datasets (no Vitis ground truth, ok / designs): class_ece8893_spring_2025 exact 34 / 94, exactclass
+32 / 94 (exactclass compiles anirudh_tulasi lab2, which `exact` stops at a `polygeist.subindex` (O25), and loses sahith lab2 (clang:
+ambiguous conditional between two `ap_fixed` types), adithi_upadhya lab2 (hls-est crash) and lab2_hanchen (hls-est > 900 s);
+kamya_hari lab3 and adithi_upadhya lab3 are a cgeist timeout at 600 s under exactclass and an empty module under exact);
+accelerators 0 / 7 under both (cgeist errors and crashes, O25, empty modules).
+
+What exactclass changes per design, with B (the only differences on the subset are forgebench): no split attention_op_p1 205 -> 73,
+tiled_attn_p1 205 -> 73, tiled_attn_p2 57 -> 23 (Q / K and the q/k weights dead only with integer ap_fixed, = Vitis), Llama_GPT_module
+0 -> 29 (Vitis 30), gpt_transformer_p1 0 -> 24 (28), tiled_attn_module 306 -> 110 (270, O16 / O10), conv_block_module / op2 / conv_module
+and diff_orders_module (98 -> 1106, Vitis 1538) move with the integer op mix (not diagnosed per array, as in the route A entry);
+default pipeline the same designs except diff_orders_module (gpt_transformer_p1 0 -> 28 = Vitis; attention_op_p1 / tiled_attn_p1
+238 -> 78, the split pass banks V 8 ways, O2). No design exact under `exact` stops being exact under `exactclass` (B, both pipelines).
+
+**Updated recommendation (T8).** Unchanged in direction, now with the hls-est side of route A in place: make `exactclass` the harness
+default together with prefix B (M5): +3 exact over `exact` + B without the split pass (46 -> 49 / 89, |err| 8717 -> 8442) and +1 with
+the default pipeline (40 -> 41), where the total error rises (7176 -> 7543, +367: conv_block_module +768, tiled_attn_module +104
+(DME removes four arrays Vitis keeps, O16 / O10), conv_block_op2 +84, against conv_module -182 and the attention designs -160 / -160 /
+-32; the conv designs move with the integer op mix under both shims, not diagnosed). `exactclass` alone (no prefix)
+gains nothing over `exact` on the subset (45 = 45, 39 = 39); its value is that the folds and DME can act. Re-measuring every baseline:
+a few minutes of hls-est per pipeline and shim (`--mlir-from`), plus one cgeist pass per shim (~20 min); no Vitis runs.
+
 ## M3 — frontend changes beyond C-semantics fixes (O10, O5, route A)
 
 - **O10:** cgeist inlines callees marked `#pragma HLS inline off`; Vitis keeps one instance and charges its arrays once.
@@ -142,6 +193,20 @@ takes about an hour of hls-est runs and no Vitis runs.
   none is done.
 
 Each needs Peter's OK before it becomes default behaviour of cgeist or of the harness.
+
+**Addendum (T8, 2026-10-10): the hls-est side of route A is in place (all opt-in).** `--inline` now works on cgeist output (the
+llvm dialect's inliner interface was missing; every cgeist module loads that dialect), and `--vitis-fold` models Vitis' undefined
+value of an integer division by a constant 0 per use (VITIS_NOTES.md N13; T4's x / 0 -> 0 is `--vitis-fold=undef=false`). With
+`--shim exactclass` and `--inline --canonicalize --sccp --vitis-fold --promote-globals-to-allocas --dead-memory-elimination` plus
+`--bram-maxi-adapters`, forgebench attention_op_p1 is **73 = Vitis per array** without the split pass (BRAM_attn_input 2, BRAM_1 2,
+BRAM_weights_v 64, V 2, scores 1, mem1_m_axi 2; Q, K, BRAM_weights_q, BRAM_weights_k eliminated, N1's a.o.1 list) and 78 with it
+(V split 8 ways, O2); the same without `--promote-globals-to-allocas` (prefix "B" of M2 / M5). The head_dim-4 control
+(`~/hls-est-work/feas/A/k_ctrl.cpp`, Vitis 6 = Q 3 + K 3) keeps Q and K (3 without the split pass; Q / K reach Vitis' 3 RAM_1WNR copies
+each with `forward-stores`, O7 / M6; scores 1 vs 0 is O18), and the head_dim-16 kernel (Vitis 0) loses Q and K (scores 1, O18). With
+`--shim exact` (f16) and `scalar` (f32) nothing folds (O16). The design study's "Route A alone does not kill Q and K" gap is closed.
+Remaining route-A gaps found end to end: assignable range selects (O15), `polygeist.subindex` in cgeist output (O25; 18 designs of the
+8 T8 datasets under exactclass), libm builtins with constant arguments left as calls (O24; no BRAM effect seen). The three decisions
+above are unchanged; M2's T8 addendum has the numbers for (1).
 
 ## M4 — BRAM formula defaults after the open-source reconciliation (N8)
 
@@ -291,6 +356,32 @@ cgeist's inlining (O10), or an initialised table read more than once per cycle, 
 The kernels: rom2r_int 2 -> 1 (= Vitis), mx_call_rw2 3 = Vitis, dg_d_fold_divrem0 12 (Vitis 6, O16: C-int x/0 is undef in
 Vitis). Still open for recommendation 4: a constant table read more than twice per cycle is scheduled at a raised II instead of
 replicated (O4 "ROM tables": rom3r_int 1 vs Vitis 4).
+
+**Addendum (T8, 2026-10-10).** Two changes to the mechanisms of this memo, both inside opt-in passes (CHANGELOG "T8"):
+`--vitis-fold` now models Vitis' undefined value of `x / 0` per use (option `undef`, default on; `undef=false` = the rule measured
+above), and `--inline` works on cgeist output. Kernels: dg_d_fold_divrem0 12 -> 6 and dg_d_fold_divrem0b 8 -> 2, both = Vitis (O16's C
+int part fixed). Harness (8 datasets: the subset plus class_ece8893_spring_2025 and accelerators; both shims, both pipelines, prefixes
+A and B below, `undef` vs `undef=false` on byte-identical MLIR, `~/hls-est-work/t8/runs/`): **no design changes** - no harness design
+divides by a constant 0 in C int arithmetic, and the attention scale is used only through sign extensions, where both rules give 0.
+So the recommendation's numbers stand; they are re-measured here at the current HEAD (T5-T7 since T4) with `--inline` added and the
+adapters on (prefix B = `--inline --canonicalize --sccp --vitis-fold --dead-memory-elimination` + `--bram-maxi-adapters`; A = B +
+`--promote-globals-to-allocas`), subset, exact / |err| over 89 designs:
+
+| shim | pipeline | nothing enabled | B (recommendation 1) | A (B + globals as locals) |
+|---|---|---|---|---|
+| exactclass | no split | 45 / 8616 | **49 / 8442** | 49 / 9473 |
+| exactclass | default | 39 / 7791 | **41 / 7543** | 42 / 7771 |
+| exact | no split | 45 / 8713 | 46 / 8717 | 46 / 9026 |
+| exact | default | 39 / 7184 | 40 / 7176 | 42 / 7524 |
+| scalar | default / no split | 37 / 27297, 43 / 31503 (T7, unchanged) | - | - |
+
+B over nothing (exactclass): newly exact attention_op_p1, tiled_attn_p1, tiled_attn_p2 (no split; Q / K dead), activation_module /
+op2 / op3, diff_dims_module_small (adapter), gpt_transformer_p1 (default); no longer exact mult_op_p2, mult_op_p3, vec_mtx_p1 (2 -> 4,
+the adapter cancellation of O17 items 2-3, as before). A over B: +attn_breakdown_op1 and +mult_op_p3, -gpt_transformer_p1 with the
+default pipeline (cancellations), none without the split pass, and +1031 / +228 |err| (attention_op_p2 / p3 20 -> 202, vec_mtx_p1
+4 -> 242, Llama_GPT_module 29 -> 85, conv_A 99 -> 995: O17). **Recommendation 1 unchanged** (with `--inline` added: measured a no-op on
+all 8 datasets, exactclass no split, `xc2_C_nos` vs `xc2_B_nos`, because cgeist already inlines every defined callee (O10); it makes
+the prefix right for modules that keep calls), recommendation 4 unchanged: do not adopt `--promote-globals-to-allocas` before O10 / O17.
 
 ## M6 — O3 + O7: turn on `--bram-seq-dual-port`; `forward-stores` only together with dead-memory elimination
 
