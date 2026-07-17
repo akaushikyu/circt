@@ -4,7 +4,7 @@ Newest entry first. One entry per logical change, including changes that were
 tried and reverted. Branch: `hls-est-vitis-match` in `~/circt`.
 
 ## 2026-10-10 — hls-est: T8 self-review fixes (`--vitis-fold` store forwarding through a view of unknown storage; notes only on the module)
-- **Commit:** the commit "hls-est: T8 self-review fixes in --vitis-fold" that carries this entry (branch `hls-est-vitis-match`)
+- **Commit:** ec2c787a8 (branch `hls-est-vitis-match`); this hash line: the following changelog-only commit
 - **Files:** lib/Dialect/Resource/Passes/VitisFold.cpp (`provablyDistinct`, `recordNotes`), test/hls-est/Passes/vitis_fold_undef.mlir (`@local_escape`)
 - **What:** (1) the forwarding of a store of U into a local (90a14d498) treated a write through any memref whose base is not an allocation as unable to write the local; a view whose base is not known storage (an if / select result that may be the local, a region block argument, `polygeist.subindex`) can, so the following load was forwarded as U and an output store was deleted (`@local_escape`: `c ? loc : other` written, then `loc` read). Two memrefs are now distinct only when both bases are known roots (alloca / alloc, global, function argument) and one is an allocation, or both are different globals. (2) `hls.vitis_fold` is written only when the pass runs on the module (as on the hls-est command line); nested under a function it would have modified the parent from a pass that may run in parallel with its siblings.
 - **Why:** self-review of 90a14d498 before the review cycle; (1) is wrong code in a corner of the opt-in pass (cgeist emits such views for C ternaries over lvalues, O25).
