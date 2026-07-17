@@ -3,6 +3,37 @@
 Numbers are from parsed harness outputs; "subset" = polybench, polybench_pragmas, forgebench, machsuite, spector_hls,
 vitis_examples (73 compared designs) at hls-est 22d473858 unless stated. They will be refreshed after T4/T5 land.
 
+## Decisions recorded 2026-10-10 (Peter's answers to the question list)
+
+| # | Question | Decision | Status |
+|---|---|---|---|
+| 1 | M1: drop `--infer-vitis-split-array` from the default pipeline | approved | to implement (W1) |
+| 2 | M6: `--bram-seq-dual-port` on by default | approved | to implement (W1) |
+| 3 | M8: `float-loads-perfect` by default | approved as recommended: only together with the exactclass shim | waits for #8 |
+| 4 | M5: dead-memory front end + m_axi adapter cost | approved as recommended: with exactclass; no globals promotion before O10/O17 | waits for #8 |
+| 5 | M6: `forward-stores` | approved as recommended: only after #4 | waits for #4 |
+| 6 | M4: band formula as the default BRAM formula, written from our measurements | approved | to implement (W1) |
+| 7 | M7: `top=` option on `--bram-analysis` | approved | to implement (W1) |
+| 8 | M2/M3: `exactclass` as the harness default shim | open: Peter asked what it is (explained 2026-10-10) | waiting for Peter |
+| 9 | `--scalar-wrapper-abi` default in cgeist | "keep it in": read as keep the option, opt-in (no change) | confirm with Peter |
+| 10 | exactclass replaces Polygeist's lit shim `Test/HLS/Inputs/vitis` | same as #8 | waiting for Peter |
+| 11 | O10: cgeist honours `#pragma HLS inline off` | approved | to implement (W3) |
+| 12 | O5: cgeist opt-in flag to keep invariant inner loops in place | approved | to implement (W3) |
+| 13 | M9: unsigned 32-bit wrap assumption | no answer | status quo (width 32) |
+| 14 | raise narrow counters against an `int` bound by assuming it fits | no answer | status quo (not raised) |
+| 15 | O15: assignable `range()` references | no answer | not started |
+| 16 | regenerate the lit Estimation CHECK values from the current model (Vitis value in a comment) | approved, after the defaults are settled | to implement (W1) |
+| 17 | the 12 designs without Vitis ground truth | Peter asked how the ground truth was produced (answered); no decision on exclusion | waiting for Peter |
+| 18 | `hls::exp` / `hls::sqrt` deviations in exactclass | Peter: find out whether these functions have a fixed cost (experiments); put the cost in a configuration file the programmer sets | to implement (W2) |
+| 19 | keep the two small default-output changes (banking constants through index casts; RAM_2P label) | approved | done |
+| 20 | correct the CLAUDE.md attention target | done (Peter + coordinator) | done |
+| 21 | push / PRs | not yet | - |
+| 22 | Phase 6 (DSP, FF, LUT) | on hold | - |
+
+Note: Peter's answers replaced the "Regression gates" bullets in CLAUDE.md; the gates still apply (test/hls-est no new
+failures; polybench_pragmas bicg 8, gesummv 16, mvt 8, syrk 32 exact; designs exact in the latest run stay exact unless
+explained per array).
+
 ## M1 — O2: drop `--infer-vitis-split-array` from the default pipeline
 
 **Question.** The pass partitions arrays by port pressure, which is what Vitis does with
