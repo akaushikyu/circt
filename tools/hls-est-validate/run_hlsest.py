@@ -326,6 +326,8 @@ def main():
     run_id = args.run_id or time.strftime("%Y%m%d-%H%M%S")
     ghash, bsha = C.hls_est_identity()
     results = {"_meta": {"pipeline": args.pipeline, "shim": str(shim), "hls_est_git": ghash,
+                         "cgeist": C.CGEIST, "cgeist_md5": C.md5_of_file(C.CGEIST),
+                         "polygeist_head": C.git_hash(Path(C.CGEIST).resolve().parents[2]),
                          "hls_est_sha256": bsha, "mlir_from": args.mlir_from,
                          "top_passes": ("none" if args.no_privatize else
                                         "--symbol-privatize=exclude=<top> --symbol-dce prepended per design"),

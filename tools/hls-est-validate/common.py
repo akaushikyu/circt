@@ -157,3 +157,16 @@ def dump_json(obj, p):
 
 def design_key(d):
     return f"{d['dataset']}/{d['benchmark']}"
+
+
+def md5_of_file(path):
+    """md5 of a file (identifies the exact cgeist / hls-est binary a run used); '' if unreadable."""
+    import hashlib
+    try:
+        h = hashlib.md5()
+        with open(path, "rb") as f:
+            for b in iter(lambda: f.read(1 << 20), b""):
+                h.update(b)
+        return h.hexdigest()
+    except OSError:
+        return ""
