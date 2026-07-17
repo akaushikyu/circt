@@ -9,14 +9,14 @@ vitis_examples (73 compared designs) at hls-est 22d473858 unless stated. They wi
 |---|---|---|---|
 | 1 | M1: drop `--infer-vitis-split-array` from the default pipeline | approved | to implement (W1) |
 | 2 | M6: `--bram-seq-dual-port` on by default | approved | to implement (W1) |
-| 3 | M8: `float-loads-perfect` by default | approved as recommended: only together with the exactclass shim | waits for #8 |
-| 4 | M5: dead-memory front end + m_axi adapter cost | approved as recommended: with exactclass; no globals promotion before O10/O17 | waits for #8 |
-| 5 | M6: `forward-stores` | approved as recommended: only after #4 | waits for #4 |
+| 3 | M8: `float-loads-perfect` by default | approved (with exactclass, which #8 now makes the default) | to implement (W1) |
+| 4 | M5: dead-memory front end + m_axi adapter cost | approved (with exactclass); no globals promotion before O10/O17 | to implement (W1) |
+| 5 | M6: `forward-stores` | approved as recommended: only after #4, and only if rule 4 holds after a look at Llama_GPT_module's Q/K | to implement or report (W1) |
 | 6 | M4: band formula as the default BRAM formula, written from our measurements | approved | to implement (W1) |
 | 7 | M7: `top=` option on `--bram-analysis` | approved | to implement (W1) |
-| 8 | M2/M3: `exactclass` as the harness default shim | open: Peter asked what it is (explained 2026-10-10) | waiting for Peter |
+| 8 | M2/M3: `exactclass` as the harness default shim | approved ("Yes use exact class", 2026-10-10) | to implement (W1) |
 | 9 | `--scalar-wrapper-abi` default in cgeist | "keep it in": read as keep the option, opt-in (no change) | confirm with Peter |
-| 10 | exactclass replaces Polygeist's lit shim `Test/HLS/Inputs/vitis` | same as #8 | waiting for Peter |
+| 10 | exactclass replaces Polygeist's lit shim `Test/HLS/Inputs/vitis` | approved (same as #8) | after W3 (Polygeist lit; RUN lines pass `--scalar-wrapper-abi` while #9 keeps it opt-in) |
 | 11 | O10: cgeist honours `#pragma HLS inline off` | approved | to implement (W3) |
 | 12 | O5: cgeist opt-in flag to keep invariant inner loops in place | approved | to implement (W3) |
 | 13 | M9: unsigned 32-bit wrap assumption | no answer | status quo (width 32) |
@@ -30,7 +30,7 @@ vitis_examples (73 compared designs) at hls-est 22d473858 unless stated. They wi
 | 21 | push / PRs | not yet | - |
 | 22 | Phase 6 (DSP, FF, LUT) | on hold | - |
 
-Note: Peter's answers replaced the "Regression gates" bullets in CLAUDE.md; the gates still apply (test/hls-est no new
+Note: the "Regression gates" bullets of CLAUDE.md were restored on Peter's request (2026-10-10); the gates apply (test/hls-est no new
 failures; polybench_pragmas bicg 8, gesummv 16, mvt 8, syrk 32 exact; designs exact in the latest run stay exact unless
 explained per array).
 
