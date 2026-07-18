@@ -4,7 +4,7 @@ Newest entry first. One entry per logical change, including changes that were
 tried and reverted. Branch: `hls-est-vitis-match` in `~/circt`.
 
 ## 2026-10-10 — hls-est: T8 review fixes (`--vitis-fold` undef rules for shifts right / remui by U, two U operands, selects decided by a compare of U; a use after free in `--dead-memory-elimination`)
-- **Commit:** see `git log --grep 'T8 route A hls-est side review fixes'` (branch `hls-est-vitis-match`; this entry is part of that commit)
+- **Commit:** a752b67e5 (branch `hls-est-vitis-match`); this hash line: the following changelog-only commit
 - **Files:** lib/Dialect/Resource/Passes/VitisFold.cpp (`producesUndef`, `UndefFolder::run`, new `isSelectToMinMax`, `VitisFoldPass::runOnOperation`, file comment), lib/Dialect/Resource/Passes/DeadMemoryElimination.cpp (`eliminateOnce`), test/hls-est/Passes/vitis_fold_undef.mlir (`@use_zero` changed; new `@review_undef2`, `@select_by_compare`), tools/hls-est-validate/VITIS_NOTES.md (N13)
 - **What:** the T8 review (D1-D5) of 90a14d498 / ec2c787a8:
   - *D1:* `x >> U` (shrsi, shrui) and `remui x, U` keep U (they fell through to U := 0). `remui x, <constant 0>` stays 0.
