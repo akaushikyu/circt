@@ -930,6 +930,11 @@ bool DeadMemoryEliminationPass::eliminateOnce(
       return WalkResult::skip();
     });
   }
+
+  SmallVector<Operation *> deadGlobals;
+  for (const MemObject &opHandle : table.objs)
+    if (!opHandle.live && isa<memref::GlobalOp>(opHandle.def))
+      deadGlobals.push_back(opHandle.def);
   for (Operation *op : dead)
     notes.forget(op);
   for (Operation *op : dead)
@@ -940,12 +945,11 @@ bool DeadMemoryEliminationPass::eliminateOnce(
   }
   changed |= !dead.empty();
 
-  for (const MemObject &opHandle : table.objs)
-    if (!opHandle.live && isa<memref::GlobalOp>(opHandle.def)) {
-      notes.forget(opHandle.def);
-      opHandle.def->erase();
-      changed = true;
-    }
+  for (Operation *globalOp : deadGlobals) {
+    notes.forget(globalOp);
+    globalOp->erase();
+    changed = true;
+  }
   return changed;
 }
 

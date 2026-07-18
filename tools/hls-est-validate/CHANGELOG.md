@@ -3,6 +3,35 @@
 Newest entry first. One entry per logical change, including changes that were
 tried and reverted. Branch: `hls-est-vitis-match` in `~/circt`.
 
+## 2026-10-10 — hls-est: T8 review fixes (`--vitis-fold` undef rules for shifts right / remui by U, two U operands, selects decided by a compare of U; a use after free in `--dead-memory-elimination`)
+- **Commit:** see `git log --grep 'T8 route A hls-est side review fixes'` (branch `hls-est-vitis-match`; this entry is part of that commit)
+- **Files:** lib/Dialect/Resource/Passes/VitisFold.cpp (`producesUndef`, `UndefFolder::run`, new `isSelectToMinMax`, `VitisFoldPass::runOnOperation`, file comment), lib/Dialect/Resource/Passes/DeadMemoryElimination.cpp (`eliminateOnce`), test/hls-est/Passes/vitis_fold_undef.mlir (`@use_zero` changed; new `@review_undef2`, `@select_by_compare`), tools/hls-est-validate/VITIS_NOTES.md (N13)
+- **What:** the T8 review (D1-D5) of 90a14d498 / ec2c787a8:
+  - *D1:* `x >> U` (shrsi, shrui) and `remui x, U` keep U (they fell through to U := 0). `remui x, <constant 0>` stays 0.
+  - *D3:* `U * U2`, `U & U2`, `U | U2` keep U; `U ^ U2` is 0 (was 0, 0, -1 and U: reversed). `U ^ x` with one U operand still keeps U.
+  - *D2:* a select whose condition is a constant takes the arm it picks, U or not (rule `select-constant-condition`; also in `producesUndef`). The selects of a round are rewritten after every other use, so a compare of U (directly or through a pair of extensions) that decides the condition is folded first: `(u >= x) ? u : x` and `(u < x) ? x : u` are U and their stores are deleted, `(u > x) ? u : x` stores x. The rules run once before the pass's first greedy rewrite, and with `undef` that rewrite leaves out arith's 16 `select (cmpi a, b), a, b -> min / max` patterns (root `arith.select`, generated op a min / max), which would merge the sge and sgt forms into one `maxsi`. Known difference, documented in N13 and pinned in `@use_zero`: a `--canonicalize` before `--vitis-fold` (prefix B) has already formed the max, which stays an unmeasured use (U := 0).
+  - *D4:* `eliminateOnce` read `o.def` of every memory object after the dead allocas were erased (`isa<memref::GlobalOp>(o.def)` on freed memory; from 77e9ca1fa4, T4). The dead globals are now collected before anything is erased.
+  - *D5:* the comment on the user order said "in IR order"; it is U-discovery and use-list order, now with the selects last.
+- **Why:** Vitis run `~/hls-est-work/experiments/t8review_undef2/e731b57e6aee` (kernel `~/hls-est-work/exp-src/t8review/rv_undef2.cpp`, made by the reviewer): `db/a.o.1.ll` keeps only `out[7] = 0` (U ^ U2) and `out[9] = in[8]` (x >> (U & 31)). Every other slot is deleted (U): x >> U, x >>> U, x % U unsigned, U * U2, U & U2, U | U2, and the two ternaries decided by a compare of U. The frontend IR has the ternaries as a branch and a phi, so Vitis folds the compare (isTrueWhenEqual) before any select or max exists. D4: valgrind "Invalid read of size 8" in `eliminateOnce` on a single write-only alloca (`/home/peter/tmp/rv_t8/dme_min.mlir`, binary `~/hls-est-work/t8/hls-est.t8b`).
+- **Effect:**
+  - *Kernel (SSA mirror of rv_undef2, `/home/peter/tmp/rv_t8/undef2_ssa.mlir`; lit `@review_undef2`):* `--vitis-fold` now leaves exactly Vitis' two stores (before: 9 stores, among them x for out[0] / out[1], 0 for uout[0], max(x, 0) for out[3] / out[4], 0 for out[5] / out[6], -1 for out[8]). With `canonicalize=false` the result is the same. With `--canonicalize` before the pass, out[3] / out[4] still store `maxsi(x, 0)` (the known difference).
+  - *Edge case `@b` of the review (`/home/peter/tmp/rv_t8/edge.mlir`):* `select (cmpi sge (ext h), (ext U)), U, h` is U, and its store is deleted (before: h). The cgeist output of rv_undef2 cannot be read by hls-est: its ternaries are `scf.if` over `polygeist.subindex` views (O25).
+  - *Harness:* frozen binary `~/hls-est-work/t8fix/hls-est.t8fix`, runs in `~/hls-est-work/t8fix/runs/`. All runs used `--mlir-from` with the T8 runs' MLIR, compared with T8's runs (`~/hls-est-work/t8/runs/xc2_{A,B}_{nos,def}.json`, `s_{def,nos}.json`). **Every design is identical in status, total and per-array memref rows.** The one exception is lab2_hanchen (no Vitis ground truth), which timed out in both: 120 s here, 900 s on T8's retry.
+
+    | run | designs | no split | default |
+    |---|---|---|---|
+    | exactclass + prefix B + adapters (8 datasets) | 213 | 49 / 8442 | 41 / 7543 |
+    | exactclass + prefix A + adapters (8 datasets) | 213 | 49 / 9473 | 42 / 7771 |
+    | scalar, no prefix (subset) | 112 | 43 / 31503 | 37 / 27297 |
+
+    Each cell is exact / \|err\| on the 89 compared designs. Gates bicg 8, gesummv 16, mvt 8, syrk 32 are exact in all six runs. No harness design contains a U, so none of the rule changes can reach one.
+  - *Kernels with prefix B + adapters:* forgebench attention_op_p1 gives 73 with no split and 78 with the default pipeline, with prefix A or B. dg_d_fold_divrem0 is 6, dg_d_fold_divrem0b 2, k 1, and k_ctrl 3 (no split) / 1 (default). All are equal to the T8 binary's numbers.
+  - *Memory checks:* valgrind is clean on dme_min, edge.mlir (both canonicalize settings), undef2_ssa, `vitis_fold{,_undef}.mlir` (both settings), `dead_memory_elimination.mlir` and `dme_cfg.mlir`. The T8 binary still shows the D4 invalid read on dme_min.
+  - *`check_debug_invariance.sh`:* 38 pass / 0 fail / 4 err under both the default pipeline and prefix B, per case identical to the review's runs.
+  - *Lit `test/hls-est`:* 94 tests: 65 passed, 1 expectedly failed, 24 unresolved and 4 failed (activation_op1, tiled_attn_module, tiled_attn_p1, tiled_attn_p2; pre-existing). Unchanged. The new CHECK and NOCANON lines fail on the T8 binary.
+- **Not adopted / for Peter:** nothing joins the default pipeline: `--vitis-fold` stays opt-in and `DEFAULT_PIPELINE` and the lit RUN lines are unchanged. Running `--vitis-fold` before `--canonicalize` in the M5 prefix would avoid the min / max known difference. That is not proposed, because no harness design has a U and so it is not measured to matter.
+- **Reverted?:** no
+
 ## 2026-10-10 — hls-est: T8 self-review fixes (`--vitis-fold` store forwarding through a view of unknown storage; notes only on the module)
 - **Commit:** ec2c787a8 (branch `hls-est-vitis-match`); this hash line: the following changelog-only commit
 - **Files:** lib/Dialect/Resource/Passes/VitisFold.cpp (`provablyDistinct`, `recordNotes`), test/hls-est/Passes/vitis_fold_undef.mlir (`@local_escape`)

@@ -337,10 +337,14 @@ func.func @local_scalar(%x: i32, %in: memref<8xi32>, %out: memref<9xi32>) {
 
 // -----
 
-// Uses that were not measured see U := 0 (the T4 refinement): a shift right
-// by U (x >> 0 = x), an index computed from U (index 0), a yield.
+// Uses that were not measured see U := 0 (the T4 refinement): a min / max,
+// an index computed from U (index 0). Known difference (N13): a
+// --canonicalize before this pass merges `(u >= x) ? u : x` into
+// `maxsi U, x`, which no longer says whether the compare was sge (Vitis: U,
+// the store is deleted) or sgt (Vitis: x); max(x, 0) is stored.
 // CHECK-LABEL: func.func @use_zero
-// CHECK: memref.store %arg1, %arg2[%c0]
+// CHECK: %[[M:.*]] = arith.maxsi %arg1, %{{.*}} : i32
+// CHECK: memref.store %[[M]], %arg2[%c0]
 // CHECK: %[[V:.*]] = memref.load %arg3[%c0]
 // CHECK: memref.store %[[V]], %arg2[%c1]
 func.func @use_zero(%x: i32, %y: i32, %out: memref<2xi32>, %tbl: memref<16xi32>) {
@@ -348,11 +352,120 @@ func.func @use_zero(%x: i32, %y: i32, %out: memref<2xi32>, %tbl: memref<16xi32>)
   %i0 = arith.constant 0 : index
   %i1 = arith.constant 1 : index
   %u = arith.divsi %x, %c0 : i32
-  %sh = arith.shrsi %y, %u : i32
-  memref.store %sh, %out[%i0] : memref<2xi32>
+  %mx = arith.maxsi %u, %y : i32
+  memref.store %mx, %out[%i0] : memref<2xi32>
   %idx = arith.index_cast %u : i32 to index
   %v = memref.load %tbl[%idx] : memref<16xi32>
   memref.store %v, %out[%i1] : memref<2xi32>
+  return
+}
+
+// -----
+
+// The T8 review kernel ~/hls-est-work/exp-src/t8review/rv_undef2.cpp (run
+// t8review_undef2/e731b57e6aee) in SSA form: Vitis keeps only out[7] = 0
+// and out[9] = in[8]. x >> U (shrsi, shrui) and x % U unsigned are U
+// (out[0], out[1], uout[0]); x << U is U (out[2]); U * U2, U & U2, U | U2
+// are U (out[5], out[6], out[8]) and U ^ U2 is 0 (out[7]); the compare of U
+// decides the select before it could become a max: `(u >= x) ? u : x` and
+// `(u < x) ? x : u` are U (out[3], out[4]); x >> (U & 31) is x (out[9]).
+// CHECK-LABEL: func.func @review_undef2
+// CHECK: %[[Z:.*]] = arith.constant 0 : i32
+// CHECK-NOT: affine.store
+// CHECK: affine.store %[[Z]], %arg1[7]
+// CHECK-NEXT: %[[L:.*]] = affine.load %arg0[8]
+// CHECK-NEXT: affine.store %[[L]], %arg1[9]
+// CHECK-NEXT: return
+// T4-LABEL: func.func @review_undef2
+// T4: affine.store %{{.*}}, %arg1[0]
+// NOCANON-LABEL: func.func @review_undef2
+// NOCANON-NOT: affine.store
+// NOCANON: affine.store %{{.*}}, %arg1[7]
+// NOCANON-NOT: affine.store
+// NOCANON: affine.store %{{.*}}, %arg1[9]
+// NOCANON-NEXT: return
+func.func @review_undef2(%in: memref<16xi32>, %out: memref<16xi32>, %uout: memref<4xi32>) {
+  %c0 = arith.constant 0 : i32
+  %c31 = arith.constant 31 : i32
+  %x0 = affine.load %in[0] : memref<16xi32>
+  %x1 = affine.load %in[1] : memref<16xi32>
+  %u = arith.divsi %x0, %c0 : i32
+  %u2 = arith.divsi %x1, %c0 : i32
+  %a2 = affine.load %in[2] : memref<16xi32>
+  %s0 = arith.shrsi %a2, %u : i32
+  affine.store %s0, %out[0] : memref<16xi32>
+  %a3 = affine.load %in[3] : memref<16xi32>
+  %s1 = arith.shrui %a3, %u : i32
+  affine.store %s1, %out[1] : memref<16xi32>
+  %a4 = affine.load %in[4] : memref<16xi32>
+  %s2 = arith.shli %a4, %u : i32
+  affine.store %s2, %out[2] : memref<16xi32>
+  %a5 = affine.load %in[5] : memref<16xi32>
+  %c3 = arith.cmpi sge, %u, %a5 : i32
+  %s3 = arith.select %c3, %u, %a5 : i32
+  affine.store %s3, %out[3] : memref<16xi32>
+  %a6 = affine.load %in[6] : memref<16xi32>
+  %c4 = arith.cmpi slt, %u, %a6 : i32
+  %s4 = arith.select %c4, %a6, %u : i32
+  affine.store %s4, %out[4] : memref<16xi32>
+  %m = arith.muli %u, %u2 : i32
+  affine.store %m, %out[5] : memref<16xi32>
+  %an = arith.andi %u, %u2 : i32
+  affine.store %an, %out[6] : memref<16xi32>
+  %xo = arith.xori %u, %u2 : i32
+  affine.store %xo, %out[7] : memref<16xi32>
+  %o = arith.ori %u, %u2 : i32
+  affine.store %o, %out[8] : memref<16xi32>
+  %a7 = affine.load %in[7] : memref<16xi32>
+  %r = arith.remui %a7, %u : i32
+  affine.store %r, %uout[0] : memref<4xi32>
+  %a8 = affine.load %in[8] : memref<16xi32>
+  %m31 = arith.andi %u, %c31 : i32
+  %s9 = arith.shrsi %a8, %m31 : i32
+  affine.store %s9, %out[9] : memref<16xi32>
+  return
+}
+
+// -----
+
+// A select whose condition a compare of U decides takes the arm it picks:
+// sgt is false, so `(u > y) ? u : y` stores y (the sge form above is U);
+// through a pair of sign extensions the same: `(h >= v) ? v : h` with v = U
+// is U, deleted. The pass's own rewrite leaves `select (cmpi a, b), a, b`
+// without U a select (a max would lose the predicate); the T4 rule merges
+// it into a max.
+// CHECK-LABEL: func.func @select_by_compare
+// CHECK: memref.store %arg1, %arg3[%c0]
+// CHECK: %[[C:.*]] = arith.cmpi sgt, %arg1, %arg2 : i32
+// CHECK: %[[S:.*]] = arith.select %[[C]], %arg1, %arg2 : i32
+// CHECK: memref.store %[[S]], %arg3[%c1]
+// CHECK-NOT: memref.store
+// CHECK: return
+// T4-LABEL: func.func @select_by_compare
+// T4: arith.maxsi %arg1, %arg2 : i32
+// NOCANON-LABEL: func.func @select_by_compare
+// NOCANON: memref.store %arg1, %arg3[%{{.*}}]
+// NOCANON: memref.store %{{.*}}, %arg3[%{{.*}}]
+// NOCANON-NOT: memref.store
+// NOCANON: return
+func.func @select_by_compare(%x: i32, %y: i32, %b: i32, %out: memref<2xi32>, %h: i16, %out16: memref<1xi16>) {
+  %c0 = arith.constant 0 : i32
+  %c0_16 = arith.constant 0 : i16
+  %i0 = arith.constant 0 : index
+  %i1 = arith.constant 1 : index
+  %u = arith.divsi %x, %c0 : i32
+  %gt = arith.cmpi sgt, %u, %y : i32
+  %s0 = arith.select %gt, %u, %y : i32
+  memref.store %s0, %out[%i0] : memref<2xi32>
+  %c = arith.cmpi sgt, %y, %b : i32
+  %s1 = arith.select %c, %y, %b : i32
+  memref.store %s1, %out[%i1] : memref<2xi32>
+  %v = arith.divsi %h, %c0_16 : i16
+  %ve = arith.extsi %v : i16 to i32
+  %he = arith.extsi %h : i16 to i32
+  %ge = arith.cmpi sge, %he, %ve : i32
+  %s2 = arith.select %ge, %v, %h : i16
+  memref.store %s2, %out16[%i0] : memref<1xi16>
   return
 }
 

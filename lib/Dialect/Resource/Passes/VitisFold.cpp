@@ -16,6 +16,7 @@
 #include "llvm/ADT/SetVector.h"
 #include "llvm/ADT/StringMap.h"
 
+#include <algorithm>
 #include <type_traits>
 
 using namespace mlir;
@@ -204,17 +205,33 @@ bool UndefFolder::producesUndef(Operation *op) const {
     return false;
   if (isa<arith::TruncIOp>(op))
     return isU(op->getOperand(0));
-  if (isa<arith::AddIOp, arith::SubIOp, arith::XOrIOp>(op))
+  if (isa<arith::AddIOp, arith::SubIOp>(op))
     return isU(op->getOperand(0)) || isU(op->getOperand(1));
-  if (isa<arith::DivSIOp, arith::DivUIOp, arith::RemSIOp>(op))
+
+  if (isa<arith::XOrIOp>(op))
+    return isU(op->getOperand(0)) != isU(op->getOperand(1));
+
+  if (isa<arith::DivSIOp, arith::DivUIOp, arith::RemSIOp, arith::RemUIOp>(op))
     return isU(op->getOperand(1));
-  if (isa<arith::ShLIOp>(op))
+
+  if (isa<arith::ShLIOp, arith::ShRSIOp, arith::ShRUIOp>(op))
     return isU(op->getOperand(1));
+
+  if (isa<arith::MulIOp, arith::AndIOp, arith::OrIOp>(op) &&
+      isU(op->getOperand(0)) && isU(op->getOperand(1)))
+    return true;
   if (isa<arith::MulIOp>(op))
     return (isU(op->getOperand(0)) && isOddConstant(op->getOperand(1))) ||
            (isU(op->getOperand(1)) && isOddConstant(op->getOperand(0)));
-  if (auto sel = dyn_cast<arith::SelectOp>(op))
-    return isU(sel.getTrueValue()) && isU(sel.getFalseValue());
+  if (auto sel = dyn_cast<arith::SelectOp>(op)) {
+    if (isU(sel.getTrueValue()) && isU(sel.getFalseValue()))
+      return true;
+    APInt candidateValue;
+    if (matchPattern(sel.getCondition(), m_ConstantInt(&candidateValue)))
+      return isU(candidateValue.isZero() ? sel.getFalseValue()
+                                         : sel.getTrueValue());
+    return false;
+  }
   return false;
 }
 
@@ -277,13 +294,17 @@ bool UndefFolder::run(SmallVectorImpl<FoldNote> &notes) {
     }
   }
 
-  llvm::SetVector<Operation *> users;
+  llvm::SetVector<Operation *> userSet;
   for (auto &[valueHandle, src] : undef)
     for (Operation *useValue : valueHandle.getUsers())
       if (!producesUndef(useValue))
-        users.insert(useValue);
-  if (users.empty())
+        userSet.insert(useValue);
+  if (userSet.empty())
     return false;
+  SmallVector<Operation *> users(userSet.begin(), userSet.end());
+  std::stable_partition(users.begin(), users.end(), [](Operation *op) {
+    return !isa<arith::SelectOp>(op);
+  });
 
   OpBuilder buildPoint(root->getContext());
   auto note = [&](StringRef rule, Operation *op, Value useValue,
@@ -364,6 +385,11 @@ bool UndefFolder::run(SmallVectorImpl<FoldNote> &notes) {
       replaceAndErase(op, buildPoint.getZeroAttr(op->getResult(0).getType()));
       continue;
     }
+    if (isa<arith::XOrIOp>(op)) {
+      note("xor-undef-undef-zero", op, useValue);
+      replaceAndErase(op, buildPoint.getZeroAttr(op->getResult(0).getType()));
+      continue;
+    }
     if (isa<arith::MulIOp, arith::AndIOp>(op)) {
       note(isa<arith::MulIOp>(op) ? "mul-zero" : "and-zero", op, useValue);
       replaceAndErase(op, buildPoint.getZeroAttr(op->getResult(0).getType()));
@@ -395,6 +421,18 @@ bool UndefFolder::run(SmallVectorImpl<FoldNote> &notes) {
       continue;
     }
     if (auto sel = dyn_cast<arith::SelectOp>(op)) {
+
+      APInt candidateValue;
+      if (matchPattern(sel.getCondition(), m_ConstantInt(&candidateValue))) {
+        Value pick =
+            candidateValue.isZero() ? sel.getFalseValue() : sel.getTrueValue();
+        note("select-constant-condition", op, useValue,
+             isU(pick) ? "undef arm" : "other arm");
+        sel.getResult().replaceAllUsesWith(pick);
+        toErase.push_back(op);
+        done.insert(op);
+        continue;
+      }
       if (!isU(sel.getCondition())) {
         Value keep =
             isU(sel.getTrueValue()) ? sel.getFalseValue() : sel.getTrueValue();
@@ -429,6 +467,21 @@ bool UndefFolder::run(SmallVectorImpl<FoldNote> &notes) {
     }
   }
   return true;
+}
+
+/// The arith `select (cmpi pred, a, b), a, b -> min / max (a, b)` patterns.
+static bool isSelectToMinMax(const RewritePattern &portValue) {
+  std::optional<OperationName> root = portValue.getRootKind();
+  if (!root || root->getStringRef() != arith::SelectOp::getOperationName())
+    return false;
+  return llvm::any_of(
+      portValue.getGeneratedOps(), [](OperationName elementCount) {
+        return llvm::is_contained({arith::MaxSIOp::getOperationName(),
+                                   arith::MinSIOp::getOperationName(),
+                                   arith::MaxUIOp::getOperationName(),
+                                   arith::MinUIOp::getOperationName()},
+                                  elementCount.getStringRef());
+      });
 }
 
 struct VitisFoldPass : PassWrapper<VitisFoldPass, OperationPass<>> {
@@ -475,6 +528,12 @@ struct VitisFoldPass : PassWrapper<VitisFoldPass, OperationPass<>> {
         targetDialect->getCanonicalizationPatterns(patterns);
       for (RegisteredOperationName op : context->getRegisteredOperations())
         op.getCanonicalizationPatterns(patterns, context);
+
+      if (undefRules)
+        llvm::erase_if(patterns.getNativePatterns(),
+                       [](const std::unique_ptr<RewritePattern> &portValue) {
+                         return isSelectToMinMax(*portValue);
+                       });
     }
     FrozenRewritePatternSet frozen(std::move(patterns));
 
@@ -482,6 +541,9 @@ struct VitisFoldPass : PassWrapper<VitisFoldPass, OperationPass<>> {
     config.enableFolding(canonicalize);
     SmallVector<FoldNote> notes;
     UndefFolder folder(getOperation());
+
+    if (undefRules)
+      (void)folder.run(notes);
     for (unsigned round = 0; round < 16; ++round) {
       (void)applyPatternsGreedily(getOperation(), frozen, config);
       if (!undefRules || !folder.run(notes))
