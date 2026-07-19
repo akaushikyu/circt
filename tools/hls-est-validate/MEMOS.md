@@ -21,7 +21,7 @@ vitis_examples (73 compared designs) at hls-est 22d473858 unless stated. They wi
 | 12 | O5: cgeist opt-in flag to keep invariant inner loops in place | approved | to implement (W3) |
 | 13 | M9: unsigned 32-bit wrap assumption | approved: the frontend marks signed arithmetic as non-wrapping; keep today's behaviour until that lands | to implement (W5) |
 | 14 | raise narrow counters against an `int` bound by assuming it fits | Peter: "do whatever you feel will make the result closer" - decide by a Vitis experiment (does Vitis pipeline such a loop?) | to implement (W5) |
-| 15 | O15: assignable `range()` references | Peter: "Yes? What is this doing - make a write-up" | write-up M10; waiting for Peter's OK on its plan |
+| 15 | O15: assignable `range()` references | Peter approved the M10 plan (2026-10-10): time-boxed experiment on one soda design and SkyNet, after the W3/W5 frontend work | to implement (W6) |
 | 16 | regenerate the lit Estimation CHECK values from the current model (Vitis value in a comment) | approved, after the defaults are settled | to implement (W1) |
 | 17 | the 12 designs without Vitis ground truth | exclude them for now and record why in the spreadsheet | done (2e8f04992, sheet "excluded designs") |
 | 18 | `hls::exp` / `hls::sqrt` deviations in exactclass | Peter: find out whether these functions have a fixed cost (experiments); put the cost in a configuration file the programmer sets | to implement (W2) |
