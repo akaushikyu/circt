@@ -19,11 +19,11 @@ vitis_examples (73 compared designs) at hls-est 22d473858 unless stated. They wi
 | 10 | exactclass replaces Polygeist's lit shim `Test/HLS/Inputs/vitis` | approved (same as #8) | after W3 (Polygeist lit; RUN lines pass `--scalar-wrapper-abi` while #9 keeps it opt-in) |
 | 11 | O10: cgeist honours `#pragma HLS inline off` | approved | to implement (W3) |
 | 12 | O5: cgeist opt-in flag to keep invariant inner loops in place | approved | to implement (W3) |
-| 13 | M9: unsigned 32-bit wrap assumption | no answer | status quo (width 32) |
-| 14 | raise narrow counters against an `int` bound by assuming it fits | no answer | status quo (not raised) |
-| 15 | O15: assignable `range()` references | no answer | not started |
+| 13 | M9: unsigned 32-bit wrap assumption | approved: the frontend marks signed arithmetic as non-wrapping; keep today's behaviour until that lands | to implement (W5) |
+| 14 | raise narrow counters against an `int` bound by assuming it fits | Peter: "do whatever you feel will make the result closer" - decide by a Vitis experiment (does Vitis pipeline such a loop?) | to implement (W5) |
+| 15 | O15: assignable `range()` references | Peter: "Yes? What is this doing - make a write-up" | write-up M10; waiting for Peter's OK on its plan |
 | 16 | regenerate the lit Estimation CHECK values from the current model (Vitis value in a comment) | approved, after the defaults are settled | to implement (W1) |
-| 17 | the 12 designs without Vitis ground truth | Peter asked how the ground truth was produced (answered); no decision on exclusion | waiting for Peter |
+| 17 | the 12 designs without Vitis ground truth | exclude them for now and record why in the spreadsheet | done (2e8f04992, sheet "excluded designs") |
 | 18 | `hls::exp` / `hls::sqrt` deviations in exactclass | Peter: find out whether these functions have a fixed cost (experiments); put the cost in a configuration file the programmer sets | to implement (W2) |
 | 19 | keep the two small default-output changes (banking constants through index casts; RAM_2P label) | approved | done |
 | 20 | correct the CLAUDE.md attention target | done (Peter + coordinator) | done |
@@ -564,3 +564,45 @@ narrow `*=` computes in `int` + `trunci` again, so an in-range narrow product (`
 switching to 64 costs nothing in BRAM today but makes 19 designs' accesses non-affine, which weakens banking and
 scheduling. Evidence: CHANGELOG entries for Polygeist 763b0046 and cbc105e0; probes in the session scratchpad `r4\`,
 `r6\` and `verify3\`.
+
+## M10 — O15: assignable bit and range selects (`x.range(h, l) = v`): what they do and what supporting them takes
+
+**What the source code does.** In Vitis' `ap_int` / `ap_uint` / `ap_fixed`, the calls `x.range(h, l)`, `x(h, l)`,
+`x[i]`, `x.bit(i)` and the concatenation `(a, b)` return small proxy objects (`ap_range_ref`, `ap_bit_ref`,
+`ap_concat_ref`, `af_range_ref`). A proxy holds a reference to `x` plus the bit positions. Reading it gives the bits
+as a value. Assigning to it (`x.range(15, 0) = v;`) is a read-modify-write of `x`: clear bits h..l, OR in `v`
+shifted to position l, write `x` back. Designs use this to pack narrow values into wide words:
+
+| design group | example line | what it packs |
+|---|---|---|
+| soda (11 designs) | `dram_*_buf(255, 240) = Reinterpret<ap_uint<16>>(...)` | sixteen 16-bit values into one 256-bit memory word |
+| accelerators Mask-Net_dataset, SkyNet_dataset | `DATA.range(FM_RG + 16*c, 16*c) = d.range(FM_RG, 0)` | feature-map lanes into wide DATA words |
+| vitis_examples/01 fixed_point_sqrt | `result.range(W2-1, 0) = ap_uint<W2>(q >> 1)` | the low bits of a fixed-point result |
+| 9 class_ece8893_spring_2025 labs | `temp.range(16*(jj+1)-1, 16*jj) = bits` | 16-bit lanes into a wide word |
+
+**Why it matters for BRAM.** These arrays hold wide words (often 256 or 512 bits), so their BRAM count depends on the
+exact word width, and each range write is a load plus a store of the whole word, which decides how many ports the
+array needs (single- vs dual-port RAM, replication).
+
+**Why these designs fail today.** All 23 stop in cgeist under every shim. `scalar` and `exact` turn `ap_uint<256>`
+into a plain integer, which has no `.range()` at all. `exactclass` has `.range()` that returns a value, so reading
+works, but assigning to it is a compile error (`no viable overloaded '='`). 14 of the 23 have Vitis ground truth
+(the 11 soda designs, Mask-Net, SkyNet, fixed_point_sqrt); the 9 class labs do not.
+
+**What supporting it takes** (both parts behind the existing opt-in `--scalar-wrapper-abi`, so nothing else changes):
+1. *Shim:* give `exactclass` real proxy classes: a pointer to the word plus h and l, with an always-inlined
+   `operator=` that does the read-modify-write on the word's integer, and reads that convert to a value.
+2. *cgeist:* after inlining, the proxy is a small struct (pointer + two ints) in a local slot. Polygeist does not
+   split such struct slots into scalars today, so a small scalar-replacement step for proxy-shaped structs is needed;
+   then the code becomes `load word; and with mask; or (v << l); store word` on an `iW` array, which is the form
+   Vitis' own front end produces and hls-est already handles.
+3. *Check:* compile one soda design and SkyNet, confirm the MLIR has plain `iW` arrays and the read-modify-write, run
+   hls-est and compare per array with Vitis; add the shim cases to `check_shim_cgeist.py` (bit-exact against the real
+   Vitis headers).
+
+**Expected effect.** 14 designs with ground truth become comparable (today they read "cgeist error"); whether they
+match Vitis is not known until they run. No effect on any design that compiles today.
+
+**Recommendation.** Yes, as a time-boxed experiment on one soda design and SkyNet first (steps 1-3), run after the
+W3 cgeist work (one frontend change at a time). If the scalar-replacement step turns out large or fragile, stop and
+report; the 23 designs then stay excluded as "cgeist error". Waiting for your OK on this plan.
