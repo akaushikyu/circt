@@ -12,6 +12,7 @@ Sheets, in order:
   per-array             one row per array: Vitis BRAM vs hls-est BRAM (default pipeline)
   mismatches            designs whose default prediction differs, largest |diff| first, with cause / O-number
   failures              designs where Vitis or hls-est produced no number, with the reason
+  excluded designs      designs without Vitis ground truth, excluded from comparison, with the reason
   vitis designs         the ground truth for every design: totals, status, error text, top, cache dir
   vitis memories        the Vitis "* Memory:" rows (one per physical memory / bank row)
   vitis loops           the Vitis loop tables (pipelined, II, trip count, latency)
@@ -22,6 +23,7 @@ Sheets, in order:
 Every number is copied from a parsed tool output; a missing number is written as the failure text.
 """
 import argparse
+import re
 import csv
 import hashlib
 import subprocess
@@ -80,11 +82,30 @@ def vitis_ok(v):
     return bool(v) and v.get("status") == "ok"
 
 
-def vitis_fail_text(v):
+def exclusion(v):
+    """Why a design has no Vitis ground truth: (category, reason), derived from the Vitis
+    status and error text only (no design names). Peter, 2026-10-10: exclude these designs
+    for now and record why in the spreadsheet."""
     if not v:
-        return "vitis failed: not run"
-    note = (v.get("note") or "").strip().splitlines()
-    return f"vitis failed: {v.get('status')}" + (f" ({note[0][:160]})" if note else "")
+        return "not run", "Vitis was not run on this design"
+    note = (v.get("note") or "").strip()
+    st = v.get("status") or ""
+    m = re.search(r"\[HLS 207-812\] '([^']+)' file not found", note)
+    if m:
+        return ("missing header", f"Vitis cannot compile the source: it includes '{m.group(1)}', "
+                "which is not part of the dataset (vendor/host header)")
+    if re.search(r"Impl=uram\w*.*not supported", note) or "[HLS 214-370]" in note:
+        return ("URAM on Zynq-7000", "the source binds arrays to UltraRAM (bind_storage impl=uram); "
+                "the xc7z020 part has no UltraRAM, so Vitis stops")
+    if "timeout" in st:
+        return ("Vitis timeout", f"Vitis csynth did not finish within the harness limit ({st})")
+    first = note.splitlines()[0][:160] if note else ""
+    return ("other Vitis failure", f"{st}" + (f": {first}" if first else ""))
+
+
+def vitis_fail_text(v):
+    cat, why = exclusion(v)
+    return f"excluded ({cat}): {why}"
 
 
 def git(repo, *a):
@@ -116,7 +137,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--vitis", default=str(C.RESULTS_DIR / "vitis.json"))
     ap.add_argument("--hlsest", default=str(C.RESULTS_DIR / "hlsest.json"), help="default-pipeline run")
-    ap.add_argument("--nosplit", default=None, help="run of the default pipeline without --infer-vitis-split-array")
+    ap.add_argument("--nosplit", default=None, help="a second run for the extra sheet (historically the pipeline without --infer-vitis-split-array, which is the default since MEMOS M1; now e.g. the former default with it)")
     ap.add_argument("--experiments", default=str(C.HERE / "experiments" / "results.csv"))
     ap.add_argument("--diagnoses", default=str(C.HERE / "diagnoses.json"))
     ap.add_argument("--out", default=str(C.HERE / "hls-est-results.xlsx"))
@@ -204,6 +225,20 @@ def main():
                           ((h or {}).get("note") or (h or {}).get("error") or "")[:300]])
     table(wf, ["dataset", "benchmark", "Vitis status", "Vitis error", "hls-est status", "hls-est note"], frows)
 
+    # ---- excluded designs (no Vitis ground truth) ----
+    wx = wb.create_sheet("excluded designs")
+    xrows = []
+    for k in sorted(V):
+        v = V[k]
+        if vitis_ok(v):
+            continue
+        cat, why = exclusion(v)
+        h = H.get(k)
+        xrows.append([*k.split("/", 1), cat, why, ((v.get("note") or "").strip().splitlines() or [""])[0][:300],
+                      prediction(h) if h else "hls-est: not run"])
+    table(wx, ["dataset", "benchmark", "exclusion category", "why it is excluded", "Vitis error (first line)",
+               "hls-est result (not compared)"], xrows)
+
     # ---- vitis designs / memories / loops ----
     wd = wb.create_sheet("vitis designs")
     drows, vmrows, lrows = [], [], []
@@ -282,6 +317,8 @@ def main():
         ["td (syn.array_partition.throughput_driven)", "off (ground truth); td=auto only on its own sheet"],
         ["extra hls config", "; ".join(C.EXTRA_HLS_CFG)],
         ["Vitis designs / with a result", f"{len(V)} / {sum(1 for v in V.values() if vitis_ok(v))}"],
+        ["excluded designs (no Vitis ground truth; see 'excluded designs')",
+         f"{sum(1 for v in V.values() if not vitis_ok(v))} - excluded from every comparison (Peter, 2026-10-10)"],
         ["shim", hmeta.get("shim", "")],
         ["default pipeline (prediction column)", hmeta.get("pipeline", "")],
         ["no-split pipeline", nmeta.get("pipeline", "")],
