@@ -1,5 +1,6 @@
 // RUN: hls-est %s --bram-analysis --bram-seq-dual-port | FileCheck %s
-// RUN: hls-est %s --bram-analysis | FileCheck %s --check-prefix=OFF
+// RUN: hls-est %s --bram-analysis --bram-seq-dual-port=false | FileCheck %s --check-prefix=OFF
+// RUN: hls-est %s --bram-analysis | FileCheck %s
 
 // --bram-seq-dual-port (VITIS_NOTES.md N12) on hand-written lowered IR, to pin
 // the parts of the rule that the --convert-affine-to-loopschedule output does

@@ -11,11 +11,14 @@
 //   @cc     ci2d_cc_64x8  int A[64][8], j unrolled in both  -> 8 x [64x32] @ 1 [8]
 //   @varj   ci2d_64x8     int A[64][8], copy-in j pipelined -> one RAM_1WNR,
 //                         7 copies of 512x32 at x18 = 14 [14]
-// Total 22 = Vitis. The default (td=auto) pipeline splits @varj by port
-// pressure instead (8 banks = 8) and keeps @both as one RAM (1): 17.
+// Total 22 = Vitis. The td=auto variant (--infer-vitis-split-array without
+// td=, the default pipeline before MEMOS.md M1) splits @varj by port pressure
+// instead (8 banks = 8) and keeps @both as one RAM: RAM_T2P 2 (the unrolled
+// body stores two elements per state, --bram-seq-dual-port, on by default
+// since MEMOS.md M6; 1 before): 18.
 
 // REPORT: Total BRAM: 22
-// AUTO: Total BRAM: 17
+// AUTO: Total BRAM: 18
 
 // CHECK:      A (alloca) @ {{.*}}
 // CHECK-NEXT:   shape [4] x i32 (32 bits) = 4 words

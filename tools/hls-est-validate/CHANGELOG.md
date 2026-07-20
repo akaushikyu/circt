@@ -3,6 +3,24 @@
 Newest entry first. One entry per logical change, including changes that were
 tried and reverted. Branch: `hls-est-vitis-match` in `~/circt`.
 
+## 2026-10-10 — hls-est: `--bram-seq-dual-port` on by default (MEMOS M6 recommendation 1, decision #2; W1a item 2)
+- **Commit:** ITEM2HASH (branch `hls-est-vitis-match`); this hash line: the W1a changelog-only commit
+- **Files:** lib/Dialect/Resource/Passes/BRAMAnalysis.cpp (`bramSeqDualPortOpt`: `cl::init(true)`, description; comments), test/hls-est/Passes/seq_scope_ports.mlir (the main RUN line uses the default; the OFF line passes `--bram-seq-dual-port=false`), test/hls-est/Passes/seq_scope_ports_ir.mlir (OFF line `=false`, new default line), test/hls-est/Estimation/polybench/bicg.mlir (CHECK 12 -> 14), test/hls-est/Passes/split_array_td_off_bram.mlir (AUTO 17 -> 18)
+- **What:** two independent accesses of a bank in one straight-line stretch of a sequential scope keep both ports live (RAM_2P / RAM_T2P, x18), as in Vitis (N12), without an option. The option stays: `--bram-seq-dual-port=false` gives the former one-live-port model. `forward-stores` stays off (decision #5 waits for #4).
+- **Why:** N12 (33 + 5 kernels), M6: +2 / +3 exact on every shim in the T6 measurements, nothing lost.
+- **Effect** (`--mlir-from` the baseline runs, default pipeline of item 1; frozen `~/hls-est-work/w1a/bin/hls-est.seq`; runs `~/hls-est-work/w1a/runs/{s,x}_i2.json` vs `{s,x}_i1.json`):
+
+  | shim | before (item 1) | after |
+  |---|---|---|
+  | scalar | 42 / 89, \|err\| 31567 | **45** / 89, \|err\| 31570 |
+  | exactclass (information) | 45 / 89, \|err\| 8616 | **48** / 89, \|err\| 8609 |
+
+  Gates exact; no exact design lost. Changed designs (per array, from the debug JSON):
+  - *newly exact (both shims):* polybench atax 11 -> 13 (buff_x: the 64 hoisted invariant reads issue two per state, buff_y_out: RAM_1P 1 -> RAM_2P 2 each = Vitis), bicg 12 -> 14 (buff_p, buff_s_out 1 -> 2 = Vitis), mvt 12 -> 14 (buff_y1, buff_y2 1 -> 2 = Vitis). For buff_y_out / buff_s_out the reason differs from Vitis' (O3 item 3, M6).
+  - *farther:* polybench gesummv 20 -> 21 (135; buff_x 1 -> 2 = Vitis; the gap is buff_A / buff_B, item 1). Scalar only: forgebench conv_block_module 13736 -> 13741, conv_block_op2 11717 -> 11719, conv_block_op3 9094 -> 9097: localWeights 256x32 banks RAM_1P 1 -> RAM_2P 2; Vitis binds localWeights ram_2p as well, 256x16 = 1 (the scalar shim's f32 doubles the x18 columns; with exactclass these designs do not change, as in M6).
+  - lit `test/hls-est`: polybench/bicg.mlir now gives Vitis' 14 (CHECK updated, comment explains), split_array_td_off_bram.mlir's td=auto variant 17 -> 18 (@both's 64x32 B: the unrolled straight-line body stores two elements per state -> RAM_T2P 2); otherwise unchanged (65 pass, 1 expected failure, 24 unresolved, 4 failing pre-existing). `check_debug_invariance.sh`: 38 pass / 0 fail / 4 err.
+- **Reverted?:** no
+
 ## 2026-10-10 — hls-est-validate: `--infer-vitis-split-array` leaves the default pipeline (MEMOS M1, decision #1; W1a item 1)
 - **Commit:** ITEM1HASH (branch `hls-est-vitis-match`); this hash line: the W1a changelog-only commit
 - **Files:** tools/hls-est-validate/common.py (`DEFAULT_PIPELINE`; new `SPLIT_PIPELINE` = the former default), tools/hls-est-validate/experiment_pipeline.py (`ABLATION`: the canonical-relative ablations drop the pass, `no-split-infer` becomes `+split-infer` / `+split-infer-td-off`, `with-dme` / `with-dme-maxi` keep the pass explicitly so their meaning does not move), tools/hls-est-validate/check_debug_invariance.sh (default `PIPELINE`), tools/hls-est-validate/check_pipeline_unroll.py (docstring), test/hls-est/Estimation/run_all.sh (the "aggr" sweep mode) and test/hls-est/Estimation/Claude.md (its command), test/hls-est/Passes/{dependence_scope,index_castui,pipeline_yield_late}.mlir (comments). make_sheet.py's `--nosplit` help text was edited here too but went into 2e8f04992 (another agent's `make_sheet.py` commit staged the whole file).

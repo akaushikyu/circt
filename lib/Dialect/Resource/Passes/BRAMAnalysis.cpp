@@ -81,10 +81,10 @@ static llvm::cl::opt<bool> bramSeqDualPortOpt(
                    "depend on each other (SSA or memory order through any "
                    "array) share a state and keep both ports live (RAM_2P, "
                    "or RAM_T2P for two writes; x18 columns; VITIS_NOTES.md "
-                   "N12). "
-                   "Default: a sequential scope has one live port "
-                   "(OPEN_ISSUES.md O3)"),
-    llvm::cl::init(false));
+                   "N12). On by default (MEMOS.md M6, decision #2 of "
+                   "2026-10-10); =false gives the former model, where a "
+                   "sequential scope has one live port (OPEN_ISSUES.md O3)"),
+    llvm::cl::init(true));
 
 namespace {
 

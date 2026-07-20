@@ -1,11 +1,12 @@
-// RUN: hls-est %s --affine-loop-normalize --auto-pipeline-unroll --memory-banking-bram --convert-affine-to-loopschedule --bram-analysis --bram-seq-dual-port --bram-debug > %t.out 2> %t.err
+// RUN: hls-est %s --affine-loop-normalize --auto-pipeline-unroll --memory-banking-bram --convert-affine-to-loopschedule --bram-analysis --bram-debug > %t.out 2> %t.err
 // RUN: FileCheck %s --input-file=%t.out --check-prefix=REPORT
 // RUN: FileCheck %s --input-file=%t.err
-// RUN: hls-est %s --affine-loop-normalize --auto-pipeline-unroll --memory-banking-bram --convert-affine-to-loopschedule --bram-analysis | FileCheck %s --check-prefix=OFF
+// RUN: hls-est %s --affine-loop-normalize --auto-pipeline-unroll --memory-banking-bram --convert-affine-to-loopschedule --bram-analysis --bram-seq-dual-port=false | FileCheck %s --check-prefix=OFF
 // RUN: hls-est %s --affine-loop-normalize --auto-pipeline-unroll --memory-banking-bram --convert-affine-to-loopschedule -o - | FileCheck %s --check-prefix=ARMS
 
 // Two accesses of one array in one state of a NON-pipelined region
-// (--bram-seq-dual-port, VITIS_NOTES.md N12, OPEN_ISSUES.md O3). Vitis
+// (--bram-seq-dual-port, on by default since MEMOS.md M6; VITIS_NOTES.md N12,
+// OPEN_ISSUES.md O3). Vitis
 // schedules a sequential region with the same 2-port RAM core as a pipeline
 // and puts two accesses in one state when they lie in one straight-line
 // stretch and neither depends on the other; one such state makes a 64x32 array
@@ -14,8 +15,8 @@
 // Each function below mirrors a Vitis kernel of ~/hls-est-work/exp-src/
 // seqports3 (`sp_o_*`: the body of an outer loop that a variable-trip inner
 // loop keeps from being pipelined), seqports (`sp_*`) or t6rev (`rv_*`); the
-// Vitis BRAM of `a` is in the comment. Without the option (OFF) every array
-// here is 1.
+// Vitis BRAM of `a` is in the comment. With --bram-seq-dual-port=false (OFF)
+// every array here is 1.
 //
 // @two_loads (sp_o_8ld / sp_2ld_outer, Vitis 2): a[i] and a[i+32] feed one add.
 // @dependent_loads (sp_o_dd, Vitis 1): the second address is the first value.
