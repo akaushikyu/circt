@@ -2,6 +2,9 @@
 // RUN: hls-est %s --affine-loop-normalize --auto-pipeline-unroll --infer-vitis-split-array --memory-banking-bram --convert-affine-to-loopschedule --bram-analysis | FileCheck %s
 // RUN: hls-est %s --affine-loop-normalize --auto-pipeline-unroll --memory-banking-bram --convert-affine-to-loopschedule -o - | FileCheck %s --check-prefix=SCHED
 
+// The RUN line without --infer-vitis-split-array is the default pipeline (MEMOS.md
+// M1); the one with it is the former default (td=auto), kept as a variant.
+
 // forgebench mult_op_p3 (scalar shim) aborted in --convert-affine-to-loopschedule
 // (IRMapping::lookup "expected 'from' to be contained within the map", from
 // createLoopSchedulePipeline's terminator lookup). Reduced kernel: the

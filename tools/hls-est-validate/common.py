@@ -66,8 +66,13 @@ HLS_EST_DEFAULT = str(CIRCT / "build/clion/bin/hls-est")
 HLS_EST = os.environ.get("HLS_EST_BIN") or HLS_EST_DEFAULT
 
 # The canonical hls-est pipeline (CLAUDE.md).  Experiments vary this string.
-DEFAULT_PIPELINE = ("--affine-loop-normalize --auto-pipeline-unroll --infer-vitis-split-array "
+# --infer-vitis-split-array is not in it (MEMOS.md M1, decision #1 of 2026-10-10): its
+# port-pressure partitioning is the td=auto behaviour and the ground truth is td=off. The
+# pass stays available (td=auto|off); SPLIT_PIPELINE is the former default, for comparisons.
+DEFAULT_PIPELINE = ("--affine-loop-normalize --auto-pipeline-unroll "
                     "--memory-banking-bram --convert-affine-to-loopschedule --bram-analysis")
+SPLIT_PIPELINE = ("--affine-loop-normalize --auto-pipeline-unroll --infer-vitis-split-array "
+                  "--memory-banking-bram --convert-affine-to-loopschedule --bram-analysis")
 HLSEST_TIMEOUT = 120
 
 

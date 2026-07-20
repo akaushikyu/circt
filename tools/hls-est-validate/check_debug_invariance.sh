@@ -15,7 +15,7 @@ set -u
 
 CIRCT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 HLS_EST="${HLS_EST:-$CIRCT/build/clion/bin/hls-est}"
-PIPELINE="${PIPELINE:---affine-loop-normalize --auto-pipeline-unroll --infer-vitis-split-array --memory-banking-bram --convert-affine-to-loopschedule --bram-analysis}"
+PIPELINE="${PIPELINE:---affine-loop-normalize --auto-pipeline-unroll --memory-banking-bram --convert-affine-to-loopschedule --bram-analysis}"
 TIMEOUT="${TIMEOUT:-60}"
 TESTS="${TESTS:-$CIRCT/test/hls-est/Estimation}"
 

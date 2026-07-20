@@ -15,8 +15,9 @@ For every kernel in ~/hls-est-work/exp-src/pipeline_unroll{,_chk,_float}/*.cpp:
        [HLS 214-376] automatically set the pipeline for Loop< VITIS_LOOP_L_n>
        [HLS 214-186] Unrolling loop 'VITIS_LOOP_L_n' ... with a factor of F
        [XFORM 203-541] Flattening a loop nest 'VITIS_LOOP_L_n'
-  3. unless --no-bram, the canonical pipeline without
-     --infer-vitis-split-array is run and its Total BRAM compared with the
+  3. unless --no-bram, the canonical pipeline (without
+     --infer-vitis-split-array, as the default since MEMOS M1) is run and its
+     Total BRAM compared with the
      Vitis total of the same run (`<exp-src>/out/<kernel>.json`).
 
 A kernel named `..._pl<N>_...` was synthesized with

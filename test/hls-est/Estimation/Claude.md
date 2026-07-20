@@ -21,7 +21,6 @@ estimation pipeline on each one, and dump the results into a CSV.
 ~/circt/bin/hls-est <test>.mlir \
   --affine-loop-normalize \
   --auto-pipeline-unroll \ 
-  --infer-vitis-split-array \
   --memory-banking-bram \
   --convert-affine-to-loopschedule \
   --symbol-privatize=exclude=<top-func> \

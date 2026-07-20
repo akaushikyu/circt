@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# Batch BRAM estimation. Conditionally applies --auto-pipeline-unroll and
-# --infer-vitis-split-array only where the historical shim prediction in
-# bram-tracking.csv significantly undercounts ground-truth BRAM.
+# Batch BRAM estimation. Conditionally applies --auto-pipeline-unroll only
+# where the historical shim prediction in bram-tracking.csv significantly
+# undercounts ground-truth BRAM (--infer-vitis-split-array was part of this
+# "aggr" mode until it left the default pipeline, MEMOS.md M1).
 #   trigger: estimate < 0.75*truth  AND  (truth-estimate) >= 4
 #   decision estimate: historical 'BRAM (prediction, shim)' column when numeric,
 #                      else a fresh baseline run (pipeline without the two passes).
@@ -51,7 +52,7 @@ parse_kinds()  { cat "$1" "$2" 2>/dev/null | grep -oE 'kind=[A-Za-z0-9_]+' | sed
 # run_pipeline MODE FILE TOP OUT ERR  (MODE = base | aggr)
 run_pipeline() {
   local mode="$1" f="$2" top="$3" oo="$4" ee="$5" extra=""
-  [[ "$mode" == "aggr" ]] && extra="--auto-pipeline-unroll --infer-vitis-split-array"
+  [[ "$mode" == "aggr" ]] && extra="--auto-pipeline-unroll"
   timeout "$TIMEOUT" "$BIN" "$f" \
     --affine-loop-normalize $extra --memory-banking-bram \
     --convert-affine-to-loopschedule \

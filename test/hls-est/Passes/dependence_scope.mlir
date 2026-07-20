@@ -5,6 +5,9 @@
 // RUN: hls-est %s --affine-loop-normalize --auto-pipeline-unroll --infer-vitis-split-array --memory-banking-bram --convert-affine-to-loopschedule --bram-analysis --mlir-pass-statistics -o /dev/null 2> %t.3 | FileCheck %s
 // RUN: FileCheck %s --check-prefix=STATS --input-file=%t.3
 
+// The RUN line without --infer-vitis-split-array is the default pipeline (MEMOS.md
+// M1); the one with it is the former default (td=auto), kept as a variant.
+
 // --convert-affine-to-loopschedule's memory dependence analysis
 // (InnermostLoopDependenceAnalysis) only examines pairs of accesses inside one
 // innermost loop, at that loop's depth: the only dependences a modulo

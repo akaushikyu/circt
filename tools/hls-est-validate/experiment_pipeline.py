@@ -42,32 +42,38 @@ DME_PRE = ("--promote-globals-to-allocas --vitis-fold --canonicalize --sccp "
 DME_FLAGS = "--bram-attribute-globals --bram-maxi-adapters"
 
 ABLATION = [
+    # canonical = C.DEFAULT_PIPELINE (no --infer-vitis-split-array since MEMOS M1 /
+    # decision #1); the ablations below vary it by one change. "+split-infer" is the
+    # former default (td=auto port-pressure partitioning), "+split-infer-td-off" T5's
+    # td=off variant (only Vitis' automatic td=off partitions, N7).
     ("canonical", C.DEFAULT_PIPELINE),
-    ("no-normalize", "--auto-pipeline-unroll --infer-vitis-split-array " + CORE),
-    ("no-auto-unroll", "--affine-loop-normalize --infer-vitis-split-array " + CORE),
-    ("no-split-infer", "--affine-loop-normalize --auto-pipeline-unroll " + CORE),
+    ("no-normalize", "--auto-pipeline-unroll " + CORE),
+    ("no-auto-unroll", "--affine-loop-normalize " + CORE),
+    ("+split-infer", C.SPLIT_PIPELINE),
+    ("+split-infer-td-off", "--affine-loop-normalize --auto-pipeline-unroll --infer-vitis-split-array=td=off " + CORE),
     ("base", "--affine-loop-normalize " + CORE),
     ("base+merge-cond", "--affine-loop-normalize --merge-conditional-stores " + CORE),
-    ("canonical+merge-cond", "--affine-loop-normalize --auto-pipeline-unroll --infer-vitis-split-array --merge-conditional-stores " + CORE),
-    ("normalize-after-unroll", "--auto-pipeline-unroll --affine-loop-normalize --infer-vitis-split-array " + CORE),
+    ("canonical+merge-cond", "--affine-loop-normalize --auto-pipeline-unroll --merge-conditional-stores " + CORE),
+    ("normalize-after-unroll", "--auto-pipeline-unroll --affine-loop-normalize " + CORE),
     ("split-after-banking?", "--affine-loop-normalize --auto-pipeline-unroll --memory-banking-bram --infer-vitis-split-array --convert-affine-to-loopschedule --bram-analysis"),
-    ("+canonicalize+cse", "--affine-loop-normalize --canonicalize --cse --auto-pipeline-unroll --infer-vitis-split-array " + CORE),
-    ("+scalrep", "--affine-loop-normalize --auto-pipeline-unroll --canonicalize --affine-scalrep --infer-vitis-split-array " + CORE),
-    ("+sccp", "--affine-loop-normalize --canonicalize --sccp --auto-pipeline-unroll --infer-vitis-split-array " + CORE),
-    ("+inline", "--inline --affine-loop-normalize --auto-pipeline-unroll --infer-vitis-split-array " + CORE),
-    ("+loop-fusion", "--affine-loop-normalize --affine-loop-fusion --auto-pipeline-unroll --infer-vitis-split-array " + CORE),
+    ("+canonicalize+cse", "--affine-loop-normalize --canonicalize --cse --auto-pipeline-unroll " + CORE),
+    ("+scalrep", "--affine-loop-normalize --auto-pipeline-unroll --canonicalize --affine-scalrep " + CORE),
+    ("+sccp", "--affine-loop-normalize --canonicalize --sccp --auto-pipeline-unroll " + CORE),
+    ("+inline", "--inline --affine-loop-normalize --auto-pipeline-unroll " + CORE),
+    ("+loop-fusion", "--affine-loop-normalize --affine-loop-fusion --auto-pipeline-unroll " + CORE),
     ("vis-default", "--auto-pipeline-unroll --canonicalize --affine-scalrep --affine-loop-normalize " + CORE),
-    ("pipeline-loops-64", "--affine-loop-normalize --auto-pipeline-unroll=pipeline-loops=64 --infer-vitis-split-array " + CORE),
-    ("pipeline-loops-16", "--affine-loop-normalize --auto-pipeline-unroll=pipeline-loops=16 --infer-vitis-split-array " + CORE),
-    # with-dme (T4): the cleanups prepended, with and without the split pass,
-    # and each mechanism on its own on the no-split pipeline.
-    ("with-dme", DME_PRE + " " + C.DEFAULT_PIPELINE + " " + DME_FLAGS),
+    ("pipeline-loops-64", "--affine-loop-normalize --auto-pipeline-unroll=pipeline-loops=64 " + CORE),
+    ("pipeline-loops-16", "--affine-loop-normalize --auto-pipeline-unroll=pipeline-loops=16 " + CORE),
+    # with-dme (T4): the cleanups prepended, with the split pass (the former default,
+    # so "with-dme" / "with-dme-maxi" keep their meaning) and without it, and each
+    # mechanism on its own on the no-split (now default) pipeline.
+    ("with-dme", DME_PRE + " " + C.SPLIT_PIPELINE + " " + DME_FLAGS),
     ("with-dme-no-split", DME_PRE + " --affine-loop-normalize --auto-pipeline-unroll " + CORE + " " + DME_FLAGS),
     ("with-dme-passes-only-no-split", DME_PRE + " --affine-loop-normalize --auto-pipeline-unroll " + CORE),
     # the combination MEMOS M5 proposes (no global promotion, O17), run it with --shim exactclass
     ("with-dme-maxi-no-split", "--vitis-fold --canonicalize --sccp --dead-memory-elimination "
      "--affine-loop-normalize --auto-pipeline-unroll " + CORE + " --bram-maxi-adapters"),
-    ("with-dme-maxi", "--vitis-fold --canonicalize --sccp --dead-memory-elimination " + C.DEFAULT_PIPELINE
+    ("with-dme-maxi", "--vitis-fold --canonicalize --sccp --dead-memory-elimination " + C.SPLIT_PIPELINE
      + " --bram-maxi-adapters"),
     ("with-canon-sccp-no-split", "--canonicalize --sccp --affine-loop-normalize --auto-pipeline-unroll " + CORE),
     ("with-maxi-no-split", "--affine-loop-normalize --auto-pipeline-unroll " + CORE + " --bram-maxi-adapters"),
