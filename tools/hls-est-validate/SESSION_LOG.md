@@ -64,9 +64,9 @@ Binaries in `Polygeist/build/bin/`: `cgeist` (current), `cgeist.prev-8017846b`, 
 | wf_05612499-391 | cgeist round 4: AffineCFG no longer promotes narrow integer arithmetic that can wrap, second-counter shortcut, cast chains through inlining, loop exit values, float compound rounding, div/rem sign check at every width | **done**: Polygeist 763b0046 + review fixes cbc105e0 (circt dbf091007, b60c020ee); recheck: no defects, harness byte-identical; open: unsigned 32-bit wrap assumption → memo M9 |
 | wf_3050670d-893 | cgeist O23: no store-to-load forwarding across a loop that overwrites the location (lost accumulations in mult_op_module_dot, mult_op_p3, testing_impl); fix, verify, fix, recheck | running; binary kept private at /home/peter/tmp/o23/ - **install into build/bin/cgeist only after T8 has finished** (coordinator step) |
 | wf_3a800524-b43 (W1) | Peter-approved defaults: W1a drop `--infer-vitis-split-array`, `--bram-seq-dual-port` on, band BRAM formula, `top=`; W1c exactclass harness shim (#8), dead-memory front end + m_axi adapters (#4), `float-loads-perfect` (#3), `forward-stores` if rule 4 holds (#5); W1b lit Estimation CHECK regeneration, full runs, workbook | waits for `fix-T8.done`; writes `w1.done`. (First launch wf_baed0f13-918 was derailed: its agents answered Peter's mid-turn question instead of working; stopped, nothing edited.) |
-| wf_72c9c655-ac2 (W2) | hls:: math-function cost: Vitis experiments now, then a configuration file read by `--bram-analysis` (Peter: "punt them to a configuration file") | experiments running; implementation waits for `w1.done`; writes `w2.done` |
-| wf_58a68378-45f (W3) | non-inlined functions: Vitis experiments now; cgeist honours `inline off` + opt-in `--hls-keep-invariant-loops` (waits for `o23.installed`); hls-est call support (waits for `w2.done`) | experiments running; writes `w3.done` |
-| wf_a05ffb25-dfb (W5) | frontend: Vitis experiment on narrow counters vs wider runtime bounds (#14, now); after W3's cgeist step: signed arithmetic marked non-wrapping + AffineCFG trusts only that (#13), the #14 behaviour the evidence favours, Polygeist lit shim -> exactclass (#10) | experiment running; private binary; writes `w5.done` |
+| wf_bdcba361-69a (W2) | hls:: math-function cost: Vitis experiments, then a configuration file read by `--bram-analysis` (Peter: "punt them to a configuration file") | relaunched 17:05 (first run wf_72c9c655-ac2 stopped, see below); implementation waits for `w1.done`; writes `w2.done` |
+| wf_58a68378-45f (W3) | non-inlined functions: Vitis experiments (done: VITIS_NOTES N14, 34289e775); cgeist honours `inline off` + opt-in `--hls-keep-invariant-loops` (waits for `o23.installed`; writes `w3cgeist.done`); hls-est call support (waits for `w2.done`) | resumed 17:05: experiment cached, the six derailed steps redone; writes `w3.done` |
+| wf_9be89a19-0be (W5) | frontend: Vitis experiment on narrow counters vs wider runtime bounds (#14); then signed arithmetic marked non-wrapping + AffineCFG trusts only that (#13), the #14 behaviour the evidence favours, Polygeist lit shim -> exactclass (#10) | relaunched 17:05 (first run wf_a05ffb25-dfb stopped); Polygeist edits wait for `w3cgeist.done`; private binary; writes `w5.done` |
 | wf_7e144e09-d08 (W6) | #15 (Peter approved M10): exactclass proxy classes for assignable bit/range/concat selects + cgeist scalar replacement of proxy structs; one soda design and SkyNet first, then the 23 O15 designs; time-boxed | shim prototyping in a private copy now; real edits wait for `w5.done`; private binary; writes `w6.done` |
 | wf_1620e0fa-ab0 | `tiled_attn_module` 600→1321 bisect | **done**: harness artefact, O12, memo M7, `pipeline_full` recorded |
 
@@ -88,11 +88,13 @@ Still to do after the workflows: refresh `MEMOS.md` numbers, the formal pipeline
 bisect is done: no regression, a re-run without the top-selection prefix; O12, `pipeline_full` now recorded by `run_hlsest.py`.)
 Regenerate the appendices below with `python3 update_session_log.py` after each batch of commits.
 
+**Derailed agents, 2026-10-10 15:30-17:00.** Peter asked mid-turn whether Vitis really ran. Agents of the workflows launched in that turn (the first W1 run, W2, W3) answered him in their reports, and every later agent that received such a report in its prompt answered too instead of working: all six W3 steps after the experiment returned without doing their task, and one of them touched `flags/w3.done`. Nothing was edited, committed or installed. Fix: `w3.done` removed; every workflow prompt now says that Peter's messages are for the coordinator and that answers to his question in quoted reports are to be ignored; W3 resumed (experiment cached), W2 and W5 relaunched, W5's gate moved from W3's journal to the new flag `w3cgeist.done`. Side effect: the derailed agents re-ran 9 designs/kernels through Vitis from scratch and matched the ground truth exactly.
+
 Coordinator steps pending: install the O23 cgeist after T8 and the O23 recheck, then touch `flags/o23.installed`; after W1, update CLAUDE.md's "Current default pipeline" section and Shims row; after W3 has installed its cgeist and `w5.done` exists, install W5's private cgeist (its report names it) and run a control harness; then W6's private cgeist after `w6.done` the same way; finally the formal pipeline sweep and REPORT.md.
 
 ## Appendix A — every file changed in ~/circt (branch hls-est-vitis-match), per commit, oldest first
 
-Generated by `update_session_log.py` at 2026-10-10 16:29 from `git log --reverse --name-status e9da1aaf0..HEAD` (e9da1aaf0 = snapshot of Peter's pre-existing uncommitted tree). A = added, M = modified, D = deleted. Large result JSONs are git-ignored.
+Generated by `update_session_log.py` at 2026-10-10 16:31 from `git log --reverse --name-status e9da1aaf0..HEAD` (e9da1aaf0 = snapshot of Peter's pre-existing uncommitted tree). A = added, M = modified, D = deleted. Large result JSONs are git-ignored.
 
 ### 3ad60fb79 hls-est: register DLTI/LLVM dialects; add hls-est-validate harness skeleton
 
@@ -806,6 +808,10 @@ Generated by `update_session_log.py` at 2026-10-10 16:29 from `git log --reverse
 
 - M `tools/hls-est-validate/MEMOS.md`
 
+### ad990d32f SESSION_LOG: W6 (assignable range selects) launched
+
+- M `tools/hls-est-validate/SESSION_LOG.md`
+
 ## Appendix B — every file changed in Polygeist (/mnt/d/HLS, branch hls-est-vitis-match), per commit
 
 ### d279a433 cgeist: lower _Float16/__bf16 and _BitInt(N) scalars to f16/bf16/iN
@@ -887,7 +893,7 @@ Generated by `update_session_log.py` at 2026-10-10 16:29 from `git log --reverse
 - A `Polygeist/tools/cgeist/Test/Verification/store-forward-loop.c`
 - M `Polygeist/tools/cgeist/driver.cc`
 
-## Appendix C — uncommitted work at 2026-10-10 16:29 (owned by running agents unless stated)
+## Appendix C — uncommitted work at 2026-10-10 16:31 (owned by running agents unless stated)
 
 ~/circt:
 
