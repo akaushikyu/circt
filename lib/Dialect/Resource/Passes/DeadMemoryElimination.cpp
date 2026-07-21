@@ -487,18 +487,18 @@ void Liveness::markVal(Value valueHandle) {
     return;
   }
   auto arrayValue = cast<BlockArgument>(valueHandle);
-  Operation *owningFunction = arrayValue.getOwner()->getParentOp();
+  Operation *owner = arrayValue.getOwner()->getParentOp();
 
-  if (!owningFunction || isa<func::FuncOp>(owningFunction))
+  if (!owner || isa<func::FuncOp>(owner))
     return;
-  if (isHandledLoop(owningFunction) && !conservative.contains(owningFunction)) {
-    auto loop = cast<LoopLikeOpInterface>(owningFunction);
+  if (isHandledLoop(owner) && !conservative.contains(owner)) {
+    auto loop = cast<LoopLikeOpInterface>(owner);
     auto iterArgs = loop.getRegionIterArgs();
     for (unsigned loopIndex = 0; loopIndex < iterArgs.size(); ++loopIndex)
       if (iterArgs[loopIndex] == valueHandle)
-        markIdx(owningFunction, loopIndex);
+        markIdx(owner, loopIndex);
   }
-  markOp(owningFunction);
+  markOp(owner);
 }
 
 void Liveness::markIdx(Operation *op, unsigned loopIndex) {

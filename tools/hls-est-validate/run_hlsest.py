@@ -12,7 +12,10 @@ Per design:
      (cached by hash of sources, shim files and the shim's cgeist flags)
   2. hls-est <mlir> --symbol-privatize=exclude=<top> --symbol-dce <pipeline>
      (the privatize/dce pair keeps only the top and what it calls, which is how
-     the inlining double count was fixed)
+     the inlining double count was fixed), with top=<top> added to the pipeline's
+     --bram-analysis (MEMOS M7: costs only what the top reaches through calls;
+     the same set as the prefix gives, and no warning about several public
+     functions). --no-privatize drops both.
 --mlir-from reuses the MLIR files (and cgeist outcomes) an earlier result file
 recorded instead of running cgeist, so two hls-est builds or pipelines can be
 compared on byte-identical inputs even after a shim or cgeist change.
@@ -23,6 +26,7 @@ import argparse
 import concurrent.futures as cf
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -225,11 +229,57 @@ def parse_hlsest_output(text):
     return total, mems
 
 
+_TOP_SUPPORT = {}
+_TOP_LOCK = threading.Lock()
+
+
+def bram_top_supported(binary):
+    """Whether this hls-est build has --bram-analysis's top= option (from its --help), so that a
+    frozen binary older than the option still runs (it then gets the prefix alone)."""
+    with _TOP_LOCK:
+        if binary not in _TOP_SUPPORT:
+            ok = False
+            try:
+                out = subprocess.run([binary, "--help"], capture_output=True, text=True, errors="replace",
+                                     timeout=60).stdout
+                lines = out.splitlines()
+                for i, line in enumerate(lines):
+                    if re.match(r"\s+--bram-analysis\s+-", line):
+                        ind = len(line) - len(line.lstrip())
+                        for m in lines[i + 1:]:
+                            s = m.lstrip()
+                            if s.startswith("--") and len(m) - len(s) <= ind:
+                                break
+                            if s.startswith("--top="):
+                                ok = True
+                        break
+            except (OSError, subprocess.SubprocessError):
+                ok = False
+            _TOP_SUPPORT[binary] = ok
+        return _TOP_SUPPORT[binary]
+
+
+def with_top(args, top_fn):
+    """The pipeline's --bram-analysis with top=<top_fn> (MEMOS M7). A --bram-analysis that
+    already has options keeps them (one argv element: "--bram-analysis=<opts> top=<fn>");
+    one that already names a top is left alone."""
+    out = []
+    for a in args:
+        if a == "--bram-analysis":
+            a = f"--bram-analysis=top={top_fn}"
+        elif a.startswith("--bram-analysis=") and not re.search(r"(^|[= ])top=", a[len("--bram-analysis="):]):
+            a = f"{a} top={top_fn}"
+        out.append(a)
+    return out
+
+
 def run_hlsest(mlir, top_fn, pipeline, timeout, log_prefix, privatize=True, debug_json=None):
     cmd = [C.HLS_EST, str(mlir)]
     if privatize and top_fn:
         cmd += [f"--symbol-privatize=exclude={top_fn}", "--symbol-dce"]
-    cmd += pipeline.split()
+        cmd += with_top(pipeline.split(), top_fn) if bram_top_supported(C.HLS_EST) else pipeline.split()
+    else:
+        cmd += pipeline.split()
     if debug_json:
         cmd += [f"--bram-debug-json={debug_json}"]
     cmd += ["-o", "/dev/null"]
@@ -237,16 +287,17 @@ def run_hlsest(mlir, top_fn, pipeline, timeout, log_prefix, privatize=True, debu
     try:
         p = subprocess.run(cmd, capture_output=True, text=True, errors="replace", timeout=timeout)
     except subprocess.TimeoutExpired:
-        return {"status": f"hls-est timeout {timeout}s", "elapsed_s": timeout, "cmd": " ".join(cmd)}
+        return {"status": f"hls-est timeout {timeout}s", "elapsed_s": timeout, "cmd": shlex.join(cmd)}
     el = time.time() - t0
     Path(log_prefix + ".out").write_text(p.stdout)
-    Path(log_prefix + ".err").write_text(" ".join(cmd) + "\n\n" + p.stderr)
+    Path(log_prefix + ".err").write_text(shlex.join(cmd) + "\n\n" + p.stderr)
     total, mems = parse_hlsest_output(p.stdout + "\n" + p.stderr)
     # pipeline_full = every pass actually run, incl. the per-design top-selection prefix
-    # (--symbol-privatize/--symbol-dce).  Re-run a case from `cmd`/`pipeline_full`, never from
-    # `pipeline` alone: without the prefix uncalled public functions are costed too (OPEN_ISSUES O12).
-    full = " ".join(a for a in cmd[2:] if a not in ("-o", "/dev/null"))
-    r = {"elapsed_s": round(el, 2), "cmd": " ".join(cmd), "pipeline_full": full, "total_bram": total,
+    # (--symbol-privatize/--symbol-dce) and --bram-analysis's top=.  Re-run a case from
+    # `cmd`/`pipeline_full` (shell-quoted: an option list with a space is one argument), never
+    # from `pipeline` alone: without the prefix uncalled public functions are costed too (O12).
+    full = shlex.join(a for a in cmd[2:] if a not in ("-o", "/dev/null"))
+    r = {"elapsed_s": round(el, 2), "cmd": shlex.join(cmd), "pipeline_full": full, "total_bram": total,
          "memrefs": mems, "exit": p.returncode}
     if p.returncode < 0 or p.returncode > 1 and ("Stack dump" in p.stderr or "Aborted" in p.stderr or "Assertion" in p.stderr):
         r["status"] = "hls-est error: crash"
@@ -330,7 +381,9 @@ def main():
                          "polygeist_head": C.git_hash(Path(C.CGEIST).resolve().parents[2]),
                          "hls_est_sha256": bsha, "mlir_from": args.mlir_from,
                          "top_passes": ("none" if args.no_privatize else
-                                        "--symbol-privatize=exclude=<top> --symbol-dce prepended per design"),
+                                        "--symbol-privatize=exclude=<top> --symbol-dce prepended per design; "
+                                        + ("top=<top> on --bram-analysis" if bram_top_supported(C.HLS_EST)
+                                         else "no top= (this hls-est build has no such option)")),
                          "timeout": args.timeout, "run_id": run_id, "hls_est": C.HLS_EST}}
     if not args.quiet:
         print(f"{len(designs)} designs; pipeline: {args.pipeline}; shim: {shim}; git {ghash}", flush=True)

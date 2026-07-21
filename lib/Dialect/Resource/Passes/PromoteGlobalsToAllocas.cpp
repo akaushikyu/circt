@@ -60,9 +60,9 @@ struct PromoteGlobalsToAllocasPass
 
   void runOnOperation() override {
     ModuleOp rootModule = getOperation();
-    SmallVector<memref::GlobalOp> globalOps(
+    SmallVector<memref::GlobalOp> globals(
         rootModule.getOps<memref::GlobalOp>());
-    for (memref::GlobalOp globalOp : globalOps) {
+    for (memref::GlobalOp globalOp : globals) {
       if (globalOp.getConstant() || !hasNoOrZeroInit(globalOp))
         continue;
       MemRefType memRefType = globalOp.getType();
@@ -72,26 +72,25 @@ struct PromoteGlobalsToAllocasPass
           SymbolTable::getSymbolUses(globalOp, rootModule);
       if (!symbolUses)
         continue;
-      SmallVector<memref::GetGlobalOp> accessSites;
-      func::FuncOp owningFunction;
-      bool canPromote = true;
+      SmallVector<memref::GetGlobalOp> sites;
+      func::FuncOp owner;
+      bool eligible = true;
       for (const SymbolTable::SymbolUse &use : *symbolUses) {
         auto globalUse = dyn_cast<memref::GetGlobalOp>(use.getUser());
         auto function = globalUse ? globalUse->getParentOfType<func::FuncOp>()
                                   : func::FuncOp();
-        if (!globalUse || !function ||
-            (owningFunction && function != owningFunction)) {
-          canPromote = false;
+        if (!globalUse || !function || (owner && function != owner)) {
+          eligible = false;
           break;
         }
-        owningFunction = function;
-        accessSites.push_back(globalUse);
+        owner = function;
+        sites.push_back(globalUse);
       }
-      if (!canPromote || !owningFunction || accessSites.empty())
+      if (!eligible || !owner || sites.empty())
         continue;
 
-      OpBuilder buildPoint(&owningFunction.getBody().front(),
-                           owningFunction.getBody().front().begin());
+      OpBuilder buildPoint(&owner.getBody().front(),
+                           owner.getBody().front().begin());
       auto localAlloca =
           memref::AllocaOp::create(buildPoint, globalOp.getLoc(), memRefType);
       StringRef symbolName = globalOp.getSymName();
@@ -107,7 +106,7 @@ struct PromoteGlobalsToAllocasPass
       localAlloca->setAttr("hls.preserve", buildPoint.getUnitAttr());
       localAlloca->setAttr("hls.from_global",
                            buildPoint.getStringAttr(symbolName));
-      for (memref::GetGlobalOp globalUse : accessSites) {
+      for (memref::GetGlobalOp globalUse : sites) {
         Value replacementValue = localAlloca.getResult();
         if (globalUse.getType() != replacementValue.getType()) {
 

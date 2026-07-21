@@ -11,6 +11,7 @@
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/Dialect/Utils/StaticValueUtils.h"
 #include "mlir/IR/BuiltinOps.h"
+#include "mlir/IR/SymbolTable.h"
 #include "mlir/Interfaces/CallInterfaces.h"
 #include "mlir/Interfaces/LoopLikeInterface.h"
 #include "mlir/Interfaces/SideEffectInterfaces.h"
@@ -112,6 +113,24 @@ enum class BramFormula { Band, N6 };
 const char *formulaName(BramFormula fieldValue) {
   return fieldValue == BramFormula::Band ? "band" : "n6";
 }
+
+struct TopScope {
+  std::string symbol;
+  llvm::DenseSet<Operation *> funcs;
+  llvm::DenseSet<StringRef> funcNames;
+  llvm::DenseSet<StringRef> globals;
+  unsigned skipped = 0;
+
+  bool active() const { return !symbol.empty(); }
+  bool covers(Operation *op) const {
+    if (!active())
+      return true;
+    if (auto globalOp = dyn_cast<memref::GlobalOp>(op))
+      return globals.contains(globalOp.getSymName());
+    auto function = op->getParentOfType<func::FuncOp>();
+    return function && funcs.contains(function.getOperation());
+  }
+};
 
 struct AccessRecord {
   std::string op;
@@ -944,9 +963,9 @@ SmallVector<AccessSummary> collectAccessSummaries(ArrayRef<Value> banks) {
   return out;
 }
 
-static bool neverWritten(ArrayRef<Value> accessSites) {
-  SmallVector<Value> work(accessSites.begin(), accessSites.end());
-  DenseSet<Value> seen(accessSites.begin(), accessSites.end());
+static bool neverWritten(ArrayRef<Value> sites) {
+  SmallVector<Value> work(sites.begin(), sites.end());
+  DenseSet<Value> seen(sites.begin(), sites.end());
   while (!work.empty()) {
     Value cur = work.pop_back_val();
     for (OpOperand &use : cur.getUses()) {
@@ -1669,13 +1688,19 @@ static void printFoldSummary(const FoldSummary &fieldValue,
 static void printDebugText(ArrayRef<MemrefRecord> records,
                            ArrayRef<PipelineRecord> pipelines, int64_t total,
                            const FoldSummary &fold, BramFormula formula,
-                           llvm::raw_ostream &os) {
+                           const TopScope &scope, llvm::raw_ostream &os) {
   os << "=== bram-debug: how each BRAM number was derived ===\n";
   os << "bram formula: " << formulaName(formula)
      << (formula == BramFormula::Band
              ? " (7-series depth bands, VITIS_NOTES.md N8)"
              : " (min over aspect-ratio modes, VITIS_NOTES.md N6)")
      << "\n";
+  if (scope.active())
+    os << "top: @" << scope.symbol << " (" << scope.funcs.size()
+       << " function(s) reachable through calls; " << scope.skipped
+       << " memref(s) outside them not costed)\n";
+  else
+    os << "top: none (every function is costed)\n";
   for (const MemrefRecord &resultValue : records) {
     if (resultValue.adapter) {
       const AdapterRecord &arrayValue = *resultValue.adapter;
@@ -2038,11 +2063,28 @@ static llvm::json::Object toJson(const MemrefRecord &resultValue) {
 static std::error_code writeDebugJson(ArrayRef<MemrefRecord> records,
                                       ArrayRef<PipelineRecord> pipelineRecords,
                                       int64_t total, const FoldSummary &fold,
-                                      BramFormula formula, StringRef path) {
+                                      BramFormula formula,
+                                      const TopScope &scope, StringRef path) {
   llvm::json::Object root;
   root["version"] = 2;
   root["total_bram"] = total;
   root["bram_formula"] = formulaName(formula);
+
+  if (scope.active()) {
+    llvm::json::Object to;
+    to["symbol"] = scope.symbol;
+    SmallVector<StringRef> names(scope.funcNames.begin(),
+                                 scope.funcNames.end());
+    llvm::sort(names);
+    llvm::json::Array fa;
+    for (StringRef elementCount : names)
+      fa.push_back(elementCount.str());
+    to["functions"] = std::move(fa);
+    to["skipped_memrefs"] = static_cast<int64_t>(scope.skipped);
+    root["top"] = std::move(to);
+  } else {
+    root["top"] = nullptr;
+  }
 
   llvm::json::Array functions;
   SmallVector<std::string> seen;
@@ -2336,6 +2378,61 @@ static void appendDeadRecords(ModuleOp rootModule, unsigned &index,
   }
 }
 
+static bool computeTopScope(ModuleOp rootModule, StringRef top,
+                            TopScope &scope) {
+  scope.symbol = top.str();
+  auto topFn = rootModule.lookupSymbol<func::FuncOp>(top);
+  if (!topFn || topFn.isExternal()) {
+    mlir::emitError(rootModule.getLoc(), "--bram-analysis: top=")
+        << top << ": no func.func with a body of that name in the module";
+    return false;
+  }
+  SmallVector<func::FuncOp> work{topFn};
+  scope.funcs.insert(topFn.getOperation());
+  while (!work.empty()) {
+    func::FuncOp function = work.pop_back_val();
+    scope.funcNames.insert(function.getName());
+    function.walk([&](Operation *op) {
+      if (auto globalUse = dyn_cast<memref::GetGlobalOp>(op)) {
+        scope.globals.insert(globalUse.getName());
+        return;
+      }
+      auto callSite = dyn_cast<CallOpInterface>(op);
+      if (!callSite)
+        return;
+      auto symbolName =
+          dyn_cast_if_present<SymbolRefAttr>(callSite.getCallableForCallee());
+      if (!symbolName)
+        return;
+      auto callee = dyn_cast_if_present<func::FuncOp>(
+          SymbolTable::lookupNearestSymbolFrom(op, symbolName));
+      if (callee && !callee.isExternal() &&
+          scope.funcs.insert(callee.getOperation()).second)
+        work.push_back(callee);
+    });
+  }
+  return true;
+}
+
+static SmallVector<StringRef> publicFuncsWithMemrefs(ModuleOp rootModule) {
+  SmallVector<StringRef> out;
+  for (auto function : rootModule.getOps<func::FuncOp>()) {
+    if (function.isPrivate() || function.isExternal())
+      continue;
+    bool holds = false;
+    function.walk([&](Operation *op) {
+      if (isa<memref::AllocaOp, memref::AllocOp, memref::GetGlobalOp>(op)) {
+        holds = true;
+        return WalkResult::interrupt();
+      }
+      return WalkResult::advance();
+    });
+    if (holds)
+      out.push_back(function.getName());
+  }
+  return out;
+}
+
 struct BRAMAnalysisLoopSchedule
     : PassWrapper<BRAMAnalysisLoopSchedule, OperationPass<ModuleOp>> {
 
@@ -2362,8 +2459,37 @@ struct BRAMAnalysisLoopSchedule
           clEnumValN(BramFormula::N6, "n6",
                      "minimum over aspect-ratio modes (N6)"))};
 
+  Option<std::string> topOpt{
+      *this, "top",
+      llvm::cl::desc("Cost only the memrefs of the func.funcs reachable from "
+                     "this one through calls, the memref.globals they use and "
+                     "its own m_axi adapters, as Vitis synthesizes the top and "
+                     "what it calls (MEMOS.md M7). Without it every function "
+                     "is costed, with a warning when more than one public "
+                     "function holds memrefs"),
+      llvm::cl::init("")};
+
   void runOnOperation() override {
     ModuleOp rootModule = getOperation();
+    TopScope scope;
+    if (!topOpt.empty()) {
+      if (!computeTopScope(rootModule, topOpt, scope))
+        return signalPassFailure();
+    } else {
+      SmallVector<StringRef> tops = publicFuncsWithMemrefs(rootModule);
+      if (tops.size() > 1) {
+        InFlightDiagnostic widthValue = mlir::emitWarning(rootModule.getLoc())
+                                        << "--bram-analysis: " << tops.size()
+                                        << " public functions hold memrefs (";
+        llvm::interleaveComma(tops, widthValue, [&](StringRef elementCount) {
+          widthValue << "@" << elementCount;
+        });
+        widthValue
+            << "); all of them are costed. Give the top function with "
+               "--bram-analysis=top=<symbol> (or --symbol-privatize=exclude="
+               "<top> --symbol-dce first) to cost only what it reaches";
+      }
+    }
     int64_t total = 0;
 
     std::vector<MemrefRecord> records;
@@ -2381,6 +2507,10 @@ struct BRAMAnalysisLoopSchedule
       auto iface = dyn_cast<MemoryResourceOpInterface>(op);
       if (!iface)
         return;
+      if (!scope.covers(op)) {
+        ++scope.skipped;
+        return;
+      }
       SmallVector<Value> banks;
       bool attributed;
       if (auto globalOp = dyn_cast<memref::GlobalOp>(op)) {
@@ -2410,6 +2540,8 @@ struct BRAMAnalysisLoopSchedule
 
     if (bramMaxiAdaptersOpt)
       for (auto &[function, arrayValue] : collectAdapters(rootModule)) {
+        if (scope.active() && function.getName() != scope.symbol)
+          continue;
         unsigned bram = arrayValue.readBram + arrayValue.writeBram;
         llvm::outs() << "m_axi.adapter bundle=" << arrayValue.bundle
                      << " func=@" << function.getName() << " bram=" << bram
@@ -2444,8 +2576,18 @@ struct BRAMAnalysisLoopSchedule
         records.push_back(std::move(rec));
       }
     llvm::outs() << "Total BRAM: " << total << "\n";
-    if (bramDebugOpt || !bramDebugJsonOpt.empty())
+    if (bramDebugOpt || !bramDebugJsonOpt.empty()) {
+      size_t first = records.size();
       appendDeadRecords(rootModule, index, records);
+      if (scope.active())
+        records.erase(std::remove_if(records.begin() + first, records.end(),
+                                     [&](const MemrefRecord &resultValue) {
+                                       return resultValue.func &&
+                                              !scope.funcNames.contains(
+                                                  *resultValue.func);
+                                     }),
+                      records.end());
+    }
 
     SmallVector<PipelineRecord> pipelines;
     if (bramDebugOpt || !bramDebugJsonOpt.empty())
@@ -2454,10 +2596,12 @@ struct BRAMAnalysisLoopSchedule
     if (bramDebugOpt || !bramDebugJsonOpt.empty())
       fold = collectFoldSummary(rootModule);
     if (bramDebugOpt)
-      printDebugText(records, pipelines, total, fold, formulaOpt, llvm::errs());
+      printDebugText(records, pipelines, total, fold, formulaOpt, scope,
+                     llvm::errs());
     if (!bramDebugJsonOpt.empty())
-      if (std::error_code ec = writeDebugJson(records, pipelines, total, fold,
-                                              formulaOpt, bramDebugJsonOpt)) {
+      if (std::error_code ec =
+              writeDebugJson(records, pipelines, total, fold, formulaOpt, scope,
+                             bramDebugJsonOpt)) {
 
         mlir::emitError(getOperation().getLoc(),
                         "bram-debug-json: cannot write '")

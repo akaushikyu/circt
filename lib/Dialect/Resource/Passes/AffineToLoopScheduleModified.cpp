@@ -255,10 +255,10 @@ static bool isPlainMemrefUse(Operation *user) {
   });
 }
 
-static MemrefAliasInfo collectMemrefAliases(Value memory) {
+static MemrefAliasInfo collectMemrefAliases(Value mem) {
   MemrefAliasInfo info;
-  SmallVector<Value> worklist{memory};
-  info.members.insert(memory);
+  SmallVector<Value> worklist{mem};
+  info.members.insert(mem);
   while (!worklist.empty()) {
     Value valueHandle = worklist.pop_back_val();
     for (Operation *user : valueHandle.getUsers()) {
@@ -321,10 +321,10 @@ void AffineToLoopSchedule::hoistInvariantLoads() {
   });
 
   DenseMap<Value, MemrefAliasInfo> aliasCache;
-  auto aliasInfo = [&](Value memory) -> const MemrefAliasInfo & {
-    auto it = aliasCache.find(memory);
+  auto aliasInfo = [&](Value mem) -> const MemrefAliasInfo & {
+    auto it = aliasCache.find(mem);
     if (it == aliasCache.end())
-      it = aliasCache.try_emplace(memory, collectMemrefAliases(memory)).first;
+      it = aliasCache.try_emplace(mem, collectMemrefAliases(mem)).first;
     return it->second;
   };
 
@@ -338,12 +338,12 @@ void AffineToLoopSchedule::hoistInvariantLoads() {
              invariant.contains(valueHandle);
     };
     DenseMap<Value, bool> writtenCache;
-    auto writtenInLoop = [&](Value memory) {
-      auto it = writtenCache.find(memory);
+    auto writtenInLoop = [&](Value mem) {
+      auto it = writtenCache.find(mem);
       if (it != writtenCache.end())
         return it->second;
-      bool widthValue = isMemrefWrittenInLoop(aliasInfo(memory), root);
-      writtenCache[memory] = widthValue;
+      bool widthValue = isMemrefWrittenInLoop(aliasInfo(mem), root);
+      writtenCache[mem] = widthValue;
       return widthValue;
     };
 
@@ -438,11 +438,11 @@ static void addCounterAttr(Operation *op, StringRef name, int64_t by) {
 /// Memrefs whose SSA value identifies the storage: a local array or a
 /// function argument. Two memref.get_global of one symbol are two values for
 /// one memory, and a view or an iter_arg aliases its source: not tracked.
-static bool isRootMemref(Value memory) {
-  if (auto arg = dyn_cast<BlockArgument>(memory))
+static bool isRootMemref(Value mem) {
+  if (auto arg = dyn_cast<BlockArgument>(mem))
     return isa<func::FuncOp>(arg.getOwner()->getParentOp());
   return isa_and_present<memref::AllocaOp, memref::AllocOp>(
-      memory.getDefiningOp());
+      mem.getDefiningOp());
 }
 
 void AffineToLoopSchedule::cleanupRedundantAccesses() {
@@ -450,10 +450,10 @@ void AffineToLoopSchedule::cleanupRedundantAccesses() {
   getOperation().walk([&](Block *buildPoint) { blocks.push_back(buildPoint); });
 
   DenseMap<Value, MemrefAliasInfo> aliasCache;
-  auto aliasInfo = [&](Value memory) -> const MemrefAliasInfo & {
-    auto it = aliasCache.find(memory);
+  auto aliasInfo = [&](Value mem) -> const MemrefAliasInfo & {
+    auto it = aliasCache.find(mem);
     if (it == aliasCache.end())
-      it = aliasCache.try_emplace(memory, collectMemrefAliases(memory)).first;
+      it = aliasCache.try_emplace(mem, collectMemrefAliases(mem)).first;
     return it->second;
   };
 
@@ -461,11 +461,11 @@ void AffineToLoopSchedule::cleanupRedundantAccesses() {
   for (Block *block : blocks) {
     DenseMap<Value, SmallVector<KnownValue, 8>> known;
     DenseMap<Value, Value> memberToRoot;
-    auto forget = [&](Value memory) {
-      auto it = memberToRoot.find(memory);
+    auto forget = [&](Value mem) {
+      auto it = memberToRoot.find(mem);
       if (it != memberToRoot.end())
         known.erase(it->second);
-      known.erase(memory);
+      known.erase(mem);
     };
     auto forgetOperands = [&](Operation *op) {
       for (Value valueHandle : op->getOperands())
@@ -473,27 +473,27 @@ void AffineToLoopSchedule::cleanupRedundantAccesses() {
           forget(valueHandle);
     };
 
-    auto trackable = [&](Value memory) -> bool {
-      if (!isRootMemref(memory))
+    auto trackable = [&](Value mem) -> bool {
+      if (!isRootMemref(mem))
         return false;
-      const MemrefAliasInfo &ai = aliasInfo(memory);
+      const MemrefAliasInfo &ai = aliasInfo(mem);
       if (ai.escaped)
         return false;
-      if (!memberToRoot.count(memory))
+      if (!memberToRoot.count(mem))
         for (Value memoryOp : ai.members)
-          memberToRoot[memoryOp] = memory;
+          memberToRoot[memoryOp] = mem;
       return true;
     };
 
     for (Operation &op : llvm::make_early_inc_range(*block)) {
       if (auto load = dyn_cast<AffineLoadOp>(op)) {
-        Value memory = load.getMemRef();
-        if (!trackable(memory)) {
-          forget(memory);
+        Value mem = load.getMemRef();
+        if (!trackable(mem)) {
+          forget(mem);
           continue;
         }
         AccessAddr addr(load.getAffineMap(), load.getMapOperands());
-        auto &vals = known[memory];
+        auto &vals = known[mem];
         KnownValue *same = nullptr;
         for (KnownValue &kv : vals) {
           AddrRelation rel = compareAddresses(addr, kv.addr);
@@ -526,13 +526,13 @@ void AffineToLoopSchedule::cleanupRedundantAccesses() {
         continue;
       }
       if (auto store = dyn_cast<AffineStoreOp>(op)) {
-        Value memory = store.getMemRef();
-        if (!trackable(memory)) {
-          forget(memory);
+        Value mem = store.getMemRef();
+        if (!trackable(mem)) {
+          forget(mem);
           continue;
         }
         AccessAddr addr(store.getAffineMap(), store.getMapOperands());
-        auto &vals = known[memory];
+        auto &vals = known[mem];
         SmallVector<KnownValue, 8> kept;
         for (KnownValue &kv : vals) {
           AddrRelation rel = compareAddresses(addr, kv.addr);
