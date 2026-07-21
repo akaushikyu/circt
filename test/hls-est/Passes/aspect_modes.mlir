@@ -1,6 +1,7 @@
 // RUN: hls-est %s --affine-loop-normalize --memory-banking-bram --convert-affine-to-loopschedule --bram-analysis --bram-debug > %t.out 2> %t.err
 // RUN: FileCheck %s --input-file=%t.out --check-prefix=REPORT
 // RUN: FileCheck %s --input-file=%t.err
+// RUN: hls-est %s --affine-loop-normalize --memory-banking-bram --convert-affine-to-loopschedule --bram-analysis=bram-formula=n6 | FileCheck %s --check-prefix=REPORT
 
 // BRAM_18K count per bank: RAMB18 aspect-ratio modes with parity bits
 // (VITIS_NOTES.md N6, aspect.md R1/R2 + aspect_chk.md depth rounding):
@@ -21,6 +22,9 @@
 // "one port": written in one loop, read in another. "1R+1W/cycle": an
 // in-place update inside one pipelined loop (both ports live in the same
 // cycle, Vitis ram_2p).
+// Every value is the same under the default bram-formula=band (the 7-series
+// depth bands of VITIS_NOTES.md N8) and under bram-formula=n6 (RUN line 4): the
+// two formulas differ only deeper than 4096 words (bram_formula_band.mlir).
 
 module {
   func.func @kernel(%in_p1024x18: memref<1024xi18>, %out_p1024x18: memref<1024xi18>, %in_p2048x9: memref<2048xi9>, %out_p2048x9: memref<2048xi9>, %in_p512x36: memref<512xi36>, %out_p512x36: memref<512xi36>, %in_p2500x18: memref<2500xi18>, %out_p2500x18: memref<2500xi18>, %in_p1024x40: memref<1024xi40>, %out_p1024x40: memref<1024xi40>, %in_p3072x20: memref<3072xi20>, %out_p3072x20: memref<3072xi20>, %in_p64x32: memref<64xi32>, %out_p64x32: memref<64xi32>, %in_w512x36: memref<512xi36>, %out_w512x36: memref<512xi36>, %in_w1024x18: memref<1024xi18>, %out_w1024x18: memref<1024xi18>, %in_w64x32: memref<64xi32>, %out_w64x32: memref<64xi32>) {

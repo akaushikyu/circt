@@ -45,12 +45,14 @@ module {
 // bank 0 of buf: one live port -> the x36 mode, 512 words = one RAMB18.
 // CHECK:      "bank_math": {
 // CHECK-NEXT:   "addr_depth": 512,
+// CHECK-NEXT:   "band": "depth <= 512, SDP: ceil(W/36)",
 // CHECK-NEXT:   "bits_per_bram": 18432,
 // CHECK-NEXT:   "blocks": 1,
 // CHECK-NEXT:   "blocks_per_copy": 1,
 // CHECK-NEXT:   "config_width": 36,
 // CHECK-NEXT:   "depth_per_block": 512,
 // CHECK-NEXT:   "depth_tiles": 1,
+// CHECK-NEXT:   "formula": "band",
 // CHECK-NEXT:   "max_width": 36,
 // CHECK-NEXT:   "replication": 1,
 // CHECK-NEXT:   "wide": true,

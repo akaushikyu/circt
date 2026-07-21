@@ -107,6 +107,12 @@ struct PortDemand {
   bool segregated = false;
 };
 
+enum class BramFormula { Band, N6 };
+
+const char *formulaName(BramFormula fieldValue) {
+  return fieldValue == BramFormula::Band ? "band" : "n6";
+}
+
 struct AccessRecord {
   std::string op;
   bool isWrite = false;
@@ -154,6 +160,8 @@ struct BankMathRecord {
   int64_t blocksPerCopy = 0;
   int64_t replication = 1;
   int64_t blocks = 0;
+  std::string formula;
+  std::string band;
 };
 
 struct ReplicationLoopRecord {
@@ -764,12 +772,14 @@ int64_t ceilDiv(int64_t arrayValue, int64_t buildPoint) {
   return (arrayValue + buildPoint - 1) / buildPoint;
 }
 
-int64_t estimateBlocks(int64_t numElems, unsigned elemBits, bool wide,
-                       BankMathRecord *bm = nullptr) {
+int64_t estimateBlocksN6(int64_t numElems, unsigned elemBits, bool wide,
+                         BankMathRecord *bm = nullptr) {
   if (bm) {
     bm->present = true;
     bm->wide = wide;
     bm->maxWidth = wide ? kMaxPortWidthWide : kMaxPortWidthNarrow;
+    bm->formula = formulaName(BramFormula::N6);
+    bm->band = "min over the aspect-ratio modes (N6)";
   }
   if (numElems <= 0 || elemBits == 0)
     return 0;
@@ -804,6 +814,72 @@ int64_t estimateBlocks(int64_t numElems, unsigned elemBits, bool wide,
     bm->blocks = best;
   }
   return best;
+}
+
+int64_t estimateBlocksBand(int64_t numElems, unsigned elemBits, bool sdp,
+                           BankMathRecord *bm = nullptr) {
+  if (bm) {
+    bm->present = true;
+    bm->wide = sdp;
+    bm->maxWidth = sdp ? kMaxPortWidthWide : kMaxPortWidthNarrow;
+    bm->formula = formulaName(BramFormula::Band);
+  }
+  if (numElems <= 0 || elemBits == 0)
+    return 0;
+  int64_t addrDepth =
+      static_cast<int64_t>(llvm::PowerOf2Ceil(static_cast<uint64_t>(numElems)));
+  int64_t widthValue = elemBits;
+  unsigned mode;
+  int64_t depthPerBlock;
+  int64_t cols, perCol;
+  const char *band;
+  if (addrDepth <= 512) {
+    mode = sdp ? 36 : 18;
+    depthPerBlock = sdp ? 512 : 1024;
+    cols = ceilDiv(widthValue, mode);
+    perCol = 1;
+    band = sdp ? "depth <= 512, SDP: ceil(W/36)"
+               : "depth <= 512, not SDP: ceil(W/18)";
+  } else if (addrDepth <= 1024) {
+    mode = 18, depthPerBlock = 1024, cols = ceilDiv(widthValue, 18), perCol = 1;
+    band = "depth 513-1024: ceil(W/18)";
+  } else if (addrDepth <= 2048) {
+    mode = 9, depthPerBlock = 2048, cols = ceilDiv(widthValue, 9), perCol = 1;
+    band = "depth 1025-2048: ceil(W/9)";
+  } else if (addrDepth <= 4096) {
+    band = "depth 2049-4096: min(ceil(W/4), 2*ceil(W/9))";
+    if (ceilDiv(widthValue, 4) <= 2 * ceilDiv(widthValue, 9))
+      mode = 4, depthPerBlock = 4096, cols = ceilDiv(widthValue, 4), perCol = 1;
+    else
+      mode = 9, depthPerBlock = 2048, cols = ceilDiv(widthValue, 9), perCol = 2;
+  } else if (addrDepth <= 8192) {
+    mode = 2, depthPerBlock = 8192, cols = ceilDiv(widthValue, 2), perCol = 1;
+    band = "depth 4097-8192: ceil(W/2)";
+  } else {
+    mode = 1, depthPerBlock = 16384, cols = widthValue,
+    perCol = addrDepth / 16384;
+    band = "depth > 8192: 2^ceil(log2 ceil(D/16384)) * W";
+  }
+  int64_t blocks = cols * perCol;
+  if (bm) {
+    bm->band = band;
+    bm->configWidth = mode;
+    bm->widthTiles = cols;
+    bm->depthPerBlock = depthPerBlock;
+    bm->addrDepth = addrDepth;
+    bm->depthTiles = perCol;
+    bm->blocksPerCopy = blocks;
+    bm->replication = 1;
+    bm->blocks = blocks;
+  }
+  return blocks;
+}
+
+int64_t estimateBlocks(int64_t numElems, unsigned elemBits, bool sdp,
+                       BramFormula formula, BankMathRecord *bm = nullptr) {
+  return formula == BramFormula::Band
+             ? estimateBlocksBand(numElems, elemBits, sdp, bm)
+             : estimateBlocksN6(numElems, elemBits, sdp, bm);
 }
 
 unsigned portOccupancy(bool) { return 1u; }
@@ -1189,7 +1265,7 @@ static std::string ramReasonFor(const PortDemand &dimensionIndex,
 
 static BRAMCost estimateBRAM(MemoryResourceOpInterface iface, MemrefRecord &rec,
                              ArrayRef<Value> banks, bool attributed,
-                             SeqScopeIndex *seq) {
+                             SeqScopeIndex *seq, BramFormula formula) {
   BRAMCost cost;
   cost.kind = StorageKind::RAM_1P;
   cost.bramCount = 0;
@@ -1329,14 +1405,14 @@ static BRAMCost estimateBRAM(MemoryResourceOpInterface iface, MemrefRecord &rec,
     rep.limitingLoop.reset();
     if (elementCount <= 2) {
       kr.kind = elementCount <= 1 ? StorageKind::ROM_1P : StorageKind::ROM_2P;
-      blocks = estimateBlocks(numElems, elemBits, true, &rec.bankMath);
+      blocks = estimateBlocks(numElems, elemBits, true, formula, &rec.bankMath);
     } else {
       kr.kind = StorageKind::ROM_NP;
       rep.copies =
           std::min<unsigned>(static_cast<unsigned>(ceilDiv(elementCount, 2)),
                              kMaxReplicationCopies);
       int64_t perCopy =
-          estimateBlocks(numElems, elemBits, false, &rec.bankMath);
+          estimateBlocks(numElems, elemBits, false, formula, &rec.bankMath);
       blocks = perCopy * rep.copies;
       rec.bankMath.replication = rep.copies;
       rec.bankMath.blocks = blocks;
@@ -1366,15 +1442,16 @@ static BRAMCost estimateBRAM(MemoryResourceOpInterface iface, MemrefRecord &rec,
              ? std::string(": read-only ports are simple dual port, x36 "
                            "allowed (N8)")
              : ", " + std::to_string(rep.copies) +
-                   " copies = ceil(n/2) at x18 (N8 ROM_nP; unconfirmed "
-                   "by a kernel)");
+                   " copies = ceil(n/2) at x18 (N8 (c) ROM_nP: "
+                   "fr_rom3r / fr_rom4r, aes sbox, gsm bitoff)");
     rec.bram = cost.bramCount;
     return cost;
   }
   if (rep.copies > 1) {
 
     kr.kind = StorageKind::RAM_1WNR;
-    int64_t perCopy = estimateBlocks(numElems, elemBits, false, &rec.bankMath);
+    int64_t perCopy =
+        estimateBlocks(numElems, elemBits, false, formula, &rec.bankMath);
     blocks = perCopy * rep.copies;
     rec.bankMath.replication = rep.copies;
     rec.bankMath.blocks = blocks;
@@ -1390,8 +1467,8 @@ static BRAMCost estimateBRAM(MemoryResourceOpInterface iface, MemrefRecord &rec,
         dimensionIndex.reads = dimensionIndex.writes = 1;
     }
     kr = selectStorageKind(dimensionIndex);
-    blocks =
-        estimateBlocks(numElems, elemBits, isWideKind(kr.kind), &rec.bankMath);
+    blocks = estimateBlocks(numElems, elemBits, isWideKind(kr.kind), formula,
+                            &rec.bankMath);
   }
   cost.kind = kr.kind;
   cost.infeasible = kr.infeasible;
@@ -1591,8 +1668,14 @@ static void printFoldSummary(const FoldSummary &fieldValue,
 
 static void printDebugText(ArrayRef<MemrefRecord> records,
                            ArrayRef<PipelineRecord> pipelines, int64_t total,
-                           const FoldSummary &fold, llvm::raw_ostream &os) {
+                           const FoldSummary &fold, BramFormula formula,
+                           llvm::raw_ostream &os) {
   os << "=== bram-debug: how each BRAM number was derived ===\n";
+  os << "bram formula: " << formulaName(formula)
+     << (formula == BramFormula::Band
+             ? " (7-series depth bands, VITIS_NOTES.md N8)"
+             : " (min over aspect-ratio modes, VITIS_NOTES.md N6)")
+     << "\n";
   for (const MemrefRecord &resultValue : records) {
     if (resultValue.adapter) {
       const AdapterRecord &arrayValue = *resultValue.adapter;
@@ -1728,10 +1811,14 @@ static void printDebugText(ArrayRef<MemrefRecord> records,
        << resultValue.ramReason << "\n";
     if (resultValue.bankMath.present) {
       const BankMathRecord &buildPoint = resultValue.bankMath;
+
+      bool onePort =
+          resultValue.ramType == "RAM_1P" || resultValue.ramType == "ROM_1P";
       os << "  bank math: " << buildPoint.bitsPerBram
          << " bits/BRAM_18K (incl. parity), "
-         << (buildPoint.wide ? "one live port -> x36 allowed"
-                             : "two live ports -> x18 max")
+         << (!buildPoint.wide ? "two live ports -> x18 max"
+             : onePort        ? "one live port -> x36 allowed"
+                              : "simple dual port -> x36 allowed")
          << " at " << resultValue.ramType << ", element "
          << resultValue.elemBits << "b -> mode x" << buildPoint.configWidth
          << ": columns ceil(" << resultValue.elemBits << "/"
@@ -1743,7 +1830,8 @@ static void printDebugText(ArrayRef<MemrefRecord> records,
          << buildPoint.addrDepth << "/" << buildPoint.depthPerBlock
          << ")=" << buildPoint.depthTiles << " -> " << buildPoint.blocksPerCopy
          << " per copy, replication " << buildPoint.replication << " -> "
-         << buildPoint.blocks << " block(s)\n";
+         << buildPoint.blocks << " block(s); formula " << buildPoint.formula
+         << ": " << buildPoint.band << "\n";
     }
     os << "  bram: " << resultValue.bram
        << (resultValue.infeasible ? "  [INFEASIBLE]" : "") << "\n";
@@ -1936,6 +2024,9 @@ static llvm::json::Object toJson(const MemrefRecord &resultValue) {
     bm["blocks_per_copy"] = buildPoint.blocksPerCopy;
     bm["replication"] = buildPoint.replication;
     bm["blocks"] = buildPoint.blocks;
+
+    bm["formula"] = buildPoint.formula;
+    bm["band"] = buildPoint.band;
     opHandle["bank_math"] = std::move(bm);
   } else {
     opHandle["bank_math"] = nullptr;
@@ -1947,10 +2038,11 @@ static llvm::json::Object toJson(const MemrefRecord &resultValue) {
 static std::error_code writeDebugJson(ArrayRef<MemrefRecord> records,
                                       ArrayRef<PipelineRecord> pipelineRecords,
                                       int64_t total, const FoldSummary &fold,
-                                      StringRef path) {
+                                      BramFormula formula, StringRef path) {
   llvm::json::Object root;
   root["version"] = 2;
   root["total_bram"] = total;
+  root["bram_formula"] = formulaName(formula);
 
   llvm::json::Array functions;
   SmallVector<std::string> seen;
@@ -2032,18 +2124,7 @@ static std::error_code writeDebugJson(ArrayRef<MemrefRecord> records,
 }
 
 static unsigned fifoBlocksNarrow(unsigned bits, int64_t depth) {
-  if (depth > 8192)
-    return static_cast<unsigned>(
-        llvm::PowerOf2Ceil(static_cast<uint64_t>(ceilDiv(depth, 16384))) *
-        bits);
-  if (depth > 4096)
-    return static_cast<unsigned>(ceilDiv(bits, 2));
-  if (depth > 2048)
-    return static_cast<unsigned>(
-        std::min(ceilDiv(bits, 4), 2 * ceilDiv(bits, 9)));
-  if (depth > 1024)
-    return static_cast<unsigned>(ceilDiv(bits, 9));
-  return static_cast<unsigned>(ceilDiv(bits, 18));
+  return static_cast<unsigned>(estimateBlocksBand(depth, bits, false));
 }
 
 static void scanArgUses(Value valueHandle, AdapterRecord &arrayValue) {
@@ -2265,6 +2346,22 @@ struct BRAMAnalysisLoopSchedule
     return "Estimate BRAM resources for HLS allocations (post-banking).";
   }
 
+  BRAMAnalysisLoopSchedule() = default;
+  BRAMAnalysisLoopSchedule(const BRAMAnalysisLoopSchedule &other)
+      : PassWrapper(other) {}
+
+  Option<BramFormula> formulaOpt{
+      *this, "bram-formula",
+      llvm::cl::desc("Blocks per bank: band = the 7-series depth bands "
+                     "(VITIS_NOTES.md N8, the default since MEMOS.md M4); "
+                     "n6 = the minimum over the aspect-ratio modes (N6, the "
+                     "former default; differs only deeper than 4096 words)"),
+      llvm::cl::init(BramFormula::Band),
+      llvm::cl::values(
+          clEnumValN(BramFormula::Band, "band", "7-series depth bands (N8)"),
+          clEnumValN(BramFormula::N6, "n6",
+                     "minimum over aspect-ratio modes (N6)"))};
+
   void runOnOperation() override {
     ModuleOp rootModule = getOperation();
     int64_t total = 0;
@@ -2300,7 +2397,8 @@ struct BRAMAnalysisLoopSchedule
       }
       MemrefRecord rec;
       describeMemref(op, index++, rec);
-      BRAMCost cost = estimateBRAM(iface, rec, banks, attributed, seq);
+      BRAMCost cost =
+          estimateBRAM(iface, rec, banks, attributed, seq, formulaOpt);
       llvm::outs() << op->getName() << " @ " << op->getLoc() << "\n"
                    << "  kind=" << kindName(cost.kind)
                    << "  bram=" << cost.bramCount
@@ -2356,10 +2454,10 @@ struct BRAMAnalysisLoopSchedule
     if (bramDebugOpt || !bramDebugJsonOpt.empty())
       fold = collectFoldSummary(rootModule);
     if (bramDebugOpt)
-      printDebugText(records, pipelines, total, fold, llvm::errs());
+      printDebugText(records, pipelines, total, fold, formulaOpt, llvm::errs());
     if (!bramDebugJsonOpt.empty())
       if (std::error_code ec = writeDebugJson(records, pipelines, total, fold,
-                                              bramDebugJsonOpt)) {
+                                              formulaOpt, bramDebugJsonOpt)) {
 
         mlir::emitError(getOperation().getLoc(),
                         "bram-debug-json: cannot write '")

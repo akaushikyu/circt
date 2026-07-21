@@ -76,7 +76,9 @@ module {
 // CHECK-DAG:      ii=1: 0R+2W per iteration -> ceil(2/1)=2 port-cycles -> copies 1
 // CHECK-DAG:      ii=4: 8R+0W per iteration -> ceil(8/4)=2 port-cycles -> copies 1
 // CHECK:        ram type: RAM_T2P -- peak port demand 2/cycle (2R+2W, max over scopes): two ports live in the same cycle -> RAM_T2P (x18/port, true dual port); not replicable: a loop body stores to it 2 times (Vitis keeps one 2-port RAM and raises that loop's II)
-// CHECK:        bank math: {{.*}} two live ports -> x18 max at RAM_T2P, element 32b -> mode x18: columns ceil(32/18)=2, depth/block 1024, address depth 2^ceil(log2 4096)=4096, blocks/column max(1,4096/1024)=4 -> 8 per copy, replication 1 -> 8 block(s)
+// (4096 words: the 2049-4096 band, min(ceil(32/4), 2*ceil(32/9)) = 8 per copy as
+// 4Kx4 columns; N6 printed the same 8 as 2 x18 columns of 4 blocks)
+// CHECK:        bank math: {{.*}} two live ports -> x18 max at RAM_T2P, element 32b -> mode x4: columns ceil(32/4)=8, depth/block 4096, address depth 2^ceil(log2 4096)=4096, blocks/column max(1,4096/4096)=1 -> 8 per copy, replication 1 -> 8 block(s)
 // CHECK-NEXT:   bram: 8
 // CHECK:      tmp (alloca)
 // CHECK:        bram: 8

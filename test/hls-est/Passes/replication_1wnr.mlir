@@ -99,12 +99,14 @@ module {
 // CHECK:        replication: replicable (max 1 store(s) per loop body), copies 15 set by pipeline @
 // CHECK:          ii=1: 16R+0W per iteration -> ceil(16/1)=16 port-cycles -> copies 15
 // CHECK:        ram type: RAM_1WNR -- replicable (no loop body stores to it more than once); pipeline @ {{.*}}: 16R+0W per iteration at II 1 needs ceil(16/1)=16 port-cycles -> RAM_1WNR with 15 copies
-// CHECK:        bank math: 18432 bits/BRAM_18K (incl. parity), two live ports -> x18 max at RAM_1WNR, element 32b -> mode x18: columns ceil(32/18)=2, depth/block 1024, address depth 2^ceil(log2 4096)=4096, blocks/column max(1,4096/1024)=4 -> 8 per copy, replication 15 -> 120 block(s)
+// (4096 words: the 2049-4096 band, min(ceil(32/4), 2*ceil(32/9)) = 8 per copy as
+// 4Kx4 columns; N6 printed the same 8 as 2 x18 columns of 4 blocks)
+// CHECK:        bank math: 18432 bits/BRAM_18K (incl. parity), two live ports -> x18 max at RAM_1WNR, element 32b -> mode x4: columns ceil(32/4)=8, depth/block 4096, address depth 2^ceil(log2 4096)=4096, blocks/column max(1,4096/4096)=1 -> 8 per copy, replication 15 -> 120 block(s)
 // CHECK-NEXT:   bram: 120
 // CHECK:      tmp (alloca)
 // CHECK:        replication: replicable (max 1 store(s) per loop body), copies 1
 // CHECK:        ram type: RAM_1P
-// CHECK:        bank math: {{.*}} one live port -> x36 allowed at RAM_1P, element 32b -> mode x36: columns ceil(32/36)=1, depth/block 512, address depth 2^ceil(log2 4096)=4096, blocks/column max(1,4096/512)=8 -> 8 per copy, replication 1 -> 8 block(s)
+// CHECK:        bank math: {{.*}} one live port -> x36 allowed at RAM_1P, element 32b -> mode x4: columns ceil(32/4)=8, depth/block 4096, address depth 2^ceil(log2 4096)=4096, blocks/column max(1,4096/4096)=1 -> 8 per copy, replication 1 -> 8 block(s)
 // CHECK-NEXT:   bram: 8
 // CHECK:      Total BRAM: 128
 
