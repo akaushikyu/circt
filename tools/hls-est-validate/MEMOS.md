@@ -24,7 +24,7 @@ vitis_examples (73 compared designs) at hls-est 22d473858 unless stated. They wi
 | 15 | O15: assignable `range()` references | Peter approved the M10 plan (2026-10-10): time-boxed experiment on one soda design and SkyNet, after the W3/W5 frontend work | to implement (W6) |
 | 16 | regenerate the lit Estimation CHECK values from the current model (Vitis value in a comment) | approved, after the defaults are settled | to implement (W1) |
 | 17 | the 12 designs without Vitis ground truth | exclude them for now and record why in the spreadsheet | done (2e8f04992, sheet "excluded designs") |
-| 18 | `hls::exp` / `hls::sqrt` deviations in exactclass | Peter: find out whether these functions have a fixed cost (experiments); put the cost in a configuration file the programmer sets | to implement (W2) |
+| 18 | `hls::exp` / `hls::sqrt` deviations in exactclass | Peter: find out whether these functions have a fixed cost (experiments); put the cost in a configuration file the programmer sets | experiments done: fixed BRAM per core instance, instances by call structure (VITIS_NOTES N16, fde45f14f); draft config `math_costs.json` (30e2933f9); hls-est reader to implement (W2) |
 | 19 | keep the two small default-output changes (banking constants through index casts; RAM_2P label) | approved | done |
 | 20 | correct the CLAUDE.md attention target | done (Peter + coordinator) | done |
 | 21 | push / PRs | not yet | - |
