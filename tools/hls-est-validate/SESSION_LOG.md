@@ -62,11 +62,11 @@ Binaries in `Polygeist/build/bin/`: `cgeist` (current), `cgeist.prev-8017846b`, 
 | wf_453191fc-b80 | cgeist round 3: `+=` path, wrapping unsigned loops, unsigned bounds, mixed-sign counters | **done**: Polygeist 8490cbbb; its verifier found a new wrong-code regression (narrow `-=`/`*=` promoted to non-wrapping affine) and two incomplete fixes → round 4 |
 | wf_e91158f4-96e + wf_cde0098f-30a | priority 4 (N8 formula reconciliation) + priority 5 tools, then their review fixes | **done**: 3a0c04cc8, b93c11751, dbb6b9550, c85766872; memo M4 |
 | wf_05612499-391 | cgeist round 4: AffineCFG no longer promotes narrow integer arithmetic that can wrap, second-counter shortcut, cast chains through inlining, loop exit values, float compound rounding, div/rem sign check at every width | **done**: Polygeist 763b0046 + review fixes cbc105e0 (circt dbf091007, b60c020ee); recheck: no defects, harness byte-identical; open: unsigned 32-bit wrap assumption → memo M9 |
-| wf_3050670d-893 | cgeist O23: no store-to-load forwarding across a loop that overwrites the location (lost accumulations in mult_op_module_dot, mult_op_p3, testing_impl); fix, verify, fix, recheck | running; binary kept private at /home/peter/tmp/o23/ - **install into build/bin/cgeist only after T8 has finished** (coordinator step) |
-| wf_3a800524-b43 (W1) | Peter-approved defaults: W1a drop `--infer-vitis-split-array`, `--bram-seq-dual-port` on, band BRAM formula, `top=`; W1c exactclass harness shim (#8), dead-memory front end + m_axi adapters (#4), `float-loads-perfect` (#3), `forward-stores` if rule 4 holds (#5); W1b lit Estimation CHECK regeneration, full runs, workbook | waits for `fix-T8.done`; writes `w1.done`. (First launch wf_baed0f13-918 was derailed: its agents answered Peter's mid-turn question instead of working; stopped, nothing edited.) |
-| wf_bdcba361-69a (W2) | hls:: math-function cost: Vitis experiments, then a configuration file read by `--bram-analysis` (Peter: "punt them to a configuration file") | relaunched 17:05 (first run wf_72c9c655-ac2 stopped, see below); implementation waits for `w1.done`; writes `w2.done` |
+| wf_3050670d-893 | cgeist O23: no store-to-load forwarding across a loop that overwrites the location; fix, verify, fix, recheck | fix 18a550dd + review fixes c70ba2b0 (circt 30700ae50); verifier: no correctness defects; recheck running; binary to install: /home/peter/tmp/o23/cgeist (= cgeist.v4, md5 6ff60ea1...) after the recheck |
+| wf_3a800524-b43 (W1) | Peter-approved defaults: W1a drop `--infer-vitis-split-array` (919792784), `--bram-seq-dual-port` on (98e86b070), band BRAM formula (51b9a6434), `top=` (433f07113); W1c exactclass shim (#8), dead-memory front end + m_axi adapters (#4), `float-loads-perfect` (#3), `forward-stores` if rule 4 holds (#5); W1b lit CHECK regeneration, full runs, workbook | W1a landed; its review found 3 defects (top= counted out-of-scope get_global sites with `--bram-attribute-globals`; the "before" row dropped 3 designs; a workbook label) - fix running; then W1c, W1b; writes `w1.done` |
+| wf_bdcba361-69a (W2) | hls:: math-function cost: Vitis experiments (done: N16 fde45f14f, `math_costs.json` 30e2933f9, 45 entries; each core instance has a fixed BRAM cost, instances follow the call structure), then `--bram-analysis` reads the file | implementation waits for `w1.done`; writes `w2.done` |
 | wf_58a68378-45f (W3) | non-inlined functions: Vitis experiments (done: VITIS_NOTES N14, 34289e775); cgeist honours `inline off` + opt-in `--hls-keep-invariant-loops` (waits for `o23.installed`; writes `w3cgeist.done`); hls-est call support (waits for `w2.done`) | resumed 17:05: experiment cached, the six derailed steps redone; writes `w3.done` |
-| wf_9be89a19-0be (W5) | frontend: Vitis experiment on narrow counters vs wider runtime bounds (#14); then signed arithmetic marked non-wrapping + AffineCFG trusts only that (#13), the #14 behaviour the evidence favours, Polygeist lit shim -> exactclass (#10) | relaunched 17:05 (first run wf_a05ffb25-dfb stopped); Polygeist edits wait for `w3cgeist.done`; private binary; writes `w5.done` |
+| wf_9be89a19-0be (W5) | frontend: narrow counters vs wider runtime bounds (#14; experiment done: N15 989279d91, recommends raising the loop and marking it so the pipeline decision does not collapse it early; no ground-truth design contains the case); then signed arithmetic marked non-wrapping (#13), Polygeist lit shim -> exactclass (#10) | Polygeist edits wait for `w3cgeist.done`; private binary; writes `w5.done` |
 | wf_7e144e09-d08 (W6) | #15 (Peter approved M10): exactclass proxy classes for assignable bit/range/concat selects + cgeist scalar replacement of proxy structs; one soda design and SkyNet first, then the 23 O15 designs; time-boxed | shim prototyping in a private copy now; real edits wait for `w5.done`; private binary; writes `w6.done` |
 | wf_1620e0fa-ab0 | `tiled_attn_module` 600→1321 bisect | **done**: harness artefact, O12, memo M7, `pipeline_full` recorded |
 
@@ -90,11 +90,13 @@ Regenerate the appendices below with `python3 update_session_log.py` after each 
 
 **Derailed agents, 2026-10-10 15:30-17:00.** Peter asked mid-turn whether Vitis really ran. Agents of the workflows launched in that turn (the first W1 run, W2, W3) answered him in their reports, and every later agent that received such a report in its prompt answered too instead of working: all six W3 steps after the experiment returned without doing their task, and one of them touched `flags/w3.done`. Nothing was edited, committed or installed. Fix: `w3.done` removed; every workflow prompt now says that Peter's messages are for the coordinator and that answers to his question in quoted reports are to be ignored; W3 resumed (experiment cached), W2 and W5 relaunched, W5's gate moved from W3's journal to the new flag `w3cgeist.done`. Side effect: several derailed agents re-ran designs and kernels through Vitis from scratch (their reports list them: e.g. bicg, attention_op_p1, viterbi, gesummv, syrk, histogram); every re-run they report matched the cached result exactly.
 
+**Model switch 2026-10-10 17:45.** Peter moved the session from Opus 5.5 to Fable 5.1 (new account). Commits by the coordinator from here on carry `Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>`; agents launched earlier keep the Opus 5.5 trailer their prompts specify.
+
 Coordinator steps pending: install the O23 cgeist after T8 and the O23 recheck, then touch `flags/o23.installed`; after W1, update CLAUDE.md's "Current default pipeline" section and Shims row; after W3 has installed its cgeist and `w5.done` exists, install W5's private cgeist (its report names it) and run a control harness; then W6's private cgeist after `w6.done` the same way; finally the formal pipeline sweep and REPORT.md.
 
 ## Appendix A — every file changed in ~/circt (branch hls-est-vitis-match), per commit, oldest first
 
-Generated by `update_session_log.py` at 2026-10-10 16:31 from `git log --reverse --name-status e9da1aaf0..HEAD` (e9da1aaf0 = snapshot of Peter's pre-existing uncommitted tree). A = added, M = modified, D = deleted. Large result JSONs are git-ignored.
+Generated by `update_session_log.py` at 2026-10-10 17:48 from `git log --reverse --name-status e9da1aaf0..HEAD` (e9da1aaf0 = snapshot of Peter's pre-existing uncommitted tree). A = added, M = modified, D = deleted. Large result JSONs are git-ignored.
 
 ### 3ad60fb79 hls-est: register DLTI/LLVM dialects; add hls-est-validate harness skeleton
 
@@ -812,6 +814,85 @@ Generated by `update_session_log.py` at 2026-10-10 16:31 from `git log --reverse
 
 - M `tools/hls-est-validate/SESSION_LOG.md`
 
+### 09740fb24 SESSION_LOG: derailed agents incident; W2/W5 relaunched, W3 resumed
+
+- M `tools/hls-est-validate/SESSION_LOG.md`
+
+### 047ee4670 SESSION_LOG: correct an uncounted number
+
+- M `tools/hls-est-validate/SESSION_LOG.md`
+
+### 919792784 hls-est-validate: drop --infer-vitis-split-array from the default pipeline (MEMOS M1, decision #1)
+
+- M `test/hls-est/Estimation/Claude.md`
+- M `test/hls-est/Estimation/run_all.sh`
+- M `test/hls-est/Passes/dependence_scope.mlir`
+- M `test/hls-est/Passes/index_castui.mlir`
+- M `test/hls-est/Passes/pipeline_yield_late.mlir`
+- M `tools/hls-est-validate/CHANGELOG.md`
+- M `tools/hls-est-validate/check_debug_invariance.sh`
+- M `tools/hls-est-validate/check_pipeline_unroll.py`
+- M `tools/hls-est-validate/common.py`
+- M `tools/hls-est-validate/experiment_pipeline.py`
+
+### 98e86b070 hls-est: --bram-seq-dual-port on by default (MEMOS M6, decision #2)
+
+- M `lib/Dialect/Resource/Passes/BRAMAnalysis.cpp`
+- M `test/hls-est/Estimation/polybench/bicg.mlir`
+- M `test/hls-est/Passes/seq_scope_ports.mlir`
+- M `test/hls-est/Passes/seq_scope_ports_ir.mlir`
+- M `test/hls-est/Passes/split_array_td_off_bram.mlir`
+- M `tools/hls-est-validate/CHANGELOG.md`
+
+### 51b9a6434 hls-est: the 7-series depth-band formula is the default BRAM formula (MEMOS M4, decision #6)
+
+- M `lib/Dialect/Resource/Passes/BRAMAnalysis.cpp`
+- M `test/hls-est/Passes/aspect_modes.mlir`
+- M `test/hls-est/Passes/bram_debug_json.mlir`
+- A `test/hls-est/Passes/bram_formula_band.mlir`
+- A `test/hls-est/Passes/bram_formula_rom_ir.mlir`
+- M `test/hls-est/Passes/replication_1wnr.mlir`
+- M `test/hls-est/Passes/replication_two_stores.mlir`
+- M `tools/hls-est-validate/CHANGELOG.md`
+- M `tools/hls-est-validate/OPEN_ISSUES.md`
+- M `tools/hls-est-validate/VITIS_NOTES.md`
+
+### 989279d91 VITIS_NOTES: N15 narrow loop counters against a wider runtime bound (W5, decision #14)
+
+- M `tools/hls-est-validate/VITIS_NOTES.md`
+
+### 433f07113 hls-est: --bram-analysis=top=<symbol> costs only what the top reaches (MEMOS M7, decision #7)
+
+- M `lib/Dialect/Resource/Passes/BRAMAnalysis.cpp`
+- A `test/hls-est/Passes/bram_top.mlir`
+- M `tools/hls-est-validate/CHANGELOG.md`
+- M `tools/hls-est-validate/OPEN_ISSUES.md`
+- M `tools/hls-est-validate/run_hlsest.py`
+
+### 88c81e070 hls-est-validate: W1a hash lines; MEMOS decisions #1, #2, #6, #7 implemented; notes
+
+- M `tools/hls-est-validate/CHANGELOG.md`
+- M `tools/hls-est-validate/MEMOS.md`
+- M `tools/hls-est-validate/OPEN_ISSUES.md`
+- M `tools/hls-est-validate/VITIS_NOTES.md`
+
+### 30700ae50 hls-est-validate: CHANGELOG / OPEN_ISSUES for the cgeist O23 review fixes (Polygeist c70ba2b0)
+
+- M `tools/hls-est-validate/CHANGELOG.md`
+- M `tools/hls-est-validate/OPEN_ISSUES.md`
+
+### fde45f14f hls-est-validate: VITIS_NOTES N16 hls:: math-function BRAM cost per core instance (W2-exp)
+
+- M `tools/hls-est-validate/VITIS_NOTES.md`
+
+### 30e2933f9 hls-est-validate: math_costs.json, the hls:: math-function cost table (W2-exp draft)
+
+- A `tools/hls-est-validate/math_costs.json`
+
+### 4a76b5f5c hls-est-validate: MEMOS decision #18 experiments done (N16, math_costs.json)
+
+- M `tools/hls-est-validate/MEMOS.md`
+
 ## Appendix B — every file changed in Polygeist (/mnt/d/HLS, branch hls-est-vitis-match), per commit
 
 ### d279a433 cgeist: lower _Float16/__bf16 and _BitInt(N) scalars to f16/bf16/iN
@@ -893,27 +974,19 @@ Generated by `update_session_log.py` at 2026-10-10 16:31 from `git log --reverse
 - A `Polygeist/tools/cgeist/Test/Verification/store-forward-loop.c`
 - M `Polygeist/tools/cgeist/driver.cc`
 
-## Appendix C — uncommitted work at 2026-10-10 16:31 (owned by running agents unless stated)
+### c70ba2b0 cgeist: O23 review fixes
+
+- M `Polygeist/lib/polygeist/Passes/AffineScalRep.cpp`
+- M `Polygeist/tools/cgeist/Test/HLS/regressions/store-forward-loop-carried.c`
+
+## Appendix C — uncommitted work at 2026-10-10 17:48 (owned by running agents unless stated)
 
 ~/circt:
 
 - `M lib/Dialect/Resource/Passes/BRAMAnalysis.cpp`
-- `M test/hls-est/Estimation/Claude.md`
-- `M test/hls-est/Estimation/polybench/bicg.mlir`
-- `M test/hls-est/Estimation/run_all.sh`
-- `M test/hls-est/Passes/dependence_scope.mlir`
-- `M test/hls-est/Passes/index_castui.mlir`
-- `M test/hls-est/Passes/pipeline_yield_late.mlir`
-- `M test/hls-est/Passes/seq_scope_ports.mlir`
-- `M test/hls-est/Passes/seq_scope_ports_ir.mlir`
-- `M test/hls-est/Passes/split_array_td_off_bram.mlir`
+- `M lib/Dialect/Resource/Passes/VitisFold.cpp`
 - `M tools/hls-est-validate/SESSION_LOG.md`
-- `M tools/hls-est-validate/check_debug_invariance.sh`
-- `M tools/hls-est-validate/check_pipeline_unroll.py`
-- `M tools/hls-est-validate/common.py`
-- `M tools/hls-est-validate/experiment_pipeline.py`
 
 Polygeist:
 
-- `M lib/polygeist/Passes/AffineScalRep.cpp`
-- `M tools/cgeist/Test/HLS/regressions/store-forward-loop-carried.c`
+- (clean)
