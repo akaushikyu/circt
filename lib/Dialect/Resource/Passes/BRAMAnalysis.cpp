@@ -122,6 +122,7 @@ struct TopScope {
   unsigned skipped = 0;
 
   bool active() const { return !symbol.empty(); }
+
   bool covers(Operation *op) const {
     if (!active())
       return true;
@@ -791,6 +792,10 @@ int64_t ceilDiv(int64_t arrayValue, int64_t buildPoint) {
   return (arrayValue + buildPoint - 1) / buildPoint;
 }
 
+unsigned usedPortWidth(const BankMathRecord &bm, StorageKind keyValue) {
+  return bm.configWidth ? bm.configWidth : blockDataWidth(keyValue);
+}
+
 int64_t estimateBlocksN6(int64_t numElems, unsigned elemBits, bool wide,
                          BankMathRecord *bm = nullptr) {
   if (bm) {
@@ -1417,8 +1422,16 @@ static BRAMCost estimateBRAM(MemoryResourceOpInterface iface, MemrefRecord &rec,
             (global.getConstant() || neverWritten(banks));
   if (rec.rom) {
     unsigned elementCount = std::max(demand.total, 1u);
-    for (const ReplicationLoopRecord &lowerIndex : rep.loops)
+    for (ReplicationLoopRecord &lowerIndex : rep.loops) {
       elementCount = std::max(elementCount, lowerIndex.need);
+
+      lowerIndex.copies =
+          lowerIndex.need <= 2
+              ? 1u
+              : std::min<unsigned>(
+                    static_cast<unsigned>(ceilDiv(lowerIndex.need, 2)),
+                    kMaxReplicationCopies);
+    }
     rep.replicable = true;
     rep.copies = 1;
     rep.limitingLoop.reset();
@@ -1497,12 +1510,13 @@ static BRAMCost estimateBRAM(MemoryResourceOpInterface iface, MemrefRecord &rec,
   else if (kr.kind == StorageKind::RAM_1WNR)
     cost.note = std::to_string(numElems) + "x" + std::to_string(elemBits) +
                 "b -> RAM_1WNR, " + std::to_string(rep.copies) + " copies x " +
-                std::to_string(rec.bankMath.blocksPerCopy) +
-                " (x18/port) = " + std::to_string(blocks) + " BRAM_18K";
+                std::to_string(rec.bankMath.blocksPerCopy) + " (x" +
+                std::to_string(usedPortWidth(rec.bankMath, kr.kind)) +
+                "/port) = " + std::to_string(blocks) + " BRAM_18K";
   else
     cost.note = std::to_string(numElems) + "x" + std::to_string(elemBits) +
                 "b -> " + kindName(kr.kind) + " (x" +
-                std::to_string(blockDataWidth(kr.kind)) +
+                std::to_string(usedPortWidth(rec.bankMath, kr.kind)) +
                 "/port) = " + std::to_string(blocks) + " BRAM_18K";
 
   recordAccesses(accesses, rec, seq);
@@ -1577,9 +1591,12 @@ struct PipelineRecord {
   SmallVector<Unrolled> unrolled;
 };
 
-static SmallVector<PipelineRecord> collectPipelineRecords(ModuleOp rootModule) {
+static SmallVector<PipelineRecord>
+collectPipelineRecords(ModuleOp rootModule, const TopScope &scope) {
   SmallVector<PipelineRecord> out;
   rootModule.walk([&](LoopSchedulePipelineOp portValue) {
+    if (!scope.covers(portValue))
+      return;
     PipelineRecord resultValue;
     resultValue.loc = locString(portValue.getLoc());
     if (auto function = portValue->getParentOfType<func::FuncOp>())
@@ -1623,29 +1640,53 @@ static SmallVector<PipelineRecord> collectPipelineRecords(ModuleOp rootModule) {
 
 struct FoldSummary {
   struct Rewrite {
-    std::string rule, loc, source, detail;
+    std::string rule, loc, source, detail, func;
   };
   SmallVector<std::pair<std::string, int64_t>> counts;
   SmallVector<Rewrite> rewrites;
   bool present = false;
+
+  bool wholeModule = false;
 };
 
-static FoldSummary collectFoldSummary(ModuleOp rootModule) {
+static FoldSummary collectFoldSummary(ModuleOp rootModule,
+                                      const TopScope &scope) {
   FoldSummary stringValue;
   auto dimensionIndex =
       rootModule->getAttrOfType<DictionaryAttr>("hls.vitis_fold");
   if (!dimensionIndex)
     return stringValue;
   stringValue.present = true;
-  if (auto candidateValue = dimensionIndex.getAs<DictionaryAttr>("counts"))
+  auto funcCounts = dimensionIndex.getAs<DictionaryAttr>("func_counts");
+  bool scoped = scope.active() && funcCounts;
+  stringValue.wholeModule = scope.active() && !funcCounts;
+  if (scoped) {
+    std::map<std::string, int64_t> sums;
+    for (NamedAttribute fieldValue : funcCounts) {
+      auto per = dyn_cast<DictionaryAttr>(fieldValue.getValue());
+      if (!per || !scope.funcNames.contains(fieldValue.getName().getValue()))
+        continue;
+      for (NamedAttribute na : per)
+        if (auto loopIndex = dyn_cast<IntegerAttr>(na.getValue()))
+          sums[na.getName().str()] += loopIndex.getInt();
+    }
+    stringValue.counts.assign(sums.begin(), sums.end());
+  } else if (auto candidateValue =
+                 dimensionIndex.getAs<DictionaryAttr>("counts")) {
     for (NamedAttribute na : candidateValue)
       if (auto loopIndex = dyn_cast<IntegerAttr>(na.getValue()))
         stringValue.counts.push_back({na.getName().str(), loopIndex.getInt()});
+  }
   if (auto resultValue = dimensionIndex.getAs<ArrayAttr>("rewrites"))
     for (Attribute arrayValue : resultValue) {
       auto rd = dyn_cast<DictionaryAttr>(arrayValue);
       if (!rd)
         continue;
+      if (scoped) {
+        auto function = rd.getAs<StringAttr>("func");
+        if (!function || !scope.funcNames.contains(function.getValue()))
+          continue;
+      }
       FoldSummary::Rewrite widthValue;
       if (auto exprValue = rd.getAs<StringAttr>("rule"))
         widthValue.rule = exprValue.str();
@@ -1655,6 +1696,8 @@ static FoldSummary collectFoldSummary(ModuleOp rootModule) {
         widthValue.source = locString(Location(exprValue));
       if (auto exprValue = rd.getAs<StringAttr>("detail"))
         widthValue.detail = exprValue.str();
+      if (auto exprValue = rd.getAs<StringAttr>("func"))
+        widthValue.func = exprValue.str();
       stringValue.rewrites.push_back(std::move(widthValue));
     }
   return stringValue;
@@ -1669,7 +1712,11 @@ static void printFoldSummary(const FoldSummary &fieldValue,
     elementCount += candidateValue.second;
   os << "--- vitis-fold: " << elementCount
      << " rewrites of the undefined value of an integer x / 0 "
-        "(VITIS_NOTES.md N13) ---\n  counts:";
+        "(VITIS_NOTES.md N13) ---\n";
+  if (fieldValue.wholeModule)
+    os << "  (whole module: this hls.vitis_fold has no per-function counts, "
+          "so top= does not narrow it)\n";
+  os << "  counts:";
   for (auto &candidateValue : fieldValue.counts)
     os << " " << candidateValue.first << "=" << candidateValue.second;
   os << "\n";
@@ -2149,9 +2196,13 @@ static std::error_code writeDebugJson(ArrayRef<MemrefRecord> records,
       wo["detail"] = widthValue.detail.empty()
                          ? llvm::json::Value(nullptr)
                          : llvm::json::Value(widthValue.detail);
+      wo["func"] = widthValue.func.empty() ? llvm::json::Value(nullptr)
+                                           : llvm::json::Value(widthValue.func);
       rewrites.push_back(std::move(wo));
     }
     fo["rewrites"] = std::move(rewrites);
+
+    fo["scope"] = scope.active() && !fold.wholeModule ? "top" : "module";
     root["vitis_fold"] = std::move(fo);
   } else {
     root["vitis_fold"] = nullptr;
@@ -2393,22 +2444,16 @@ static bool computeTopScope(ModuleOp rootModule, StringRef top,
     func::FuncOp function = work.pop_back_val();
     scope.funcNames.insert(function.getName());
     function.walk([&](Operation *op) {
-      if (auto globalUse = dyn_cast<memref::GetGlobalOp>(op)) {
-        scope.globals.insert(globalUse.getName());
-        return;
-      }
-      auto callSite = dyn_cast<CallOpInterface>(op);
-      if (!callSite)
-        return;
-      auto symbolName =
-          dyn_cast_if_present<SymbolRefAttr>(callSite.getCallableForCallee());
-      if (!symbolName)
-        return;
-      auto callee = dyn_cast_if_present<func::FuncOp>(
-          SymbolTable::lookupNearestSymbolFrom(op, symbolName));
-      if (callee && !callee.isExternal() &&
-          scope.funcs.insert(callee.getOperation()).second)
-        work.push_back(callee);
+      op->getAttrDictionary().walk<WalkOrder::PreOrder>([&](SymbolRefAttr ref) {
+        Operation *symbolName = SymbolTable::lookupNearestSymbolFrom(op, ref);
+        if (auto globalOp = dyn_cast_or_null<memref::GlobalOp>(symbolName))
+          scope.globals.insert(globalOp.getSymName());
+        else if (auto callee = dyn_cast_or_null<func::FuncOp>(symbolName))
+          if (!callee.isExternal() &&
+              scope.funcs.insert(callee.getOperation()).second)
+            work.push_back(callee);
+        return WalkResult::skip();
+      });
     });
   }
   return true;
@@ -2461,12 +2506,14 @@ struct BRAMAnalysisLoopSchedule
 
   Option<std::string> topOpt{
       *this, "top",
-      llvm::cl::desc("Cost only the memrefs of the func.funcs reachable from "
-                     "this one through calls, the memref.globals they use and "
-                     "its own m_axi adapters, as Vitis synthesizes the top and "
-                     "what it calls (MEMOS.md M7). Without it every function "
-                     "is costed, with a warning when more than one public "
-                     "function holds memrefs"),
+      llvm::cl::desc(
+          "Cost only the memrefs of the func.funcs reachable from "
+          "this one through calls (any symbol reference, as "
+          "--symbol-dce keeps them), the memref.globals they use and "
+          "its own m_axi adapters, as Vitis synthesizes the top and "
+          "what it calls (MEMOS.md M7). Without it every function "
+          "is costed, with a warning when more than one public "
+          "function holds memrefs"),
       llvm::cl::init("")};
 
   void runOnOperation() override {
@@ -2501,7 +2548,8 @@ struct BRAMAnalysisLoopSchedule
     llvm::StringMap<SmallVector<Value>> globalSites;
     if (bramAttributeGlobalsOpt)
       rootModule.walk([&](memref::GetGlobalOp globalUse) {
-        globalSites[globalUse.getName()].push_back(globalUse.getResult());
+        if (scope.covers(globalUse))
+          globalSites[globalUse.getName()].push_back(globalUse.getResult());
       });
     rootModule.walk([&](Operation *op) {
       auto iface = dyn_cast<MemoryResourceOpInterface>(op);
@@ -2591,10 +2639,10 @@ struct BRAMAnalysisLoopSchedule
 
     SmallVector<PipelineRecord> pipelines;
     if (bramDebugOpt || !bramDebugJsonOpt.empty())
-      pipelines = collectPipelineRecords(getOperation());
+      pipelines = collectPipelineRecords(getOperation(), scope);
     FoldSummary fold;
     if (bramDebugOpt || !bramDebugJsonOpt.empty())
-      fold = collectFoldSummary(rootModule);
+      fold = collectFoldSummary(rootModule, scope);
     if (bramDebugOpt)
       printDebugText(records, pipelines, total, fold, formulaOpt, scope,
                      llvm::errs());

@@ -2,13 +2,16 @@
 """Build hls-est-results.xlsx: one workbook with the Vitis ground truth and the hls-est predictions.
 
     python3 make_sheet.py [--vitis results/vitis.json] [--hlsest <default-pipeline run .json>]
-                          [--nosplit <no-split run .json>] [--experiments experiments/results.csv]
+                          [--second <second run .json> [--second-label <name>]]
+                          [--experiments experiments/results.csv]
                           [--diagnoses diagnoses.json] [--out hls-est-results.xlsx]
 
 Sheets, in order:
   results               exactly the CLAUDE.md columns: dataset | benchmark | BRAM | DSP | FF | LUT |
                         BRAM_util_pct | DSP_util_pct | FF_util_pct | LUT_util_pct | BRAM (prediction, shim)
-  no-split predictions  Vitis BRAM next to the default and the no-split pipeline totals
+  second pipeline       Vitis BRAM next to the default pipeline's and a second run's totals (--second;
+                        e.g. the split pipeline, the default before MEMOS M1; labelled from the run's
+                        recorded pipeline unless --second-label names it)
   per-array             one row per array: Vitis BRAM vs hls-est BRAM (default pipeline)
   mismatches            designs whose default prediction differs, largest |diff| first, with cause / O-number
   failures              designs where Vitis or hls-est produced no number, with the reason
@@ -133,11 +136,27 @@ def color(ws, rows, vcol, pcol):
             ws.cell(row=i, column=pcol).fill = GREEN if v == p else RED
 
 
+def second_label(meta, given=None):
+    """Name of the second run's pipeline in the workbook: --second-label, else from its recorded pipeline
+    (the split pass is the one difference the sheet was made for; since MEMOS M1 the default has no split)."""
+    if given:
+        return given
+    pipe = (meta or {}).get("pipeline") or ""
+    if "--infer-vitis-split-array" in pipe:
+        return "split pipeline"
+    return "second pipeline"
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--vitis", default=str(C.RESULTS_DIR / "vitis.json"))
     ap.add_argument("--hlsest", default=str(C.RESULTS_DIR / "hlsest.json"), help="default-pipeline run")
-    ap.add_argument("--nosplit", default=None, help="a second run for the extra sheet (historically the pipeline without --infer-vitis-split-array, which is the default since MEMOS M1; now e.g. the former default with it)")
+    ap.add_argument("--second", "--nosplit", dest="second", default=None,
+                    help="a second run for the 'second pipeline' sheet, e.g. the split pipeline "
+                         "(common.SPLIT_PIPELINE, the default before MEMOS M1). --nosplit is the old name, "
+                         "from when the default had the split and this run was the one without it")
+    ap.add_argument("--second-label", default=None,
+                    help="name of the second run in the workbook (default: from its recorded pipeline)")
     ap.add_argument("--experiments", default=str(C.HERE / "experiments" / "results.csv"))
     ap.add_argument("--diagnoses", default=str(C.HERE / "diagnoses.json"))
     ap.add_argument("--out", default=str(C.HERE / "hls-est-results.xlsx"))
@@ -146,8 +165,9 @@ def main():
     V = C.load_json(a.vitis, {}) or {}
     H = C.load_json(a.hlsest, {}) or {}
     hmeta = H.pop("_meta", {})
-    N = (C.load_json(a.nosplit, {}) if a.nosplit else {}) or {}
+    N = (C.load_json(a.second, {}) if a.second else {}) or {}
     nmeta = N.pop("_meta", {})
+    nlabel = second_label(nmeta, a.second_label)
     diags = C.load_json(a.diagnoses, {}) or {}
     keys = sorted(set(V) | set(H) | set(N))
     cmp_rows = {k: compare_one(k, V.get(k), H.get(k)) for k in keys}
@@ -171,19 +191,19 @@ def main():
     table(ws, COLS, rows)
     color(ws, rows, 3, 11)
 
-    # ---- no-split predictions ----
-    wn = wb.create_sheet("no-split predictions")
+    # ---- second pipeline ----
+    wn = wb.create_sheet("second pipeline")
     nrows = []
     for k in keys:
         ds, bm = k.split("/", 1)
         v = V.get(k)
         vb = (v.get("totals") or {}).get("BRAM") if vitis_ok(v) else vitis_fail_text(v)
         d = prediction(H.get(k))
-        n = prediction(N.get(k)) if N else "no-split run not given"
+        n = prediction(N.get(k)) if N else "second run not given (--second)"
         nrows.append([ds, bm, vb, d, (d - vb) if isinstance(d, int) and isinstance(vb, int) else None,
                       n, (n - vb) if isinstance(n, int) and isinstance(vb, int) else None])
     table(wn, ["dataset", "benchmark", "Vitis BRAM", "default pipeline", "diff (default - Vitis)",
-               "no-split pipeline", "diff (no-split - Vitis)"], nrows)
+               nlabel, f"diff ({nlabel} - Vitis)"], nrows)
     color(wn, nrows, 3, 4)
     color(wn, nrows, 3, 6)
 
@@ -321,7 +341,7 @@ def main():
          f"{sum(1 for v in V.values() if not vitis_ok(v))} - excluded from every comparison (Peter, 2026-10-10)"],
         ["shim", hmeta.get("shim", "")],
         ["default pipeline (prediction column)", hmeta.get("pipeline", "")],
-        ["no-split pipeline", nmeta.get("pipeline", "")],
+        [f"second run ({nlabel}): pipeline", nmeta.get("pipeline", "")],
         ["top selection prefix", hmeta.get("top_passes", "--symbol-privatize=exclude=<top> --symbol-dce per design")],
         ["hls-est git hash (run)", hmeta.get("hls_est_git", "")],
         ["hls-est binary sha256 (run)", hmeta.get("hls_est_sha256", "")],
@@ -336,7 +356,7 @@ def main():
          "~/hls-llvm-project main = " + git(Path.home() / "hls-llvm-project", "log", "-1", "--format=%h")],
         ["default pipeline: compared / exact / total |err|",
          f"{summ.get('compared')} / {summ.get('exact')} / {summ.get('total_abs_error')}"],
-        ["no-split pipeline: compared / exact / total |err|",
+        [f"second run ({nlabel}): compared / exact / total |err|",
          f"{nsumm.get('compared')} / {nsumm.get('exact')} / {nsumm.get('total_abs_error')}" if nsumm else ""],
     ]
     table(wb.create_sheet("run config"), ["setting", "value"], cfg)
@@ -345,7 +365,7 @@ def main():
     print(f"wrote {a.out}: {len(rows)} designs, {len(arows)} array rows, {len(mrows)} mismatches, "
           f"{len(frows)} failures, {len(vmrows)} Vitis memory rows, {len(lrows)} Vitis loop rows; "
           f"default exact {summ.get('exact')}/{summ.get('compared')}"
-          + (f", no-split exact {nsumm.get('exact')}/{nsumm.get('compared')}" if nsumm else ""))
+          + (f", {nlabel} exact {nsumm.get('exact')}/{nsumm.get('compared')}" if nsumm else ""))
 
 
 if __name__ == "__main__":

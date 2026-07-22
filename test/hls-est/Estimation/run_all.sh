@@ -5,7 +5,7 @@
 # "aggr" mode until it left the default pipeline, MEMOS.md M1).
 #   trigger: estimate < 0.75*truth  AND  (truth-estimate) >= 4
 #   decision estimate: historical 'BRAM (prediction, shim)' column when numeric,
-#                      else a fresh baseline run (pipeline without the two passes).
+#                      else a fresh baseline run (pipeline without --auto-pipeline-unroll).
 set -u
 
 BIN="$HOME/circt/bin/hls-est"
@@ -92,7 +92,7 @@ for f in "${FILES[@]}"; do
     fi
   fi
 
-  # --- decide whether to apply the two passes ---
+  # --- decide whether to apply the aggr pass (--auto-pipeline-unroll) ---
   est=""; source="none"; apply="no"
   ran_base=0; b_oo="$(mktemp)"; b_ee="$(mktemp)"; b_code=""; b_elapsed=""
   if [[ -n "$truth" ]]; then

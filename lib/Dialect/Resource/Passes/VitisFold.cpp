@@ -52,6 +52,7 @@ struct FoldNote {
   Location loc;
   Location source;
   std::string detail;
+  std::string func;
 };
 
 /// divsi / divui / remsi of an integer by a constant 0.
@@ -309,8 +310,11 @@ bool UndefFolder::run(SmallVectorImpl<FoldNote> &notes) {
   OpBuilder buildPoint(root->getContext());
   auto note = [&](StringRef rule, Operation *op, Value useValue,
                   std::string dimensionIndex = {}) {
-    notes.push_back(
-        {rule.str(), op->getLoc(), srcOf(useValue), std::move(dimensionIndex)});
+    std::string function;
+    if (auto fieldValue = op->getParentOfType<FunctionOpInterface>())
+      function = fieldValue.getName().str();
+    notes.push_back({rule.str(), op->getLoc(), srcOf(useValue),
+                     std::move(dimensionIndex), std::move(function)});
   };
   auto firstU = [&](Operation *op) -> Value {
     for (Value opHandle : op->getOperands())
@@ -552,8 +556,10 @@ struct VitisFoldPass : PassWrapper<VitisFoldPass, OperationPass<>> {
     recordNotes(notes);
   }
 
-  /// `hls.vitis_fold` on the module: {counts = {rule = n}, rewrites = [{rule,
-  /// loc, source, detail}]} (first kMaxRecords), merged with an earlier run.
+  /// `hls.vitis_fold` on the module: {counts = {rule = n}, func_counts =
+  /// {function = {rule = n}}, rewrites = [{rule, loc, source, detail, func}]}
+  /// (first kMaxRecords), merged with an earlier run. func_counts and func let
+  /// --bram-analysis=top= report only the reachable functions' rewrites.
   void recordNotes(ArrayRef<FoldNote> notes) {
     if (notes.empty())
       return;
@@ -564,17 +570,27 @@ struct VitisFoldPass : PassWrapper<VitisFoldPass, OperationPass<>> {
     MLIRContext *context = &getContext();
     Builder buildPoint(context);
     llvm::StringMap<int64_t> counts;
+    llvm::StringMap<llvm::StringMap<int64_t>> funcCounts;
     SmallVector<Attribute> records;
     if (auto prev = rootModule->getAttrOfType<DictionaryAttr>(kNoteAttr)) {
       if (auto candidateValue = prev.getAs<DictionaryAttr>("counts"))
         for (NamedAttribute na : candidateValue)
           if (auto loopIndex = dyn_cast<IntegerAttr>(na.getValue()))
             counts[na.getName().getValue()] += loopIndex.getInt();
+      if (auto fc = prev.getAs<DictionaryAttr>("func_counts"))
+        for (NamedAttribute fieldValue : fc)
+          if (auto per = dyn_cast<DictionaryAttr>(fieldValue.getValue()))
+            for (NamedAttribute na : per)
+              if (auto loopIndex = dyn_cast<IntegerAttr>(na.getValue()))
+                funcCounts[fieldValue.getName().getValue()]
+                          [na.getName().getValue()] += loopIndex.getInt();
       if (auto resultValue = prev.getAs<ArrayAttr>("rewrites"))
         records.append(resultValue.begin(), resultValue.end());
     }
     for (const FoldNote &elementCount : notes) {
       ++counts[elementCount.rule];
+      if (!elementCount.func.empty())
+        ++funcCounts[elementCount.func][elementCount.rule];
       if (records.size() >= kMaxRecords)
         continue;
       SmallVector<NamedAttribute> fieldValue;
@@ -587,17 +603,28 @@ struct VitisFoldPass : PassWrapper<VitisFoldPass, OperationPass<>> {
       if (!elementCount.detail.empty())
         fieldValue.push_back(buildPoint.getNamedAttr(
             "detail", buildPoint.getStringAttr(elementCount.detail)));
+      if (!elementCount.func.empty())
+        fieldValue.push_back(buildPoint.getNamedAttr(
+            "func", buildPoint.getStringAttr(elementCount.func)));
       records.push_back(buildPoint.getDictionaryAttr(fieldValue));
     }
-    SmallVector<NamedAttribute> cs;
-    for (auto &entryValue : counts)
-      cs.push_back(buildPoint.getNamedAttr(
-          entryValue.getKey(),
-          buildPoint.getI64IntegerAttr(entryValue.getValue())));
+    auto countDict = [&](const llvm::StringMap<int64_t> &memoryOp) {
+      SmallVector<NamedAttribute> cs;
+      for (auto &entryValue : memoryOp)
+        cs.push_back(buildPoint.getNamedAttr(
+            entryValue.getKey(),
+            buildPoint.getI64IntegerAttr(entryValue.getValue())));
+      return buildPoint.getDictionaryAttr(cs);
+    };
+    SmallVector<NamedAttribute> fcs;
+    for (auto &entryValue : funcCounts)
+      fcs.push_back(buildPoint.getNamedAttr(entryValue.getKey(),
+                                            countDict(entryValue.getValue())));
     rootModule->setAttr(
         kNoteAttr, buildPoint.getDictionaryAttr(
-                       {buildPoint.getNamedAttr(
-                            "counts", buildPoint.getDictionaryAttr(cs)),
+                       {buildPoint.getNamedAttr("counts", countDict(counts)),
+                        buildPoint.getNamedAttr(
+                            "func_counts", buildPoint.getDictionaryAttr(fcs)),
                         buildPoint.getNamedAttr(
                             "rewrites", buildPoint.getArrayAttr(records))}));
   }

@@ -30,8 +30,11 @@
 // DBG: bank math: {{.*}} -> 1 block(s); formula band: depth <= 512, SDP: ceil(W/36)
 // DBG: ram type: ROM_2P -- {{.*}}peak 2 read(s) per cycle
 // DBG: bank math: {{.*}} -> 1 block(s); formula band: depth <= 512, SDP: ceil(W/36)
+// The per-loop line follows the ROM_NP model too (ceil(need/2), not need - 1).
+// DBG: 3R+0W per iteration -> ceil(3/1)=3 port-cycles -> copies 2
 // DBG: ram type: ROM_NP -- {{.*}}peak 3 read(s) per cycle -> ROM_NP, 2 copies = ceil(n/2) at x18
 // DBG: bank math: {{.*}} -> 2 per copy, replication 2 -> 4 block(s); formula band: depth <= 512, not SDP: ceil(W/18)
+// DBG: 4R+0W per iteration -> ceil(4/1)=4 port-cycles -> copies 2
 // DBG: ram type: ROM_NP -- {{.*}}peak 4 read(s) per cycle -> ROM_NP, 2 copies = ceil(n/2) at x18
 // DBG: bank math: {{.*}} -> 2 per copy, replication 2 -> 4 block(s); formula band: depth <= 512, not SDP: ceil(W/18)
 

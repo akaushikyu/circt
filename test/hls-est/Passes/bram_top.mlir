@@ -40,6 +40,9 @@
 // TOPA-NEXT:   kind=RAM_1P  bram=1
 // TOPA:      memref.alloca
 // TOPA-NEXT:   kind=RAM_1P  bram=2
+// The note names the aspect mode the formula used: 1024 words are 1Kx18 even
+// with one live port (x36 only up to 512 words).
+// TOPA-NEXT:   1024x32b -> RAM_1P (x18/port) = 2 BRAM_18K
 // TOPA-NOT:  memref.
 // TOPA:      Total BRAM: 4
 
