@@ -3,6 +3,34 @@
 Newest entry first. One entry per logical change, including changes that were
 tried and reverted. Branch: `hls-est-vitis-match` in `~/circt`.
 
+## 2026-10-10 — hls-est: `--auto-pipeline-unroll=float-loads-perfect` on by default (MEMOS M8, decision #3; W1c item 3)
+- **Commit:** __HASH__ (branch `hls-est-vitis-match`); this hash line: the W1c changelog-only commit
+- **Files:**
+  - lib/Dialect/Resource/Passes/AutoPipelineUnroll.cpp: option `floatLoadsPerfect` now `cl::init(true)`; description; the two header comments on the rule.
+  - test/hls-est/Passes/auto_pipeline_float_loads.mlir: the default RUN line now checks the float rule (FLT), a new explicit `=float-loads-perfect` line does too, and the former default prefix `DEF` is `OFF` on a `=float-loads-perfect=false` line.
+  - tools/hls-est-validate/experiment_pipeline.py: `ABLATION` row `no-float-loads-perfect`.
+  - MEMOS.md: decision row #3.
+  - OPEN_ISSUES.md: O13 status.
+- **What:** A read-only inner-invariant load of a floating-point element no longer makes a loop nest imperfect, so such a nest is flattened and its inner loop pipelined instead of unrolled. This is VITIS_NOTES N3 "Floating-point invariant loads" (18 kernels; polybench atax lp3/lp4, bicg lp1/lp2). The option stays: `=false` gives the original T3 rule. The rule keys on the MLIR element type. With exactclass, now the harness default (item 1), that is the type Vitis sees: an `ap_fixed` is an integer. That was M8's condition for the default.
+- **Why:** decision #3 (approved together with exactclass); N3 / M8 / O13.
+- **Effect** (harness subset, exactclass; `--mlir-from` the item-1 baseline; frozen `~/hls-est-work/w1c/bin/hls-est.flp` = this commit's code on fcf9a59b2; run `~/hls-est-work/w1c/runs/x_i3.json` vs `x_i2.json`):
+  - **No total and no memref changes:** 52 / 89, \|err\| 8435 before and after. Every memref's BRAM, RAM type and status is identical on all 91 designs (debug JSONs compared).
+  - Pipeline decisions change in 3 designs:
+    - polybench atax and bicg: in the nest whose inner-invariant float load made it imperfect, the outer loop was pipelined at II 32 with the 64-trip inner loop unrolled. It is now flattened into an II-1 pipeline. This is Vitis' decision (N3, M8). The totals stay 13 / 14 = Vitis: buff_y_out / buff_s_out stay 2 = Vitis, now for Vitis' reason (O3 item 3, M6).
+    - machsuite gemm_blocked (double): before, k was pipelined (II 5) with j unrolled 8x and 3 parents flattened; now j is pipelined (II 1) with 4 parents flattened. Vitis pipelines `loopk_loopj` (j with k flattened, II 8) and does not flatten loopi. Neither hls-est decision is Vitis'; the BRAM stays 0 = Vitis.
+  - The three ap_fixed designs whose decisions changed under the scalar shim in M8 (Llama_GPT_module, gpt_transformer_p1, llama_transformer_p2) do not change: their elements are integers under exactclass. polybench_pragmas/bicg does not change either.
+  - Gates exact; no exact design lost.
+  - Validation kernels (`check_pipeline_unroll.py`, 86 compared): decisions agree on 74 → 81, BRAM totals equal on 64 → 70.
+    - Decisions now agree on pf_fadd, pf_fmac, pf_fmul, pf_srchoist, rv_rmw_hoist_f_m8_n64, rv_rmw_hoist_f_m64_n64 and rv_st_hoist_f_m64_n64.
+    - BRAM now equal on pf_fadd / pf_fmac / pf_fmul / pf_srchoist 4 → 2, rv_rmw_hoist_f_m8_n64 26 → 3 and rv_rmw_hoist_f_m64_n64 99 → 11, all = Vitis.
+    - Nothing gets worse. The 5 remaining disagreements are O10 (4) and O8 (1), as in M8.
+  - Rule 4: the same exact count and the same error on the subset, with per-loop improvements on the subset and on the kernels, and nothing lost.
+- **Checks:**
+  - Lit `test/hls-est`: 71 pass, 1 expected failure, 24 unresolved, 4 failing pre-existing. No new failures; `auto_pipeline_float_loads.mlir` passes all three lines.
+  - `check_debug_invariance.sh` (default pipeline): 38 / 0 / 4.
+  - The frozen binary also contains another agent's uncommitted `hls.uncounted` edit, inert as in item 2.
+- **Reverted?:** no
+
 ## 2026-10-10 — hls-est: the dead-memory front end joins the default pipeline and the m_axi adapter cost is on by default (MEMOS M5 recommendation 1 with T8's `--inline`, decision #4; W1c item 2)
 - **Commit:** __HASH__ (branch `hls-est-vitis-match`); this hash line: the W1c changelog-only commit
 - **Files:**

@@ -40,7 +40,7 @@
 //     arithmetic never does. The hoist rule is confirmed for integer
 //     elements only: Vitis flattens the same nest when the invariant load
 //     reads a floating-point element (see "Perfectness and floating point"
-//     below; option float-loads-perfect, default off). Promotion makes the
+//     below; option float-loads-perfect, default on). Promotion makes the
 //     nest imperfect whatever the element type.
 //
 //  2. Top-down decision. A (collapsed) loop P is pipelined iff every loop
@@ -93,11 +93,13 @@
 // (pf_memred_m8_n16; atax lp1/lp2, bicg lp3/lp4, gesummv, mvt). Vitis'
 // mechanism is not visible in the IR dumps (the decision precedes a.o.1.ll,
 // where the float load is hoisted all the same). Option float-loads-perfect
-// applies this rule; it is off by default until Peter adopts it
-// (MEMOS.md): off, every hoistable invariant load breaks perfectness, as in
-// the original T3 model. With the harness' scalar shim ap_fixed is a
-// float/double in MLIR, while Vitis sees an integer: use the exact shim for
-// ap_fixed designs.
+// applies this rule; it is on by default (MEMOS.md M8, decision #3 of
+// 2026-10-10, together with the exactclass harness shim); =false gives the
+// original T3 model, where every hoistable invariant load breaks
+// perfectness. The rule keys on the MLIR element type, so it is right where
+// that is the type Vitis sees: with the exactclass shim an ap_fixed is an
+// integer, as in Vitis; the scalar shim (ap_fixed = float/double) and the
+// exact shim (W <= 16: _Float16) make ap_fixed loads float, against N3.
 //
 //===----------------------------------------------------------------------===//
 
@@ -796,10 +798,11 @@ struct AutoPipelineUnrollPass
       llvm::cl::desc("A read-only inner-invariant load of a floating-point "
                      "element does not make a loop nest imperfect, so the "
                      "nest is flattened rather than its inner loop unrolled "
-                     "(Vitis 2025.1 observation, VITIS_NOTES.md N3; off: "
-                     "every hoistable invariant load breaks perfectness, "
-                     "the original T3 rule)"),
-      llvm::cl::init(false)};
+                     "(Vitis 2025.1 observation, VITIS_NOTES.md N3). On by "
+                     "default (MEMOS.md M8, decision #3); =false: every "
+                     "hoistable invariant load breaks perfectness, the "
+                     "original T3 rule"),
+      llvm::cl::init(true)};
   Option<bool> emitRemarks{
       *this, "emit-remarks",
       llvm::cl::desc("Print one remark per decision (pipeline, unroll, "

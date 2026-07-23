@@ -1,5 +1,6 @@
-// RUN: hls-est %s --affine-loop-normalize --auto-pipeline-unroll | FileCheck %s --check-prefixes=CHECK,DEF
+// RUN: hls-est %s --affine-loop-normalize --auto-pipeline-unroll | FileCheck %s --check-prefixes=CHECK,FLT
 // RUN: hls-est %s --affine-loop-normalize --auto-pipeline-unroll=float-loads-perfect | FileCheck %s --check-prefixes=CHECK,FLT
+// RUN: hls-est %s --affine-loop-normalize --auto-pipeline-unroll=float-loads-perfect=false | FileCheck %s --check-prefixes=CHECK,OFF
 //
 // VITIS_NOTES.md N3, exp-src/pipeline_unroll_float: a read-only load at an
 // inner-invariant address makes a nest imperfect (inner loop unrolled, outer
@@ -14,8 +15,8 @@
 // one int invariant load -> unrolled). Register promotion of an accumulator
 // makes the nest imperfect whatever the element type (pf_memred_m8_n16).
 //
-// The rule is behind option float-loads-perfect (FLT), off by default until
-// Peter adopts it (MEMOS.md); the default (DEF) keeps the original T3 rule:
+// The rule is option float-loads-perfect (FLT), on by default since W1c
+// (MEMOS.md M8, decision #3); =false (OFF) keeps the original T3 rule:
 // every hoistable invariant load breaks perfectness.
 
 // CHECK-LABEL: func.func @hoisted_load_f
@@ -23,9 +24,9 @@
 // FLT-NEXT:      affine.for %{{.*}} = 0 to 16 {
 // FLT:           } {hls.flattened_parents = 1 : i64, hls.pipeline = [{II = 0 : i32, source = "auto"}]}
 // FLT-NEXT:    }
-// DEF:         affine.for %{{.*}} = 0 to 8 {
-// DEF-NOT:       affine.for
-// DEF:         } {hls.auto_unrolled = [{factor = 16 : i64, loc = #loc{{[0-9]*}}}], hls.pipeline = [{II = 0 : i32, source = "auto"}]}
+// OFF:         affine.for %{{.*}} = 0 to 8 {
+// OFF-NOT:       affine.for
+// OFF:         } {hls.auto_unrolled = [{factor = 16 : i64, loc = #loc{{[0-9]*}}}], hls.pipeline = [{II = 0 : i32, source = "auto"}]}
 func.func @hoisted_load_f(%a: memref<8x16xf32>, %b: memref<8xf32>, %out: memref<8x16xf32>) {
   %cst = arith.constant 1.0 : f32
   %lo = memref.alloca() {hls.preserve, polygeist.varname = "lo"} : memref<8x16xf32>
@@ -74,9 +75,9 @@ func.func @hoisted_load_int_fop(%a: memref<8x16xi32>, %b: memref<8xi32>, %out: m
 // FLT:         affine.for %{{.*}} = 0 to 8 {
 // FLT-NEXT:      affine.for %{{.*}} = 0 to 16 {
 // FLT:           } {hls.flattened_parents = 1 : i64, hls.pipeline = [{II = 0 : i32, source = "auto"}]}
-// DEF:         affine.for %{{.*}} = 0 to 8 {
-// DEF-NOT:       affine.for
-// DEF:         } {hls.auto_unrolled = [{factor = 16 : i64, loc = #loc{{[0-9]*}}}], hls.pipeline = [{II = 0 : i32, source = "auto"}]}
+// OFF:         affine.for %{{.*}} = 0 to 8 {
+// OFF-NOT:       affine.for
+// OFF:         } {hls.auto_unrolled = [{factor = 16 : i64, loc = #loc{{[0-9]*}}}], hls.pipeline = [{II = 0 : i32, source = "auto"}]}
 func.func @hoisted_load_f_iop(%a: memref<8x16xf32>, %b: memref<8xf32>, %out: memref<8x16xf32>) {
   %c1 = arith.constant 1 : i32
   %lo = memref.alloca() {hls.preserve, polygeist.varname = "lo"} : memref<8x16xf32>
@@ -156,9 +157,9 @@ func.func @promote_f(%a: memref<8x16xf32>, %b: memref<16xf32>, %out: memref<8xf3
 // FLT-NEXT:      affine.for %{{.*}} = 0 to 16 {
 // FLT:           } {hls.flattened_parents = 1 : i64, hls.pipeline = [{II = 0 : i32, source = "auto"}]}
 // FLT-NEXT:    }
-// DEF:         affine.for %{{.*}} = 0 to 8 {
-// DEF-NOT:       affine.for
-// DEF:         } {hls.auto_unrolled = [{factor = 16 : i64, loc = #loc{{[0-9]*}}}], hls.pipeline = [{II = 0 : i32, source = "auto"}]}
+// OFF:         affine.for %{{.*}} = 0 to 8 {
+// OFF-NOT:       affine.for
+// OFF:         } {hls.auto_unrolled = [{factor = 16 : i64, loc = #loc{{[0-9]*}}}], hls.pipeline = [{II = 0 : i32, source = "auto"}]}
 func.func @cgeist_hoisted_f(%a: memref<8x16xf32>, %b: memref<8xf32>, %out: memref<8x16xf32>) {
   %lo = memref.alloca() {hls.preserve, polygeist.varname = "lo"} : memref<8x16xf32>
   %lb = memref.alloca() {hls.preserve, polygeist.varname = "lb"} : memref<8xf32>

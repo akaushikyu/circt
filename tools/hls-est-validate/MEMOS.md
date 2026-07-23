@@ -9,7 +9,7 @@ vitis_examples (73 compared designs) at hls-est 22d473858 unless stated. They wi
 |---|---|---|---|
 | 1 | M1: drop `--infer-vitis-split-array` from the default pipeline | approved | implemented (W1a, 919792784) |
 | 2 | M6: `--bram-seq-dual-port` on by default | approved | implemented (W1a, 98e86b070) |
-| 3 | M8: `float-loads-perfect` by default | approved (with exactclass, which #8 now makes the default) | to implement (W1) |
+| 3 | M8: `float-loads-perfect` by default | approved (with exactclass, which #8 now makes the default) | implemented (W1c item 3: subset unchanged, 52 / 89; atax / bicg decisions = Vitis; kernels 74 -> 81 decisions, 64 -> 70 BRAM) |
 | 4 | M5: dead-memory front end + m_axi adapter cost | approved (with exactclass); no globals promotion before O10/O17 | implemented (W1c item 2: `DME_FRONT` = T8's prefix B in `DEFAULT_PIPELINE`, `--bram-maxi-adapters` on by default; 48 -> 52 / 89, \|err\| 8609 -> 8435) |
 | 5 | M6: `forward-stores` | approved as recommended: only after #4, and only if rule 4 holds after a look at Llama_GPT_module's Q/K | to implement or report (W1) |
 | 6 | M4: band formula as the default BRAM formula, written from our measurements | approved | implemented (W1a, 51b9a6434) |
