@@ -3,6 +3,37 @@
 Newest entry first. One entry per logical change, including changes that were
 tried and reverted. Branch: `hls-est-vitis-match` in `~/circt`.
 
+## 2026-10-10 — hls-est-validate: `exactclass` is the harness default shim; the MLIR cache key names the cgeist binary (MEMOS M2 / M3, decision #8; W1c item 1)
+- **Commit:** __HASH__ (branch `hls-est-vitis-match`); this hash line: the W1c changelog-only commit
+- **Files:** tools/hls-est-validate/common.py (new `DEFAULT_SHIM = "exactclass"`), tools/hls-est-validate/run_hlsest.py (`--shim` default `C.DEFAULT_SHIM` and help text, docstring; new `cgeist_md5` (memoized per process); `source_hash` adds the cgeist md5 to the MLIR cache key; `_meta.cgeist_md5` from the same md5), tools/hls-est-validate/experiment_pipeline.py (`--shim` default `C.DEFAULT_SHIM`; `run_config`'s run-cache key includes the shim), tools/hls-est-validate/results/baseline/hlsest-2026-10-10-exactclass-w1a-defaults.csv (new: the new baseline, compare.py CSV), tools/hls-est-validate/OPEN_ISSUES.md (O6 status), tools/hls-est-validate/MEMOS.md (decision row #8)
+- **What:**
+  - `run_hlsest.py` and `experiment_pipeline.py` run cgeist with `shim/exactclass` unless `--shim` names another (`scalar`, `exact`, `polygeist` or a directory stay selectable). The shim's `cgeist_flags` file supplies `--scalar-wrapper-abi`; cgeist's own default is unchanged (decision #9).
+  - *MLIR cache key, checked:* it already hashed the shim's path, every file in the shim directory and the shim's cgeist flags, so the shims never share an entry. It did not name the cgeist binary, so after a reinstall the previous binary's MLIR was reused silently. This affected W1a: its scalar runs (`~/hls-est-work/w1a/runs/s_*`) read cache entries written 2026-10-09 11:05-17:00 by that day's cgeist. In them machsuite viterbi's uint8 loop is still an `scf.while`, giving 64 instead of 128 (Vitis 128), and mult_op_module_dot predates O23. W1a's exactclass entries came from cbc105e0, the binary installed at the time. The key now includes the md5 of the cgeist binary. A run computed that md5 for `_meta` anyway; it is now computed once per process and shared. After this commit every entry gets a new key once, which costs one cgeist pass per shim (6-12 min at `-j 8`). `--mlir-from` is unaffected. Tested in `~/hls-est-work/w1c/keytest`: a second run hits the cache (`cached`), and both cbc105e0 and the scalar shim get keys of their own.
+  - `experiment_pipeline.py`'s run cache (`experiments/runs/<cid>.json`) was keyed on the flags and the binary only. A run with another shim and the same flags would have been reused. The key now includes `--shim`.
+  - `shim/exactclass/README.md` still calls the shim "opt-in". It is left alone because every file in a shim directory is part of the cache key, so editing the README would re-key every exactclass entry.
+- **Why:** decision #8 (Peter, 2026-10-10: "Yes use exact class"). MEMOS M2 / M3: this gives exact element widths (the N5 LUTRAM threshold; `ap_fixed<16,5>` as `i16`, not `f32`) and the integer ap_fixed that the Vitis folds and DME need (O16).
+- **Effect** (harness subset, exact / compared, total \|err\|; frozen `~/hls-est-work/w1c/bin/hls-est.base` = 78899ec78 for the W1a defaults, `~/hls-est-work/w1a/bin/hls-est.base` = e12ea00da for the pre-W1 default; runs `~/hls-est-work/w1c/runs/`):
+  - *cgeist during this item.* The installed `build/bin/cgeist` changed from cbc105e0 (md5 23b7ca89) to c70ba2b0 (md5 6ff60ea1, the O23 review-fixes binary) while the first baseline run (`x_w1a`) was running. That run reused the cbc105e0 cache and is not used here. The baseline was re-made with a fresh cgeist pass: c70ba2b0, private HOME `~/hls-est-work/w1c/home` (`x_base`, `s_prew1`). Under exactclass that pass gives MLIR byte-identical to the cbc105e0 cache on all 96 subset designs with sources, with the same cgeist statuses.
+
+    | configuration | shim | cgeist MLIR | exact | \|err\| |
+    |---|---|---|---|---|
+    | pre-W1 default: split pipeline, e12ea00da (`s_prew1`; conv_block_module / op1 re-run alone at 900 s) | scalar | c70ba2b0, fresh | 37 / 89 | 27297 |
+    | W1a defaults, 78899ec78 (`s_w1a`) | scalar | c70ba2b0, fresh | 46 / 89 | 31332 |
+    | **W1a defaults, 78899ec78 (`x_base`): the new baseline** | **exactclass** | c70ba2b0, fresh | **48 / 89** | **8609** |
+    | W1a's reported numbers (`w1a/runs/s_fix`, stale scalar MLIR) | scalar | 2026-10-09 cache | 45 / 89 | 31570 |
+
+  - *Scalar → exactclass at the W1a defaults* (`s_w1a` → `x_base`, the same cgeist). Only forgebench changes: 41 designs, plus the text of vitis_examples fixed_point_sqrt's cgeist error.
+    - Newly exact: mult_op_p2 and vec_mtx_p1, 3 → 2 (Vitis 2). BRAM_1 / BRAM_2 drop from 2 x18 columns at f32 to 1 at i16. They match only by cancellation: Vitis keeps neither global as a memory (O17 items 2-3), and the m_axi adapter is still missing until item 2.
+    - No exact design is lost.
+    - The forgebench totals roughly halve with the 16-bit elements. Examples: activation_* 512 → 256 (Vitis 258), conv_block_module 13741 → 7255 (5139), attention_op_p1 406 → 203 (73).
+    - mult_op_module_dot moves 19 → 136 (Vitis 58). Its six dot-product buffers go from RAM_2P to RAM_1WNR with 15 copies: with integer elements the unrolled 16-read loop has no float recurrence to raise its II, so it replicates (N4). Vitis partitions BRAM_A* instead; this is not diagnosed further, as in W1a item 1.
+    - polybench, polybench_pragmas, machsuite, spector_hls and vitis_examples are identical across the two shims.
+  - Gates polybench_pragmas bicg 8, gesummv 16, mvt 8, syrk 32 are exact in all four runs.
+  - The exactclass baseline equals W1a's exactclass result (`w1arf/runs/x_fix`, 48 / 89, 8609) design for design.
+  - The new baseline's compare CSV is saved as `results/baseline/hlsest-2026-10-10-exactclass-w1a-defaults.csv` (the JSON stays git-ignored, `~/hls-est-work/w1c/runs/x_base.json`).
+  - No hls-est change, so lit and `check_debug_invariance.sh` are unaffected.
+- **Reverted?:** no
+
 ## 2026-10-10 — cgeist O23 fix installed as build/bin/cgeist
 - **Commit:** none in ~/circt (install step; Polygeist c70ba2b0 is the installed source)
 - **Files:** /mnt/d/HLS/Polygeist/build/bin/cgeist (md5 6ff60ea1c05f11f99420dd672a5ce457), previous binary kept as cgeist.prev-cbc105e0

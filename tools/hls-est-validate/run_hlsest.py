@@ -2,14 +2,22 @@
 """Run cgeist and then hls-est on every design (the prediction side).
 
     python3 run_hlsest.py [--datasets a,b] [--benchmarks x,y] [-j 8] [--timeout 120]
-                          [--pipeline "<hls-est flags>"] [--shim polygeist|<dir>]
+                          [--pipeline "<hls-est flags>"]
+                          [--shim exactclass|exact|scalar|polygeist|<dir>]
                           [--out results/hlsest.json] [--force-cgeist] [--debug-json]
                           [--mlir-from <earlier result json>]
+
+--shim defaults to common.DEFAULT_SHIM = exactclass (MEMOS.md M2, decision #8): a name is a
+directory under shim/, "polygeist" Polygeist's own stand-ins, anything else a path. The shim's
+cgeist_flags file (exactclass: --scalar-wrapper-abi) is appended to the cgeist command.
 
 Per design:
   1. cgeist <sources> --function=<top> -S --hls-annotate --raise-scf-to-affine
      --memref-fullrank [<shim>/cgeist_flags] -I <shim> -I <design includes> -o <mlir>
-     (cached by hash of sources, shim files and the shim's cgeist flags)
+     (cached under ~/hls-est-work/mlir by a hash of the sources, the design's headers, the
+     shim's path and every file in it (README included), the shim's cgeist flags and the md5
+     of the cgeist binary, so a reinstalled or CGEIST_BIN cgeist never reuses another
+     binary's output)
   2. hls-est <mlir> --symbol-privatize=exclude=<top> --symbol-dce <pipeline>
      (the privatize/dce pair keeps only the top and what it calls, which is how
      the inlining double count was fixed), with top=<top> added to the pipeline's
@@ -83,6 +91,20 @@ def cgeist_cmd(d, shim, out, func):
     return cmd
 
 
+_CGEIST_MD5 = {}
+_CGEIST_MD5_LOCK = threading.Lock()
+
+
+def cgeist_md5():
+    """md5 of the cgeist binary (C.CGEIST), computed once per process: part of the MLIR cache
+    key. Before W1c the key named no binary, so a cgeist reinstall silently reused the
+    previous binary's MLIR (the W1a scalar runs read 2026-10-09 MLIR, CHANGELOG W1c item 1)."""
+    with _CGEIST_MD5_LOCK:
+        if C.CGEIST not in _CGEIST_MD5:
+            _CGEIST_MD5[C.CGEIST] = C.md5_of_file(C.CGEIST)
+        return _CGEIST_MD5[C.CGEIST]
+
+
 def source_hash(d, shim):
     files = [Path(d["dir"]) / s for s in d["sources"]]
     for p in Path(d["dir"]).rglob("*"):
@@ -96,6 +118,7 @@ def source_hash(d, shim):
     flags = shim_cgeist_flags(shim)
     if flags:   # only then, so that the keys of shims without cgeist_flags do not change
         extra += "|cgeist-flags:" + " ".join(flags)
+    extra += "|cgeist-md5:" + cgeist_md5()
     return C.sha256_of_files(files, extra)[:16]
 
 
@@ -350,7 +373,8 @@ def main():
     ap.add_argument("-j", type=int, default=8)
     ap.add_argument("--timeout", type=int, default=C.HLSEST_TIMEOUT)
     ap.add_argument("--pipeline", default=C.DEFAULT_PIPELINE)
-    ap.add_argument("--shim", default="scalar")
+    ap.add_argument("--shim", default=C.DEFAULT_SHIM,
+                    help=f"header shim (default {C.DEFAULT_SHIM}; scalar / exact / polygeist / a directory)")
     ap.add_argument("--out", default=str(C.RESULTS_DIR / "hlsest.json"))
     ap.add_argument("--run-id", default=None)
     ap.add_argument("--force-cgeist", action="store_true")
@@ -377,7 +401,7 @@ def main():
     run_id = args.run_id or time.strftime("%Y%m%d-%H%M%S")
     ghash, bsha = C.hls_est_identity()
     results = {"_meta": {"pipeline": args.pipeline, "shim": str(shim), "hls_est_git": ghash,
-                         "cgeist": C.CGEIST, "cgeist_md5": C.md5_of_file(C.CGEIST),
+                         "cgeist": C.CGEIST, "cgeist_md5": cgeist_md5(),
                          "polygeist_head": C.git_hash(Path(C.CGEIST).resolve().parents[2]),
                          "hls_est_sha256": bsha, "mlir_from": args.mlir_from,
                          "top_passes": ("none" if args.no_privatize else

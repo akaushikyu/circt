@@ -70,7 +70,7 @@ ABLATION = [
     ("with-dme", DME_PRE + " " + C.SPLIT_PIPELINE + " " + DME_FLAGS),
     ("with-dme-no-split", DME_PRE + " --affine-loop-normalize --auto-pipeline-unroll " + CORE + " " + DME_FLAGS),
     ("with-dme-passes-only-no-split", DME_PRE + " --affine-loop-normalize --auto-pipeline-unroll " + CORE),
-    # the combination MEMOS M5 proposes (no global promotion, O17), run it with --shim exactclass
+    # the combination MEMOS M5 proposes (no global promotion, O17); exactclass is the default shim
     ("with-dme-maxi-no-split", "--vitis-fold --canonicalize --sccp --dead-memory-elimination "
      "--affine-loop-normalize --auto-pipeline-unroll " + CORE + " --bram-maxi-adapters"),
     ("with-dme-maxi", "--vitis-fold --canonicalize --sccp --dead-memory-elimination " + C.SPLIT_PIPELINE
@@ -85,8 +85,9 @@ ABLATION = [
 def run_config(name, flags, args):
     ghash, bsha = C.hls_est_identity()
     # The cache key names the binary: the repo HEAD for the repo's build (as
-    # before), plus the binary's hash when HLS_EST_BIN points elsewhere.
-    key = flags + ghash + (bsha if os.environ.get("HLS_EST_BIN") else "")
+    # before), plus the binary's hash when HLS_EST_BIN points elsewhere, and
+    # the shim (a run of another shim with the same flags is another result).
+    key = flags + ghash + (bsha if os.environ.get("HLS_EST_BIN") else "") + "|shim=" + args.shim
     cid = hashlib.sha1(key.encode()).hexdigest()[:10]
     out = EXP_DIR / "runs" / f"{cid}.json"
     out.parent.mkdir(parents=True, exist_ok=True)
@@ -139,7 +140,7 @@ def main():
     ap.add_argument("--ablation", action="store_true")
     ap.add_argument("--datasets", default="")
     ap.add_argument("--vitis", default=str(C.RESULTS_DIR / "vitis.json"))
-    ap.add_argument("--shim", default="scalar")
+    ap.add_argument("--shim", default=C.DEFAULT_SHIM)
     ap.add_argument("-j", type=int, default=8)
     ap.add_argument("--timeout", type=int, default=C.HLSEST_TIMEOUT)
     ap.add_argument("--tag", default="")

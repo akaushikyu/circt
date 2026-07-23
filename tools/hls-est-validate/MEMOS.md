@@ -14,7 +14,7 @@ vitis_examples (73 compared designs) at hls-est 22d473858 unless stated. They wi
 | 5 | M6: `forward-stores` | approved as recommended: only after #4, and only if rule 4 holds after a look at Llama_GPT_module's Q/K | to implement or report (W1) |
 | 6 | M4: band formula as the default BRAM formula, written from our measurements | approved | implemented (W1a, 51b9a6434) |
 | 7 | M7: `top=` option on `--bram-analysis` | approved | implemented (W1a, 433f07113; review fixes 0ae005759: top= = the prefix with attributed globals too) |
-| 8 | M2/M3: `exactclass` as the harness default shim | approved ("Yes use exact class", 2026-10-10) | to implement (W1) |
+| 8 | M2/M3: `exactclass` as the harness default shim | approved ("Yes use exact class", 2026-10-10) | implemented (W1c item 1; new baseline 48 / 89, \|err\| 8609) |
 | 9 | `--scalar-wrapper-abi` default in cgeist | "keep it in": read as keep the option, opt-in (no change) | confirm with Peter |
 | 10 | exactclass replaces Polygeist's lit shim `Test/HLS/Inputs/vitis` | approved (same as #8) | after W3 (Polygeist lit; RUN lines pass `--scalar-wrapper-abi` while #9 keeps it opt-in) |
 | 11 | O10: cgeist honours `#pragma HLS inline off` | approved | to implement (W3) |
