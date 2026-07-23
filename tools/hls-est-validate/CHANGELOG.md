@@ -3,6 +3,62 @@
 Newest entry first. One entry per logical change, including changes that were
 tried and reverted. Branch: `hls-est-vitis-match` in `~/circt`.
 
+## 2026-10-10 — hls-est: the dead-memory front end joins the default pipeline and the m_axi adapter cost is on by default (MEMOS M5 recommendation 1 with T8's `--inline`, decision #4; W1c item 2)
+- **Commit:** __HASH__ (branch `hls-est-vitis-match`); this hash line: the W1c changelog-only commit
+- **Files:**
+  - lib/Dialect/Resource/Passes/BRAMAnalysis.cpp: `bramMaxiAdaptersOpt` now `cl::init(true)`; description updated.
+  - tools/hls-est-validate/common.py: new `DME_FRONT` and `NO_FRONT_PIPELINE`; `DEFAULT_PIPELINE` = `DME_FRONT` + `NO_FRONT_PIPELINE`.
+  - tools/hls-est-validate/experiment_pipeline.py `ABLATION`:
+    - the canonical-relative rows carry the front;
+    - the T4 `with-dme*` rows and `DME_PRE` / `DME_FLAGS` are replaced by one-change rows `no-front`, `no-inline`, `no-vitis-fold`, `no-dme`, `no-maxi`, `+globals` and `+call-latency`;
+    - rows that became duplicates are dropped: `base` (= `no-auto-unroll`), `+sccp` and `+inline` (now in the front), `pipeline-loops-64` (= canonical);
+    - `+canonicalize+cse` becomes `+cse`.
+  - tools/hls-est-validate/check_debug_invariance.sh: default `PIPELINE`.
+  - tools/hls-est-validate/check_pipeline_unroll.py: its BRAM step runs `common.DME_FRONT` first. The decision step does not, because its loop mapping follows the source order per function.
+  - test/hls-est/Passes/{dependence_scope,index_castui,pipeline_yield_late}.mlir: the default-pipeline RUN line gets the front; comments updated.
+  - test/hls-est/Passes/maxi_adapter.mlir: the main RUN line relies on the default; the OFF line passes `--bram-maxi-adapters=false`.
+  - MEMOS.md: decision row #4.
+  - OPEN_ISSUES.md: O16 and O17 status.
+- **What:**
+  - The default pipeline is now `--inline --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --memory-banking-bram --convert-affine-to-loopschedule --bram-analysis`.
+    - The front is exactly T8's "prefix B" (`~/hls-est-work/t8/runs/xc2_B_nos.json` `_meta.pipeline`).
+    - The harness puts it right after its top selection (`--symbol-privatize=exclude=<top> --symbol-dce`, plus `top=<top>` on `--bram-analysis`).
+  - The m_axi adapter cost is a `--bram-analysis` default rather than a pipeline flag. That way it applies wherever `--bram-analysis` runs: every lit RUN line, and the Compiler Explorer integration if one appears (W1a found none). `--bram-maxi-adapters=false` turns it off.
+  - Globals stay globals: no `--promote-globals-to-allocas` and no `--bram-attribute-globals`, which wait for O10 / O17 (M5 recommendation 4).
+  - `--vitis-fold` keeps its `undef` default (T8).
+- **Why:** decision #4 (MEMOS M5 recommendation 1, approved with exactclass, which item 1 made the default). N1 / N1a: Vitis deletes the arrays whose loads reach no output by `a.o.1.ll` and adds a `<bundle>_m_axi_U` adapter per m_axi bundle. N13: Vitis' undefined `x / 0`.
+- **Effect** (harness subset, exactclass; `--mlir-from` the item-1 baseline `x_base.json`; frozen `~/hls-est-work/w1c/bin/hls-est.maxi` = this commit's code on b345b36b2; run `~/hls-est-work/w1c/runs/x_i2.json` vs `x_base.json`):
+
+  | dataset | n | before (item 1 baseline) | after |
+  |---|---|---|---|
+  | polybench | 9 | 8 / 114 | 8 / 114 |
+  | polybench_pragmas | 7 | 6 / 16 | 6 / 16 |
+  | forgebench | 40 | 3 / 8462 | **7 / 8288** |
+  | machsuite | 11 | 10 / 16 | 10 / 16 |
+  | spector_hls | 8 | 8 / 0 | 8 / 0 |
+  | vitis_examples | 14 | 13 / 1 | 13 / 1 |
+  | **subset** | 89 | **48 / 8609** | **52 / 8435** |
+
+  Cells are exact / total \|err\|. Only forgebench changes. Changes per array, from the compare rows:
+  - *Newly exact (7):*
+    - activation_module / op2 / op3 256 → 258 and diff_dims_module_small 1152 → 1154: the mem1 adapter is 2 and mem2 is 0, both = Vitis.
+    - attention_op_p1 and tiled_attn_p1 203 → 73, and tiled_attn_p2 55 → 23. Q, K, BRAM_weights_q and BRAM_weights_k are `eliminated_dead` (64 + 64 + 2 + 2, or 16 + 16 + 1 + 1 in p2), and the adapter adds 2. This equals Vitis per array (N1's a.o.1 list).
+  - *No longer exact (3), all O17 cancellations (M5):* mult_op_p2, mult_op_p3 and vec_mtx_p1 go 2 → 4 (Vitis 2). The new mem1 adapter is 2 = Vitis. The remaining 2 are BRAM_1 / BRAM_2 at 1 each, where Vitis partitions the globals into 16 banks of 64x16 or registers (0 BRAM). Their pragmas sit on a callee parameter or on two dimensions, which the "global = one RAM_1P" rule ignores (O17 items 2-3). They matched before only because that error cancelled the missing adapter.
+  - *Moved, not exact before or after:*
+    - +2 from the adapter alone, = Vitis per bundle: Llama_GPT_module 27 → 29 (30), gpt_transformer_p1 22 → 24 (28), llama_transformer_p2 23 → 25 (30), attention_op_p2 / p3 18 → 20 (24), attn_breakdown_* (op1 9 → 11, Vitis 10), conv_*, diff_dims_*, diff_orders_module, activation_op1, testing_impl, vec_mtx_module, mlp (no Vitis result).
+    - mult_op_module_dot 136 → 142: three bundles of 2.
+    - diff_orders_p1 24 → 22 (130), p2 10 → 11 (2), p3 40 → 34 (514), and mult_op_p1 5 → 6 (2): BRAM_3 (4 / 1 / 8 / 1) is `eliminated_dead`, which agrees with Vitis (no BRAM_3 memory), plus the adapter.
+    - tiled_attn_module 304 → 110 (Vitis 270): Q, K, split_wq and split_wk are eliminated, = Vitis. So are BRAM_A2 / A3 / B2 / B3, which Vitis keeps as `RAM_AUTO_0R0W` (160 BRAM) because its `load_*` callees are not inlined. This is O16 / O10, as in M5.
+  - Over the compared designs, all 86 adapter rows equal Vitis per bundle. Of the 32 eliminated arrays, 28 have no Vitis BRAM; the 4 others are the tiled_attn_module ones above.
+  - Compared with T8's "exactclass + B" run (`t8/runs/xc2_B_nos`, 49 / 89, 8442), design for design the only differences are W1a's `--bram-seq-dual-port` changes: atax, bicg and mvt become exact, and gesummv goes 20 → 21.
+  - Gates polybench_pragmas bicg 8, gesummv 16, mvt 8, syrk 32 are exact. No other exact design is lost.
+- **Checks:**
+  - Lit `test/hls-est`: 71 pass, 1 expected failure, 24 unresolved, 4 failing (activation_op1 and tiled_attn_module / p1 / p2, pre-existing). The 71 include another agent's uncommitted `auto_pipeline_uncounted.mlir`; W1a's 70 plus that one, so nothing new fails. The three default-pipeline RUN lines pass with the front, and maxi_adapter passes with the default and with `=false`.
+  - `check_debug_invariance.sh` with the new default pipeline: 38 pass / 0 fail / 4 err, as before.
+  - `check_pipeline_unroll.py`: the report is identical with and without the front in the BRAM step (decisions 74 / 86 agree, BRAM totals 64 / 86 equal).
+  - The frozen binary also contains another agent's uncommitted `hls.uncounted` edit (AutoPipelineUnroll.cpp, LoopPragmas.h). It is inert here: no subset MLIR carries `hls.uncounted`.
+- **Reverted?:** no
+
 ## 2026-10-10 — hls-est-validate: `exactclass` is the harness default shim; the MLIR cache key names the cgeist binary (MEMOS M2 / M3, decision #8; W1c item 1)
 - **Commit:** __HASH__ (branch `hls-est-vitis-match`); this hash line: the W1c changelog-only commit
 - **Files:** tools/hls-est-validate/common.py (new `DEFAULT_SHIM = "exactclass"`), tools/hls-est-validate/run_hlsest.py (`--shim` default `C.DEFAULT_SHIM` and help text, docstring; new `cgeist_md5` (memoized per process); `source_hash` adds the cgeist md5 to the MLIR cache key; `_meta.cgeist_md5` from the same md5), tools/hls-est-validate/experiment_pipeline.py (`--shim` default `C.DEFAULT_SHIM`; `run_config`'s run-cache key includes the shim), tools/hls-est-validate/results/baseline/hlsest-2026-10-10-exactclass-w1a-defaults.csv (new: the new baseline, compare.py CSV), tools/hls-est-validate/OPEN_ISSUES.md (O6 status), tools/hls-est-validate/MEMOS.md (decision row #8)

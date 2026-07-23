@@ -76,8 +76,17 @@ HLS_EST = os.environ.get("HLS_EST_BIN") or HLS_EST_DEFAULT
 # --infer-vitis-split-array is not in it (MEMOS.md M1, decision #1 of 2026-10-10): its
 # port-pressure partitioning is the td=auto behaviour and the ground truth is td=off. The
 # pass stays available (td=auto|off); SPLIT_PIPELINE is the former default, for comparisons.
-DEFAULT_PIPELINE = ("--affine-loop-normalize --auto-pipeline-unroll "
-                    "--memory-banking-bram --convert-affine-to-loopschedule --bram-analysis")
+# DME_FRONT (MEMOS.md M5 recommendation 1 with T8's --inline, "prefix B"; decision #4 of
+# 2026-10-10) runs right after the top selection (run_hlsest.py prepends
+# --symbol-privatize=exclude=<top> --symbol-dce): Vitis' integer folds and its undefined
+# x / 0, then the arrays whose loads reach no output are deleted, as at Vitis' a.o.1.ll.
+# The m_axi adapter cost that goes with it is a --bram-analysis default (--bram-maxi-adapters,
+# on since W1c). Globals stay globals (no --promote-globals-to-allocas /
+# --bram-attribute-globals before OPEN_ISSUES O10 / O17).
+DME_FRONT = "--inline --canonicalize --sccp --vitis-fold --dead-memory-elimination"
+NO_FRONT_PIPELINE = ("--affine-loop-normalize --auto-pipeline-unroll "
+                     "--memory-banking-bram --convert-affine-to-loopschedule --bram-analysis")
+DEFAULT_PIPELINE = DME_FRONT + " " + NO_FRONT_PIPELINE
 SPLIT_PIPELINE = ("--affine-loop-normalize --auto-pipeline-unroll --infer-vitis-split-array "
                   "--memory-banking-bram --convert-affine-to-loopschedule --bram-analysis")
 HLSEST_TIMEOUT = 120

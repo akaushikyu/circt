@@ -15,9 +15,9 @@ For every kernel in ~/hls-est-work/exp-src/pipeline_unroll{,_chk,_float}/*.cpp:
        [HLS 214-376] automatically set the pipeline for Loop< VITIS_LOOP_L_n>
        [HLS 214-186] Unrolling loop 'VITIS_LOOP_L_n' ... with a factor of F
        [XFORM 203-541] Flattening a loop nest 'VITIS_LOOP_L_n'
-  3. unless --no-bram, the canonical pipeline (without
-     --infer-vitis-split-array, as the default since MEMOS M1) is run and its
-     Total BRAM compared with the
+  3. unless --no-bram, the canonical pipeline (common.DEFAULT_PIPELINE: the
+     DME front of MEMOS M5 first, no --infer-vitis-split-array since MEMOS M1)
+     is run and its Total BRAM compared with the
      Vitis total of the same run (`<exp-src>/out/<kernel>.json`).
 
 A kernel named `..._pl<N>_...` was synthesized with
@@ -33,7 +33,11 @@ import argparse
 import json
 import re
 import subprocess
+import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import common as C   # noqa: E402
 
 HOME = Path.home()
 HLS_EST = HOME / "circt/build/clion/bin/hls-est"
@@ -70,13 +74,16 @@ def apu_flag(kernel, extra):
 
 
 def decide_flags(kernel):
+    # Without the DME front: the loops are mapped to C loops by their order per function
+    # (mlir_loop_lines), which --inline / --canonicalize would reorder. The default pipeline
+    # decides after the front (its BRAM step below has it; W1c item 2: same totals either way).
     return ["--affine-loop-normalize", apu_flag(kernel, ["emit-remarks"]),
             "--mlir-print-debuginfo"]
 
 
 def bram_flags(kernel):
     auto = apu_flag(kernel, [])
-    return ["--affine-loop-normalize", auto, "--memory-banking-bram",
+    return [*C.DME_FRONT.split(), "--affine-loop-normalize", auto, "--memory-banking-bram",
             "--convert-affine-to-loopschedule", "--bram-analysis"]
 
 

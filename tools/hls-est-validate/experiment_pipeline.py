@@ -33,52 +33,41 @@ EXP_DIR = C.HERE / "experiments"
 CSV = EXP_DIR / "results.csv"
 
 CORE = "--memory-banking-bram --convert-affine-to-loopschedule --bram-analysis"
-# Vitis front-end cleanups (T4, MEMOS.md M5): globals as locals, x/0 -> 0,
-# folds, dead-memory elimination - meant to run before --auto-pipeline-unroll;
-# DME_FLAGS are the --bram-analysis model extensions that go with them
-# (globals attributed / priced as ROMs, m_axi adapter cost). Not default.
-DME_PRE = ("--promote-globals-to-allocas --vitis-fold --canonicalize --sccp "
-           "--dead-memory-elimination")
-DME_FLAGS = "--bram-attribute-globals --bram-maxi-adapters"
+# The Vitis front-end cleanups of the default (MEMOS.md M5 / decision #4, since W1c):
+# folds, Vitis' undefined x / 0, dead-memory elimination, right after the top selection.
+FRONT = C.DME_FRONT
 
 ABLATION = [
-    # canonical = C.DEFAULT_PIPELINE (no --infer-vitis-split-array since MEMOS M1 /
-    # decision #1); the ablations below vary it by one change. "+split-infer" is the
-    # former default (td=auto port-pressure partitioning), "+split-infer-td-off" T5's
-    # td=off variant (only Vitis' automatic td=off partitions, N7).
+    # canonical = C.DEFAULT_PIPELINE = FRONT + normalize + auto-pipeline-unroll + CORE, with
+    # the --bram-analysis defaults (m_axi adapters on since W1c); every row below varies it by
+    # one change. "+split-infer" adds the former default's td=auto port-pressure partitioning
+    # (MEMOS M1), "+split-infer-td-off" T5's td=off variant (only Vitis' automatic td=off
+    # partitions, N7). The T4 rows "with-dme*" (cleanups added to a pipeline without them)
+    # became the "no-..." rows (W1c: the cleanups are the default).
     ("canonical", C.DEFAULT_PIPELINE),
-    ("no-normalize", "--auto-pipeline-unroll " + CORE),
-    ("no-auto-unroll", "--affine-loop-normalize " + CORE),
-    ("+split-infer", C.SPLIT_PIPELINE),
-    ("+split-infer-td-off", "--affine-loop-normalize --auto-pipeline-unroll --infer-vitis-split-array=td=off " + CORE),
-    ("base", "--affine-loop-normalize " + CORE),
-    ("base+merge-cond", "--affine-loop-normalize --merge-conditional-stores " + CORE),
-    ("canonical+merge-cond", "--affine-loop-normalize --auto-pipeline-unroll --merge-conditional-stores " + CORE),
-    ("normalize-after-unroll", "--auto-pipeline-unroll --affine-loop-normalize " + CORE),
-    ("split-after-banking?", "--affine-loop-normalize --auto-pipeline-unroll --memory-banking-bram --infer-vitis-split-array --convert-affine-to-loopschedule --bram-analysis"),
-    ("+canonicalize+cse", "--affine-loop-normalize --canonicalize --cse --auto-pipeline-unroll " + CORE),
-    ("+scalrep", "--affine-loop-normalize --auto-pipeline-unroll --canonicalize --affine-scalrep " + CORE),
-    ("+sccp", "--affine-loop-normalize --canonicalize --sccp --auto-pipeline-unroll " + CORE),
-    ("+inline", "--inline --affine-loop-normalize --auto-pipeline-unroll " + CORE),
-    ("+loop-fusion", "--affine-loop-normalize --affine-loop-fusion --auto-pipeline-unroll " + CORE),
-    ("vis-default", "--auto-pipeline-unroll --canonicalize --affine-scalrep --affine-loop-normalize " + CORE),
-    ("pipeline-loops-64", "--affine-loop-normalize --auto-pipeline-unroll=pipeline-loops=64 " + CORE),
-    ("pipeline-loops-16", "--affine-loop-normalize --auto-pipeline-unroll=pipeline-loops=16 " + CORE),
-    # with-dme (T4): the cleanups prepended, with the split pass (the former default,
-    # so "with-dme" / "with-dme-maxi" keep their meaning) and without it, and each
-    # mechanism on its own on the no-split (now default) pipeline.
-    ("with-dme", DME_PRE + " " + C.SPLIT_PIPELINE + " " + DME_FLAGS),
-    ("with-dme-no-split", DME_PRE + " --affine-loop-normalize --auto-pipeline-unroll " + CORE + " " + DME_FLAGS),
-    ("with-dme-passes-only-no-split", DME_PRE + " --affine-loop-normalize --auto-pipeline-unroll " + CORE),
-    # the combination MEMOS M5 proposes (no global promotion, O17); exactclass is the default shim
-    ("with-dme-maxi-no-split", "--vitis-fold --canonicalize --sccp --dead-memory-elimination "
-     "--affine-loop-normalize --auto-pipeline-unroll " + CORE + " --bram-maxi-adapters"),
-    ("with-dme-maxi", "--vitis-fold --canonicalize --sccp --dead-memory-elimination " + C.SPLIT_PIPELINE
-     + " --bram-maxi-adapters"),
-    ("with-canon-sccp-no-split", "--canonicalize --sccp --affine-loop-normalize --auto-pipeline-unroll " + CORE),
-    ("with-maxi-no-split", "--affine-loop-normalize --auto-pipeline-unroll " + CORE + " --bram-maxi-adapters"),
-    ("with-globals-no-split", "--promote-globals-to-allocas --affine-loop-normalize --auto-pipeline-unroll " + CORE + " --bram-attribute-globals"),
-    ("with-call-latency-no-split", "--affine-loop-normalize --auto-pipeline-unroll " + CORE + " --loopschedule-call-latency=1"),
+    ("no-normalize", FRONT + " --auto-pipeline-unroll " + CORE),
+    ("no-auto-unroll", FRONT + " --affine-loop-normalize " + CORE),
+    ("+split-infer", FRONT + " " + C.SPLIT_PIPELINE),
+    ("+split-infer-td-off", FRONT + " --affine-loop-normalize --auto-pipeline-unroll --infer-vitis-split-array=td=off " + CORE),
+    ("base+merge-cond", FRONT + " --affine-loop-normalize --merge-conditional-stores " + CORE),
+    ("canonical+merge-cond", FRONT + " --affine-loop-normalize --auto-pipeline-unroll --merge-conditional-stores " + CORE),
+    ("normalize-after-unroll", FRONT + " --auto-pipeline-unroll --affine-loop-normalize " + CORE),
+    ("split-after-banking?", FRONT + " --affine-loop-normalize --auto-pipeline-unroll --memory-banking-bram --infer-vitis-split-array --convert-affine-to-loopschedule --bram-analysis"),
+    ("+cse", FRONT + " --affine-loop-normalize --cse --auto-pipeline-unroll " + CORE),
+    ("+scalrep", FRONT + " --affine-loop-normalize --auto-pipeline-unroll --canonicalize --affine-scalrep " + CORE),
+    ("+loop-fusion", FRONT + " --affine-loop-normalize --affine-loop-fusion --auto-pipeline-unroll " + CORE),
+    ("vis-default", FRONT + " --auto-pipeline-unroll --canonicalize --affine-scalrep --affine-loop-normalize " + CORE),
+    ("pipeline-loops-16", FRONT + " --affine-loop-normalize --auto-pipeline-unroll=pipeline-loops=16 " + CORE),
+    # the front, one mechanism at a time
+    ("no-front", C.NO_FRONT_PIPELINE),
+    ("no-inline", C.DEFAULT_PIPELINE.replace("--inline ", "", 1)),
+    ("no-vitis-fold", C.DEFAULT_PIPELINE.replace("--vitis-fold ", "", 1)),
+    ("no-dme", C.DEFAULT_PIPELINE.replace("--dead-memory-elimination ", "", 1)),
+    ("no-maxi", C.DEFAULT_PIPELINE + " --bram-maxi-adapters=false"),
+    # not adopted (MEMOS M5 recommendations 4-5: O10 / O17; no kernel pins the call latency)
+    ("+globals", C.DEFAULT_PIPELINE.replace("--dead-memory-elimination", "--promote-globals-to-allocas --dead-memory-elimination", 1)
+     + " --bram-attribute-globals"),
+    ("+call-latency", C.DEFAULT_PIPELINE + " --loopschedule-call-latency=1"),
 ]
 
 

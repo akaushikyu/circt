@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Prove that --bram-debug / --bram-debug-json do not change any estimate.
 #
-# Runs every test/hls-est/Estimation/**/*.mlir through the base pipeline twice,
+# Runs every test/hls-est/Estimation/**/*.mlir through the default pipeline twice,
 # once plain and once with `--bram-debug --bram-debug-json=<tmp>`, and diffs
 # the stdout (the --bram-analysis report, including "Total BRAM: N").  Also
 # checks that the JSON's total_bram equals the report's total.
@@ -15,7 +15,8 @@ set -u
 
 CIRCT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 HLS_EST="${HLS_EST:-$CIRCT/build/clion/bin/hls-est}"
-PIPELINE="${PIPELINE:---affine-loop-normalize --auto-pipeline-unroll --memory-banking-bram --convert-affine-to-loopschedule --bram-analysis}"
+# default: common.py DEFAULT_PIPELINE (MEMOS.md M1 and M5, decisions #1 and #4)
+PIPELINE="${PIPELINE:---inline --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --memory-banking-bram --convert-affine-to-loopschedule --bram-analysis}"
 TIMEOUT="${TIMEOUT:-60}"
 TESTS="${TESTS:-$CIRCT/test/hls-est/Estimation}"
 

@@ -71,8 +71,10 @@ static llvm::cl::opt<bool> bramMaxiAdaptersOpt(
                    "every bundle of a public function's hls.interface "
                    "arguments (read FIFO depth max_read_burst_length x "
                    "num_read_outstanding, write buffer when "
-                   "max_write_burst_length > 16; VITIS_NOTES.md N1a)"),
-    llvm::cl::init(false));
+                   "max_write_burst_length > 16; VITIS_NOTES.md N1a). On by "
+                   "default (MEMOS.md M5, decision #4 of 2026-10-10); =false "
+                   "leaves the adapters out"),
+    llvm::cl::init(true));
 
 static llvm::cl::opt<bool> bramSeqDualPortOpt(
     "bram-seq-dual-port",

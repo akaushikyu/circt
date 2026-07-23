@@ -1,12 +1,13 @@
 // RUN: hls-est %s --convert-affine-to-loopschedule --bram-analysis --mlir-pass-statistics -o /dev/null 2> %t.1 | FileCheck %s
 // RUN: FileCheck %s --check-prefix=STATS --input-file=%t.1
-// RUN: hls-est %s --affine-loop-normalize --auto-pipeline-unroll --memory-banking-bram --convert-affine-to-loopschedule --bram-analysis --mlir-pass-statistics -o /dev/null 2> %t.2 | FileCheck %s
+// RUN: hls-est %s --inline --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --memory-banking-bram --convert-affine-to-loopschedule --bram-analysis --mlir-pass-statistics -o /dev/null 2> %t.2 | FileCheck %s
 // RUN: FileCheck %s --check-prefix=STATS --input-file=%t.2
 // RUN: hls-est %s --affine-loop-normalize --auto-pipeline-unroll --infer-vitis-split-array --memory-banking-bram --convert-affine-to-loopschedule --bram-analysis --mlir-pass-statistics -o /dev/null 2> %t.3 | FileCheck %s
 // RUN: FileCheck %s --check-prefix=STATS --input-file=%t.3
 
-// The RUN line without --infer-vitis-split-array is the default pipeline (MEMOS.md
-// M1); the one with it is the former default (td=auto), kept as a variant.
+// The RUN line with the DME front (--inline ... --dead-memory-elimination) is the
+// default pipeline (MEMOS.md M1, M5: decisions #1 and #4); the one with
+// --infer-vitis-split-array is the former default (td=auto), kept as a variant.
 
 // --convert-affine-to-loopschedule's memory dependence analysis
 // (InnermostLoopDependenceAnalysis) only examines pairs of accesses inside one

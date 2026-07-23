@@ -1,9 +1,10 @@
-// RUN: hls-est %s --affine-loop-normalize --auto-pipeline-unroll --memory-banking-bram --convert-affine-to-loopschedule --bram-analysis 2>&1 | FileCheck %s --implicit-check-not="not pipelined"
+// RUN: hls-est %s --inline --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --memory-banking-bram --convert-affine-to-loopschedule --bram-analysis 2>&1 | FileCheck %s --implicit-check-not="not pipelined"
 // RUN: hls-est %s --affine-loop-normalize --auto-pipeline-unroll --infer-vitis-split-array --memory-banking-bram --convert-affine-to-loopschedule --bram-analysis 2>&1 | FileCheck %s --implicit-check-not="not pipelined"
 // RUN: hls-est %s --affine-loop-normalize --auto-pipeline-unroll --memory-banking-bram --convert-affine-to-loopschedule -o - | FileCheck %s --check-prefix=SCHED
 
-// The RUN line without --infer-vitis-split-array is the default pipeline (MEMOS.md
-// M1); the one with it is the former default (td=auto), kept as a variant.
+// The RUN line with the DME front (--inline ... --dead-memory-elimination) is the
+// default pipeline (MEMOS.md M1, M5: decisions #1 and #4); the one with
+// --infer-vitis-split-array is the former default (td=auto), kept as a variant.
 
 // `arith.index_castui` is the same wire as `arith.index_cast`. cgeist casts an
 // unsigned C index (`unsigned char`, `ap_uint<W>`, `size_t`) with it since its

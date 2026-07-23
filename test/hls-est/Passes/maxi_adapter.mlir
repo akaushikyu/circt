@@ -1,9 +1,10 @@
-// RUN: hls-est %s --affine-loop-normalize --convert-affine-to-loopschedule --bram-analysis --bram-maxi-adapters --bram-debug -o /dev/null > %t.out 2> %t.err
+// RUN: hls-est %s --affine-loop-normalize --convert-affine-to-loopschedule --bram-analysis --bram-debug -o /dev/null > %t.out 2> %t.err
 // RUN: FileCheck %s --input-file=%t.out
 // RUN: FileCheck %s --input-file=%t.err --check-prefix=DBG
-// RUN: hls-est %s --affine-loop-normalize --convert-affine-to-loopschedule --bram-analysis -o /dev/null | FileCheck %s --check-prefix=OFF
+// RUN: hls-est %s --affine-loop-normalize --convert-affine-to-loopschedule --bram-analysis --bram-maxi-adapters=false -o /dev/null | FileCheck %s --check-prefix=OFF
 
-// --bram-maxi-adapters: every m_axi bundle of a public function's arguments
+// --bram-maxi-adapters (on by default since W1c, MEMOS.md M5 decision #4; the
+// OFF line passes =false): every m_axi bundle of a public function's arguments
 // (`hls.interface` entries with mode = "m_axi") gets the adapter instance
 // `<bundle>_m_axi_U` Vitis adds (VITIS_NOTES.md N1a "Interfaces"; kernels
 // ~/hls-est-work/exp-src/dead_globals/dg_g_maxi_*.cpp and
