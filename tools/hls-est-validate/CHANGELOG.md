@@ -3,6 +3,14 @@
 Newest entry first. One entry per logical change, including changes that were
 tried and reverted. Branch: `hls-est-vitis-match` in `~/circt`.
 
+## 2026-10-10 — cgeist O23 fix installed as build/bin/cgeist
+- **Commit:** none in ~/circt (install step; Polygeist c70ba2b0 is the installed source)
+- **Files:** /mnt/d/HLS/Polygeist/build/bin/cgeist (md5 6ff60ea1c05f11f99420dd672a5ce457), previous binary kept as cgeist.prev-cbc105e0
+- **What:** the O23 fix (no store-to-load forwarding across a loop that overwrites the location) and its review fixes are now the frontend every harness run uses.
+- **Why:** recheck of wf_3050670d-893: no defects; probe kernels right at runtime against native clang; lit no worse. Decisive kernel re-checked at install time.
+- **Effect:** Control run (coordinator, `/home/peter/tmp/o23ctl/`, same frozen hls-est from the 18:20 build, old vs new cgeist): scalar shim - the cgeist output changes on all three affected designs; mult_op_p3 (4) and testing_impl (8) keep their totals, mult_op_module_dot moves 277 -> 25 (Vitis 58; the O23 implementer's control with the pre-W1 hls-est had 65 on both sides, so the move comes from the fixed MLIR meeting the new W1a defaults - closer to Vitis, not exact before or after). exactclass shim: cgeist output identical on all three (under that shim `+=` is still an operator call when the forwarding runs, as the O23 report says).
+- **Reverted?:** no
+
 ## 2026-10-10 — hls-est: W1a defaults review fixes (`top=` reaches every referenced symbol and attributes only reachable get_global sites; scoped debug pipelines and `--vitis-fold` summary; workbook second-run labels; item-1 baseline corrected)
 - **Commit:** 0ae005759 (branch `hls-est-vitis-match`); this hash line: the follow-up changelog-only commit
 - **Files:** lib/Dialect/Resource/Passes/BRAMAnalysis.cpp (`computeTopScope`, `TopScope::covers` comment, `runOnOperation` get_global sites, `collectPipelineRecords`, `FoldSummary` / `collectFoldSummary` / `printFoldSummary`, `writeDebugJson` fold fields, ROM branch of `estimateBRAM`, new `usedPortWidth`, stdout notes, `top` option text), lib/Dialect/Resource/Passes/VitisFold.cpp (`FoldNote::func`, `recordNotes`), test/hls-est/Passes/bram_top_scope.mlir (new), test/hls-est/Passes/bram_top_fold.mlir (new), test/hls-est/Passes/bram_top.mlir (note line), test/hls-est/Passes/bram_formula_rom_ir.mlir (per-loop ROM copies), test/hls-est/Estimation/run_all.sh (comments), tools/hls-est-validate/make_sheet.py (`--second`, `--second-label`, `second_label`), tools/hls-est-validate/CHANGELOG.md (W1a item 1 Effect corrected in place), tools/hls-est-validate/OPEN_ISSUES.md (O12 status)
