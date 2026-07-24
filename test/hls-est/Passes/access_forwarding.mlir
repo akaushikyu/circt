@@ -2,7 +2,8 @@
 // RUN: FileCheck %s --input-file=%t.out --check-prefix=REPORT
 // RUN: FileCheck %s --input-file=%t.err
 // RUN: hls-est %s --affine-loop-normalize --memory-banking-bram --convert-affine-to-loopschedule=forward-stores=true -o - | FileCheck %s --check-prefix=SCHED
-// RUN: hls-est %s --affine-loop-normalize --memory-banking-bram --convert-affine-to-loopschedule --bram-analysis | FileCheck %s --check-prefix=NOFWD
+// RUN: hls-est %s --affine-loop-normalize --memory-banking-bram --convert-affine-to-loopschedule --bram-analysis | FileCheck %s --check-prefix=REPORT
+// RUN: hls-est %s --affine-loop-normalize --memory-banking-bram --convert-affine-to-loopschedule=forward-stores=false --bram-analysis | FileCheck %s --check-prefix=NOFWD
 
 // Store-to-load forwarding and dead-store elimination on the unrolled body
 // (VITIS_NOTES.md N4: R and W per iteration are counted "after unrolling,
@@ -17,11 +18,12 @@
 // loop is bound by the 8 interface reads (2 ports) at II 4. Without the
 // cleanup the body stores to acc 9 times, acc is not replicable, the loop
 // runs at II 9 and acc is a true-dual-port 64x32 RAM = 2 BRAM.
-// `forward-stores` is OFF by default (last RUN line = NOFWD): per array it is
-// what Vitis does where the array is live (an unrolled accumulator becomes one
-// store; attention Q/K become replicable, 3 copies = Vitis), but it also
-// replicates arrays Vitis deletes unless --dead-memory-elimination runs, so it
-// is proposed together with that pass (MEMOS.md M6, OPEN_ISSUES.md O7).
+// `forward-stores` is ON by default since W1c (MEMOS.md M6, decision #5; the
+// fifth RUN line checks the default report, the last one =false = NOFWD): per
+// array it is what Vitis does where the array is live (an unrolled accumulator
+// becomes one store; attention Q/K become replicable, 3 copies = Vitis); it
+// would also replicate arrays Vitis deletes, which the default pipeline's
+// --dead-memory-elimination removes first (OPEN_ISSUES.md O7).
 // @mayalias: `b[i] = v; x = b[j]; b[i] = w` with i and j both functions of
 // the flattened induction variable: the difference of the two addresses is
 // not a constant, so the load may read either store's address. Nothing is

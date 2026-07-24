@@ -1,9 +1,20 @@
 // RUN: hls-est %s --symbol-privatize=exclude=attn --symbol-dce --inline --symbol-dce --vitis-fold --canonicalize --sccp --dead-memory-elimination | FileCheck %s --check-prefix=IR
 // RUN: hls-est %s --symbol-privatize=exclude=attn_ctrl --symbol-dce --inline --symbol-dce --vitis-fold --canonicalize --sccp --dead-memory-elimination | FileCheck %s --check-prefix=CTRL
-// RUN: hls-est %s --symbol-privatize=exclude=attn --symbol-dce --inline --symbol-dce --vitis-fold --canonicalize --sccp --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --memory-banking-bram --convert-affine-to-loopschedule --bram-analysis --bram-debug --bram-debug-json=%t.json -o /dev/null > %t.out 2> %t.err
+// RUN: hls-est %s --symbol-privatize=exclude=attn --symbol-dce --inline --symbol-dce --vitis-fold --canonicalize --sccp --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --memory-banking-bram --convert-affine-to-loopschedule=forward-stores=false --bram-analysis --bram-debug --bram-debug-json=%t.json -o /dev/null > %t.out 2> %t.err
 // RUN: FileCheck %s --input-file=%t.err --check-prefix=DBG
 // RUN: FileCheck %s --input-file=%t.json --check-prefix=JSON
-// RUN: hls-est %s --symbol-privatize=exclude=attn_ctrl --symbol-dce --inline --symbol-dce --vitis-fold --canonicalize --sccp --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --memory-banking-bram --convert-affine-to-loopschedule --bram-analysis -o /dev/null | FileCheck %s --check-prefix=CTRLBRAM
+// RUN: hls-est %s --symbol-privatize=exclude=attn_ctrl --symbol-dce --inline --symbol-dce --vitis-fold --canonicalize --sccp --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --memory-banking-bram --convert-affine-to-loopschedule=forward-stores=false --bram-analysis -o /dev/null | FileCheck %s --check-prefix=CTRLBRAM
+
+// The two BRAM RUN lines pin --convert-affine-to-loopschedule=forward-stores=false
+// (the default since W1c, MEMOS.md M6 decision #5): this reduced kernel has no
+// softmax, whose 8 stores of scores[i][j] per row keep scores non-replicable
+// (attention_op_p1: the context loop at II 4 in Vitis and hls-est, V 2 BRAM, not
+// replicated); with forwarding the reduced
+// kernel's scores and V become RAM_1WNR (21 / 81 BRAM), which says nothing about
+// Vitis. The real kernels under the default pipeline (forwarding on) give
+// dg_d_apfixed4 8 (Q 3, K 3, V 1, scores 1) and dg_d_apfixed16 2 (V 1, scores 1),
+// = Vitis per array (CHANGELOG W1c item 4). The checks below are about the folds
+// and DME.
 
 // The forgebench attention kernel (CLAUDE.md step 2, VITIS_NOTES.md N1/N1a,
 // dead_globals.md R5, kernels dg_d_apfixed16 / dg_d_apfixed4) in the integer

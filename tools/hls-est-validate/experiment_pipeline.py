@@ -66,6 +66,7 @@ ABLATION = [
     ("no-maxi", C.DEFAULT_PIPELINE + " --bram-maxi-adapters=false"),
     # option defaults of the passes (W1c: float-loads-perfect on, MEMOS M8 / decision #3)
     ("no-float-loads-perfect", C.DEFAULT_PIPELINE.replace("--auto-pipeline-unroll", "--auto-pipeline-unroll=float-loads-perfect=false", 1)),
+    ("no-forward-stores", C.DEFAULT_PIPELINE.replace("--convert-affine-to-loopschedule", "--convert-affine-to-loopschedule=forward-stores=false", 1)),
     # not adopted (MEMOS M5 recommendations 4-5: O10 / O17; no kernel pins the call latency)
     ("+globals", C.DEFAULT_PIPELINE.replace("--dead-memory-elimination", "--promote-globals-to-allocas --dead-memory-elimination", 1)
      + " --bram-attribute-globals"),

@@ -56,16 +56,17 @@ def AffineToLoopSchedule : Pass<"convert-affine-to-loopschedule", "mlir::func::F
            "address of the same memref in the same block when no intervening "
            "write may alias it (Vitis GVN): the duplicate uses no port and "
            "does not count toward R.">,
-    Option<"forwardStores", "forward-stores", "bool", /*default=*/"false",
+    Option<"forwardStores", "forward-stores", "bool", /*default=*/"true",
            "Before scheduling, replace a load by the value an earlier store in "
            "the same block put at the same address (no intervening may-alias "
            "write) and drop a store overwritten by a later store to the same "
            "address with no intervening may-alias read (Vitis store-to-load "
            "forwarding / dead-store elimination): an unrolled accumulator "
-           "becomes one load and one store per iteration. Off by default: "
-           "it is right per array where the array is live, but it makes "
-           "arrays that Vitis deletes replicable (MEMOS.md M6: proposed "
-           "together with --dead-memory-elimination; OPEN_ISSUES.md O7).">
+           "becomes one load and one store per iteration. On by default "
+           "since the default pipeline deletes dead arrays first "
+           "(--dead-memory-elimination; MEMOS.md M6, decision #5 of "
+           "2026-10-10; OPEN_ISSUES.md O7); =false keeps every store and "
+           "load of the unrolled body.">
   ];
 }
 

@@ -3,6 +3,42 @@
 Newest entry first. One entry per logical change, including changes that were
 tried and reverted. Branch: `hls-est-vitis-match` in `~/circt`.
 
+## 2026-10-10 — hls-est: `--convert-affine-to-loopschedule=forward-stores` on by default (MEMOS M6 recommendation 2, decision #5; W1c item 4)
+- **Commit:** __HASH__ (branch `hls-est-vitis-match`); this hash line: the W1c changelog-only commit
+- **Files:**
+  - include/circt/Conversion/Passes.td: option `forwardStores` defaults to `"true"`; description updated.
+  - lib/Dialect/Resource/Passes/AffineToLoopScheduleModified.cpp: comment at `cleanupRedundantAccesses`' call.
+  - test/hls-est/Passes/access_forwarding.mlir: new RUN line, where the default gives the forwarded report (REPORT). The NOFWD line passes `forward-stores=false`. Comment updated.
+  - test/hls-est/Passes/dme_attention_int.mlir: its two BRAM RUN lines pin `forward-stores=false`, with a comment explaining why (see Checks).
+  - tools/hls-est-validate/experiment_pipeline.py: `ABLATION` row `no-forward-stores`.
+  - MEMOS.md: M6 addendum with the Llama_GPT_module analysis; decision row #5.
+  - OPEN_ISSUES.md: O7 status and a Llama_GPT_module note under O10.
+- **What:** Store-to-load forwarding and dead-store elimination on the unrolled bodies are now on by default: an unrolled `acc[i] +=` becomes one store per iteration. `=false` keeps every access. Decision #5 allowed this only after #4 (the dead-memory front end, item 2) and only if working-loop rule 4 holds after a look at Llama_GPT_module's Q / K. Both conditions are met, as below.
+- **Why:** VITIS_NOTES N4: R and W per iteration are counted after unrolling, CSE and forwarding. OPEN_ISSUES O7, MEMOS M6.
+- **Effect** (harness subset, exactclass; `--mlir-from` the item-1 baseline; run `~/hls-est-work/w1c/runs/x_i4fs.json`, made with the item-3 binary `hls-est.flp` and `--convert-affine-to-loopschedule=forward-stores=true` on the item-3 default pipeline, vs `x_i3.json`; replayed with this commit's binary `hls-est.fwd` without the option, `x_i4.json`: identical to `x_i4fs` on all 91 designs, every memref and every pipeline record):
+  - 52 / 89 → **55 / 89** exact, \|err\| 8435 → **8425**. Only forgebench changes (7 → 10 / 40, \|err\| 8288 → 8278).
+  - *Newly exact:* attention_op_p2 and attention_op_p3 20 → 24 (Vitis 24), and gpt_transformer_p1 24 → 28 (Vitis 28). The unrolled `Q[s][d] +=` / `K[s][d] +=` of the QKV loop is one store per iteration. The scores loop then runs at II 1 with 4 reads of Q and of K per cycle, so Q and K become RAM_1WNR with 3 copies each, = Vitis (RAM_1WNR_AUTO_1R1W 3; Vitis pipelines that loop at II 1 in both designs). scores goes RAM_T2P → RAM_2P at the same 1 BRAM.
+  - *No exact design lost.* Gates polybench_pragmas bicg 8, gesummv 16, mvt 8, syrk 32 are exact.
+  - *Farther (the only one):* forgebench/Llama_GPT_module 29 → 33 (Vitis 30). Per array it is explained by O10 and by the math tables (decision #18). It is not a forwarding error:
+    - The source calls `grouped_multihead_attention_..._rope` twice, with `(groups, is_rope)` = (8, 0) and (4, 1). The function has `#pragma HLS inline off`, and the top has `#pragma HLS allocation function instances=... limit=1`.
+    - Vitis builds one shared instance in which `groups` and `is_rope` are runtime values. Its scores loop (`VITIS_LOOP_207_9_VITIS_LOOP_208_10`, trip 64) runs at II 2, and its QKV loop at II 16. Q, K and scores are ram_t2p and V is RAM_1WNR, 1 BRAM each.
+    - cgeist inlines both calls with constant arguments (O10), so hls-est has two instances.
+      - The (4, 1) copy matches Vitis' instance: scores loop at II 2, Q / K RAM_2P 1 each.
+      - The (8, 0) copy is the one Vitis does not have. With forwarding it behaves like the single-call designs above (scores loop II 1, Q / K RAM_1WNR 3 each); without forwarding it was RAM_2P 1 each (scores loop II 3).
+    - So the extra instance costs Q 3 + K 3 + V 1 + scores 1 = 8 instead of 4.
+    - The other side of the total is −5: hls-est does not cost the hls:: math tables Vitis instantiates in this design (`cordic_apfixed_circ_table_arctan_128` 4, the `pow_reduce` table 1; VITIS_NOTES N16, decision #18, W2).
+    - So 33 = 30 + 8 − 5, and the former 29 = 30 + 4 − 5. Neither is right per array.
+  - *Kernels* (cgeist c70ba2b0 + exactclass + the default pipeline; `~/hls-est-work/w1c/dgk/`):
+    - dg_d_apfixed4: 8 with forwarding = Vitis 8 per array (Q 3 and K 3 RAM_1WNR, V 1, scores 1); 4 without (Q / K 1 each).
+    - dg_d_apfixed16: 2 = Vitis either way (V 1, scores 1; Q / K dead).
+  - Rule 4 holds: net +3 exact with lower error, no exact design lost, and the one design that gets farther is explained per array by named issues (O10, decision #18 / N16).
+  - Debug JSONs of `x_i3` vs `x_i4fs`: memrefs change only in these 4 designs and in llama_transformer_p2, whose scores goes RAM_T2P → RAM_2P at the same 1 BRAM. Pipeline II records change in 10 designs; the changes are lower IIs, for example attention_op_p1's context loop 5 → 4 and vitis_examples imperfect_loops 2 → 1, with no BRAM change.
+- **Checks:**
+  - Lit `test/hls-est`: 71 pass, 1 expected failure, 24 unresolved, 4 failing pre-existing (activation_op1, tiled_attn_module / p1 / p2). dme_attention_int.mlir failed under the new default and now pins `forward-stores=false` on its two BRAM RUN lines. Its reduced kernel has no softmax, so scores becomes replicable and the context loop runs at II 1: V / scores RAM_1WNR, 21 BRAM (81 for the control). Real attention keeps the context loop at II 4 (attention_op_p1, = Vitis), and the real kernels above are exact. access_forwarding.mlir has the new default RUN line.
+  - `check_debug_invariance.sh` (default pipeline): 38 / 0 / 4; `check_pipeline_unroll.py` unchanged (81 / 86 decisions, 70 / 86 BRAM).
+  - The frozen binary also contains another agent's uncommitted `hls.uncounted` edit, inert as in item 2.
+- **Reverted?:** no
+
 ## 2026-10-10 — hls-est: `--auto-pipeline-unroll=float-loads-perfect` on by default (MEMOS M8, decision #3; W1c item 3)
 - **Commit:** __HASH__ (branch `hls-est-vitis-match`); this hash line: the W1c changelog-only commit
 - **Files:**

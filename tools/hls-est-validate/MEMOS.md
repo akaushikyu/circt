@@ -11,7 +11,7 @@ vitis_examples (73 compared designs) at hls-est 22d473858 unless stated. They wi
 | 2 | M6: `--bram-seq-dual-port` on by default | approved | implemented (W1a, 98e86b070) |
 | 3 | M8: `float-loads-perfect` by default | approved (with exactclass, which #8 now makes the default) | implemented (W1c item 3: subset unchanged, 52 / 89; atax / bicg decisions = Vitis; kernels 74 -> 81 decisions, 64 -> 70 BRAM) |
 | 4 | M5: dead-memory front end + m_axi adapter cost | approved (with exactclass); no globals promotion before O10/O17 | implemented (W1c item 2: `DME_FRONT` = T8's prefix B in `DEFAULT_PIPELINE`, `--bram-maxi-adapters` on by default; 48 -> 52 / 89, \|err\| 8609 -> 8435) |
-| 5 | M6: `forward-stores` | approved as recommended: only after #4, and only if rule 4 holds after a look at Llama_GPT_module's Q/K | to implement or report (W1) |
+| 5 | M6: `forward-stores` | approved as recommended: only after #4, and only if rule 4 holds after a look at Llama_GPT_module's Q/K | implemented (W1c item 4: rule 4 holds, 52 -> 55 / 89, \|err\| 8435 -> 8425; Llama_GPT_module 29 -> 33 is O10 + N16 per array, M6 addendum W1c) |
 | 6 | M4: band formula as the default BRAM formula, written from our measurements | approved | implemented (W1a, 51b9a6434) |
 | 7 | M7: `top=` option on `--bram-analysis` | approved | implemented (W1a, 433f07113; review fixes 0ae005759: top= = the prefix with attributed globals too) |
 | 8 | M2/M3: `exactclass` as the harness default shim | approved ("Yes use exact class", 2026-10-10) | implemented (W1c item 1; new baseline 48 / 89, \|err\| 8609) |
@@ -478,6 +478,28 @@ Vitis 30: one of its two hls-est Q / K instances becomes RAM_1WNR where Vitis ha
    polybench atax / bicg / gesummv / mvt would be regenerated (70 / 71 / 135 / 14 under the default RUN pipeline).
 2. Keep `forward-stores` off until the M5 front end (exactclass shim + `--dead-memory-elimination`) is the default; adopt
    it together with that (+3 exact there), after a look at Llama_GPT_module's Q / K.
+
+**Addendum (W1c, 2026-10-10): decision #5 implemented.** Measured on the new defaults: the exactclass shim, the DME front, the m_axi adapters, and `float-loads-perfect` (W1c items 1-3). Harness subset, `--mlir-from` the W1c baseline. Runs in `~/hls-est-work/w1c/runs/`: `x_i3` (forward-stores off) and `x_i4fs` (on). Cells: exact / total \|err\| over 89 designs.
+
+| forward-stores | subset | forgebench | changed designs (Vitis) |
+|---|---|---|---|
+| off (W1c item 3) | 52 / 8435 | 7 / 8288 | - |
+| on | **55 / 8425** | 10 / 8278 | attention_op_p2 / p3 20 -> 24 (24), gpt_transformer_p1 24 -> 28 (28), Llama_GPT_module 29 -> 33 (30) |
+
+*Llama_GPT_module, per array.* `grouped_multihead_attention_..._rope` has `#pragma HLS inline off`, and the top has `#pragma HLS allocation function instances=... limit=1`. The top calls it twice, with `(groups, is_rope)` = (8, 0) and (4, 1).
+- Vitis builds one shared instance in which both arguments are runtime values. Its scores loop `VITIS_LOOP_207_9_VITIS_LOOP_208_10` (trip 64) runs at II 2 and its QKV loop at II 16. Q, K and scores are ram_t2p and V is RAM_1WNR, 1 BRAM each.
+- cgeist inlines both calls with constant arguments (O10), so hls-est costs two instances:
+  - The (4, 1) copy matches Vitis' instance: scores loop at II 2, Q / K RAM_2P 1 each, with or without forwarding.
+  - The (8, 0) copy has no counterpart in Vitis. With forwarding its scores loop runs at II 1 and Q / K become RAM_1WNR with 3 copies each. That is exactly what Vitis does in the single-call designs where the function is specialized to constant arguments: attention_op_p2 and gpt_transformer_p1, whose scores loops run at II 1 with Q / K RAM_1WNR 3. Without forwarding the copy was RAM_2P 1 each (II 3).
+- The duplicate instance therefore costs Q 3 + K 3 + V 1 + scores 1 = 8 with forwarding, against 4 without.
+- Against that, hls-est does not cost the hls:: math tables Vitis instantiates in this design: the cordic arctan table 4 and the pow table 1 (N16, decision #18).
+- So 33 = 30 + 8 - 5 and 29 = 30 + 4 - 5. Neither is right per array.
+
+Kernels: dg_d_apfixed4 gives 8 with forwarding, = Vitis per array (Q 3 and K 3 RAM_1WNR, V 1, scores 1); without it, 4. dg_d_apfixed16 gives 2 = Vitis either way (`~/hls-est-work/w1c/dgk/`).
+
+The forwarding itself is right wherever the function is specialized per call, which is what hls-est sees after inlining. The remaining error belongs to O10 (one instance per non-inlined callee, here also forced by `allocation limit=1`) and to the math-table cost (W2).
+
+Rule 4 holds: +3 exact, \|err\| 8435 -> 8425, no exact design lost, and the one design that gets farther is explained per array by named issues. Every other memref is identical; llama_transformer_p2's scores changes RAM_T2P -> RAM_2P at the same 1 BRAM. **Adopted as the default** (`forward-stores` default `true`; CHANGELOG W1c item 4).
 
 ## M7 — O12: let `--bram-analysis` cost only what the top function reaches
 
