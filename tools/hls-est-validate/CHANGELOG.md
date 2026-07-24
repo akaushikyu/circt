@@ -4,7 +4,7 @@ Newest entry first. One entry per logical change, including changes that were
 tried and reverted. Branch: `hls-est-vitis-match` in `~/circt`.
 
 ## 2026-10-10 — hls-est-validate: the cgeist md5 is memoized by path, size and mtime (W1c item 1 follow-up)
-- **Commit:** __HASH__ (branch `hls-est-vitis-match`); this hash line: the W1c changelog-only commit
+- **Commit:** 8257adddd (branch `hls-est-vitis-match`); this hash line: the W1c changelog-only commit
 - **Files:** tools/hls-est-validate/run_hlsest.py: `cgeist_md5` memoizes its result in `~/hls-est-work/cgeist-md5.json`, keyed by the binary's real path, size and mtime; new `MD5_MEMO`.
 - **What:** Every `run_hlsest.py` run hashed the 4 GB cgeist binary for `_meta.cgeist_md5`, even with `--mlir-from`. Since W1c item 1 the same md5 is also part of the MLIR cache key. Read through `/mnt/d`, the hash took 5-15 minutes per run on a loaded machine: `x_i4fs` spent 15 minutes at about 4 MB/s before its first design. The md5 is now looked up by (real path, size, mtime) and computed only when that triple is new. A reinstall renames the old binary aside and copies the new one, which gives a new mtime, so a new binary is always hashed. A failed memo write is ignored, because the memo is only an optimization.
 - **Why:** harness turnaround; no estimate or key changes (the same md5).
@@ -12,7 +12,7 @@ tried and reverted. Branch: `hls-est-vitis-match` in `~/circt`.
 - **Reverted?:** no
 
 ## 2026-10-10 — hls-est: `--convert-affine-to-loopschedule=forward-stores` on by default (MEMOS M6 recommendation 2, decision #5; W1c item 4)
-- **Commit:** __HASH__ (branch `hls-est-vitis-match`); this hash line: the W1c changelog-only commit
+- **Commit:** d4210fc36 (branch `hls-est-vitis-match`); this hash line: the W1c changelog-only commit
 - **Files:**
   - include/circt/Conversion/Passes.td: option `forwardStores` defaults to `"true"`; description updated.
   - lib/Dialect/Resource/Passes/AffineToLoopScheduleModified.cpp: comment at `cleanupRedundantAccesses`' call.
@@ -48,7 +48,7 @@ tried and reverted. Branch: `hls-est-vitis-match` in `~/circt`.
 - **Reverted?:** no
 
 ## 2026-10-10 — hls-est: `--auto-pipeline-unroll=float-loads-perfect` on by default (MEMOS M8, decision #3; W1c item 3)
-- **Commit:** __HASH__ (branch `hls-est-vitis-match`); this hash line: the W1c changelog-only commit
+- **Commit:** 5b9418cb8 (branch `hls-est-vitis-match`); this hash line: the W1c changelog-only commit
 - **Files:**
   - lib/Dialect/Resource/Passes/AutoPipelineUnroll.cpp: option `floatLoadsPerfect` now `cl::init(true)`; description; the two header comments on the rule.
   - test/hls-est/Passes/auto_pipeline_float_loads.mlir: the default RUN line now checks the float rule (FLT), a new explicit `=float-loads-perfect` line does too, and the former default prefix `DEF` is `OFF` on a `=float-loads-perfect=false` line.
@@ -76,7 +76,7 @@ tried and reverted. Branch: `hls-est-vitis-match` in `~/circt`.
 - **Reverted?:** no
 
 ## 2026-10-10 — hls-est: the dead-memory front end joins the default pipeline and the m_axi adapter cost is on by default (MEMOS M5 recommendation 1 with T8's `--inline`, decision #4; W1c item 2)
-- **Commit:** __HASH__ (branch `hls-est-vitis-match`); this hash line: the W1c changelog-only commit
+- **Commit:** fcf9a59b2 (branch `hls-est-vitis-match`); this hash line: the W1c changelog-only commit
 - **Files:**
   - lib/Dialect/Resource/Passes/BRAMAnalysis.cpp: `bramMaxiAdaptersOpt` now `cl::init(true)`; description updated.
   - tools/hls-est-validate/common.py: new `DME_FRONT` and `NO_FRONT_PIPELINE`; `DEFAULT_PIPELINE` = `DME_FRONT` + `NO_FRONT_PIPELINE`.
@@ -132,7 +132,7 @@ tried and reverted. Branch: `hls-est-vitis-match` in `~/circt`.
 - **Reverted?:** no
 
 ## 2026-10-10 — hls-est-validate: `exactclass` is the harness default shim; the MLIR cache key names the cgeist binary (MEMOS M2 / M3, decision #8; W1c item 1)
-- **Commit:** __HASH__ (branch `hls-est-vitis-match`); this hash line: the W1c changelog-only commit
+- **Commit:** b345b36b2 (branch `hls-est-vitis-match`); this hash line: the W1c changelog-only commit
 - **Files:** tools/hls-est-validate/common.py (new `DEFAULT_SHIM = "exactclass"`), tools/hls-est-validate/run_hlsest.py (`--shim` default `C.DEFAULT_SHIM` and help text, docstring; new `cgeist_md5` (memoized per process); `source_hash` adds the cgeist md5 to the MLIR cache key; `_meta.cgeist_md5` from the same md5), tools/hls-est-validate/experiment_pipeline.py (`--shim` default `C.DEFAULT_SHIM`; `run_config`'s run-cache key includes the shim), tools/hls-est-validate/results/baseline/hlsest-2026-10-10-exactclass-w1a-defaults.csv (new: the new baseline, compare.py CSV), tools/hls-est-validate/OPEN_ISSUES.md (O6 status), tools/hls-est-validate/MEMOS.md (decision row #8)
 - **What:**
   - `run_hlsest.py` and `experiment_pipeline.py` run cgeist with `shim/exactclass` unless `--shim` names another (`scalar`, `exact`, `polygeist` or a directory stay selectable). The shim's `cgeist_flags` file supplies `--scalar-wrapper-abi`; cgeist's own default is unchanged (decision #9).

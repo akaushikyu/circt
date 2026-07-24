@@ -9,12 +9,12 @@ vitis_examples (73 compared designs) at hls-est 22d473858 unless stated. They wi
 |---|---|---|---|
 | 1 | M1: drop `--infer-vitis-split-array` from the default pipeline | approved | implemented (W1a, 919792784) |
 | 2 | M6: `--bram-seq-dual-port` on by default | approved | implemented (W1a, 98e86b070) |
-| 3 | M8: `float-loads-perfect` by default | approved (with exactclass, which #8 now makes the default) | implemented (W1c item 3: subset unchanged, 52 / 89; atax / bicg decisions = Vitis; kernels 74 -> 81 decisions, 64 -> 70 BRAM) |
-| 4 | M5: dead-memory front end + m_axi adapter cost | approved (with exactclass); no globals promotion before O10/O17 | implemented (W1c item 2: `DME_FRONT` = T8's prefix B in `DEFAULT_PIPELINE`, `--bram-maxi-adapters` on by default; 48 -> 52 / 89, \|err\| 8609 -> 8435) |
-| 5 | M6: `forward-stores` | approved as recommended: only after #4, and only if rule 4 holds after a look at Llama_GPT_module's Q/K | implemented (W1c item 4: rule 4 holds, 52 -> 55 / 89, \|err\| 8435 -> 8425; Llama_GPT_module 29 -> 33 is O10 + N16 per array, M6 addendum W1c) |
+| 3 | M8: `float-loads-perfect` by default | approved (with exactclass, which #8 now makes the default) | implemented (W1c item 3, 5b9418cb8: subset unchanged, 52 / 89; atax / bicg decisions = Vitis; kernels 74 -> 81 decisions, 64 -> 70 BRAM) |
+| 4 | M5: dead-memory front end + m_axi adapter cost | approved (with exactclass); no globals promotion before O10/O17 | implemented (W1c item 2, fcf9a59b2: `DME_FRONT` = T8's prefix B in `DEFAULT_PIPELINE`, `--bram-maxi-adapters` on by default; 48 -> 52 / 89, \|err\| 8609 -> 8435) |
+| 5 | M6: `forward-stores` | approved as recommended: only after #4, and only if rule 4 holds after a look at Llama_GPT_module's Q/K | implemented (W1c item 4, d4210fc36: rule 4 holds, 52 -> 55 / 89, \|err\| 8435 -> 8425; Llama_GPT_module 29 -> 33 is O10 + N16 per array, M6 addendum W1c) |
 | 6 | M4: band formula as the default BRAM formula, written from our measurements | approved | implemented (W1a, 51b9a6434) |
 | 7 | M7: `top=` option on `--bram-analysis` | approved | implemented (W1a, 433f07113; review fixes 0ae005759: top= = the prefix with attributed globals too) |
-| 8 | M2/M3: `exactclass` as the harness default shim | approved ("Yes use exact class", 2026-10-10) | implemented (W1c item 1; new baseline 48 / 89, \|err\| 8609) |
+| 8 | M2/M3: `exactclass` as the harness default shim | approved ("Yes use exact class", 2026-10-10) | implemented (W1c item 1, b345b36b2; new baseline 48 / 89, \|err\| 8609) |
 | 9 | `--scalar-wrapper-abi` default in cgeist | "keep it in": read as keep the option, opt-in (no change) | confirm with Peter |
 | 10 | exactclass replaces Polygeist's lit shim `Test/HLS/Inputs/vitis` | approved (same as #8) | after W3 (Polygeist lit; RUN lines pass `--scalar-wrapper-abi` while #9 keeps it opt-in) |
 | 11 | O10: cgeist honours `#pragma HLS inline off` | approved | to implement (W3) |
