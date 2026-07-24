@@ -3,6 +3,14 @@
 Newest entry first. One entry per logical change, including changes that were
 tried and reverted. Branch: `hls-est-vitis-match` in `~/circt`.
 
+## 2026-10-10 — hls-est-validate: the cgeist md5 is memoized by path, size and mtime (W1c item 1 follow-up)
+- **Commit:** __HASH__ (branch `hls-est-vitis-match`); this hash line: the W1c changelog-only commit
+- **Files:** tools/hls-est-validate/run_hlsest.py: `cgeist_md5` memoizes its result in `~/hls-est-work/cgeist-md5.json`, keyed by the binary's real path, size and mtime; new `MD5_MEMO`.
+- **What:** Every `run_hlsest.py` run hashed the 4 GB cgeist binary for `_meta.cgeist_md5`, even with `--mlir-from`. Since W1c item 1 the same md5 is also part of the MLIR cache key. Read through `/mnt/d`, the hash took 5-15 minutes per run on a loaded machine: `x_i4fs` spent 15 minutes at about 4 MB/s before its first design. The md5 is now looked up by (real path, size, mtime) and computed only when that triple is new. A reinstall renames the old binary aside and copies the new one, which gives a new mtime, so a new binary is always hashed. A failed memo write is ignored, because the memo is only an optimization.
+- **Why:** harness turnaround; no estimate or key changes (the same md5).
+- **Effect:** none on any result: the key and `_meta` carry the same md5. The first run after this commit writes the memo, and later runs skip the hash.
+- **Reverted?:** no
+
 ## 2026-10-10 — hls-est: `--convert-affine-to-loopschedule=forward-stores` on by default (MEMOS M6 recommendation 2, decision #5; W1c item 4)
 - **Commit:** __HASH__ (branch `hls-est-vitis-match`); this hash line: the W1c changelog-only commit
 - **Files:**

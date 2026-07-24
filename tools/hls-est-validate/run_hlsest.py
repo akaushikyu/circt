@@ -93,16 +93,37 @@ def cgeist_cmd(d, shim, out, func):
 
 _CGEIST_MD5 = {}
 _CGEIST_MD5_LOCK = threading.Lock()
+MD5_MEMO = Path.home() / "hls-est-work" / "cgeist-md5.json"
 
 
 def cgeist_md5():
-    """md5 of the cgeist binary (C.CGEIST), computed once per process: part of the MLIR cache
-    key. Before W1c the key named no binary, so a cgeist reinstall silently reused the
-    previous binary's MLIR (the W1a scalar runs read 2026-10-09 MLIR, CHANGELOG W1c item 1)."""
+    """md5 of the cgeist binary (C.CGEIST): part of the MLIR cache key. Before W1c the key named
+    no binary, so a cgeist reinstall silently reused the previous binary's MLIR (the W1a scalar
+    runs read 2026-10-09 MLIR, CHANGELOG W1c item 1). Computed once per process and memoized in
+    ~/hls-est-work/cgeist-md5.json by (real path, size, mtime): hashing the 4 GB binary through
+    /mnt/d takes minutes, and a reinstall (rename aside + copy) changes the mtime."""
     with _CGEIST_MD5_LOCK:
-        if C.CGEIST not in _CGEIST_MD5:
-            _CGEIST_MD5[C.CGEIST] = C.md5_of_file(C.CGEIST)
-        return _CGEIST_MD5[C.CGEIST]
+        if C.CGEIST in _CGEIST_MD5:
+            return _CGEIST_MD5[C.CGEIST]
+        try:
+            real = os.path.realpath(C.CGEIST)
+            st = os.stat(real)
+            memo_key = f"{real}|{st.st_size}|{st.st_mtime_ns}"
+        except OSError:
+            memo_key = None
+        memo = (C.load_json(MD5_MEMO, {}) or {}) if memo_key else {}
+        md5 = memo.get(memo_key) if memo_key else None
+        if not md5:
+            md5 = C.md5_of_file(C.CGEIST)
+            if memo_key and md5:
+                try:
+                    memo = C.load_json(MD5_MEMO, {}) or {}
+                    memo[memo_key] = md5
+                    C.dump_json(memo, MD5_MEMO)
+                except OSError:
+                    pass
+        _CGEIST_MD5[C.CGEIST] = md5
+        return md5
 
 
 def source_hash(d, shim):
