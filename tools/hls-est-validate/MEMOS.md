@@ -29,6 +29,10 @@ vitis_examples (73 compared designs) at hls-est 22d473858 unless stated. They wi
 | 20 | correct the CLAUDE.md attention target | done (Peter + coordinator) | done |
 | 21 | push / PRs | not yet | - |
 | 22 | Phase 6 (DSP, FF, LUT) | on hold | - |
+| 23 | Generalization: every architectural assumption exposed in a designer config file; plugins (separately compilable) for what cannot be data | Peter directed it (2026-10-10 20:10) | phase P2 of wf_c3d16de8-975, after the open tracks |
+| 24 | `hls-doc/`: home of all documentation, ground truth, current results, every note and the assistant's memory | Peter directed it | phase P0 (wf_2a1ab997-478) now; notes move in P1 |
+| 25 | every cgeist test mirrored as an hls-est lit test | Peter directed it | phase P1 |
+| 26 | refactor for readability / good engineering practice and speed, byte-identical outputs | Peter directed it ("nice and human readable, standard good software engineering practices") | phase P3 |
 
 Note: the "Regression gates" bullets of CLAUDE.md were restored on Peter's request (2026-10-10); the gates apply (test/hls-est no new
 failures; polybench_pragmas bicg 8, gesummv 16, mvt 8, syrk 32 exact; designs exact in the latest run stay exact unless
