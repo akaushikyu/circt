@@ -34,6 +34,8 @@ vitis_examples (73 compared designs) at hls-est 22d473858 unless stated. They wi
 | 25 | every cgeist test mirrored as an hls-est lit test | Peter directed it | phase P1 |
 | 26 | refactor for readability / good engineering practice and speed, byte-identical outputs | Peter directed it ("nice and human readable, standard good software engineering practices") | phase P3 |
 | 27 | forgebench fixes track W7: replication overcount, never-accessed globals Vitis keeps, ROM width narrowing, globals-promotion measurement (memo M11 for the default), cgeist empty-module failures | Peter: "go" (2026-10-10 20:50) | wf_5074c6a1-dc8, after the diagnosis (fbgap.done) and W3; P1-P3 wait for it |
+| 28 | HLSFactory_v2 (`D:\HLSFactory_v2\HLSFactory`) as the design catalogue; every design compilable by cgeist and ingested by hls-est | Peter directed it (21:05) | W8 wf_7474f3cd-7d5 |
+| 29 | every case lit tested in cgeist and hls-est | Peter directed it (21:20) | cgeist side in W8c, hls-est side in P1a |
 
 Note: the "Regression gates" bullets of CLAUDE.md were restored on Peter's request (2026-10-10); the gates apply (test/hls-est no new
 failures; polybench_pragmas bicg 8, gesummv 16, mvt 8, syrk 32 exact; designs exact in the latest run stay exact unless
