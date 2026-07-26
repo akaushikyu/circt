@@ -12,11 +12,14 @@ Per design the comparison records:
 Array names: Vitis reports `<name>_U` instances per module (partition banks are
 `<name>_<k>_U`); hls-est's debug JSON (--bram-debug-json) carries the
 `polygeist.varname` / global symbol of each memref.  Without the debug JSON only
-totals are compared.
+totals are compared.  A Vitis row is grouped by its own variable when the hls-est
+names are known (see `vitis_array_name`), so that two real arrays `FM_buffer_1` /
+`FM_buffer_2` are not folded into a fake `FM_buffer`.
 """
 import argparse
 import csv
 import json
+import re
 import sys
 from collections import defaultdict
 from pathlib import Path
@@ -24,13 +27,46 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import common as C  # noqa: E402
 
+# Partition-bank (`_1`, `_0_7`) and inline (`.i`, `.i2`) suffixes, as in align_arrays.py.
+BANK_TAIL_RE = re.compile(r"^(?:\.i\d*|[._]\d+)+$")
 
-def vitis_arrays(v):
-    """Aggregate the Vitis per-memory rows by C array name (banks and module copies summed).
+
+def known_root(name, known):
+    """Longest name in `known` that `name` extends by bank / inline suffixes only, else None
+    (align_arrays.known_root)."""
+    best = None
+    for k in known:
+        if len(k) < len(name) and name.startswith(k) and BANK_TAIL_RE.match(name[len(k):]):
+            if best is None or len(k) > len(best):
+                best = k
+    return best
+
+
+def vitis_array_name(m, known=None):
+    """Group name of one `* Memory:` row.  With the hls-est array names (`known`) the row's own
+    variable (csynth.xml BindNode VARIABLE, else the instance without `_U`) decides: a known name
+    stays itself (`FM_buffer_1`), a name that extends a known one by bank indices is folded into
+    it (`localW_12` -> localW, `BRAM_1_0_7` -> BRAM_1), anything else keeps vitis_parse's bank
+    grouping (`array`).  Without `known`, vitis_parse's grouping alone, which folds two real
+    arrays `FM_buffer_1` / `FM_buffer_2` into a fake `FM_buffer` (align_arrays.py's T1 fix,
+    ported here; totals are unaffected, only the per-array rows)."""
+    if known:
+        var = m.get("variable") or re.sub(r"_U(_x)?$", "", str(m.get("Memory") or ""))
+        if var in known:
+            return var
+        root = known_root(var, known)
+        if root is not None:
+            return root
+    return m.get("array") or m.get("Memory")
+
+
+def vitis_arrays(v, known=None):
+    """Aggregate the Vitis per-memory rows by C array name (banks and module copies summed;
+    `known` = the hls-est array names, see `vitis_array_name`).
     m_axi/s_axi adapters and ROM tables of library functions are kept but flagged."""
     out = {}
     for m in v.get("memories", []):
-        name = m.get("array") or m.get("Memory")
+        name = vitis_array_name(m, known)
         a = out.setdefault(name, {"name": name, "vitis_bram": 0, "banks": 0, "rows": 0,
                                   "words": 0, "bits": m.get("Bits"), "cores": set(), "modules": set()})
         a["vitis_bram"] += m.get("bram") or 0
@@ -113,8 +149,8 @@ def compare_one(key, v, h):
         r["status"] = "vitis missing" if vb is None else "hls-est missing"
     arrays = []
     if v and h:
-        va = vitis_arrays(v)
         ha, has_names = hlsest_arrays(h)
+        va = vitis_arrays(v, set(ha) if has_names else None)
         r["array_names_available"] = has_names
         names = sorted(set(va) | set(ha))
         for n in names:
