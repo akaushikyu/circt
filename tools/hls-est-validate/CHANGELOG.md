@@ -3,6 +3,22 @@
 Newest entry first. One entry per logical change, including changes that were
 tried and reverted. Branch: `hls-est-vitis-match` in `~/circt`.
 
+## 2026-10-10 — hls-doc/forgebench-gap.md: why forgebench is far off and which passes would fix it (FB-diag); VITIS_NOTES N17; OPEN_ISSUES O28
+- **Commit:** the commit that adds this entry (branch `hls-est-vitis-match`)
+- **Files:** hls-doc/forgebench-gap.md (new: cause table, hypothesis verdicts H1-H6, per-design table, ranked pass list); tools/hls-est-validate/VITIS_NOTES.md (N17); OPEN_ISSUES.md (O28 new; O17 item 3: cause confirmed); CHANGELOG.md.
+- **What:** Diagnosis of the forgebench gap in `~/hls-est-work/w1c/runs/x_i4.json` (hls-est 5b9418cb8, exactclass, default pipeline): 40 compared, 10 exact, \|err\| 8278 of the subset's 8425. Seven causes, each with per-array evidence (`--bram-debug-json` of the run, the Vitis memory and loop tables, `hls_compile.log`, the `a.o.*.ll` stages), 12 Vitis kernels (`~/hls-est-work/exp-src/fbh{1,3,6}/`) and 3 cgeist probes.
+- **Why:** Peter asked why forgebench is so far off and which passes would close the gap (MEMOS decision #27, track W7).
+- **Effect:** none on any estimate (documentation and notes). Findings (\|err\| explained per dominant cause): C1 callee-parameter `array_partition` lost at inlining 1284; C2 `memref.global` unbanked and unattributed (O4) 1970; C3 one copy per call site instead of one instance per `inline off` callee (O10) 4831 together with C1; C4 dead arrays written through a shared callee instance kept by Vitis as `RAM_AUTO_0R0W` 160; C5 constant-fill ROM width (O18) 19; C6 math-core tables (N16, W2) 13; C7 the callee's accumulator recurrence sets the II (N14 R7) 42; residual 4. Hypotheses: H1 refuted as stated (the arrays are not partitioned in hls-est at all; the 15 copies are N4 working as designed on an unbanked array), H2 confirmed for the global designs (diff_orders_module / diff_dims_module_large are C1 locals), H3 confirmed with a different rule (N17 (a): not "never accessed" but "written through a shared instance"), H4 16, H5 5 per affected design, H6 three cgeist defects plus a harness blind spot (O28). Opt-in options on forgebench, same binary, `--mlir-from x_i4.json`: `--bram-attribute-globals` 10 / 40, 8278 (nothing moves); with `--promote-globals-to-allocas` 7 / 40, 9343 (O17). Ranked passes: propagate callee-parameter pragmas before inlining (~1250 alone), bank globals in place (~1970), one instance per non-inlined callee (~4800 with the first), dead arrays behind shared instances (160), ROM narrowing (19), math tables (13-20).
+- **Reverted?:** no
+
+## 2026-10-10 — hls-est-validate: compare.py groups Vitis memory rows by their own variable (FB-diag harness fix)
+- **Commit:** a892b780c (branch `hls-est-vitis-match`)
+- **Files:** tools/hls-est-validate/compare.py: new `BANK_TAIL_RE`, `known_root`, `vitis_array_name`; `vitis_arrays(v, known=None)`; `compare_one` passes the hls-est array names.
+- **What:** `vitis_arrays()` grouped the Vitis `* Memory:` rows by `vitis_parse`'s bank base (`array`), which folded the real arrays `FM_buffer_1` / `FM_buffer_2` / `FM_buffer_3` into one fake `FM_buffer` row (and `BRAM_1_0_15` into `BRAM_1_0`). With the hls-est names known, a row is now grouped by its own variable (csynth.xml BindNode VARIABLE, else the instance without `_U`), and a name that extends a known array by bank / inline suffixes only is folded into it: `align_arrays.py`'s T1 `report_key` / `known_root`, ported.
+- **Why:** the per-array tables showed spurious gaps (`FM_buffer: None/3072` next to `FM_buffer_1: 1024/None`; 64 separate `BRAM_conv_weight_<k>` rows in conv_A), which misled the forgebench diagnosis.
+- **Effect:** totals, exact counts and \|err\| unchanged on all 143 designs (checked against the previous module on `x_i4.json` and `coord/x_i4_all.json`; subset 55 / 89, 8425; forgebench 10 / 40, 8278). The per-array rows change in 28 designs, e.g. conv_A `BRAM_conv_weight: 64/512`, diff_orders_p3 `BRAM_1: 8/128; BRAM_2: 16/256; BRAM_4: 8/128`.
+- **Reverted?:** no
+
 ## 2026-10-10 — hls-est-validate: the cgeist md5 is memoized by path, size and mtime (W1c item 1 follow-up)
 - **Commit:** 8257adddd (branch `hls-est-vitis-match`); this hash line: the W1c changelog-only commit
 - **Files:** tools/hls-est-validate/run_hlsest.py: `cgeist_md5` memoizes its result in `~/hls-est-work/cgeist-md5.json`, keyed by the binary's real path, size and mtime; new `MD5_MEMO`.
