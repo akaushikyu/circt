@@ -19,6 +19,27 @@ import common as C  # noqa: E402
 from compare import compare_one, summarize  # noqa: E402
 
 
+BAND_OVER = 0.15   # Peter's goal (2026-10-10): exact, or an over-count of at most 15 % of the Vitis value
+
+
+def band(vitis, est):
+    """Classify one design against the goal band: 'exact', 'over<=15%', 'over>15%', 'under', or '' if not compared."""
+    if vitis is None or est is None:
+        return ""
+    if est == vitis:
+        return "exact"
+    if est > vitis:
+        return "over<=15%" if est <= vitis * (1 + BAND_OVER) else "over>15%"
+    return "under"
+
+
+def band_counts(compared):
+    b = [band(r["vitis_bram"], r["hlsest_bram"]) for r in compared]
+    inb = sum(1 for x in b if x in ("exact", "over<=15%"))
+    return [inb, b.count("over<=15%"), b.count("over>15%"), b.count("under"),
+            round(100 * inb / len(compared), 1) if compared else ""]
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--vitis", default=str(C.RESULTS_DIR / "vitis.json"))
@@ -36,11 +57,11 @@ def main():
     with open(out / "comparison.csv", "w", newline="") as f:
         w = csv.writer(f)
         w.writerow(["dataset", "benchmark", "vitis_bram_18k", "hlsest_bram_18k", "diff_hlsest_minus_vitis", "abs_diff",
-                    "exact", "comparison_status", "vitis_status", "hlsest_status", "largest_array_differences"])
+                    "exact", "goal_band", "comparison_status", "vitis_status", "hlsest_status", "largest_array_differences"])
         for r in rows:
             worst = sorted((x for x in r.get("arrays", []) if x.get("diff")), key=lambda x: -abs(x["diff"]))[:3]
             w.writerow([r["dataset"], r["benchmark"], r["vitis_bram"], r["hlsest_bram"], r["diff"],
-                        abs(r["diff"]) if r["diff"] is not None else None, r["exact"], r["status"],
+                        abs(r["diff"]) if r["diff"] is not None else None, r["exact"], band(r["vitis_bram"], r["hlsest_bram"]), r["status"],
                         r["vitis_status"], r["hlsest_status"],
                         "; ".join(f"{x['name']}: hls-est {x['hlsest_bram']} vs Vitis {x['vitis_bram']}" for x in worst)])
 
@@ -48,14 +69,16 @@ def main():
     with open(out / "comparison-summary.csv", "w", newline="") as f:
         w = csv.writer(f)
         w.writerow(["dataset", "designs", "with_vitis_result", "compared", "exact", "exact_pct_of_compared",
-                    "total_abs_err", "mean_abs_err", "median_abs_err", "hlsest_failed_or_not_run", "vitis_failed"])
+                    "total_abs_err", "mean_abs_err", "median_abs_err", "hlsest_failed_or_not_run", "vitis_failed",
+                    "in_goal_band", "over_le_15pct", "over_gt_15pct", "under", "in_goal_band_pct_of_compared"])
         def line(name, rs):
             c = [r for r in rs if r["status"] == "compared"]
             errs = [abs(r["diff"]) for r in c]
             w.writerow([name, len(rs), sum(1 for r in rs if r["vitis_status"] == "ok"), len(c),
                         sum(1 for r in c if r["exact"]), round(100 * sum(1 for r in c if r["exact"]) / len(c), 1) if c else "",
                         sum(errs), round(statistics.mean(errs), 1) if errs else "", statistics.median(errs) if errs else "",
-                        sum(1 for r in rs if r["status"] == "hls-est missing"), sum(1 for r in rs if r["status"] == "vitis missing")])
+                        sum(1 for r in rs if r["status"] == "hls-est missing"), sum(1 for r in rs if r["status"] == "vitis missing"),
+                        *band_counts(c)])
         for ds in sorted(s["per_dataset"]):
             line(ds, [r for r in rows if r["dataset"] == ds])
         line("ALL", rows)
@@ -71,6 +94,9 @@ def main():
             w.writerow([k, v])
     print(f"wrote {out/'comparison.csv'} ({len(rows)} rows) and {out/'comparison-summary.csv'}")
     print(f"ALL: compared {s['compared']}, exact {s['exact']}, |err| {s['total_abs_error']}")
+    allc = [r for r in rows if r["status"] == "compared"]
+    inb, le, gt, un, pct = band_counts(allc)
+    print(f"goal band (exact or over-count <= 15%): {inb}/{len(allc)} ({pct}%); over<=15%: {le}, over>15%: {gt}, under: {un}")
     for ds, d in sorted(s["per_dataset"].items()):
         print(f"  {ds:22s} designs {d['designs']:3d} compared {d['compared']:3d} exact {d['exact']:3d} |err| {d['abs_error']:6d}")
 
