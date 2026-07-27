@@ -20,7 +20,6 @@ import argparse
 import csv
 import hashlib
 import json
-import os
 import subprocess
 import sys
 import time
@@ -28,6 +27,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import common as C      # noqa: E402
+import run_hlsest as R  # noqa: E402
 
 EXP_DIR = C.HERE / "experiments"
 CSV = EXP_DIR / "results.csv"
@@ -74,12 +74,27 @@ ABLATION = [
 ]
 
 
+def inputs_key(args):
+    """What the runs of this invocation read besides hls-est and the pipeline: the design set of
+    --datasets with every design's MLIR cache key (sources, headers, the shim's files and cgeist
+    flags, the cgeist binary's md5; run_hlsest.inputs_digest), and the timeout. Computed once per
+    invocation; exits when the cgeist binary cannot be hashed (a key without it names no binary)."""
+    try:
+        digest = R.inputs_digest(R.select_designs(args.datasets), R.resolve_shim(args.shim))
+    except R.CgeistUnhashable as e:
+        sys.exit(f"experiment_pipeline.py: {e}")
+    return f"|shim={args.shim}|timeout={args.timeout}|inputs={digest}"
+
+
 def run_config(name, flags, args):
     ghash, bsha = C.hls_est_identity()
-    # The cache key names the binary: the repo HEAD for the repo's build (as
-    # before), plus the binary's hash when HLS_EST_BIN points elsewhere, and
-    # the shim (a run of another shim with the same flags is another result).
-    key = flags + ghash + (bsha if os.environ.get("HLS_EST_BIN") else "") + "|shim=" + args.shim
+    # The run-cache key names everything a run's result depends on: the pipeline, the hls-est
+    # binary (the repo HEAD or HLS_EST_BIN's sidecar, and always the binary's sha256, so a
+    # rebuild with uncommitted edits is another binary), and inputs_key (the design set, the
+    # sources, the shim, the cgeist binary, the timeout). Before, the key had neither the
+    # cgeist binary nor the datasets: a run after a cgeist reinstall, or a full-set run after a
+    # --datasets run, reused the old result (W1c review defect 1).
+    key = flags + "|" + ghash + "|" + bsha + args.inputs_key
     cid = hashlib.sha1(key.encode()).hexdigest()[:10]
     out = EXP_DIR / "runs" / f"{cid}.json"
     out.parent.mkdir(parents=True, exist_ok=True)
@@ -156,6 +171,7 @@ def main():
                 configs.append((line[:40], line))
     if not configs:
         sys.exit("nothing to run (use --ablation, --config or --configs)")
+    args.inputs_key = inputs_key(args)
     print(f"{len(configs)} configurations; git {C.git_hash()}")
     for name, flags in configs:
         print(f"=== {name}: {flags}", flush=True)

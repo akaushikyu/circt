@@ -17,7 +17,7 @@ Per design:
      (cached under ~/hls-est-work/mlir by a hash of the sources, the design's headers, the
      shim's path and every file in it (README included), the shim's cgeist flags and the md5
      of the cgeist binary, so a reinstalled or CGEIST_BIN cgeist never reuses another
-     binary's output)
+     binary's output; a run that would call cgeist stops when that binary cannot be hashed)
   2. hls-est <mlir> --symbol-privatize=exclude=<top> --symbol-dce <pipeline>
      (the privatize/dce pair keeps only the top and what it calls, which is how
      the inlining double count was fixed), with top=<top> added to the pipeline's
@@ -32,7 +32,7 @@ hls-est error: <status> | hls-est timeout <N>s.
 """
 import argparse
 import concurrent.futures as cf
-import os
+import hashlib
 import re
 import shlex
 import shutil
@@ -91,39 +91,21 @@ def cgeist_cmd(d, shim, out, func):
     return cmd
 
 
-_CGEIST_MD5 = {}
-_CGEIST_MD5_LOCK = threading.Lock()
-MD5_MEMO = Path.home() / "hls-est-work" / "cgeist-md5.json"
+class CgeistUnhashable(RuntimeError):
+    """The cgeist binary cannot be hashed, so no MLIR cache key can name it."""
 
 
-def cgeist_md5():
-    """md5 of the cgeist binary (C.CGEIST): part of the MLIR cache key. Before W1c the key named
-    no binary, so a cgeist reinstall silently reused the previous binary's MLIR (the W1a scalar
-    runs read 2026-10-09 MLIR, CHANGELOG W1c item 1). Computed once per process and memoized in
-    ~/hls-est-work/cgeist-md5.json by (real path, size, mtime): hashing the 4 GB binary through
-    /mnt/d takes minutes, and a reinstall (rename aside + copy) changes the mtime."""
-    with _CGEIST_MD5_LOCK:
-        if C.CGEIST in _CGEIST_MD5:
-            return _CGEIST_MD5[C.CGEIST]
-        try:
-            real = os.path.realpath(C.CGEIST)
-            st = os.stat(real)
-            memo_key = f"{real}|{st.st_size}|{st.st_mtime_ns}"
-        except OSError:
-            memo_key = None
-        memo = (C.load_json(MD5_MEMO, {}) or {}) if memo_key else {}
-        md5 = memo.get(memo_key) if memo_key else None
-        if not md5:
-            md5 = C.md5_of_file(C.CGEIST)
-            if memo_key and md5:
-                try:
-                    memo = C.load_json(MD5_MEMO, {}) or {}
-                    memo[memo_key] = md5
-                    C.dump_json(memo, MD5_MEMO)
-                except OSError:
-                    pass
-        _CGEIST_MD5[C.CGEIST] = md5
-        return md5
+def cgeist_md5_or_raise():
+    """C.cgeist_md5(), or CgeistUnhashable when the binary cannot be read. Before W1c the MLIR
+    cache key named no binary, so a cgeist reinstall silently reused the previous binary's MLIR
+    (the W1a scalar runs read 2026-10-09 MLIR, CHANGELOG W1c item 1); a key built from an empty
+    md5 would do the same (W1c's x_w1a run, started during a reinstall, has _meta.cgeist_md5 '')."""
+    md5 = C.cgeist_md5()
+    if not md5:
+        raise CgeistUnhashable(
+            f"cannot hash the cgeist binary {C.CGEIST} (missing, unreadable or being replaced); "
+            "no MLIR cache key without its md5. Retry once it is in place, or set CGEIST_BIN to a copy")
+    return md5
 
 
 def source_hash(d, shim):
@@ -139,8 +121,51 @@ def source_hash(d, shim):
     flags = shim_cgeist_flags(shim)
     if flags:   # only then, so that the keys of shims without cgeist_flags do not change
         extra += "|cgeist-flags:" + " ".join(flags)
-    extra += "|cgeist-md5:" + cgeist_md5()
+    extra += "|cgeist-md5:" + cgeist_md5_or_raise()
     return C.sha256_of_files(files, extra)[:16]
+
+
+def select_designs(datasets="", benchmarks=""):
+    """The designs of the comma-separated datasets / benchmarks (all when empty)."""
+    designs = D.load_designs()
+    if datasets:
+        ds = set(datasets.split(","))
+        designs = [d for d in designs if d["dataset"] in ds]
+    if benchmarks:
+        bs = set(benchmarks.split(","))
+        designs = [d for d in designs if d["benchmark"] in bs]
+    return designs
+
+
+def inputs_digest(designs, shim):
+    """sha256 over the design keys and, per design, its MLIR cache key (source_hash: sources,
+    headers, shim files and cgeist flags, cgeist md5) or, for an mlir-only design, its MLIR file:
+    everything a run of these designs reads except the hls-est binary and the pipeline.
+    experiment_pipeline.py keys its run cache on it. Raises CgeistUnhashable like source_hash."""
+    h = hashlib.sha256()
+    for d in sorted(designs, key=C.design_key):
+        if d.get("mode") == "mlir-only":
+            part = "mlir:" + C.file_sha256(d["mlir"], 64)
+        elif d.get("sources"):
+            part = "src:" + source_hash(d, shim)
+        else:
+            part = "no-sources"
+        h.update(f"{C.design_key(d)}\0{part}\0".encode())
+    return h.hexdigest()
+
+
+def mlir_from_record(d, args):
+    """The --mlir-from record that replaces cgeist for design d, or None (cgeist runs)."""
+    prev = (args.mlir_from_records or {}).get(C.design_key(d))
+    if prev and prev.get("mlir") and Path(prev["mlir"]).exists():
+        return prev
+    if prev and str(prev.get("cgeist_status", "ok")) != "ok":
+        return prev
+    return None
+
+
+def needs_cgeist(d, args):
+    return d.get("mode") != "mlir-only" and bool(d.get("sources")) and mlir_from_record(d, args) is None
 
 
 def run_cgeist(d, shim, force=False):
@@ -360,13 +385,12 @@ def run_hlsest(mlir, top_fn, pipeline, timeout, log_prefix, privatize=True, debu
 
 
 def process(d, args, shim, run_id):
-    key = C.design_key(d)
     r = {"dataset": d["dataset"], "benchmark": d["benchmark"], "top": d["top"], "mode": d.get("mode"),
          "pipeline": args.pipeline, "shim": str(shim)}
-    prev = (args.mlir_from_records or {}).get(key)
+    prev = mlir_from_record(d, args)
     if prev and prev.get("mlir") and Path(prev["mlir"]).exists():
         st, mlir, note = "ok", Path(prev["mlir"]), f"from {args.mlir_from}"
-    elif prev and str(prev.get("cgeist_status", "ok")) != "ok":
+    elif prev:
         st, mlir, note = prev["cgeist_status"], None, f"from {args.mlir_from}"
     else:
         st, mlir, note = run_cgeist(d, shim, args.force_cgeist)
@@ -419,10 +443,16 @@ def main():
     if args.benchmarks:
         bs = set(args.benchmarks.split(","))
         designs = [d for d in designs if d["benchmark"] in bs]
+    n_cgeist = sum(1 for d in designs if needs_cgeist(d, args))
+    if n_cgeist:
+        try:
+            cgeist_md5_or_raise()
+        except CgeistUnhashable as e:
+            sys.exit(f"run_hlsest.py: {e} ({n_cgeist} designs would run cgeist)")
     run_id = args.run_id or time.strftime("%Y%m%d-%H%M%S")
     ghash, bsha = C.hls_est_identity()
     results = {"_meta": {"pipeline": args.pipeline, "shim": str(shim), "hls_est_git": ghash,
-                         "cgeist": C.CGEIST, "cgeist_md5": cgeist_md5(),
+                         "cgeist": C.CGEIST, "cgeist_md5": C.cgeist_md5(),
                          "polygeist_head": C.git_hash(Path(C.CGEIST).resolve().parents[2]),
                          "hls_est_sha256": bsha, "mlir_from": args.mlir_from,
                          "top_passes": ("none" if args.no_privatize else

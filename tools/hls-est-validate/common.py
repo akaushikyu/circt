@@ -9,6 +9,8 @@ import json
 import os
 import re
 import subprocess
+import tempfile
+import threading
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -168,16 +170,101 @@ def load_json(p, default=None):
 
 
 def dump_json(obj, p):
+    """Write obj to p as JSON, atomically: into a temporary file of its own in the same directory,
+    then os.replace. The temporary name is unique per call, so several processes or threads may
+    write the same file (the cgeist md5 memo after a reinstall, for one) and a reader sees one
+    complete version, never a mix. (Before, every writer used <p>.tmp.)"""
     p = Path(p)
     p.parent.mkdir(parents=True, exist_ok=True)
-    tmp = p.with_suffix(p.suffix + ".tmp")
-    with open(tmp, "w") as f:
-        json.dump(obj, f, indent=1, sort_keys=True)
-    os.replace(tmp, p)
+    fd, tmp = tempfile.mkstemp(prefix=p.name + ".", suffix=".tmp", dir=str(p.parent))
+    try:
+        try:
+            os.fchmod(fd, 0o644)         # mkstemp's 0600 -> what open() gave before
+        except OSError:
+            pass
+        with os.fdopen(fd, "w") as f:
+            json.dump(obj, f, indent=1, sort_keys=True)
+        os.replace(tmp, p)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
 
 
 def design_key(d):
     return f"{d['dataset']}/{d['benchmark']}"
+
+
+_CGEIST_MD5 = {}
+_CGEIST_MD5_LOCK = threading.Lock()
+CGEIST_MD5_MEMO = Path.home() / "hls-est-work" / "cgeist-md5.json"
+
+
+def _read_cgeist_md5_memo():
+    """The md5 memo as a dict; {} when it is missing, unreadable or not a JSON object. A damaged
+    memo only costs one hash: the md5 is recomputed and the memo rewritten."""
+    try:
+        memo = load_json(CGEIST_MD5_MEMO, {})
+    except (OSError, ValueError):
+        return {}
+    return memo if isinstance(memo, dict) else {}
+
+
+def _md5_stable(path):
+    """(md5, os.stat_result) of the file at path, read through one descriptor; ('', None) when it
+    cannot be read or changed while it was read (a copy in progress)."""
+    try:
+        with open(path, "rb") as f:
+            st0 = os.fstat(f.fileno())
+            h = hashlib.md5()
+            for b in iter(lambda: f.read(1 << 20), b""):
+                h.update(b)
+            st1 = os.fstat(f.fileno())
+    except OSError:
+        return "", None
+    if (st0.st_size, st0.st_mtime_ns) != (st1.st_size, st1.st_mtime_ns):
+        return "", None
+    return h.hexdigest(), st0
+
+
+def cgeist_md5(binary=None):
+    """md5 of the cgeist binary (default CGEIST). run_hlsest.py keys its MLIR cache on it, so a
+    reinstalled or CGEIST_BIN cgeist never reuses another binary's output (W1c item 1), and
+    experiment_pipeline.py's run cache through that key.
+
+    Memoized per process and in ~/hls-est-work/cgeist-md5.json by (real path, size, mtime):
+    hashing the 4 GB binary through /mnt/d takes minutes, and a reinstall (rename aside + copy)
+    gives a new mtime. The hash and the memo key come from the same open file, and a file that
+    changes while it is read is not hashed. A missing or damaged memo is recomputed.
+
+    Returns '' when the binary cannot be read (missing, e.g. in the middle of a reinstall, or
+    unreadable, or being written). '' is not memoized, so a later call tries again. A cache key
+    must never be formed from '' (it would name no binary): run_hlsest.source_hash refuses it."""
+    binary = str(binary or CGEIST)
+    with _CGEIST_MD5_LOCK:
+        if _CGEIST_MD5.get(binary):
+            return _CGEIST_MD5[binary]
+        real = os.path.realpath(binary)
+        try:
+            st = os.stat(real)
+        except OSError:
+            return ""
+        memo_key = f"{real}|{st.st_size}|{st.st_mtime_ns}"
+        md5 = _read_cgeist_md5_memo().get(memo_key)
+        if not (isinstance(md5, str) and re.fullmatch(r"[0-9a-f]{32}", md5)):
+            md5, st = _md5_stable(real)
+            if not md5:
+                return ""
+            memo = _read_cgeist_md5_memo()
+            memo[f"{real}|{st.st_size}|{st.st_mtime_ns}"] = md5
+            try:
+                dump_json(memo, CGEIST_MD5_MEMO)
+            except OSError:
+                pass                     # the memo is only an optimization
+        _CGEIST_MD5[binary] = md5
+        return md5
 
 
 def md5_of_file(path):

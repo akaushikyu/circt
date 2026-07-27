@@ -1,4 +1,4 @@
-# "exactclass" shim (harness-local, opt-in; bit-exact ap_fixed / ap_int)
+# "exactclass" shim (the harness default; bit-exact ap_fixed / ap_int)
 
 Stand-ins for the Vitis HLS headers in which `ap_int<W>` / `ap_uint<W>` /
 `ap_fixed<W,I,Q,O,N>` / `ap_ufixed<...>` are *classes* whose only data member
@@ -22,17 +22,24 @@ and every operation is the integer arithmetic of the Vitis headers
 (`etc/ap_fixed_base.h`, `etc/ap_int_base.h` of 2025.1), so the constants the
 frontend folds are the ones Vitis folds: `(ap_fixed<16,5>)16` is `-32768`
 (wrap), and `1.0 / hls::sqrt((ap_fixed<16,5>)16)` is a division by zero that
-stays in the IR as `arith.divsi 4194304, 0` (Vitis: `undef`; folding it is
-hls-est-side work, track T8, not done yet).
+stays in the IR as `arith.divsi 4194304, 0` (Vitis: `undef`; hls-est's
+`--vitis-fold`, rule `undef` (T8), folds it the way Vitis does; it is in the
+default pipeline since W1c).
 
-Use: `python3 run_hlsest.py --shim exactclass ...`. Without
-`--scalar-wrapper-abi` (e.g. a cgeist binary that predates it) these classes
-are LLVM structs that hls-est cannot parse.
+Use: this is the harness default shim since W1c (MEMOS.md decision #8,
+`common.DEFAULT_SHIM`): `run_hlsest.py` and `experiment_pipeline.py` use it
+unless `--shim` names another (`scalar`, `exact`, `polygeist` or a directory).
+Without `--scalar-wrapper-abi` (e.g. a cgeist binary that predates it) these
+classes are LLVM structs that hls-est cannot parse.
 
-This directory is used by the harness only. It does **not** replace
+This directory is used by the harness only. It does not yet replace
 `tools/cgeist/Test/HLS/Inputs/vitis` in Polygeist (the double-backed class
-stand-in the lit tests use) nor `shim/exact`; whether to switch either over is
-Peter's decision.
+stand-in the lit tests use): Peter approved that switch (decision #10), to be
+made after W3. `shim/exact` stays selectable.
+
+Every file in this directory, this README included, is part of the MLIR cache
+key of `run_hlsest.py`, so an edit here makes the next run call cgeist again
+for every design with this shim.
 
 ## What is modelled (validated by `../../check_shim.py` and `../../check_shim_cgeist.py`)
 

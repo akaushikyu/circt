@@ -508,7 +508,7 @@ Kernels: dg_d_apfixed4 gives 8 with forwarding, = Vitis per array (Q 3 and K 3 R
 
 The forwarding itself is right wherever the function is specialized per call, which is what hls-est sees after inlining. The remaining error belongs to O10 (one instance per non-inlined callee, here also forced by `allocation limit=1`) and to the math-table cost (W2).
 
-Rule 4 holds: +3 exact, \|err\| 8435 -> 8425, no exact design lost, and the one design that gets farther is explained per array by named issues. Every other memref is identical; llama_transformer_p2's scores changes RAM_T2P -> RAM_2P at the same 1 BRAM. **Adopted as the default** (`forward-stores` default `true`; CHANGELOG W1c item 4).
+Rule 4 holds: +3 exact, \|err\| 8435 -> 8425, no exact design lost, and the one design that gets farther is explained per array by named issues. Every other memref keeps its status, RAM type and BRAM, except `scores`, which goes RAM_T2P -> RAM_2P at the same 1 BRAM in all five designs that change (attention_op_p2 / p3, gpt_transformer_p1, both instances in Llama_GPT_module, llama_transformer_p2). *Corrected in place by the W1c review fixes: this sentence named only llama_transformer_p2 (debug JSONs of `w1c/runs/x_i3` vs `x_i4`).* **Adopted as the default** (`forward-stores` default `true`; CHANGELOG W1c item 4).
 
 ## M7 — O12: let `--bram-analysis` cost only what the top function reaches
 
