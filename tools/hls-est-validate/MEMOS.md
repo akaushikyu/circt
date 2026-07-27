@@ -17,8 +17,8 @@ vitis_examples (73 compared designs) at hls-est 22d473858 unless stated. They wi
 | 8 | M2/M3: `exactclass` as the harness default shim | approved ("Yes use exact class", 2026-10-10) | implemented (W1c item 1, b345b36b2; new baseline 48 / 89, \|err\| 8609) |
 | 9 | `--scalar-wrapper-abi` default in cgeist | "keep it in": read as keep the option, opt-in (no change) | confirm with Peter |
 | 10 | exactclass replaces Polygeist's lit shim `Test/HLS/Inputs/vitis` | approved (same as #8) | after W3 (Polygeist lit; RUN lines pass `--scalar-wrapper-abi` while #9 keeps it opt-in) |
-| 11 | O10: cgeist honours `#pragma HLS inline off` | approved | to implement (W3) |
-| 12 | O5: cgeist opt-in flag to keep invariant inner loops in place | approved | to implement (W3) |
+| 11 | O10: cgeist honours `#pragma HLS inline off` | approved | implemented in Polygeist (W3, 62c40544 + 2ec1956c; `--hls-ignore-inline-off` restores inlining). Not installed: hls-est must price kept calls per instance first (N14); see CHANGELOG |
+| 12 | O5: cgeist opt-in flag to keep invariant inner loops in place | approved | implemented in Polygeist (W3, 62c40544: `--hls-keep-invariant-loops`, default off). Not installed (installed with #11) |
 | 13 | M9: unsigned 32-bit wrap assumption | approved: the frontend marks signed arithmetic as non-wrapping; keep today's behaviour until that lands | to implement (W5) |
 | 14 | raise narrow counters against an `int` bound by assuming it fits | Peter: "do whatever you feel will make the result closer" - decide by a Vitis experiment (does Vitis pipeline such a loop?) | to implement (W5) |
 | 15 | O15: assignable `range()` references | Peter approved the M10 plan (2026-10-10): time-boxed experiment on one soda design and SkyNet, after the W3/W5 frontend work | to implement (W6) |

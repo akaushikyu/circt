@@ -3,6 +3,30 @@
 Newest entry first. One entry per logical change, including changes that were
 tried and reverted. Branch: `hls-est-vitis-match` in `~/circt`.
 
+## 2026-10-10 — cgeist: honour `#pragma HLS inline off`; opt-in `--hls-keep-invariant-loops` (MEMOS decisions #11, #12; W3-cgeist)
+- **Commit:** Polygeist 62c40544 and its follow-up 2ec1956c (branch `hls-est-vitis-match` in `/mnt/d/HLS`); this entry: the commit that adds it. **Not installed:** `build/bin/cgeist` stays c70ba2b0 until hls-est handles the kept calls (N14). Private binary: `/home/peter/tmp/w3cg/cgeist.2ec1956c` (md5 947214ff4640d47c32387d20df58493e).
+- **Files (Polygeist):** tools/cgeist/Lib/HLSPragma.{h,cc} (`cgeist::hls::registerInlinerExtension`, `HLSFuncInlinerInterface`, `--hls-ignore-inline-off`); tools/cgeist/driver.cc (registered in place of `mlir::func::registerInlinerExtension`; `--hls-keep-invariant-loops`); lib/polygeist/Passes/ParallelLICM.cpp, include/polygeist/Passes/Passes.h (`createParallelLICMPass(bool keepLoops)`); tools/cgeist/Test/HLS/regressions/inline-off-kept-call.c and keep-invariant-loops.c (new); Test/HLS/inline/inline.cpp (comment); docs/hls-pragmas.md (4.2, 7, 8, 10).
+- **What:**
+  - `inline off` (every spelling `--hls-annotate` parses) is honoured by default. cgeist's func-dialect inliner interface refuses to inline a call whose callee carries `hls.inline_off`, so the call stays a `func.call` (inside loops it is raised to affine like any other op) and the callee stays a function with `hls.inline_off`. Functions without the pragma, or with `inline` on, are inlined as before. `--hls-ignore-inline-off` restores the old behaviour for comparisons.
+  - Exception (2ec1956c): an array argument that does not fit the shape the parameter declares (C ignores the first dimension, e.g. `memref<32x32xi16>` passed to `p[8][32]`) gives a `memref.cast` that MLIR rejects and that only inlining removes. Such a call is inlined as before, with a warning naming the callee and both types. A row argument (`f(a[k])`) is passed as `polygeist.subindex` (O25).
+  - `--hls-keep-invariant-loops` (default off): ParallelLICM, the LICM before raise-scf-to-affine, no longer hoists an op that is or contains a loop; other invariant ops are still hoisted. Bisected with `--pm-enable-printing` on inl_o5_f8. It needs `--parallel-licm` (the default); otherwise cgeist reports an error.
+- **Why:** VITIS_NOTES N14 (R1-R3: Vitis keeps an `inline off` callee as one module with instances by concurrency; "O5": Vitis decides pipeline/flatten on the unhoisted loop, 3 kernels); OPEN_ISSUES O10, O5; MEMOS decisions #11 (honour by default, escape option) and #12 (opt-in flag).
+- **Effect** (harness subset, exactclass, default pipeline, private HOMEs). Both sides use the same frozen hls-est, `hls-est.cur` = build/clion at aa8c68eba plus another agent's uncommitted LoopPragmas.h / AutoPipelineUnroll.cpp (built 21:45). The MLIR comes from cgeist c70ba2b0 (installed) vs 2ec1956c (private). Runs: `/home/peter/tmp/w3cg/r_{base,new2}.json`, replays of `h_{base,new2}.json`.
+  - Exact 55 / 89 → 56 / 87 compared, \|err\| 8425 → 4932. On the 87 designs compared in both: 55 → 56, \|err\| 8338 → 4932. Only forgebench changes (10 / 40 → 11 / 38). No exact design is lost; the gates bicg 8, gesummv 16, mvt 8, syrk 32 stay exact.
+  - The MLIR changes in 19 designs, all forgebench and all with `inline off`. The other two subset designs with the pragma, mult_op_module_mm and _mmv, stop in cgeist both before and after (empty module).
+  - hls-est's default pipeline starts with `--inline`, so hls-est still inlines every kept call per call site. Per-instance pricing (N14) is not implemented. The totals that change do so because cgeist no longer specialises and raises the callee per call site before hls-est sees it:
+    - tiled_attn_module 110 → **270 = Vitis, by cancellation**. BRAM_A2 / BRAM_A3 go 0 → 64 each (= Vitis, RAM_AUTO_0R0W in top). split_wq / split_wk go 0 → 16 each (Vitis has no such rows). Still off: BRAM_B2 / BRAM_B3 0 (Vitis 16 each), V / scores 2 each (Vitis 1), and Vitis' 4 non-array BRAM.
+    - conv_module 1663 → 767 (Vitis 1042): localW 1088 → 192 (Vitis 512 in its one `conv_via_tiling_3x3` instance). Before, one of the three inlined copies had localW as RAM_1WNR with 15 copies (960). Now each inlined copy is RAM_1P 64. Neither is right per array.
+    - conv_block_module 7257 → 5465 (Vitis 5139) and conv_block_op2 6246 → 4454 (Vitis 4796): localW 2248 → 456 and 1920 → 128 (Vitis 512), by the same mechanism.
+    - The other 13 MLIR changes leave the total as it was: activation_module / _op1 / _op2 / _op3, attn_breakdown_module / _op1 / _op2, conv_block_op1 / _op3, diff_dims_module_large / _small, diff_orders_module, vec_mtx_module.
+  - **New hls-est failures (not fixed here):** Llama_GPT_module (was 33, Vitis 30) and mult_op_module_dot (was 142, Vitis 58) fail with "operation being parsed with an unregistered dialect". The cause is `polygeist.subindex` from row arguments of kept calls (O25). Neither design was exact.
+  - The 62c40544 build alone also stopped attn_breakdown_module / _op1 / _op2 in cgeist (empty module: the invalid `memref.cast` of a kept call). 2ec1956c fixes this.
+  - Polygeist lit, in private lit trees with the private binary:
+    - HLS without hlsfactory: 93 pass, 5 fail. The 5 (array_partition/lowering.c, consumer/hls-est-banking.c, consumer/hls-est-pipeline.c, pipeline/lowering.c, polybench/hls-est-e2e.c) also fail with c70ba2b0, which in addition fails the 2 new tests.
+    - Verification: 135 pass and 8 expected failures, the same as c70ba2b0.
+    - hls-est is unchanged, so `test/hls-est` is not affected.
+- **Reverted?:** no
+
 ## 2026-10-10 — hls-doc/forgebench-gap.md: why forgebench is far off and which passes would fix it (FB-diag); VITIS_NOTES N17; OPEN_ISSUES O28
 - **Commit:** the commit that adds this entry (branch `hls-est-vitis-match`)
 - **Files:** hls-doc/forgebench-gap.md (new: cause table, hypothesis verdicts H1-H6, per-design table, ranked pass list); tools/hls-est-validate/VITIS_NOTES.md (N17); OPEN_ISSUES.md (O28 new; O17 item 3: cause confirmed); CHANGELOG.md.
