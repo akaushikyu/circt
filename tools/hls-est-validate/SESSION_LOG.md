@@ -1259,3 +1259,16 @@ Polygeist:
 - `M lib/polygeist/Passes/PolygeistCanonicalize.cpp`
 - `M tools/cgeist/Lib/clang-mlir.cc`
 - `M tools/cgeist/driver.cc`
+
+## 2026-10-11 00:10 — hard steps switched to Opus until the usage reset
+
+- Peter (00:05): "switch to opus right now and when you reset switch to fable".
+- Each hard step now reads its model from a one-word flag file when it starts (`scratchpad/model.hard`, read by a
+  small Haiku step; the default is `opus` if the file can't be read). The file now says `opus`, and the coordinator
+  sets it back to `fable` at the reset time. Fallback to the other model, and a stop when both fail, are unchanged.
+- The four hard steps already running on Fable (impl:W3-hlsest, impl:W5-cgeist, impl:W6-rangeref,
+  impl:W7-forgebench) keep running on Fable: they are not stopped, because a stop restarts a step from zero. If they hit the
+  limit, they retry on Opus. Their workflows are restarted at the next step boundary to load the new helper.
+  Steps that already ran keep their recorded model, so resume caching still matches them.
+- Assessment for Peter: switching keeps work moving when Fable's allowance is low. It does not improve quality:
+  Fable remains the stronger model for the hard steps.
