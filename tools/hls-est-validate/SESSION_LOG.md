@@ -1272,3 +1272,15 @@ Polygeist:
   Steps that already ran keep their recorded model, so resume caching still matches them.
 - Assessment for Peter: switching keeps work moving when Fable's allowance is low. It does not improve quality:
   Fable remains the stronger model for the hard steps.
+
+## 2026-10-11 00:25 — Fable out of credits; W3, W5, W6, W7 and W10 restarted on Opus
+
+- 00:17: the Fable agents of impl:W3-hlsest and impl:W5-cgeist died with "out of usage credits" (resets 03:10
+  America/New_York). The workflows hung on the dead agents, so the old fallback never fired. W6 and W7 were only waiting
+  at their gates on Fable and would have died on their next turn.
+- Restarted with the flag-file model switch, a resume note on every step that re-runs (uncommitted edits are the earlier
+  attempt's partial work; leave other tracks' hunks), and the model word set to `opus`. The Haiku model check returned
+  `opus` in every workflow, and the steps started on claude-opus-5-5. New task IDs: W3 w2i9livtb, W5 wzalafx2t,
+  W6 wtaf1517m, W7 w7mi9cj6b, W10 wxpb85lzu (run IDs unchanged). W1, W2, W8, W9 and P1–P3 were already on Opus and
+  were not touched.
+- At 03:12 a one-shot reminder sets the word back to `fable`, probes Fable, and writes `opus` back if the probe fails.
