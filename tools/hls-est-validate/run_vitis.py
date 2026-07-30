@@ -16,6 +16,8 @@ Summary of all designs: results/vitis.json  (one entry per dataset/benchmark).
 """
 import argparse
 import concurrent.futures as cf
+import contextlib
+import fcntl
 import os
 import re
 import shutil
@@ -31,6 +33,36 @@ import designs as D                      # noqa: E402
 import vitis_parse as VP                 # noqa: E402
 
 LOCK = threading.Lock()
+
+
+@contextlib.contextmanager
+def file_lock(path, blocking=True):
+    """Exclusive flock on <path>; yields False instead of waiting when blocking=False and another
+    process holds it. Two runners may share a work root: each design is synthesised by one runner
+    at a time (its work directory is deleted at the start of a run, which once corrupted 37 cached
+    results), and the summary file is updated by read-merge-write under its own lock."""
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "a+") as f:
+        try:
+            fcntl.flock(f, fcntl.LOCK_EX | (0 if blocking else fcntl.LOCK_NB))
+        except BlockingIOError:
+            yield False
+            return
+        try:
+            yield True
+        finally:
+            fcntl.flock(f, fcntl.LOCK_UN)
+
+
+def update_summary(out, updates):
+    """Merge {key: result} into the summary JSON at <out> as it is on disk now, so a concurrent
+    runner's or a --reparse's entries are kept."""
+    with LOCK, file_lock(str(out) + ".lock"):
+        cur = C.load_json(out, {}) or {}
+        cur.update(updates)
+        C.dump_json(cur, out)
+        return cur
 SRC_EXT = {".c", ".cc", ".cpp", ".cxx", ".h", ".hh", ".hpp", ".hxx", ".inc", ".tcc", ".ipp", ".dat", ".txt"}
 
 
@@ -167,6 +199,18 @@ def run_one(d, args):
 
     tag = "" if EXTRA_CFG == list(C.EXTRA_HLS_CFG) else "td-" + EXTRA_CFG[-1].split("=")[-1] + "/"
     work_wsl = f"{C.WORK_WSL_ROOT}/{tag}{d['dataset']}/{d['benchmark']}"
+    with file_lock(work_wsl + ".lock", blocking=False) as mine:
+        if not mine:
+            return {"dataset": d["dataset"], "benchmark": d["benchmark"], "top": d["top"], "key": key,
+                    "status": "locked", "note": "another runner is synthesising this design"}
+        if res_path.exists() and not args.force:      # the other runner finished it meanwhile
+            r = C.load_json(res_path)
+            r["cached"] = True
+            return r
+        return synthesise(d, args, key, cdir, res_path, tag, work_wsl)
+
+
+def synthesise(d, args, key, cdir, res_path, tag, work_wsl):
     work_win = f"{C.WORK_WIN_ROOT}/{tag}{d['dataset']}/{d['benchmark']}"
     shutil.rmtree(work_wsl, ignore_errors=True)
     Path(work_wsl).mkdir(parents=True, exist_ok=True)
@@ -217,6 +261,26 @@ def run_one(d, args):
     return result
 
 
+def reparse(designs, args):
+    summary = C.load_json(args.out, {}) or {}
+    n = 0
+    for d in designs:
+        k = C.design_key(d)
+        r = summary.get(k)
+        if not r or r.get("status") != "ok" or not r.get("cache_dir"):
+            continue
+        parsed = VP.parse_cache_dir(r["cache_dir"], d["top"])
+        if parsed.get("ok"):
+            r["totals"] = VP.totals_from(parsed)
+            for f in ("memories", "loops", "instances", "modules", "log"):
+                r[f] = parsed.get(f, r.get(f))
+            r["bind_nodes"] = parsed.get("bind_nodes", [])
+            C.dump_json(r, Path(r["cache_dir"]) / "result.json")
+            n += 1
+    C.dump_json(summary, args.out)
+    print(f"reparsed {n} cached results -> {args.out}")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--datasets", default="", help="comma list; default: all with sources")
@@ -256,22 +320,8 @@ def main():
 
     summary = C.load_json(args.out, {}) or {}
     if args.reparse:
-        n = 0
-        for d in designs:
-            k = C.design_key(d)
-            r = summary.get(k)
-            if not r or r.get("status") != "ok" or not r.get("cache_dir"):
-                continue
-            parsed = VP.parse_cache_dir(r["cache_dir"], d["top"])
-            if parsed.get("ok"):
-                r["totals"] = VP.totals_from(parsed)
-                for f in ("memories", "loops", "instances", "modules", "log"):
-                    r[f] = parsed.get(f, r.get(f))
-                r["bind_nodes"] = parsed.get("bind_nodes", [])
-                C.dump_json(r, Path(r["cache_dir"]) / "result.json")
-                n += 1
-        C.dump_json(summary, args.out)
-        print(f"reparsed {n} cached results -> {args.out}")
+        with file_lock(str(args.out) + ".lock"):
+            reparse(designs, args)
         return
     print(f"{len(designs)} designs, -j{args.j}, timeout {args.timeout}s", flush=True)
     done = 0
@@ -285,13 +335,13 @@ def main():
                 r = {"dataset": d["dataset"], "benchmark": d["benchmark"], "top": d["top"],
                      "status": "harness error", "note": repr(e)[:300]}
             done += 1
-            with LOCK:
-                summary[C.design_key(d)] = r
-                C.dump_json(summary, args.out)
+            if r.get("status") != "locked":
+                update_summary(args.out, {C.design_key(d): r})
             tot = r.get("totals", {}) or {}
             print(f"[{done}/{len(designs)}] {C.design_key(d):50s} {r.get('status'):14s} "
                   f"BRAM={tot.get('BRAM')} {'(cached)' if r.get('cached') else str(r.get('elapsed_s', '')) + 's'} "
                   f"{r.get('note', '')}", flush=True)
+    summary = C.load_json(args.out, {}) or {}
     n_ok = sum(1 for r in summary.values() if r.get("status") == "ok")
     print(f"done: {n_ok} ok of {len(summary)} in summary -> {args.out}")
 
