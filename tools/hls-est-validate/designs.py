@@ -24,6 +24,16 @@ The resource dir is not recorded here (it depends on the clang that built
 cgeist: `clang -print-resource-dir`); the runner must add it.  The absolute
 -I dirs the substitutions imply are recorded per design in 'lit_includes'.
 
+Second catalogue (opt-in): catalog="v2" (load_designs) / --catalog v2 (this CLI,
+run_hlsest.py, run_vitis.py), or HLSFACTORY_ROOT set in the environment, reads
+the HLSFactory 1.1.0 tree itself (default /mnt/d/HLSFactory_v2/HLSFactory, or
+$HLSFACTORY_ROOT) through hlsfactory_v2.py: hlsfactory.toml / dataset_hls.tcl /
+Tcl projects, evaluated by a small Tcl interpreter.  Designs keep the keys of
+their Polygeist copies; one whose source set is identical to the copy's IS the
+copy's record (so cache keys and results stay valid), others point at the
+HLSFactory tree (field 'source_match' says which).  polybench_pragmas and basic
+are added as in the default catalogue.  Without either switch nothing changes.
+
 Python 3.10, stdlib only.  Paths are stored in WSL spelling ('dir') and in
 Windows spelling ('win_dir'); the module runs from either side.
 """
@@ -43,7 +53,7 @@ DEFAULT_TEST_HLS_DIR = "/mnt/d/HLS/Polygeist/tools/cgeist/Test/HLS"
 WSL_DISTRO = os.environ.get("WSL_DISTRO_NAME", "Ubuntu-22.04")
 
 MODES = ("full", "check-only", "errors", "errors-check-only", "xfail", "skip",
-         "mlir-only")
+         "mlir-only", "v2")     # v2: an HLSFactory_v2 design that is not its Polygeist copy
 SRC_LANG = {".c": "c", ".cc": "cpp", ".cpp": "cpp", ".cxx": "cpp"}
 # Flags every generated RUN line carries; they are not design-specific.
 FIXED_FLAGS = {"-S", "--hls-annotate"}
@@ -401,6 +411,47 @@ def load_basic(circt_wsl: str, problems: list[str]) -> list[dict]:
 
 
 # --------------------------------------------------------------------------
+# HLSFactory v2: the HLSFactory 1.1.0 tree itself (opt-in; hlsfactory_v2.py)
+# --------------------------------------------------------------------------
+DEFAULT_HLSFACTORY_ROOT = "/mnt/d/HLSFactory_v2/HLSFactory"
+CATALOGS = ("polygeist", "v2")
+
+
+def hlsfactory_root() -> str:
+    return to_wsl(os.environ.get("HLSFACTORY_ROOT") or DEFAULT_HLSFACTORY_ROOT).rstrip("/")
+
+
+def default_catalog() -> str:
+    """'v2' when HLSFACTORY_ROOT is set in the environment, else 'polygeist' (every result so far)."""
+    return "v2" if os.environ.get("HLSFACTORY_ROOT") else "polygeist"
+
+
+def load_hlsfactory_v2(root: str | None = None, test_hls_dir: str = DEFAULT_TEST_HLS_DIR,
+                       problems: list[str] | None = None, info: dict | None = None) -> list[dict]:
+    """One record per HLSFactory 1.1.0 design under <root>/hlsfactory/hls_dataset_sources (rules:
+    hlsfactory_v2.py).  The records have this module's shape plus 'origin' ('hlsfactory_v2'), 'flows',
+    'v2_dir' / 'v2_win_dir', 'source_match' and 'v2' (toml, Tcl facts, source comparison).  `info`
+    receives {'skipped': [...], 'vanished': [...], 'root': root}: entries that are not designs, and
+    Polygeist designs the tree no longer has."""
+    here = str(Path(__file__).resolve().parent)
+    if here not in sys.path:
+        sys.path.insert(0, here)
+    import hlsfactory_v2 as V2               # noqa: E402  (harness module)
+    own = problems is None
+    problems = [] if own else problems
+    root_wsl = to_wsl(root).rstrip("/") if root else hlsfactory_root()
+    test_hls_wsl = to_wsl(test_hls_dir).rstrip("/")
+    V2.LOCAL = local if os.name == "nt" else None
+    recs, rep = V2.load(root_wsl, load_hlsfactory(test_hls_wsl, problems), test_hls_wsl, problems,
+                        to_win=to_win)
+    if info is not None:
+        info.update(rep)
+    if own and problems:
+        raise DesignParseError("\n".join(problems))
+    return recs
+
+
+# --------------------------------------------------------------------------
 # public API
 # --------------------------------------------------------------------------
 def default_circt_dir() -> str:
@@ -429,14 +480,26 @@ def load_designs(test_hls_dir: str = DEFAULT_TEST_HLS_DIR,
                  datasets: list[str] | None = None,
                  modes: list[str] | None = None,
                  verify: bool = True,
-                 problems: list[str] | None = None) -> list[dict]:
+                 problems: list[str] | None = None,
+                 catalog: str | None = None,
+                 hlsfactory_root_dir: str | None = None,
+                 info: dict | None = None) -> list[dict]:
     """All designs as dicts (see module docstring).  Parse/verification
-    problems are appended to `problems` (or raised if it is None)."""
+    problems are appended to `problems` (or raised if it is None).
+    catalog: 'polygeist' (the HLSFactory designs from the Polygeist lit copies) or
+    'v2' (load_hlsfactory_v2); None = default_catalog()."""
     own = problems is None
     problems = [] if own else problems
     test_hls_wsl = to_wsl(test_hls_dir).rstrip("/")
     circt_wsl = to_wsl(circt_dir).rstrip("/") if circt_dir else default_circt_dir()
-    designs = (load_hlsfactory(test_hls_wsl, problems)
+    catalog = catalog or default_catalog()
+    if catalog == "v2":
+        hlsf = load_hlsfactory_v2(hlsfactory_root_dir, test_hls_wsl, problems, info)
+    elif catalog == "polygeist":
+        hlsf = load_hlsfactory(test_hls_wsl, problems)
+    else:
+        raise ValueError(f"unknown catalog {catalog!r} (one of {', '.join(CATALOGS)})")
+    designs = (hlsf
                + load_polybench_pragmas(test_hls_wsl, problems)
                + load_basic(circt_wsl, problems))
     if datasets:
@@ -460,7 +523,7 @@ def count_table(designs: list[dict]) -> str:
     total: Counter = Counter()
     for c in per.values():
         total.update(c)
-    cols = [m for m in MODES if total[m]]
+    cols = [m for m in MODES if total[m]] + sorted(m for m in total if m not in MODES)
     w = max([len("dataset"), len("TOTAL")] + [len(k) for k in per])
     head = f"{'dataset':<{w}}  {'total':>5}  " + "  ".join(f"{c:>{max(len(c), 5)}}" for c in cols)
     rows = [head, "-" * len(head)]
@@ -490,14 +553,30 @@ def main(argv=None) -> int:
                     help="do not check that sources/include dirs exist on disk")
     ap.add_argument("--list", action="store_true",
                     help="also print one line per design")
+    ap.add_argument("--catalog", choices=CATALOGS, default=None,
+                    help="HLSFactory designs from the Polygeist lit copies ('polygeist') or from the "
+                         "HLSFactory 1.1.0 tree ('v2'); default 'v2' if HLSFACTORY_ROOT is set, else "
+                         "'polygeist'")
+    ap.add_argument("--hlsfactory-root", default=None,
+                    help=f"HLSFactory tree for --catalog v2 (default $HLSFACTORY_ROOT or "
+                         f"{DEFAULT_HLSFACTORY_ROOT})")
     a = ap.parse_args(argv)
     problems: list[str] = []
+    info: dict = {}
+    catalog = a.catalog or default_catalog()
     designs = load_designs(
         a.test_hls_dir, a.circt_dir,
         datasets=a.datasets.split(",") if a.datasets else None,
         modes=a.modes.split(",") if a.modes else None,
-        verify=not a.no_verify, problems=problems)
+        verify=not a.no_verify, problems=problems, catalog=catalog,
+        hlsfactory_root_dir=a.hlsfactory_root, info=info)
+    if catalog == "v2":
+        print(f"catalog: v2 ({info.get('root')})")
     print(count_table(designs))
+    if catalog == "v2":
+        import hlsfactory_v2 as V2           # noqa: E402  (imported by load_hlsfactory_v2)
+        print("\nsource match against the Polygeist copies (HLSFactory designs):")
+        print(V2.catalogue_report([d for d in designs if d.get("origin") == "hlsfactory_v2"], info))
     multi = sum(1 for d in designs if len(d["sources"]) > 1)
     langs = Counter(d["lang"] for d in designs)
     print(f"\ndesigns: {len(designs)}; with >1 source: {multi}; "

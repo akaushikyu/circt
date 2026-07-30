@@ -232,12 +232,16 @@ def main():
                     help="rebuild the summary from the cached reports (after a parser change); no synthesis")
     ap.add_argument("--td", default="off", choices=["off", "auto"],
                     help="syn.array_partition.throughput_driven (ground truth uses 'off')")
+    ap.add_argument("--catalog", choices=D.CATALOGS, default=None,
+                    help="design catalogue (designs.py): 'polygeist' (default) or 'v2' (the HLSFactory 1.1.0 "
+                         "tree; the default when HLSFACTORY_ROOT is set).  A v2 design whose sources equal "
+                         "its Polygeist copy is that copy's record, so its cache entry is reused")
     args = ap.parse_args()
     global EXTRA_CFG
     EXTRA_CFG = [l for l in C.EXTRA_HLS_CFG if not l.startswith("syn.array_partition.throughput_driven")]
     EXTRA_CFG.append(f"syn.array_partition.throughput_driven={args.td}")
 
-    designs = [d for d in D.load_designs() if d.get("sources")]
+    designs = [d for d in D.load_designs(catalog=args.catalog) if d.get("sources")]
     if args.datasets:
         ds = set(args.datasets.split(","))
         designs = [d for d in designs if d["dataset"] in ds]

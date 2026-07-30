@@ -429,6 +429,9 @@ def main():
     ap.add_argument("--debug-json", action="store_true", help="(default now; kept for compatibility)")
     ap.add_argument("--no-debug-json", action="store_true")
     ap.add_argument("--quiet", action="store_true")
+    ap.add_argument("--catalog", choices=D.CATALOGS, default=None,
+                    help="design catalogue (designs.py): 'polygeist' (default) or 'v2' (the HLSFactory 1.1.0 "
+                         "tree; the default when HLSFACTORY_ROOT is set)")
     args = ap.parse_args()
 
     shim = resolve_shim(args.shim)
@@ -436,7 +439,8 @@ def main():
     if args.mlir_from:
         prev = C.load_json(args.mlir_from, {}) or {}
         args.mlir_from_records = {k: v for k, v in prev.items() if k != "_meta"}
-    designs = D.load_designs()
+    catalog = args.catalog or D.default_catalog()
+    designs = D.load_designs(catalog=catalog)
     if args.datasets:
         ds = set(args.datasets.split(","))
         designs = [d for d in designs if d["dataset"] in ds]
@@ -460,6 +464,8 @@ def main():
                                         + ("top=<top> on --bram-analysis" if bram_top_supported(C.HLS_EST)
                                          else "no top= (this hls-est build has no such option)")),
                          "timeout": args.timeout, "run_id": run_id, "hls_est": C.HLS_EST}}
+    if catalog != "polygeist":
+        results["_meta"]["catalog"] = f"{catalog} ({D.hlsfactory_root()})"
     if not args.quiet:
         print(f"{len(designs)} designs; pipeline: {args.pipeline}; shim: {shim}; git {ghash}", flush=True)
     done = 0
