@@ -1284,3 +1284,21 @@ Polygeist:
   W6 wtaf1517m, W7 w7mi9cj6b, W10 wxpb85lzu (run IDs unchanged). W1, W2, W8, W9 and P1–P3 were already on Opus and
   were not touched.
 - At 03:12 a one-shot reminder sets the word back to `fable`, probes Fable, and writes `opus` back if the probe fails.
+
+## 2026-10-11 01:31 — Vitis ground truth for the HLSFactory_v2 designs started (coordinator step a2)
+
+- Trigger: W8a committed the v2 catalogue loader (5ff9321ce). Its sweep: 801 designs, cgeist 655, hls-est 318, Vitis
+  truth 136 (hls-doc/hlsfactory-v2.md).
+- Before launch: run_vitis.py got a per-design flock and merge-on-write summary updates (baa8eab9a). A second runner
+  now skips a design another runner holds, and no runner overwrites another's summary entries. The lock refuses a second
+  holder; two processes merging 60 entries each kept 120; cached designs still come back cached. An independent review is running.
+- Run: scratchpad `vitis_v2_run.sh`, the 665 v2 designs without a result in three tiers
+  (`coord/v2_vitis_tiers.json`: 1 = hls-est ingests, 234; 2 = cgeist ok, hls-est not yet, 327; 3 = cgeist fails, 104),
+  -j 6, 1 h timeout, td=off, into `results/vitis-v2.json` (not vitis.json, so W9's before/after measurements do not
+  shift mid-run). Log: `coord/vitis_v2_run.log`.
+- W8c's step (1) (wf_w8_next.js) now waits for this run's "all done" and merges vitis-v2.json into vitis.json instead
+  of starting its own runner. The W8a steps in wf_w8_next.js keep their original context text verbatim. Checked with a
+  stub-agent run (`stubrun.js`): the first three calls are identical to the running script, so the swap reuses W8a's
+  cached results.
+- Watcher fix: a failing wsl.exe prints its error in UTF-16, which the watcher had read as flag names; it now ignores a
+  non-zero exit or NUL bytes.
