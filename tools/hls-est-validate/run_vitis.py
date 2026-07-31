@@ -37,8 +37,8 @@ LOCK = threading.Lock()
 
 @contextlib.contextmanager
 def file_lock(path, blocking=True):
-    """Exclusive flock on <path>; yields False instead of waiting when blocking=False and another
-    process holds it. Two runners may share a work root: each design is synthesised by one runner
+    """Exclusive flock on <path>; yields the open lock file, or None instead of waiting when
+    blocking=False and another process holds it. Two runners may share a work root: each design is synthesised by one runner
     at a time (its work directory is deleted at the start of a run, which once corrupted 37 cached
     results), and the summary file is updated by read-merge-write under its own lock."""
     path = Path(path)
@@ -47,10 +47,10 @@ def file_lock(path, blocking=True):
         try:
             fcntl.flock(f, fcntl.LOCK_EX | (0 if blocking else fcntl.LOCK_NB))
         except BlockingIOError:
-            yield False
+            yield None
             return
         try:
-            yield True
+            yield f
         finally:
             fcntl.flock(f, fcntl.LOCK_UN)
 
@@ -59,6 +59,12 @@ def update_summary(out, updates):
     """Merge {key: result} into the summary JSON at <out> as it is on disk now, so a concurrent
     runner's or a --reparse's entries are kept."""
     with LOCK, file_lock(str(out) + ".lock"):
+        for k, r in list(updates.items()):
+            if r.get("cached") and r.get("cache_dir"):   # read before the lock: a --reparse may have rewritten it
+                fresh = C.load_json(Path(r["cache_dir"]) / "result.json")
+                if fresh:
+                    fresh["cached"] = True
+                    updates[k] = fresh
         cur = C.load_json(out, {}) or {}
         cur.update(updates)
         C.dump_json(cur, out)
@@ -114,10 +120,13 @@ def make_cfg(d, work_win):
 
 
 def kill_windows_tree(marker):
-    """Kill every Windows process whose command line mentions `marker` (the work dir).
-    Vitis children (vitis_hls.exe) spell the path with forward slashes while v++
-    gets backslashes, so match the path with '?' in place of every separator."""
-    pat = re.sub(r"[\/]", "?", marker)
+    r"""Kill every Windows process whose command line names the work dir `marker` as a path prefix.
+    Vitis children (vitis_hls.exe) spell the path with forward slashes while v++ gets backslashes, so
+    every separator matches either one (the -like set [\/]). The dir must be followed by a
+    separator: a bare prefix would also match sibling designs whose names extend this one
+    (GradCAM__src_hls vs GradCAM__src_hls__avg_pool) and kill their runs."""
+    sep = r"[\/]"
+    pat = "".join(sep if ch in "/\\" else ch for ch in marker.rstrip("/\\")) + sep
     ps = ("Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like '*%s*' } | "
           "ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }") % pat
     try:
@@ -207,10 +216,10 @@ def run_one(d, args):
             r = C.load_json(res_path)
             r["cached"] = True
             return r
-        return synthesise(d, args, key, cdir, res_path, tag, work_wsl)
+        return synthesise(d, args, key, cdir, res_path, tag, work_wsl, mine.fileno())
 
 
-def synthesise(d, args, key, cdir, res_path, tag, work_wsl):
+def synthesise(d, args, key, cdir, res_path, tag, work_wsl, lock_fd):
     work_win = f"{C.WORK_WIN_ROOT}/{tag}{d['dataset']}/{d['benchmark']}"
     shutil.rmtree(work_wsl, ignore_errors=True)
     Path(work_wsl).mkdir(parents=True, exist_ok=True)
@@ -225,8 +234,10 @@ def synthesise(d, args, key, cdir, res_path, tag, work_wsl):
     t0 = time.time()
     status, note = "ok", ""
     try:
+        # pass_fds: the child holds the design lock too, so if this runner dies the design stays
+        # locked until the Vitis run itself ends (a restarted runner would otherwise wipe its work dir)
         p = subprocess.run([C.CMD_EXE, "/c", cmd], cwd=work_wsl, capture_output=True,
-                           text=True, errors="replace", timeout=args.timeout)
+                           text=True, errors="replace", timeout=args.timeout, pass_fds=(lock_fd,))
         (Path(work_wsl) / "vpp_stdout.txt").write_text(p.stdout + "\n--- stderr ---\n" + p.stderr)
         if p.returncode != 0:
             status = "vitis failed"
@@ -318,7 +329,6 @@ def main():
         print(len(designs), "designs")
         return
 
-    summary = C.load_json(args.out, {}) or {}
     if args.reparse:
         with file_lock(str(args.out) + ".lock"):
             reparse(designs, args)
@@ -335,7 +345,7 @@ def main():
                 r = {"dataset": d["dataset"], "benchmark": d["benchmark"], "top": d["top"],
                      "status": "harness error", "note": repr(e)[:300]}
             done += 1
-            if r.get("status") != "locked":
+            if not args.dry_run and r.get("status") != "locked":
                 update_summary(args.out, {C.design_key(d): r})
             tot = r.get("totals", {}) or {}
             print(f"[{done}/{len(designs)}] {C.design_key(d):50s} {r.get('status'):14s} "
