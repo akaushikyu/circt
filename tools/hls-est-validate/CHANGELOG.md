@@ -915,3 +915,19 @@ tried and reverted. Branch: `hls-est-vitis-match` in `~/circt`.
 - **Files:** lib/Dialect/Resource/Passes/{AutoPipelineUnroll,BRAMAnalysis,InferVitisSplitArray,MemoryBankModified}.cpp, include/.../InferVitisSplitArray.h, test/hls-est/Estimation/* logs
 - **What:** committed the pre-existing uncommitted state of `branch-hls` as the starting point of this branch so later diffs are clean. No code was changed.
 - **Reverted?:** no
+
+## 2026-10-11 — run_vitis: concurrent runners cannot corrupt the ground truth (coordinator)
+- **Commit:** baa8eab9a, review fixes 7f670e207 (branch `hls-est-vitis-match`)
+- **Files:** tools/hls-est-validate/run_vitis.py, tools/hls-est-validate/results/.gitignore
+- **What:** a non-blocking flock per design work dir, inherited by the Vitis child, so a second runner skips a
+  design another runner holds (status `locked`, not written) and a killed runner leaves it locked until Vitis exits;
+  summary JSON updates are read-merge-write of one entry under `<out>.lock` (cached results re-read under the lock;
+  `--reparse` holds it too); `--dry-run` no longer writes the summary; the timeout killer matches both separator styles
+  and only its own design (it also matched sibling designs whose names extend this one).
+- **Why:** two runners on one work root once corrupted 37 results; the v2 ground-truth run (665 designs, hours)
+  shares the cache with agents that call run_vitis.py. A v2 `--dry-run` at 01:08 wrote 204 `dry-run` entries
+  into results/vitis.json, now removed. The 143 real entries equal W8a's 22:54 snapshot. 6 genuine v2 results
+  (class_ece8893_2023_spring) entered vitis.json in the repair and are kept.
+- **Effect:** none on estimates or Vitis results; the independent review (no defects in the refactor; one merge defect
+  and one lock gap, fixed in 7f670e207) ran on baa8eab9a.
+- **Reverted?:** no
