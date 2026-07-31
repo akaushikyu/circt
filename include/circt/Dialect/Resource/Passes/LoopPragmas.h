@@ -61,6 +61,13 @@ constexpr llvm::StringLiteral kLoopAutoUnrolledAttr = "hls.auto_unrolled";
 constexpr llvm::StringLiteral kLoopSchedulerAttr = "hls.scheduler";
 /// Value of the `source` key of an automatic `hls.pipeline` tag.
 constexpr llvm::StringLiteral kLoopPipelineAutoSource = "auto";
+/// `hls.uncounted` (unit, from cgeist): a loop whose exit test compares a
+/// counter with a runtime bound of a wider type that the counter is not known
+/// to reach (`for (uint8_t i = 0; i < n; i++)`, int n), raised by assuming
+/// that the loop terminates. Vitis cannot compute its trip count and does not
+/// collapse it with its perfect inner nest before the pipeline decision
+/// (VITIS_NOTES.md N15).
+constexpr llvm::StringLiteral kLoopUncountedAttr = "hls.uncounted";
 
 /// Number of enclosing loops flattened into `loop`'s pipeline (0 if none).
 inline unsigned getFlattenedParents(mlir::affine::AffineForOp loop) {

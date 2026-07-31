@@ -41,7 +41,16 @@
 //     elements only: Vitis flattens the same nest when the invariant load
 //     reads a floating-point element (see "Perfectness and floating point"
 //     below; option float-loads-perfect, default on). Promotion makes the
-//     nest imperfect whatever the element type.
+//     nest imperfect whatever the element type. A loop marked
+//     `hls.uncounted` (cgeist: a counter narrower than its runtime bound,
+//     `for (uint8_t i = 0; i < n; i++)` with int n) is never the outer loop
+//     of a collapsed pair: Vitis, which cannot compute its trip count, treats
+//     it like the outer loop of an imperfect nest (VITIS_NOTES.md N15: the
+//     loop is pipelined and a <= 64-trip perfect inner loop unrolled into it,
+//     where an `int` counter gets the inner loop pipelined and flattened).
+//     When its perfect inner loop is pipelined instead, it is flattened into
+//     it in step 3 despite its runtime bound, as the collapse would have
+//     done (N15: nc_f_u8 like nc_f_int).
 //
 //  2. Top-down decision. A (collapsed) loop P is pipelined iff every loop
 //     nested anywhere inside it - loops of called functions included - has a
@@ -139,6 +148,7 @@ using circt::hls_analysis::kLoopPipelineAttr;
 using circt::hls_analysis::kLoopPipelineAutoSource;
 using circt::hls_analysis::kLoopPipelineOffAttr;
 using circt::hls_analysis::kLoopUnrollAttr;
+using circt::hls_analysis::kLoopUncountedAttr;
 using circt::hls_analysis::kLoopUnrollOffAttr;
 using circt::hls_analysis::kLoopUnrollPartialAttr;
 
@@ -436,6 +446,10 @@ struct Node {
   uint64_t trip = 1; // product of the chain's trip counts (if !dynamic)
   int userPipelineIdx = -1; // outermost user-pipelined chain member
   bool pipelineOff = false; // chain.back() carries hls.pipeline_off
+  /// The node is one `hls.uncounted` loop that would have collapsed with its
+  /// only child (a perfect pair, constant inner trip count) had it been
+  /// counted (step 1); it may still be flattened into that child (step 3).
+  bool uncountedPerfect = false;
   // Derived over the subtree.
   bool constInside = true;
   uint64_t maxPath = 1; // trip * max over children of maxPath
@@ -568,6 +582,12 @@ public:
         break;
       if (!isPerfectPair(cur, child, licm))
         break;
+      // An uncounted loop (only ever the first chain member: its trip count
+      // is not constant) does not collapse with its child (step 1, N15).
+      if (cur->hasAttr(kLoopUncountedAttr)) {
+        node->uncountedPerfect = true;
+        break;
+      }
       node->chain.push_back(child);
       cur = child;
     }
@@ -1043,7 +1063,13 @@ struct AutoPipelineUnrollPass
     if (n.children.size() != 1)
       return;
     Node &c = *n.children.front();
-    if (c.viaCall || c.chain.empty() || !c.tagged || n.dynamic || c.dynamic)
+    // An uncounted loop that is a perfect parent (not collapsed in step 1)
+    // is flattened into its pipelined child as the counted loop is through
+    // the collapse: its runtime bound is the variable outermost bound the
+    // semi-perfect rule allows (N15: nc_f_u8 is flattened like nc_f_int). A
+    // loop around it is not (c.dynamic).
+    if (c.viaCall || c.chain.empty() || !c.tagged ||
+        (n.dynamic && !n.uncountedPerfect) || c.dynamic)
       return;
     if (c.chain.front()->getBlock() != n.chain.back().getBody())
       return; // the child loop is conditional
