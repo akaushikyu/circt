@@ -63,18 +63,18 @@ Binaries in `Polygeist/build/bin/`: `cgeist` (current), `cgeist.prev-8017846b`, 
 | wf_e91158f4-96e + wf_cde0098f-30a | priority 4 (N8 formula reconciliation) + priority 5 tools, then their review fixes | **done**: 3a0c04cc8, b93c11751, dbb6b9550, c85766872; memo M4 |
 | wf_05612499-391 | cgeist round 4: AffineCFG no longer promotes narrow integer arithmetic that can wrap, second-counter shortcut, cast chains through inlining, loop exit values, float compound rounding, div/rem sign check at every width | **done**: Polygeist 763b0046 + review fixes cbc105e0 (circt dbf091007, b60c020ee); recheck: no defects, harness byte-identical; open: unsigned 32-bit wrap assumption → memo M9 |
 | wf_3050670d-893 | cgeist O23: no store-to-load forwarding across a loop that overwrites the location; fix, verify, fix, recheck | **done and installed** 18:11 (Polygeist 18a550dd + c70ba2b0; recheck: no defects); `flags/o23.installed` set; control run in OPEN_ISSUES O23 |
-| wf_3a800524-b43 (W1) | Peter-approved defaults. W1a (landed + review fixes): drop `--infer-vitis-split-array` 919792784, `--bram-seq-dual-port` on 98e86b070, band BRAM formula 51b9a6434, `top=` 433f07113. W1c (in progress): exactclass harness default shim + cgeist md5 in the MLIR cache key b345b36b2 (#8), dead-memory front end in the default pipeline + m_axi adapters on fcf9a59b2 (#4), `float-loads-perfect` on 5b9418cb8 (#3), `forward-stores` under rule 4 (#5) next; then W1c review/fix, W1b (lit CHECK regeneration, full runs, workbook) | running; writes `w1.done` |
-| wf_bdcba361-69a (W2) | hls:: math-function cost: Vitis experiments (done: N16 fde45f14f, `math_costs.json` 30e2933f9, 45 entries; each core instance has a fixed BRAM cost, instances follow the call structure), then `--bram-analysis` reads the file | implementation waits for `w1.done`; writes `w2.done` |
-| wf_58a68378-45f (W3) | non-inlined functions: Vitis experiments (done: VITIS_NOTES N14, 34289e775); cgeist honours `inline off` + opt-in `--hls-keep-invariant-loops` (waits for `o23.installed`; writes `w3cgeist.done`); hls-est call support (waits for `w2.done`) | resumed 17:05: experiment cached, the six derailed steps redone; writes `w3.done` |
-| wf_9be89a19-0be (W5) | frontend: narrow counters vs wider runtime bounds (#14; experiment done: N15 989279d91, recommends raising the loop and marking it so the pipeline decision does not collapse it early; no ground-truth design contains the case); then signed arithmetic marked non-wrapping (#13), Polygeist lit shim -> exactclass (#10) | Polygeist edits wait for `w3cgeist.done`; private binary; writes `w5.done` |
-| wf_7e144e09-d08 (W6) | #15 (Peter approved M10): exactclass proxy classes for assignable bit/range/concat selects + cgeist scalar replacement of proxy structs; one soda design and SkyNet first, then the 23 O15 designs; time-boxed | shim prototyping in a private copy now; real edits wait for `w5.done`; private binary; writes `w6.done` |
+| wf_3a800524-b43 (W1) | Peter-approved defaults. W1a (landed + review fixes): drop `--infer-vitis-split-array` 919792784, `--bram-seq-dual-port` on 98e86b070, band BRAM formula 51b9a6434, `top=` 433f07113. W1c (in progress): exactclass harness default shim + cgeist md5 in the MLIR cache key b345b36b2 (#8), dead-memory front end in the default pipeline + m_axi adapters on fcf9a59b2 (#4), `float-loads-perfect` on 5b9418cb8 (#3), `forward-stores` under rule 4 (#5) next; then W1c review/fix, W1b (lit CHECK regeneration, full runs, workbook) | running (task w78m5npei): W1a and W1c landed with review fixes (W1c review: no defects); W1b (lit CHECK regeneration, workbook) running on Opus; writes `w1.done` |
+| wf_bdcba361-69a (W2) | hls:: math-function cost: Vitis experiments (done: N16 fde45f14f, `math_costs.json` 30e2933f9, 45 entries; each core instance has a fixed BRAM cost, instances follow the call structure), then `--bram-analysis` reads the file | experiment and its review done; implementation running on Opus (task wtfqs7bh4); writes `w2.done` |
+| wf_58a68378-45f (W3) | non-inlined functions: Vitis experiments (done: VITIS_NOTES N14, 34289e775); cgeist honours `inline off` + opt-in `--hls-keep-invariant-loops` (waits for `o23.installed`; writes `w3cgeist.done`); hls-est call support (waits for `w2.done`) | cgeist side done (`w3cgeist.done`); hls-est side re-running on Opus since 00:21 (task w2i9livtb) after its Fable agent ran out of credits; writes `w3.done` |
+| wf_9be89a19-0be (W5) | frontend: narrow counters vs wider runtime bounds (#14; experiment done: N15 989279d91, recommends raising the loop and marking it so the pipeline decision does not collapse it early; no ground-truth design contains the case); then signed arithmetic marked non-wrapping (#13), Polygeist lit shim -> exactclass (#10) | experiment done; implementation re-running on Opus since 00:21 (task wzalafx2t) after Fable ran out of credits; private binary; writes `w5.done` |
+| wf_7e144e09-d08 (W6) | #15 (Peter approved M10): exactclass proxy classes for assignable bit/range/concat selects + cgeist scalar replacement of proxy structs; one soda design and SkyNet first, then the 23 O15 designs; time-boxed | implementation on Opus since 00:25 (task wtaf1517m), waiting at its `w5.done` gate; private binary; writes `w6.done` |
 | wf_2a1ab997-478 (P0) | generalization program, docs: `hls-doc/` index, harness guide, generated ground-truth/results pages, assistant memory, assumptions inventory (135 rows), config-vs-plugin design memo | **done** (eac94d95f, fb668bf4b, review fixes 014a3dbea); 15 design questions for Peter = decision #30 |
 | wf_29146842-9ac (FB-diag) | forgebench gap diagnosis | **done** (a892b780c compare.py grouping, 0845d6dc0 report + N17 + O28, review fixes 697aae839): C1 callee array_partition lost at inlining, C2 globals unbanked (O4), C3 one copy per call site instead of one instance (O10/N14) explain 98% of forgebench |err|; C1 needs 2-D banking (O17 item 2) and W3's cgeist; `fbgap.done` set 23:05 |
-| wf_5074c6a1-dc8 (W7) | forgebench fixes (Peter: go): replication overcount, never-accessed globals rule, ROM width narrowing, globals-promotion measurement + memo M11 (default change = Peter's decision), cgeist empty-module failures (after w6.done) | waits for `fbgap.done` and `w3.done`; writes `w7.done` |
-| wf_7474f3cd-7d5 (W8) | HLSFactory_v2 catalogue: loader + sweep + cause classes (W8a, now); every design compilable by cgeist and ingested by hls-est (W8b, after w7.done + cgeist.final); ground truth for new designs, default catalogue switch, one cgeist lit test per design (W8c) | running; writes `w8.done` |
-| wf_3f96a4b0-371 (W9) | accuracy loop towards the goal band (exact or over-count <= 15%): measure, cluster out-of-band designs by cause, fix the largest cluster on Fable, review, fix, repeat (max 12 rounds, stop after 2 without gain); final `hls-doc/accuracy.md` | waits for `w8.done`; writes `w9.done` |
-| wf_2774bdf6-9f2 (W10) | decisions #33/#34: pin Vitis's automatic inlining rule with kernels (Opus), cgeist inlines like Vitis and merges conflicting array_partition pragmas the Vitis way, documented in `hls-doc/frontend-pragmas.md` (Fable); private cgeist | experiments now; Polygeist edits wait for `w6.done`; writes `w10.done` |
-| wf_898379cf-367 (P1-P3; earlier launches wf_c3d16de8-975 and wf_21b4cfce-671 stopped before any work to add gates) | P1 every cgeist test mirrored as an hls-est lit test, covering every HLSFactory_v2 design + notes moved to `hls-doc/notes/`; P2 config file + plugins + docs; P3 refactor (readability) + speed, byte-identical | waits for p0, w1, w2, w3, w5, w6, w7, w8, w9 and `cgeist.final`; P2 adds the new-FPGA-architecture example, P3 adds docs for every pass and the architecture (definition of done) |
+| wf_5074c6a1-dc8 (W7) | forgebench fixes (Peter: go): replication overcount, never-accessed globals rule, ROM width narrowing, globals-promotion measurement + memo M11 (default change = Peter's decision), cgeist empty-module failures (after w6.done) | implementation on Opus since 00:25 (task w7mi9cj6b), waiting at its `w3.done` gate; writes `w7.done` |
+| wf_7474f3cd-7d5 (W8) | HLSFactory_v2 catalogue: loader + sweep + cause classes (W8a, now); every design compilable by cgeist and ingested by hls-est (W8b, after w7.done + cgeist.final); ground truth for new designs, default catalogue switch, one cgeist lit test per design (W8c) | W8a done (5ff9321ce, c926618f5: 801 designs, cgeist 655, hls-est 318; review: every re-measured number reproduces); `fix:w8a` running (task w1r33ybq5); then the swap to `wf_w8_next.js` (verified: W8a's three calls replay from cache); writes `w8.done` |
+| wf_3f96a4b0-371 (W9) | accuracy loop towards the goal band (exact or over-count <= 15%): measure, cluster out-of-band designs by cause, fix the largest cluster on Fable, review, fix, repeat (max 12 rounds, stop after 2 without gain); final `hls-doc/accuracy.md` | round-1 measurement running on Opus (task wawxilun9); writes `w9.done` |
+| wf_2774bdf6-9f2 (W10) | decisions #33/#34: pin Vitis's automatic inlining rule with kernels (Opus), cgeist inlines like Vitis and merges conflicting array_partition pragmas the Vitis way, documented in `hls-doc/frontend-pragmas.md` (Fable); private cgeist | experiment done (N18, cfcbdbc9b); implementation on Opus since 00:21 (task wxpb85lzu), waiting at its `w6.done` gate; writes `w10.done` |
+| wf_898379cf-367 (P1-P3; earlier launches wf_c3d16de8-975 and wf_21b4cfce-671 stopped before any work to add gates) | P1 every cgeist test mirrored as an hls-est lit test, covering every HLSFactory_v2 design + notes moved to `hls-doc/notes/`; P2 config file + plugins + docs; P3 refactor (readability) + speed, byte-identical | P1a (mirror tests) running on Opus (task wq17u99je); later phases wait for their gates |
 | wf_1620e0fa-ab0 | `tiled_attn_module` 600→1321 bisect | **done**: harness artefact, O12, memo M7, `pipeline_full` recorded |
 
 **Session-limit outage, 19:40–21:10.** Every agent of the four workflows stopped mid-step on the usage limit. At 21:15
@@ -109,11 +109,11 @@ Regenerate the appendices below with `python3 update_session_log.py` after each 
 
 **Limit handling, 2026-10-11 00:00 (Peter: never pause on an API limit).** Facts: Claude Code's local settings record no remaining-quota or reset time (reset times appear only in an agent's limit message; the live figure needs the OAuth token, which the coordinator does not read), and they report extra usage credits as unavailable (`out_of_credits`) - with credits, Claude Code itself continues past a plan limit. Mechanism now in every workflow script (takes effect at each workflow's next resume; prompts unchanged, so cached steps still replay): a step whose model's pool is exhausted re-runs once on the other model (Opus <-> Fable); if both fail, the workflow stops with 'limits: ...' instead of running later steps on empty input. The watcher reports deaths with the reset time parsed from the message; on such an event the coordinator schedules a resume of every stopped workflow for the reset time.
 
-Coordinator steps pending: **swap W8 to `wf_w8_next.js` (resumeFromRunId wf_7474f3cd-7d5) once its `fix:w8a` has a result and before `fix:w8b` runs - otherwise `w8b.done` is never written and W2 stalls;** (O23 cgeist installed 18:11, flag set.) touch `flags/fbgap.done` when the diagnosis workflow completes; relay memo M11 (globals in the default pipeline) to Peter when W7 reports; touch `flags/cgeist.final` after the last cgeist install (W5, W6, and W7's if any) so the P1-P3 workflow can start; after `p0.done` relay the design memo's open decisions to Peter; after P1 update the note paths in CLAUDE.md; after W1, update CLAUDE.md's "Current default pipeline" section and Shims row; after W3 has installed its cgeist and `w5.done` exists, install W5's private cgeist (its report names it) and run a control harness; then W6's private cgeist after `w6.done` the same way; finally the formal pipeline sweep and REPORT.md.
+Coordinator steps pending (updated 2026-10-11 02:00): swap W8 to `wf_w8_next.js` (resumeFromRunId wf_7474f3cd-7d5) as soon as `fix:w8a` has a result; after tier 1 of the v2 Vitis run, re-run any tier-1 design that a sibling's timeout killed (tier 1 started before the killer fix 7f670e207); W8c merges `results/vitis-v2.json` into vitis.json; install the cgeist builds in order (W3's by W3's hls-est step if rule 4 holds; W5's after `w5.done`; W6's after `w6.done`; W10's after `w10.done`), each with a control harness (scalar and exactclass), then touch `flags/cgeist.final`; after `w1.done`, rewrite CLAUDE.md's "Current default pipeline" section and Shims row; decide W7's memo M11 under delegation #36 when W7 reports; after P1, update the note paths in CLAUDE.md; at 03:12 set `scratchpad/model.hard` back to `fable` (probe first); finally the formal pipeline sweep and REPORT.md. Done since the last update: O23 installed, `fbgap.done`, `p0.done`, the v2 Vitis run started (01:31).
 
 ## Appendix A — every file changed in ~/circt (branch hls-est-vitis-match), per commit, oldest first
 
-Generated by `update_session_log.py` at 2026-10-10 23:50 from `git log --reverse --name-status e9da1aaf0..HEAD` (e9da1aaf0 = snapshot of Peter's pre-existing uncommitted tree). A = added, M = modified, D = deleted. Large result JSONs are git-ignored.
+Generated by `update_session_log.py` at 2026-10-11 01:58 from `git log --reverse --name-status e9da1aaf0..HEAD` (e9da1aaf0 = snapshot of Peter's pre-existing uncommitted tree). A = added, M = modified, D = deleted. Large result JSONs are git-ignored.
 
 ### 3ad60fb79 hls-est: register DLTI/LLVM dialects; add hls-est-validate harness skeleton
 
@@ -1130,6 +1130,59 @@ Generated by `update_session_log.py` at 2026-10-10 23:50 from `git log --reverse
 - A `hls-doc/results-table.xlsx`
 - A `tools/hls-est-validate/make_results_table.py`
 
+### 1ccf07499 SESSION_LOG: limit handling (symmetric model fallback, clean stop, resume at reset)
+
+- M `tools/hls-est-validate/SESSION_LOG.md`
+
+### c87869bda SESSION_LOG: hard workflow steps switched to Opus until the usage reset (flag-file model switch)
+
+- M `tools/hls-est-validate/SESSION_LOG.md`
+
+### cfcbdbc9b hls-est-validate: VITIS_NOTES N18 Vitis automatic-inlining rule (W10-exp)
+
+- M `tools/hls-est-validate/VITIS_NOTES.md`
+
+### 70601cbd4 SESSION_LOG: Fable credits ran out; five workflows restarted on Opus via the model switch
+
+- M `tools/hls-est-validate/SESSION_LOG.md`
+
+### 5ff9321ce hls-est-validate: HLSFactory_v2 catalogue (--catalog v2), sweep of its 801 designs, hls-doc/hlsfactory-v2.md (W8a)
+
+- M `hls-doc/README.md`
+- M `hls-doc/harness.md`
+- A `hls-doc/hlsfactory-v2.csv`
+- A `hls-doc/hlsfactory-v2.md`
+- M `tools/hls-est-validate/designs.py`
+- A `tools/hls-est-validate/hlsfactory_v2.py`
+- A `tools/hls-est-validate/make_hlsfactory_report.py`
+- M `tools/hls-est-validate/run_hlsest.py`
+- M `tools/hls-est-validate/run_vitis.py`
+- A `tools/hls-est-validate/sweep_hlsfactory_v2.py`
+
+### c926618f5 hls-est-validate: W8a recorded (HLSFactory_v2 catalogue and sweep); VITIS_NOTES N19 (C++14, __SYNTHESIS__); OPEN_ISSUES O30-O32
+
+- M `tools/hls-est-validate/CHANGELOG.md`
+- M `tools/hls-est-validate/MEMOS.md`
+- M `tools/hls-est-validate/OPEN_ISSUES.md`
+- M `tools/hls-est-validate/VITIS_NOTES.md`
+
+### baa8eab9a run_vitis: per-design lock and merge-on-write summary, so concurrent runners cannot corrupt the cache
+
+- M `tools/hls-est-validate/run_vitis.py`
+
+### 000862f5e SESSION_LOG: v2 Vitis ground-truth run started; runner lock; W8c merges instead of re-running
+
+- M `tools/hls-est-validate/SESSION_LOG.md`
+
+### 7f670e207 run_vitis: review fixes for the runner lock; timeout killer kills only its own design; --dry-run writes nothing
+
+- M `tools/hls-est-validate/results/.gitignore`
+- M `tools/hls-est-validate/run_vitis.py`
+
+### 87f9067cf CHANGELOG: run_vitis runner lock and its review fixes
+
+- M `tools/hls-est-validate/CHANGELOG.md`
+
 ## Appendix B — every file changed in Polygeist (/mnt/d/HLS, branch hls-est-vitis-match), per commit
 
 ### d279a433 cgeist: lower _Float16/__bf16 and _BitInt(N) scalars to f16/bf16/iN
@@ -1234,7 +1287,27 @@ Generated by `update_session_log.py` at 2026-10-10 23:50 from `git log --reverse
 - M `Polygeist/tools/cgeist/Lib/HLSPragma.cc`
 - M `Polygeist/tools/cgeist/Test/HLS/regressions/inline-off-kept-call.c`
 
-## Appendix C — uncommitted work at 2026-10-10 23:50 (owned by running agents unless stated)
+### b3a248a8 cgeist: mark C signed int arithmetic polygeist.nsw; AffineCFG proves every unmarked add / sub / mul (MEMOS #13, M9)
+
+- M `Polygeist/include/polygeist/Passes/Passes.h`
+- M `Polygeist/lib/polygeist/Passes/AffineCFG.cpp`
+- M `Polygeist/lib/polygeist/Passes/CanonicalizeFor.cpp`
+- M `Polygeist/lib/polygeist/Passes/PolygeistCanonicalize.cpp`
+- M `Polygeist/tools/cgeist/Lib/clang-mlir.cc`
+- A `Polygeist/tools/cgeist/Test/HLS/regressions/signed-nowrap-mark.c`
+- M `Polygeist/tools/cgeist/driver.cc`
+
+### 5432780b cgeist: raise narrow-counter loops against runtime bounds by assuming termination; mark them hls.uncounted (MEMOS #14, VITIS_NOTES N15)
+
+- M `Polygeist/include/polygeist/Passes/Passes.h`
+- M `Polygeist/lib/polygeist/Passes/AffineCFG.cpp`
+- M `Polygeist/lib/polygeist/Passes/CanonicalizeFor.cpp`
+- M `Polygeist/lib/polygeist/Passes/RaiseToAffine.cpp`
+- A `Polygeist/tools/cgeist/Test/HLS/regressions/narrow-counter-assume-termination.c`
+- M `Polygeist/tools/cgeist/Test/HLS/regressions/narrow-counter-wrap.c`
+- M `Polygeist/tools/cgeist/driver.cc`
+
+## Appendix C — uncommitted work at 2026-10-11 01:58 (owned by running agents unless stated)
 
 ~/circt:
 
@@ -1244,61 +1317,13 @@ Generated by `update_session_log.py` at 2026-10-10 23:50 from `git log --reverse
 - `M lib/Dialect/Resource/Passes/AutoPipelineUnroll.cpp`
 - `M lib/Dialect/Resource/Passes/BRAMAnalysis.cpp`
 - `M lib/Dialect/Resource/Passes/CMakeLists.txt`
+- `M lib/Dialect/Resource/Passes/MemoryBankModified.cpp`
 - `M lib/Dialect/Resource/Passes/MemrefBankClassification.cpp`
+- `M test/hls-est/Passes/bram_debug_json.mlir`
 - `M tools/hls-est-validate/SESSION_LOG.md`
-- `M tools/hls-est-validate/designs.py`
-- `M tools/hls-est-validate/run_hlsest.py`
-- `M tools/hls-est-validate/run_vitis.py`
+- `M tools/hls-est-validate/hlsfactory_v2.py`
 - `M tools/hls-est/main.cpp`
 
 Polygeist:
 
-- `M include/polygeist/Passes/Passes.h`
-- `M lib/polygeist/Passes/AffineCFG.cpp`
-- `M lib/polygeist/Passes/CanonicalizeFor.cpp`
-- `M lib/polygeist/Passes/PolygeistCanonicalize.cpp`
-- `M tools/cgeist/Lib/clang-mlir.cc`
-- `M tools/cgeist/driver.cc`
-
-## 2026-10-11 00:10 — hard steps switched to Opus until the usage reset
-
-- Peter (00:05): "switch to opus right now and when you reset switch to fable".
-- Each hard step now reads its model from a one-word flag file when it starts (`scratchpad/model.hard`, read by a
-  small Haiku step; the default is `opus` if the file can't be read). The file now says `opus`, and the coordinator
-  sets it back to `fable` at the reset time. Fallback to the other model, and a stop when both fail, are unchanged.
-- The four hard steps already running on Fable (impl:W3-hlsest, impl:W5-cgeist, impl:W6-rangeref,
-  impl:W7-forgebench) keep running on Fable: they are not stopped, because a stop restarts a step from zero. If they hit the
-  limit, they retry on Opus. Their workflows are restarted at the next step boundary to load the new helper.
-  Steps that already ran keep their recorded model, so resume caching still matches them.
-- Assessment for Peter: switching keeps work moving when Fable's allowance is low. It does not improve quality:
-  Fable remains the stronger model for the hard steps.
-
-## 2026-10-11 00:25 — Fable out of credits; W3, W5, W6, W7 and W10 restarted on Opus
-
-- 00:17: the Fable agents of impl:W3-hlsest and impl:W5-cgeist died with "out of usage credits" (resets 03:10
-  America/New_York). The workflows hung on the dead agents, so the old fallback never fired. W6 and W7 were only waiting
-  at their gates on Fable and would have died on their next turn.
-- Restarted with the flag-file model switch, a resume note on every step that re-runs (uncommitted edits are the earlier
-  attempt's partial work; leave other tracks' hunks), and the model word set to `opus`. The Haiku model check returned
-  `opus` in every workflow, and the steps started on claude-opus-5-5. New task IDs: W3 w2i9livtb, W5 wzalafx2t,
-  W6 wtaf1517m, W7 w7mi9cj6b, W10 wxpb85lzu (run IDs unchanged). W1, W2, W8, W9 and P1–P3 were already on Opus and
-  were not touched.
-- At 03:12 a one-shot reminder sets the word back to `fable`, probes Fable, and writes `opus` back if the probe fails.
-
-## 2026-10-11 01:31 — Vitis ground truth for the HLSFactory_v2 designs started (coordinator step a2)
-
-- Trigger: W8a committed the v2 catalogue loader (5ff9321ce). Its sweep: 801 designs, cgeist 655, hls-est 318, Vitis
-  truth 136 (hls-doc/hlsfactory-v2.md).
-- Before launch: run_vitis.py got a per-design flock and merge-on-write summary updates (baa8eab9a). A second runner
-  now skips a design another runner holds, and no runner overwrites another's summary entries. The lock refuses a second
-  holder; two processes merging 60 entries each kept 120; cached designs still come back cached. An independent review is running.
-- Run: scratchpad `vitis_v2_run.sh`, the 665 v2 designs without a result in three tiers
-  (`coord/v2_vitis_tiers.json`: 1 = hls-est ingests, 234; 2 = cgeist ok, hls-est not yet, 327; 3 = cgeist fails, 104),
-  -j 6, 1 h timeout, td=off, into `results/vitis-v2.json` (not vitis.json, so W9's before/after measurements do not
-  shift mid-run). Log: `coord/vitis_v2_run.log`.
-- W8c's step (1) (wf_w8_next.js) now waits for this run's "all done" and merges vitis-v2.json into vitis.json instead
-  of starting its own runner. The W8a steps in wf_w8_next.js keep their original context text verbatim. Checked with a
-  stub-agent run (`stubrun.js`): the first three calls are identical to the running script, so the swap reuses W8a's
-  cached results.
-- Watcher fix: a failing wsl.exe prints its error in UTF-16, which the watcher had read as flag names; it now ignores a
-  non-zero exit or NUL bytes.
+- (clean)
