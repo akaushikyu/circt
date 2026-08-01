@@ -3,6 +3,7 @@
 #include "circt/Dialect/Resource/Passes/BRAMAnalysis.h"
 #include "circt/Dialect/LoopSchedule/LoopScheduleOps.h"
 #include "circt/Dialect/Resource/Interfaces/MemoryInterface.h"
+#include "circt/Dialect/Resource/Passes/CallInstances.h"
 #include "circt/Dialect/Resource/Passes/LoopPragmas.h"
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
@@ -148,6 +149,9 @@ struct AccessRecord {
   unsigned forwardedLoads = 0;
   unsigned removedStores = 0;
   Operation *scope = nullptr;
+
+  std::string inFunc;
+  std::optional<std::string> viaCall;
 };
 
 struct ScopeDemandRecord {
@@ -252,6 +256,27 @@ struct MemrefRecord {
   BankMathRecord bankMath;
   unsigned bram = 0;
   bool infeasible = false;
+
+  unsigned instances = 1;
+  unsigned bramPerInstance = 0;
+  std::optional<std::string> ownerFunc;
+};
+
+struct InstanceRecord {
+  std::string func;
+  unsigned instances = 1;
+  bool inlineOff = false;
+  struct Parent {
+    std::string parent;
+    unsigned parentInstances = 1;
+    unsigned callSites = 0;
+    unsigned instances = 0;
+    std::optional<int64_t> limit;
+    std::string rule;
+
+    SmallVector<std::pair<std::string, unsigned>> sites;
+  };
+  SmallVector<Parent> parents;
 };
 
 class SeqScopeIndex {
@@ -940,33 +965,67 @@ Operation *sequentialScope(Operation *op) {
   return nullptr;
 }
 
+static void
+collectAccessesFrom(Value mem, Operation *via,
+                    DenseSet<std::pair<Operation *, unsigned>> &visitedArgs,
+                    DenseSet<Operation *> &seen,
+                    SmallVectorImpl<AccessSummary> &out) {
+  for (OpOperand &use : mem.getUses()) {
+    Operation *user = use.getOwner();
+    if (auto callSite = dyn_cast<CallOpInterface>(user)) {
+      func::FuncOp callee = resolveDefinedCallee(callSite);
+      if (!callee)
+        continue;
+      std::optional<unsigned> indexValue = callArgIndex(callSite, use);
+      if (!indexValue || *indexValue >= callee.getNumArguments())
+        continue;
+      if (!visitedArgs.insert({callee.getOperation(), *indexValue}).second)
+        continue;
+      collectAccessesFrom(callee.getArgument(*indexValue), via ? via : user,
+                          visitedArgs, seen, out);
+      continue;
+    }
+    if (auto view = dyn_cast<ViewLikeOpInterface>(user))
+      if (view.getViewSource() == mem) {
+        for (Value resultValue : user->getResults())
+          if (isa<BaseMemRefType>(resultValue.getType()))
+            collectAccessesFrom(resultValue, via, visitedArgs, seen, out);
+        continue;
+      }
+    bool isWrite = false;
+    if (!classifyAccess(user, mem, isWrite))
+      continue;
+    if (!seen.insert(user).second)
+      continue;
+
+    AccessSummary arrayValue;
+    arrayValue.op = user;
+    arrayValue.isWrite = isWrite;
+    arrayValue.latency = portOccupancy(isWrite);
+    arrayValue.via = via;
+
+    if (auto pipeline = user->getParentOfType<LoopSchedulePipelineOp>()) {
+      auto stage = user->getParentOfType<LoopSchedulePipelineStageOp>();
+      arrayValue.scope = pipeline.getOperation();
+      arrayValue.ii = static_cast<unsigned>(pipeline.getII());
+      arrayValue.stageStart =
+          stage ? static_cast<unsigned>(stage.getStart()) : 0u;
+    } else {
+
+      arrayValue.scope = sequentialScope(user);
+      arrayValue.ii = 0;
+      arrayValue.stageStart = 0;
+    }
+    out.push_back(arrayValue);
+  }
+}
+
 SmallVector<AccessSummary> collectAccessSummaries(ArrayRef<Value> banks) {
   SmallVector<AccessSummary> out;
+  DenseSet<std::pair<Operation *, unsigned>> visitedArgs;
+  DenseSet<Operation *> seen;
   for (Value mem : banks)
-    for (Operation *user : mem.getUsers()) {
-      bool isWrite = false;
-      if (!classifyAccess(user, mem, isWrite))
-        continue;
-
-      AccessSummary arrayValue;
-      arrayValue.op = user;
-      arrayValue.isWrite = isWrite;
-      arrayValue.latency = portOccupancy(isWrite);
-
-      if (auto pipeline = user->getParentOfType<LoopSchedulePipelineOp>()) {
-        auto stage = user->getParentOfType<LoopSchedulePipelineStageOp>();
-        arrayValue.scope = pipeline.getOperation();
-        arrayValue.ii = static_cast<unsigned>(pipeline.getII());
-        arrayValue.stageStart =
-            stage ? static_cast<unsigned>(stage.getStart()) : 0u;
-      } else {
-
-        arrayValue.scope = sequentialScope(user);
-        arrayValue.ii = 0;
-        arrayValue.stageStart = 0;
-      }
-      out.push_back(arrayValue);
-    }
+    collectAccessesFrom(mem, nullptr, visitedArgs, seen, out);
   return out;
 }
 
@@ -1147,6 +1206,15 @@ static void recordAccesses(ArrayRef<AccessSummary> accesses,
     ar.mergedLoads = counterAttr(arrayValue.op, "hls.merged_loads");
     ar.forwardedLoads = counterAttr(arrayValue.op, "hls.forwarded_loads");
     ar.removedStores = counterAttr(arrayValue.op, "hls.removed_stores");
+    if (auto function = arrayValue.op->getParentOfType<func::FuncOp>())
+      ar.inFunc = function.getName().str();
+    if (arrayValue.via) {
+      std::string valueHandle = "call";
+      if (auto callSite = dyn_cast<CallOpInterface>(arrayValue.via))
+        if (auto callee = resolveDefinedCallee(callSite))
+          valueHandle += " @" + callee.getName().str();
+      ar.viaCall = valueHandle + " @ " + locString(arrayValue.via->getLoc());
+    }
     resultValue.accesses.push_back(std::move(ar));
     if (!llvm::is_contained(scopeOrder, arrayValue.scope))
       scopeOrder.push_back(arrayValue.scope);
@@ -1735,7 +1803,8 @@ static void printFoldSummary(const FoldSummary &fieldValue,
 }
 
 static void printDebugText(ArrayRef<MemrefRecord> records,
-                           ArrayRef<PipelineRecord> pipelines, int64_t total,
+                           ArrayRef<PipelineRecord> pipelines,
+                           ArrayRef<InstanceRecord> instances, int64_t total,
                            const FoldSummary &fold, BramFormula formula,
                            const TopScope &scope, llvm::raw_ostream &os) {
   os << "=== bram-debug: how each BRAM number was derived ===\n";
@@ -1834,6 +1903,9 @@ static void printDebugText(ArrayRef<MemrefRecord> records,
            << arrayValue.scopeKind << " @ " << arrayValue.scopeLoc;
         if (arrayValue.scopeKind == "pipeline")
           os << " ii=" << arrayValue.ii << " stage=" << arrayValue.stageStart;
+        if (arrayValue.viaCall)
+          os << " (in @" << arrayValue.inFunc << " via " << *arrayValue.viaCall
+             << ")";
         if (arrayValue.storeEnable)
           os << " (store_enable: write-only, no read port)";
         if (arrayValue.mergedLoads)
@@ -1907,8 +1979,30 @@ static void printDebugText(ArrayRef<MemrefRecord> records,
          << buildPoint.blocks << " block(s); formula " << buildPoint.formula
          << ": " << buildPoint.band << "\n";
     }
+    if (resultValue.instances != 1)
+      os << "  instances: " << resultValue.instances << " of @"
+         << (resultValue.ownerFunc
+                 ? *resultValue.ownerFunc
+                 : (resultValue.func ? *resultValue.func : "?"))
+         << " (N14: charged once per instance; " << resultValue.bramPerInstance
+         << " per instance)\n";
     os << "  bram: " << resultValue.bram
        << (resultValue.infeasible ? "  [INFEASIBLE]" : "") << "\n";
+  }
+  if (!instances.empty()) {
+    os << "--- instances (non-inlined callees, VITIS_NOTES.md N14 R2/R3) "
+          "---\n";
+    for (const InstanceRecord &fieldValue : instances) {
+      os << "  @" << fieldValue.func << ": " << fieldValue.instances
+         << " instance(s)" << (fieldValue.inlineOff ? " (inline off)" : "")
+         << "\n";
+      for (const InstanceRecord::Parent &portValue : fieldValue.parents) {
+        os << "    in @" << portValue.parent << " (x"
+           << portValue.parentInstances << "): " << portValue.rule << "\n";
+        for (const auto &[loc, inst] : portValue.sites)
+          os << "      call @ " << loc << " -> instance " << inst << "\n";
+      }
+    }
   }
   os << "--- pipelines (decisions of --auto-pipeline-unroll) ---\n";
   for (const PipelineRecord &portValue : pipelines) {
@@ -2032,6 +2126,11 @@ static llvm::json::Object toJson(const MemrefRecord &resultValue) {
     ao["merged_loads"] = static_cast<int64_t>(arrayValue.mergedLoads);
     ao["forwarded_loads"] = static_cast<int64_t>(arrayValue.forwardedLoads);
     ao["removed_stores"] = static_cast<int64_t>(arrayValue.removedStores);
+
+    ao["in_func"] = arrayValue.inFunc.empty()
+                        ? llvm::json::Value(nullptr)
+                        : llvm::json::Value(arrayValue.inFunc);
+    ao["via_call"] = optStr(arrayValue.viaCall);
     accesses.push_back(std::move(ao));
   }
   opHandle["accesses"] = std::move(accesses);
@@ -2106,11 +2205,17 @@ static llvm::json::Object toJson(const MemrefRecord &resultValue) {
     opHandle["bank_math"] = nullptr;
   }
   opHandle["bram"] = static_cast<int64_t>(resultValue.bram);
+
+  opHandle["instances"] = static_cast<int64_t>(resultValue.instances);
+  opHandle["bram_per_instance"] =
+      static_cast<int64_t>(resultValue.bramPerInstance);
+  opHandle["owner_func"] = optStr(resultValue.ownerFunc);
   return opHandle;
 }
 
 static std::error_code writeDebugJson(ArrayRef<MemrefRecord> records,
                                       ArrayRef<PipelineRecord> pipelineRecords,
+                                      ArrayRef<InstanceRecord> instanceRecords,
                                       int64_t total, const FoldSummary &fold,
                                       BramFormula formula,
                                       const TopScope &scope, StringRef path) {
@@ -2173,6 +2278,33 @@ static std::error_code writeDebugJson(ArrayRef<MemrefRecord> records,
     pipelines.push_back(std::move(po));
   }
   root["pipelines"] = std::move(pipelines);
+
+  llvm::json::Array instances;
+  for (const InstanceRecord &fieldValue : instanceRecords) {
+    llvm::json::Object fo;
+    fo["func"] = fieldValue.func;
+    fo["instances"] = static_cast<int64_t>(fieldValue.instances);
+    fo["inline_off"] = fieldValue.inlineOff;
+    llvm::json::Array parents;
+    for (const InstanceRecord::Parent &portValue : fieldValue.parents) {
+      llvm::json::Object po;
+      po["parent"] = portValue.parent;
+      po["parent_instances"] = static_cast<int64_t>(portValue.parentInstances);
+      po["call_sites"] = static_cast<int64_t>(portValue.callSites);
+      po["instances"] = static_cast<int64_t>(portValue.instances);
+      po["allocation_limit"] = optInt(portValue.limit);
+      po["rule"] = portValue.rule;
+      llvm::json::Array sites;
+      for (const auto &[loc, inst] : portValue.sites)
+        sites.push_back(llvm::json::Object{
+            {"loc", loc}, {"instance", static_cast<int64_t>(inst)}});
+      po["sites"] = std::move(sites);
+      parents.push_back(std::move(po));
+    }
+    fo["parents"] = std::move(parents);
+    instances.push_back(std::move(fo));
+  }
+  root["instances"] = std::move(instances);
 
   llvm::json::Array summary;
   for (const MemrefRecord *resultValue : sortedByBram(records)) {
@@ -2480,6 +2612,42 @@ static SmallVector<StringRef> publicFuncsWithMemrefs(ModuleOp rootModule) {
   return out;
 }
 
+static SmallVector<InstanceRecord>
+collectInstanceRecords(const InstanceModel &model) {
+  SmallVector<InstanceRecord> out;
+  for (auto &[calleeOp, parents] : model.parents) {
+    auto callee = cast<func::FuncOp>(calleeOp);
+    InstanceRecord resultValue;
+    resultValue.func = callee.getName().str();
+    resultValue.instances = model.instancesOf(callee);
+    resultValue.inlineOff = callee->hasAttr(kInlineOffAttr);
+    for (const ParentInstances &pi : parents) {
+      InstanceRecord::Parent portValue;
+      func::FuncOp parentFn = pi.parent;
+      portValue.parent = parentFn.getName().str();
+      portValue.parentInstances = model.instancesOf(parentFn);
+      portValue.callSites = pi.callSites;
+      portValue.instances = pi.instances;
+      portValue.limit = pi.limit;
+      portValue.rule = pi.rule;
+      for (const auto &[site, group] : pi.siteGroups)
+        portValue.sites.push_back({locString(site->getLoc()), group});
+      resultValue.parents.push_back(std::move(portValue));
+    }
+    llvm::sort(resultValue.parents,
+               [](const InstanceRecord::Parent &arrayValue,
+                  const InstanceRecord::Parent &buildPoint) {
+                 return arrayValue.parent < buildPoint.parent;
+               });
+    out.push_back(std::move(resultValue));
+  }
+  llvm::sort(out, [](const InstanceRecord &arrayValue,
+                     const InstanceRecord &buildPoint) {
+    return arrayValue.func < buildPoint.func;
+  });
+  return out;
+}
+
 struct BRAMAnalysisLoopSchedule
     : PassWrapper<BRAMAnalysisLoopSchedule, OperationPass<ModuleOp>> {
 
@@ -2553,6 +2721,21 @@ struct BRAMAnalysisLoopSchedule
         if (scope.covers(globalUse))
           globalSites[globalUse.getName()].push_back(globalUse.getResult());
       });
+
+    InstanceModel instanceModel =
+        computeInstances(rootModule, [&](func::FuncOp function) {
+          return !scope.active() ||
+                 scope.funcs.contains(function.getOperation());
+        });
+    llvm::StringMap<SmallVector<func::FuncOp>> globalUsers;
+    rootModule.walk([&](memref::GetGlobalOp globalUse) {
+      auto function = globalUse->getParentOfType<func::FuncOp>();
+      if (!function || !scope.covers(globalUse))
+        return;
+      auto &users = globalUsers[globalUse.getName()];
+      if (!llvm::is_contained(users, function))
+        users.push_back(function);
+    });
     rootModule.walk([&](Operation *op) {
       auto iface = dyn_cast<MemoryResourceOpInterface>(op);
       if (!iface)
@@ -2579,6 +2762,29 @@ struct BRAMAnalysisLoopSchedule
       describeMemref(op, index++, rec);
       BRAMCost cost =
           estimateBRAM(iface, rec, banks, attributed, seq, formulaOpt);
+
+      unsigned instances = 1;
+      if (auto globalOp = dyn_cast<memref::GlobalOp>(op)) {
+        auto it = globalUsers.find(globalOp.getSymName());
+        if (it != globalUsers.end()) {
+          instances = instanceModel.ownerInstances(it->second);
+          if (func::FuncOp owner = instanceModel.owner(it->second))
+            rec.ownerFunc = owner.getName().str();
+        }
+      } else {
+        instances = instanceModel.instancesAt(op);
+      }
+      rec.instances = instances;
+      rec.bramPerInstance = cost.bramCount;
+      if (instances != 1) {
+        cost.bramCount *= instances;
+        cost.note +=
+            " x " + std::to_string(instances) + " instance(s) of @" +
+            (rec.ownerFunc ? *rec.ownerFunc : (rec.func ? *rec.func : "?")) +
+            " = " + std::to_string(cost.bramCount) +
+            " (non-inlined callee, N14)";
+        rec.bram = cost.bramCount;
+      }
       llvm::outs() << op->getName() << " @ " << op->getLoc() << "\n"
                    << "  kind=" << kindName(cost.kind)
                    << "  bram=" << cost.bramCount
@@ -2642,16 +2848,19 @@ struct BRAMAnalysisLoopSchedule
     SmallVector<PipelineRecord> pipelines;
     if (bramDebugOpt || !bramDebugJsonOpt.empty())
       pipelines = collectPipelineRecords(getOperation(), scope);
+    SmallVector<InstanceRecord> instanceRecords;
+    if (bramDebugOpt || !bramDebugJsonOpt.empty())
+      instanceRecords = collectInstanceRecords(instanceModel);
     FoldSummary fold;
     if (bramDebugOpt || !bramDebugJsonOpt.empty())
       fold = collectFoldSummary(rootModule, scope);
     if (bramDebugOpt)
-      printDebugText(records, pipelines, total, fold, formulaOpt, scope,
-                     llvm::errs());
+      printDebugText(records, pipelines, instanceRecords, total, fold,
+                     formulaOpt, scope, llvm::errs());
     if (!bramDebugJsonOpt.empty())
       if (std::error_code ec =
-              writeDebugJson(records, pipelines, total, fold, formulaOpt, scope,
-                             bramDebugJsonOpt)) {
+              writeDebugJson(records, pipelines, instanceRecords, total, fold,
+                             formulaOpt, scope, bramDebugJsonOpt)) {
 
         mlir::emitError(getOperation().getLoc(),
                         "bram-debug-json: cannot write '")

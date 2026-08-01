@@ -7,6 +7,7 @@
 #include "circt/Dialect/LoopSchedule/LoopScheduleOps.h"
 #include "circt/Dialect/Resource/HLS/HLSDialect.h"
 #include "circt/Dialect/Resource/HLS/HLSOps.h"
+#include "circt/Dialect/Resource/Passes/CallInstances.h"
 #include "circt/Dialect/Resource/Passes/CyclicSchedulingAnalysisModified.h"
 #include "circt/Dialect/Resource/Passes/LoopPragmas.h"
 #include "circt/Dialect/Resource/Passes/MemrefBankClassification.h"
@@ -49,6 +50,7 @@
 
 #define DEBUG_TYPE "affine-to-loopschedule"
 
+#include "llvm/ADT/MapVector.h"
 #include "llvm/Support/CommandLine.h"
 
 static llvm::cl::opt<int> loopScheduleCallLatency(
@@ -57,6 +59,13 @@ static llvm::cl::opt<int> loopScheduleCallLatency(
                    "func.call without memref operands inside a loop body "
                    "(-1: leave that loop sequential)"),
     llvm::cl::init(-1));
+
+static llvm::cl::opt<int> loopScheduleKeptCallLatency(
+    "loopschedule-kept-call-latency",
+    llvm::cl::desc("--convert-affine-to-loopschedule: operator latency for a "
+                   "func.call to a function defined in the module inside a "
+                   "loop body (-1: leave that loop sequential)"),
+    llvm::cl::init(1));
 
 namespace circt {
 
@@ -755,6 +764,54 @@ static void anchorUntrackedSideEffects(AffineForOp forOp,
   }
 }
 
+static void chainSharedCalleeInstances(AffineForOp forOp,
+                                       ModuloProblem &problem) {
+  auto parent = forOp->getParentOfType<func::FuncOp>();
+  if (!parent)
+    return;
+  llvm::MapVector<Operation *, SmallVector<Operation *>> byCallee;
+  forOp.getBody()->walk([&](CallOpInterface callSite) {
+    if (!problem.hasOperation(callSite.getOperation()))
+      return;
+    if (func::FuncOp callee = resolveDefinedCallee(callSite))
+      byCallee[callee.getOperation()].push_back(callSite.getOperation());
+  });
+
+  auto boundBySelf = [&](Operation *callSite) {
+    auto occ = callSite->getAttrOfType<IntegerAttr>(
+        circt::hls_analysis::kCallOccupancyAttr);
+    if (!occ || occ.getInt() <= 1)
+      return;
+    Problem::Dependence self(callSite, callSite);
+    if (succeeded(problem.insertDependence(self)))
+      problem.setDistance(self, 1);
+  };
+  for (auto &[calleeOp, sites] : byCallee) {
+    if (sites.size() < 2) {
+      boundBySelf(sites.front());
+      continue;
+    }
+    auto callee = cast<func::FuncOp>(calleeOp);
+    SmallVector<unsigned> group;
+    groupConcurrentCalls(parent, sites, allocationLimit(parent, callee), group);
+    llvm::MapVector<unsigned, SmallVector<Operation *>> chains;
+    for (unsigned loopIndex = 0; loopIndex < sites.size(); ++loopIndex)
+      chains[group[loopIndex]].push_back(sites[loopIndex]);
+    for (auto &[globalOp, chain] : chains) {
+      if (chain.size() < 2) {
+        boundBySelf(chain.front());
+        continue;
+      }
+      for (unsigned keyValue = 1; keyValue < chain.size(); ++keyValue)
+        (void)problem.insertDependence(
+            Problem::Dependence(chain[keyValue - 1], chain[keyValue]));
+      Problem::Dependence back(chain.back(), chain.front());
+      if (succeeded(problem.insertDependence(back)))
+        problem.setDistance(back, 1);
+    }
+  }
+}
+
 static void anchorRegionCaptures(AffineForOp forOp, ModuloProblem &problem) {
   Block *body = forOp.getBody();
   for (Operation &regionOp : body->without_terminator()) {
@@ -1160,6 +1217,8 @@ void AffineToLoopSchedule::runOnOperation() {
 
   SmallVector<AffineForOp> innermostLoops;
   getOperation().walk([&](AffineForOp forOp) {
+    if (forOp->hasAttr(circt::hls_analysis::kLoopCallBoundaryAttr))
+      return;
     if (isInnermostAffineFor(forOp))
       innermostLoops.push_back(forOp);
   });
@@ -1173,6 +1232,7 @@ void AffineToLoopSchedule::runOnOperation() {
       continue;
 
     anchorRegionCaptures(loop, moduloProblem);
+    chainSharedCalleeInstances(loop, moduloProblem);
     anchorUntrackedSideEffects(loop, moduloProblem);
 
     if (failed(solveSchedulingProblem(loop, moduloProblem)))
@@ -1566,17 +1626,35 @@ LogicalResult AffineToLoopSchedule::populateOperatorTypes(
           return WalkResult::advance();
         })
         .Default([&](Operation *badOp) {
-          if (loopScheduleCallLatency >= 0 && isa<CallOpInterface>(badOp) &&
-              llvm::none_of(badOp->getOperandTypes(),
-                            llvm::IsaPred<BaseMemRefType>) &&
-              llvm::none_of(badOp->getResultTypes(),
-                            llvm::IsaPred<BaseMemRefType>)) {
-            Problem::OperatorType callOpr =
-                problem.getOrInsertOperatorType("call");
-            problem.setLatency(callOpr,
-                               static_cast<unsigned>(loopScheduleCallLatency));
-            problem.setLinkedOperatorType(badOp, callOpr);
-            return WalkResult::advance();
+          if (auto callSite = dyn_cast<CallOpInterface>(badOp)) {
+
+            if (loopScheduleKeptCallLatency >= 0 &&
+                resolveDefinedCallee(callSite)) {
+
+              unsigned latency =
+                  static_cast<unsigned>(loopScheduleKeptCallLatency);
+              if (auto occ = badOp->getAttrOfType<IntegerAttr>(
+                      circt::hls_analysis::kCallOccupancyAttr))
+                latency =
+                    static_cast<unsigned>(std::max<int64_t>(1, occ.getInt()));
+              Problem::OperatorType callOpr = problem.getOrInsertOperatorType(
+                  "call_kept_" + std::to_string(latency));
+              problem.setLatency(callOpr, latency);
+              problem.setLinkedOperatorType(badOp, callOpr);
+              return WalkResult::advance();
+            }
+            if (loopScheduleCallLatency >= 0 &&
+                llvm::none_of(badOp->getOperandTypes(),
+                              llvm::IsaPred<BaseMemRefType>) &&
+                llvm::none_of(badOp->getResultTypes(),
+                              llvm::IsaPred<BaseMemRefType>)) {
+              Problem::OperatorType callOpr =
+                  problem.getOrInsertOperatorType("call");
+              problem.setLatency(
+                  callOpr, static_cast<unsigned>(loopScheduleCallLatency));
+              problem.setLinkedOperatorType(badOp, callOpr);
+              return WalkResult::advance();
+            }
           }
           unsupported = op;
           return WalkResult::interrupt();

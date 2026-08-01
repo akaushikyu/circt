@@ -6,9 +6,11 @@
 #include "circt/Dialect/Resource/Passes/AutoPipelineUnroll.h"
 #include "circt/Dialect/Resource/Passes/BRAMAnalysis.h"
 #include "circt/Dialect/Resource/Passes/DebugUnroll.h"
+#include "circt/Dialect/Resource/Passes/HlsInliner.h"
 #include "circt/Dialect/Resource/Passes/InferVitisSplitArray.h"
 #include "circt/Dialect/Resource/Passes/MemoryBankModified.h"
 #include "circt/Dialect/Resource/Passes/MergeConditionalStores.h"
+#include "circt/Dialect/Resource/Passes/PolygeistCompat.h"
 #include "circt/Dialect/Resource/Passes/VitisCleanup.h"
 #include "mlir/IR/DialectRegistry.h"
 #include "mlir/Tools/mlir-opt/MlirOptMain.h"
@@ -18,7 +20,6 @@
 #include "mlir/Dialect/Affine/Transforms/Passes.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlow.h"
-#include "mlir/Dialect/Func/Extensions/InlinerExtension.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/Index/IR/IndexDialect.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
@@ -47,9 +48,11 @@ int main(int argc, char **argv) {
 
       circt::loopschedule::LoopScheduleDialect, circt::hw::HWDialect,
       circt::comb::CombDialect, circt::seq::SeqDialect,
-      circt::calyx::CalyxDialect, circt::hls_analysis::HLSDialect>();
+      circt::calyx::CalyxDialect, circt::hls_analysis::HLSDialect,
 
-  mlir::func::registerInlinerExtension(targetRegistry);
+      circt::hls_analysis::PolygeistCompatDialect>();
+
+  circt::hls_analysis::registerHlsInlinerExtension(targetRegistry);
 
   mlir::LLVM::registerInlinerInterface(targetRegistry);
   circt::hls_analysis::registerBRAMInterfaceExternalModels(targetRegistry);
@@ -61,6 +64,7 @@ int main(int argc, char **argv) {
   circt::hls_analysis::registerDebugUnrollPass();
   circt::hls_analysis::registerInferVitisSplitArray();
   circt::hls_analysis::registerVitisCleanupPasses();
+  circt::hls_analysis::registerLowerSubIndexPass();
 
   mlir::affine::registerAffinePasses();
   mlir::registerCSEPass();

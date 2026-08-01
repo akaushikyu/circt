@@ -61,6 +61,21 @@ constexpr llvm::StringLiteral kLoopAutoUnrolledAttr = "hls.auto_unrolled";
 constexpr llvm::StringLiteral kLoopSchedulerAttr = "hls.scheduler";
 /// Value of the `source` key of an automatic `hls.pipeline` tag.
 constexpr llvm::StringLiteral kLoopPipelineAutoSource = "auto";
+/// `hls.call_boundary = "<callee>"` on a loop (written by
+/// --auto-pipeline-unroll): the loop is not pipelined because it calls a kept
+/// function (`#pragma HLS inline off`) that still has loops of its own; Vitis
+/// pipelines those in the callee and leaves the caller loop sequential
+/// (VITIS_NOTES.md N14 R7, kernel w3h_cb_nest256). --convert-affine-to-
+/// loopschedule leaves such a loop an affine.for instead of pipelining it as
+/// an innermost loop.
+constexpr llvm::StringLiteral kLoopCallBoundaryAttr = "hls.call_boundary";
+/// `hls.call_occupancy = N : i64` on a func.call inside a pipelined loop
+/// (written by --auto-pipeline-unroll): the cycles one call holds its callee
+/// instance, estimated from the callee's memory accesses, at most two per
+/// memory per cycle (VITIS_NOTES.md N14 R7: `inl_f2_unroll_off`, 16 accesses
+/// of each row per call, II 8). --convert-affine-to-loopschedule uses it as
+/// the call's latency and as the II bound of the calls an instance serves.
+constexpr llvm::StringLiteral kCallOccupancyAttr = "hls.call_occupancy";
 /// `hls.uncounted` (unit, from cgeist): a loop whose exit test compares a
 /// counter with a runtime bound of a wider type that the counter is not known
 /// to reach (`for (uint8_t i = 0; i < n; i++)`, int n), raised by assuming

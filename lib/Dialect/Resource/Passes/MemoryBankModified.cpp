@@ -156,12 +156,10 @@ constantBankThroughInductionVars(AffineMap accessMap, ArrayRef<Value> operands,
     AffineExpr dimensionIndex = getAffineDimExpr(loopIndex, context);
     Value valueHandle = operands[loopIndex];
     if (affine::isAffineForInductionVar(valueHandle)) {
-      affine::AffineForOp owningFunction =
-          affine::getForInductionVarOwner(valueHandle);
-      if (owningFunction.hasConstantLowerBound() &&
-          owningFunction.getStepAsInt() != 1) {
-        dimensionIndex = dimensionIndex * owningFunction.getStepAsInt() +
-                         owningFunction.getConstantLowerBound();
+      affine::AffineForOp owner = affine::getForInductionVarOwner(valueHandle);
+      if (owner.hasConstantLowerBound() && owner.getStepAsInt() != 1) {
+        dimensionIndex = dimensionIndex * owner.getStepAsInt() +
+                         owner.getConstantLowerBound();
         any = true;
       }
     }
@@ -195,6 +193,16 @@ private:
   DenseSet<Value> oldMemRefVals;
 };
 } // namespace
+
+static Operation *unbankableUser(Value mem) {
+  for (Operation *user : mem.getUsers()) {
+    if (isa<affine::AffineLoadOp, affine::AffineStoreOp, memref::LoadOp,
+            memref::StoreOp, func::ReturnOp>(user))
+      continue;
+    return user;
+  }
+  return nullptr;
+}
 
 static DenseSet<Value> collectMemRefs(func::FuncOp funcOp) {
   DenseSet<Value> memrefVals;
@@ -419,13 +427,13 @@ static FileLineColLoc findFileLineColLoc(Location loc) {
   return {};
 }
 
-static std::string unnamedBankOf(Value memory) {
-  if (auto fieldValue = findFileLineColLoc(memory.getLoc()))
+static std::string unnamedBankOf(Value mem) {
+  if (auto fieldValue = findFileLineColLoc(mem.getLoc()))
     return "<unnamed@" + fieldValue.getFilename().str() + ":" +
            std::to_string(fieldValue.getLine()) + ":" +
            std::to_string(fieldValue.getColumn()) + ">";
   unsigned ordinal = 0;
-  if (Operation *def = memory.getDefiningOp())
+  if (Operation *def = mem.getDefiningOp())
     if (auto function = def->getParentOfType<func::FuncOp>())
       function.walk([&](Operation *op) {
         if (op == def)
@@ -588,16 +596,16 @@ struct BankMemRefLoadPattern : OpRewritePattern<memref::LoadOp> {
 
   LogicalResult matchAndRewrite(memref::LoadOp loadOp,
                                 PatternRewriter &rewriter) const override {
-    Value memory = loadOp.getMemRef();
+    Value mem = loadOp.getMemRef();
     auto iface =
-        dyn_cast_or_null<MemoryResourceOpInterface>(memory.getDefiningOp());
+        dyn_cast_or_null<MemoryResourceOpInterface>(mem.getDefiningOp());
     if (!iface)
       return failure();
     auto specOpt = iface.getPartitionSpec();
     if (!specOpt)
       return failure();
     PartitionSpec spec = *specOpt;
-    auto banksIt = memoryToBanks.find(memory);
+    auto banksIt = memoryToBanks.find(mem);
     if (banksIt == memoryToBanks.end())
       return failure();
     ArrayRef<Value> banks = banksIt->second;
@@ -613,8 +621,8 @@ struct BankMemRefLoadPattern : OpRewritePattern<memref::LoadOp> {
     if (ba.constBank) {
       rewriter.replaceOpWithNewOp<memref::LoadOp>(loadOp, banks[*ba.constBank],
                                                   ba.bankedIndices);
-      if (isa<BlockArgument>(memory))
-        oldMemRefVals.insert(memory);
+      if (isa<BlockArgument>(mem))
+        oldMemRefVals.insert(mem);
       return success();
     }
 
@@ -631,8 +639,8 @@ struct BankMemRefLoadPattern : OpRewritePattern<memref::LoadOp> {
       result = arith::SelectOp::create(rewriter, loc, eq, bankVals[keyValue],
                                        result);
     }
-    if (isa<BlockArgument>(memory))
-      oldMemRefVals.insert(memory);
+    if (isa<BlockArgument>(mem))
+      oldMemRefVals.insert(mem);
     rewriter.replaceOp(loadOp, result);
     return success();
   }
@@ -652,9 +660,9 @@ struct BankAffineLoadPattern
 
   LogicalResult matchAndRewrite(mlir::affine::AffineLoadOp loadOp,
                                 PatternRewriter &rewriter) const override {
-    Value memory = loadOp.getMemref();
+    Value mem = loadOp.getMemref();
     auto iface =
-        dyn_cast_or_null<MemoryResourceOpInterface>(memory.getDefiningOp());
+        dyn_cast_or_null<MemoryResourceOpInterface>(mem.getDefiningOp());
     if (!iface)
       return failure();
     auto specOpt = iface.getPartitionSpec();
@@ -662,7 +670,7 @@ struct BankAffineLoadPattern
       return failure();
     PartitionSpec spec = *specOpt;
 
-    auto banksIt = memoryToBanks.find(memory);
+    auto banksIt = memoryToBanks.find(mem);
     if (banksIt == memoryToBanks.end())
       return failure();
     ArrayRef<Value> banks = banksIt->second;
@@ -691,8 +699,8 @@ struct BankAffineLoadPattern
       auto newLoad = rewriter.replaceOpWithNewOp<mlir::affine::AffineLoadOp>(
           loadOp, banks[*ba.constBank], ba.bankedAccessMap, operands);
       (void)newLoad;
-      if (isa<BlockArgument>(memory))
-        oldMemRefVals.insert(memory);
+      if (isa<BlockArgument>(mem))
+        oldMemRefVals.insert(mem);
       return success();
     }
 
@@ -713,8 +721,8 @@ struct BankAffineLoadPattern
                                        result);
     }
 
-    if (isa<BlockArgument>(memory))
-      oldMemRefVals.insert(memory);
+    if (isa<BlockArgument>(mem))
+      oldMemRefVals.insert(mem);
     rewriter.replaceOp(loadOp, result);
     return success();
   }
@@ -738,16 +746,16 @@ struct BankMemRefStorePattern : public OpRewritePattern<memref::StoreOp> {
                                 PatternRewriter &rewriter) const override {
     if (processedOps.contains(storeOp))
       return failure();
-    Value memory = storeOp.getMemRef();
+    Value mem = storeOp.getMemRef();
     auto iface =
-        dyn_cast_or_null<MemoryResourceOpInterface>(memory.getDefiningOp());
+        dyn_cast_or_null<MemoryResourceOpInterface>(mem.getDefiningOp());
     if (!iface)
       return failure();
     auto specOpt = iface.getPartitionSpec();
     if (!specOpt)
       return failure();
     PartitionSpec spec = *specOpt;
-    auto banksIt = memoryToBanks.find(memory);
+    auto banksIt = memoryToBanks.find(mem);
     if (banksIt == memoryToBanks.end())
       return failure();
     ArrayRef<Value> banks = banksIt->second;
@@ -776,7 +784,7 @@ struct BankMemRefStorePattern : public OpRewritePattern<memref::StoreOp> {
     }
     processedOps.insert(storeOp);
     opsToErase.insert(storeOp);
-    oldMemRefVals.insert(memory);
+    oldMemRefVals.insert(mem);
     return success();
   }
 
@@ -803,9 +811,9 @@ struct BankAffineStorePattern
     if (processedOps.contains(storeOp))
       return failure();
 
-    Value memory = storeOp.getMemref();
+    Value mem = storeOp.getMemref();
     auto iface =
-        dyn_cast_or_null<MemoryResourceOpInterface>(memory.getDefiningOp());
+        dyn_cast_or_null<MemoryResourceOpInterface>(mem.getDefiningOp());
     if (!iface)
       return failure();
     auto specOpt = iface.getPartitionSpec();
@@ -814,7 +822,7 @@ struct BankAffineStorePattern
 
     PartitionSpec spec = *specOpt;
 
-    auto banksIt = memoryToBanks.find(memory);
+    auto banksIt = memoryToBanks.find(mem);
     if (banksIt == memoryToBanks.end())
       return failure();
 
@@ -868,7 +876,7 @@ struct BankAffineStorePattern
 
     processedOps.insert(storeOp);
     opsToErase.insert(storeOp);
-    oldMemRefVals.insert(memory);
+    oldMemRefVals.insert(mem);
     return success();
   }
 
@@ -992,6 +1000,16 @@ void MemoryBankingPass::runOnOperation() {
     auto spec = iface.getPartitionSpec();
     if (!spec || (spec->factor == 1 && spec->kind != PartitionSpec::Complete))
       continue;
+
+    if (Operation *user = unbankableUser(memrefVal)) {
+      memrefVal.getDefiningOp()->emitWarning(
+          "array_partition not applied: the array is used by an op the "
+          "banking does not rewrite (")
+          << user->getName()
+          << "); a partition across a call to a "
+             "non-inlined function is not modelled (O33)";
+      continue;
+    }
     auto [it, inserted] =
         memoryToBanks.insert(std::make_pair(memrefVal, SmallVector<Value>{}));
     if (inserted)

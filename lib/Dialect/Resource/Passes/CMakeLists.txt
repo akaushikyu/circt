@@ -11,7 +11,10 @@ add_mlir_library(HLSPasses
         VitisFold.cpp
         PromoteGlobalsToAllocas.cpp
         DeadMemoryElimination.cpp
-        
+        CallInstances.cpp
+        HlsInliner.cpp
+        PolygeistCompat.cpp
+
         DEPENDS
         CIRCTTransformsPassIncGen
         CIRCTConversionPassIncGen
@@ -33,6 +36,8 @@ add_mlir_library(HLSPasses
         MLIRAffineToStandard
         MLIRArithDialect
         MLIRSCFDialect
+        MLIRControlFlowDialect
+        MLIRTransformUtils
         MLIRPass
         CIRCTScheduling
         CIRCTSchedulingAnalysis

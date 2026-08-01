@@ -85,7 +85,12 @@ HLS_EST = os.environ.get("HLS_EST_BIN") or HLS_EST_DEFAULT
 # The m_axi adapter cost that goes with it is a --bram-analysis default (--bram-maxi-adapters,
 # on since W1c). Globals stay globals (no --promote-globals-to-allocas /
 # --bram-attribute-globals before OPEN_ISSUES O10 / O17).
-DME_FRONT = "--inline --canonicalize --sccp --vitis-fold --dead-memory-elimination"
+# --lower-polygeist-subindex (W3, MEMOS decision #11 under #36) comes first: cgeist passes a
+# row argument of a kept `inline off` call (`f(a[k])`) as polygeist.subindex; the pass
+# indexes the whole array instead and gives the callee a clone per argument form
+# (OPEN_ISSUES O25). `--inline` keeps the calls to `hls.inline_off` callees (VITIS_NOTES N14).
+DME_FRONT = ("--lower-polygeist-subindex --inline --canonicalize --sccp --vitis-fold "
+             "--dead-memory-elimination")
 NO_FRONT_PIPELINE = ("--affine-loop-normalize --auto-pipeline-unroll "
                      "--memory-banking-bram --convert-affine-to-loopschedule --bram-analysis")
 DEFAULT_PIPELINE = DME_FRONT + " " + NO_FRONT_PIPELINE

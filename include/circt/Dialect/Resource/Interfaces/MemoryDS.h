@@ -70,6 +70,10 @@ namespace circt::hls_analysis {
       // II of `scope` when it is a pipeline; 0 means sequential scope
       // (no cross-iteration overlap -> at most one access per cycle).
       unsigned ii = 0;
+      // The call through which the access was reached when it lies in a
+      // callee that received the memref as an argument (the outermost call
+      // in the owner's function); null for a direct access.
+      mlir::Operation *via = nullptr;
     };
 
     struct BRAMCost {

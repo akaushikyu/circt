@@ -16,6 +16,7 @@
 #include "mlir/Interfaces/ViewLikeInterface.h"
 #include "mlir/Pass/Pass.h"
 
+#include "llvm/ADT/BitVector.h"
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/SetVector.h"
 #include "llvm/Support/Path.h"
@@ -369,6 +370,59 @@ static Operation *findKiller(Operation *store, const ObjectTable &table,
       return nullptr;
     anchor = parent;
   }
+}
+
+/// W3 (VITIS_NOTES.md N17 (a), kernel fbh3_l_callee_rd_dead): a memref
+/// parameter of a kept callee (`#pragma HLS inline off`; a private function
+/// every use of which is a func.call) that has no use left - its loads went
+/// with the dead values they fed - is removed from the callee and its operand
+/// from every call, so that the call no longer keeps the caller's array alive.
+/// Vitis has no memory row for a local array read only inside a non-inlined
+/// callee whose result is dead (fbh3_l_callee_rd_dead; tiled_attn_module
+/// `split_wq` / `split_wk`, read by `grouped_multihead_attention_...` only
+/// into the dead Q / K). A parameter the callee still reads or writes stays.
+/// Returns the number of parameters removed.
+static unsigned dropUnusedMemrefParams(ModuleOp rootModule, bool remarks) {
+  unsigned dropped = 0;
+  for (auto function : rootModule.getOps<func::FuncOp>()) {
+    if (function.isExternal() || !function.isPrivate())
+      continue;
+    llvm::BitVector unused(function.getNumArguments());
+    for (BlockArgument arg : function.getArguments())
+      if (isa<BaseMemRefType>(arg.getType()) && arg.use_empty())
+        unused.set(arg.getArgNumber());
+    if (unused.none())
+      continue;
+    std::optional<SymbolTable::UseRange> symbolUses =
+        SymbolTable::getSymbolUses(function, rootModule);
+    if (!symbolUses)
+      continue;
+    SmallVector<func::CallOp> calls;
+    bool onlyCalls = true;
+    for (const SymbolTable::SymbolUse &use : *symbolUses) {
+      auto callSite = dyn_cast<func::CallOp>(use.getUser());
+      if (!callSite ||
+          callSite.getNumOperands() != function.getNumArguments()) {
+        onlyCalls = false;
+        break;
+      }
+      calls.push_back(callSite);
+    }
+    if (!onlyCalls)
+      continue;
+    for (func::CallOp callSite : calls)
+      callSite->eraseOperands(unused);
+    if (remarks)
+      for (unsigned loopIndex : unused.set_bits())
+        function.emitRemark()
+            << "dead-memory: memref parameter #" << loopIndex
+            << " is not accessed; removed with its operand in " << calls.size()
+            << " call(s)";
+    if (failed(function.eraseArguments(unused)))
+      continue;
+    dropped += unused.count();
+  }
+  return dropped;
 }
 
 static unsigned killOverwrittenStores(ModuleOp rootModule, bool remarks,
@@ -964,6 +1018,7 @@ void DeadMemoryEliminationPass::runOnOperation() {
     bool changed = false;
     if (overwrittenStores)
       changed |= killOverwrittenStores(rootModule, remarks, notes) > 0;
+    changed |= dropUnusedMemrefParams(rootModule, remarks) > 0;
     changed |= eliminateOnce(rootModule, records);
     if (!changed)
       break;

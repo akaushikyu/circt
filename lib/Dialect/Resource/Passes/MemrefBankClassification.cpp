@@ -2,7 +2,9 @@
 
 #include "circt/Dialect/Resource/Passes/MemrefBankClassification.h"
 #include "circt/Dialect/Resource/HLS/HLSOps.h"
+#include "circt/Dialect/Resource/Passes/CallInstances.h"
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/Interfaces/LoopLikeInterface.h"
@@ -103,6 +105,24 @@ BRAMClassification::BRAMClassification(Operation *op) {
 }
 
 void BRAMClassification::enumerateBanks(Operation *root) {
+
+  if (auto function = dyn_cast<func::FuncOp>(root)) {
+    bool isCallee = function.isPrivate() || function->hasAttr(kInlineOffAttr);
+    if (isCallee)
+      for (BlockArgument arg : function.getArguments()) {
+        auto memTy = dyn_cast<MemRefType>(arg.getType());
+        if (!memTy || !memTy.hasStaticShape())
+          continue;
+        Type elt = memTy.getElementType();
+        if (!elt.isIntOrFloat() && !isa<IndexType>(elt))
+          continue;
+        BankProfile prof;
+        prof.memref = arg;
+        prof.width = elt.isIntOrFloat() ? elt.getIntOrFloatBitWidth() : 64u;
+        prof.depth = static_cast<unsigned>(memTy.getNumElements());
+        banks.try_emplace(arg, prof);
+      }
+  }
   root->walk([&](memref::AllocaOp localAlloca) {
     Value bank = localAlloca.getResult();
     auto memTy = dyn_cast<MemRefType>(bank.getType());

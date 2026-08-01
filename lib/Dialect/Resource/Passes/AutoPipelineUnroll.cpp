@@ -1,118 +1,9 @@
-//===- AutoPipelineUnroll.cpp - Vitis automatic pipeline/unroll/flatten ---===//
-//
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
+
+
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
-//
-//===----------------------------------------------------------------------===//
-//
-// Reproduces the automatic pipeline / unroll / flatten decision of Vitis HLS
-// (`config_compile -pipeline_loops`, default 64). Evidence: VITIS_NOTES.md
-// N3, exp-notes/pipeline_unroll.md and pipeline_unroll_chk.md (64 kernels).
-//
-// Per function:
-//
-//  0. User `hls.unroll` pragmas are applied first (complete, or by factor),
-//     as Vitis does before its automatic decision. A loop that keeps a
-//     partial user unroll (factor below the trip count, 1 included) is never
-//     unrolled completely for an enclosing automatic pipeline: it blocks the
-//     auto-pipelining of every loop around it and is pipelined itself (Vitis
-//     ground truth of spector_hls/fir, forgebench/mult_op_p1, diff_dims_p1,
-//     diff_orders_p1: the partially unrolled loops - and their user-made
-//     copies - are the pipelined ones, their parents are not). Vitis keeps
-//     the remainder iterations of a trip count the factor does not divide in
-//     the unrolled body (exit checks), it has no epilogue loop: the cleanup
-//     loop MLIR generates is unrolled completely into straight-line code
-//     after the loop, and only the main loop carries `hls.unroll_partial`
-//     (none does when the main loop is left with a single iteration and
-//     MLIR replaces it by its body).
-//
-//  1. Perfect-nest collapse. A loop whose body holds exactly one nested loop
-//     and no memory operation outside it (register-only code is allowed)
-//     forms a perfect nest with that loop; chains collapse into ONE loop for
-//     the decision, with the product of the trip counts. Perfectness is
-//     judged as Vitis sees it after LLVM LICM and scalar promotion: a load
-//     whose address does not change with the inner loop, from a memory the
-//     inner loop never writes, is hoisted into the outer body, and the
-//     accesses of a memory touched at one inner-invariant address only
-//     (`acc[i] += ...`) are promoted to a register with the load before and
-//     the store after the inner loop. Both make the nest imperfect; pure
-//     arithmetic never does. The hoist rule is confirmed for integer
-//     elements only: Vitis flattens the same nest when the invariant load
-//     reads a floating-point element (see "Perfectness and floating point"
-//     below; option float-loads-perfect, default on). Promotion makes the
-//     nest imperfect whatever the element type. A loop marked
-//     `hls.uncounted` (cgeist: a counter narrower than its runtime bound,
-//     `for (uint8_t i = 0; i < n; i++)` with int n) is never the outer loop
-//     of a collapsed pair: Vitis, which cannot compute its trip count, treats
-//     it like the outer loop of an imperfect nest (VITIS_NOTES.md N15: the
-//     loop is pipelined and a <= 64-trip perfect inner loop unrolled into it,
-//     where an `int` counter gets the inner loop pipelined and flattened).
-//     When its perfect inner loop is pipelined instead, it is flattened into
-//     it in step 3 despite its runtime bound, as the collapse would have
-//     done (N15: nc_f_u8 like nc_f_int).
-//
-//  2. Top-down decision. A (collapsed) loop P is pipelined iff every loop
-//     nested anywhere inside it - loops of called functions included - has a
-//     constant trip count and the product of the trip counts along every
-//     nesting path inside P is <= T. Every loop inside P is then completely
-//     unrolled (all levels, callee loops included), after the invariant loads
-//     have been hoisted and the register-promotable accesses promoted out of
-//     the loops being unrolled - and, once they are unrolled, out of the
-//     pipelined loop itself (option promote-pipelined, default on) - so the
-//     pipelined body carries the accesses Vitis schedules (one `acc[i]` load
-//     and store, not 64 of each; `acc[0..7] +=` of an unrolled body becomes
-//     eight register recurrences and the loop reads nothing of acc). A loop
-//     containing no loop is pipelined as it is, whatever its trip count. If P
-//     fails, each child loop is decided on its own.
-//
-//  3. Flattening. A loop Q that was not pipelined, has exactly one child
-//     loop C (directly in its body, no call boundary), constant bounds, and
-//     whose C (constant trip counts) ends up pipelined, is converted and
-//     flattened by Vitis into C's pipeline. C is tagged with
-//     `hls.flattened_parents = N` (counting Q and, recursively, Q's parents
-//     and the perfect-chain members above C) so that later passes treat the
-//     induction variables of those N ancestors as loop-variant for C's
-//     pipeline: --convert-affine-to-loopschedule does not hoist such loads
-//     and --infer-vitis-split-array / --bram-analysis count them.
-//
-// Tags: the pipelined loop gets `hls.pipeline = [{II = 0 : i32, source =
-// "auto"}]` and, when it unrolled loops, `hls.auto_unrolled = [{factor, loc},
-// ...]` (a record for --bram-debug). A user `hls.pipeline` is kept as written
-// and always wins (the loop is pipelined whatever T, everything inside it is
-// unrolled); a user `hls.pipeline_off` loop is never auto-pipelined.
-// `pipeline-loops=0` disables the automatic decision; user pragmas are still
-// applied.
-//
-// Perfectness and floating point (VITIS_NOTES.md N3, exp-src/
-// pipeline_unroll_float): a load at an inner-invariant address makes the nest
-// imperfect only when the loaded element is an integer. The same nest
-// reading a float element (`lo[i][j] = la[i][j] * lb[i]`, float `lb`) is
-// converted into a perfect nest and flattened by Vitis
-// (rv_st_hoist_f_m64_n64, rv_rmw_hoist_f_m8_n64 / _m64_n64, pf_fmul_m8_n64,
-// pf_fadd_m8_n64, pf_fmac_m8_n32, pf_srchoist_m8_n64 - the load written in
-// the outer body in the source -, pm_floatarr_iop_m8_n64 - float arrays,
-// integer arithmetic; polybench atax lp3/lp4, bicg lp1/lp2), while every
-// integer twin is unrolled (rv_st_hoist_m64_n64, rv_rmw_hoist_m8_n64,
-// pi_add_m8_n64, pi_mul3_m8_n64, pl_mul_m8_n64, pi_srchoist_m8_n64,
-// pm_intarr_fop_m8_n64 - int arrays, float arithmetic), and so is a body
-// with one float and one int invariant load (pf_twoload_m8_n64). It is the
-// type of the load, not of the arithmetic. Register promotion of an
-// accumulator makes the nest imperfect for float elements too
-// (pf_memred_m8_n16; atax lp1/lp2, bicg lp3/lp4, gesummv, mvt). Vitis'
-// mechanism is not visible in the IR dumps (the decision precedes a.o.1.ll,
-// where the float load is hoisted all the same). Option float-loads-perfect
-// applies this rule; it is on by default (MEMOS.md M8, decision #3 of
-// 2026-10-10, together with the exactclass harness shim); =false gives the
-// original T3 model, where every hoistable invariant load breaks
-// perfectness. The rule keys on the MLIR element type, so it is right where
-// that is the type Vitis sees: with the exactclass shim an ap_fixed is an
-// integer, as in Vitis; the scalar shim (ap_fixed = float/double) and the
-// exact shim (W <= 16: _Float16) make ap_fixed loads float, against N3.
-//
-//===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/Resource/Passes/AutoPipelineUnroll.h"
+#include "circt/Dialect/Resource/Passes/CallInstances.h"
 #include "circt/Dialect/Resource/Passes/LoopPragmas.h"
 #include "mlir/Dialect/Affine/Analysis/LoopAnalysis.h"
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
@@ -131,32 +22,35 @@
 #include "mlir/Pass/Pass.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/DenseSet.h"
+#include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/Support/Debug.h"
 
+#include <functional>
 #include <limits>
+#include <set>
+#include <tuple>
+#include <vector>
 
 #define DEBUG_TYPE "auto-pipeline-unroll"
 
 using namespace mlir;
 using namespace mlir::affine;
 using circt::hls_analysis::getFlattenedParents;
+using circt::hls_analysis::kCallOccupancyAttr;
 using circt::hls_analysis::kLoopAutoUnrolledAttr;
+using circt::hls_analysis::kLoopCallBoundaryAttr;
 using circt::hls_analysis::kLoopFlattenedParentsAttr;
 using circt::hls_analysis::kLoopPipelineAttr;
 using circt::hls_analysis::kLoopPipelineAutoSource;
 using circt::hls_analysis::kLoopPipelineOffAttr;
-using circt::hls_analysis::kLoopUnrollAttr;
 using circt::hls_analysis::kLoopUncountedAttr;
+using circt::hls_analysis::kLoopUnrollAttr;
 using circt::hls_analysis::kLoopUnrollOffAttr;
 using circt::hls_analysis::kLoopUnrollPartialAttr;
 
 namespace {
-
-//===----------------------------------------------------------------------===//
-// Pragma attributes
-//===----------------------------------------------------------------------===//
 
 /// Set on a loop only for the duration of its loopUnrollByFactor call, so
 /// that the main loop and the cleanup clone can be found afterwards.
@@ -200,26 +94,23 @@ static std::optional<uint64_t> userUnrollFactor(AffineForOp loop) {
 }
 
 static void tagAutoPipeline(AffineForOp loop) {
-  Builder b(loop.getContext());
+  Builder buildPoint(loop.getContext());
   loop->setAttr(
       kLoopPipelineAttr,
-      b.getArrayAttr({b.getDictionaryAttr(
-          {b.getNamedAttr("II", b.getI32IntegerAttr(0)),
-           b.getNamedAttr("source",
-                          b.getStringAttr(kLoopPipelineAutoSource))})}));
+      buildPoint.getArrayAttr({buildPoint.getDictionaryAttr(
+          {buildPoint.getNamedAttr("II", buildPoint.getI32IntegerAttr(0)),
+           buildPoint.getNamedAttr("source", buildPoint.getStringAttr(
+                                                 kLoopPipelineAutoSource))})}));
 }
 
 static void addFlattenedParents(AffineForOp loop, unsigned count) {
   if (count == 0)
     return;
-  Builder b(loop.getContext());
-  loop->setAttr(kLoopFlattenedParentsAttr,
-                b.getI64IntegerAttr(getFlattenedParents(loop) + count));
+  Builder buildPoint(loop.getContext());
+  loop->setAttr(
+      kLoopFlattenedParentsAttr,
+      buildPoint.getI64IntegerAttr(getFlattenedParents(loop) + count));
 }
-
-//===----------------------------------------------------------------------===//
-// Memory accesses and the LICM / promotion model
-//===----------------------------------------------------------------------===//
 
 /// One affine or memref load/store: its memory and composed address.
 struct Access {
@@ -231,47 +122,53 @@ struct Access {
 };
 
 static std::optional<Access> getAccess(Operation *op) {
-  Access a;
-  a.op = op;
-  MLIRContext *ctx = op->getContext();
+  Access arrayValue;
+  arrayValue.op = op;
+  MLIRContext *context = op->getContext();
   if (auto load = dyn_cast<AffineLoadOp>(op)) {
-    a.mem = load.getMemRef();
-    a.map = load.getAffineMap();
-    a.operands.assign(load.getMapOperands().begin(),
-                      load.getMapOperands().end());
+    arrayValue.mem = load.getMemRef();
+    arrayValue.map = load.getAffineMap();
+    arrayValue.operands.assign(load.getMapOperands().begin(),
+                               load.getMapOperands().end());
   } else if (auto store = dyn_cast<AffineStoreOp>(op)) {
-    a.mem = store.getMemRef();
-    a.isWrite = true;
-    a.map = store.getAffineMap();
-    a.operands.assign(store.getMapOperands().begin(),
-                      store.getMapOperands().end());
+    arrayValue.mem = store.getMemRef();
+    arrayValue.isWrite = true;
+    arrayValue.map = store.getAffineMap();
+    arrayValue.operands.assign(store.getMapOperands().begin(),
+                               store.getMapOperands().end());
   } else if (auto load = dyn_cast<memref::LoadOp>(op)) {
-    a.mem = load.getMemRef();
-    a.map = AffineMap::getMultiDimIdentityMap(load.getIndices().size(), ctx);
-    a.operands.assign(load.getIndices().begin(), load.getIndices().end());
+    arrayValue.mem = load.getMemRef();
+    arrayValue.map =
+        AffineMap::getMultiDimIdentityMap(load.getIndices().size(), context);
+    arrayValue.operands.assign(load.getIndices().begin(),
+                               load.getIndices().end());
   } else if (auto store = dyn_cast<memref::StoreOp>(op)) {
-    a.mem = store.getMemRef();
-    a.isWrite = true;
-    a.map = AffineMap::getMultiDimIdentityMap(store.getIndices().size(), ctx);
-    a.operands.assign(store.getIndices().begin(), store.getIndices().end());
+    arrayValue.mem = store.getMemRef();
+    arrayValue.isWrite = true;
+    arrayValue.map =
+        AffineMap::getMultiDimIdentityMap(store.getIndices().size(), context);
+    arrayValue.operands.assign(store.getIndices().begin(),
+                               store.getIndices().end());
   } else {
     return std::nullopt;
   }
-  fullyComposeAffineMapAndOperands(&a.map, &a.operands);
-  canonicalizeMapAndOperands(&a.map, &a.operands);
-  a.map = simplifyAffineMap(a.map);
-  return a;
+  fullyComposeAffineMapAndOperands(&arrayValue.map, &arrayValue.operands);
+  canonicalizeMapAndOperands(&arrayValue.map, &arrayValue.operands);
+  arrayValue.map = simplifyAffineMap(arrayValue.map);
+  return arrayValue;
 }
 
-static bool sameAddress(const Access &x, const Access &y) {
-  return x.mem == y.mem && x.map == y.map && x.operands == y.operands;
+static bool sameAddress(const Access &exprValue, const Access &rowValue) {
+  return exprValue.mem == rowValue.mem && exprValue.map == rowValue.map &&
+         exprValue.operands == rowValue.operands;
 }
 
-static bool isInvariantIn(const Access &a, AffineForOp loop) {
-  if (!loop.isDefinedOutsideOfLoop(a.mem))
+static bool isInvariantIn(const Access &arrayValue, AffineForOp loop) {
+  if (!loop.isDefinedOutsideOfLoop(arrayValue.mem))
     return false;
-  return llvm::all_of(a.operands,
-                      [&](Value v) { return loop.isDefinedOutsideOfLoop(v); });
+  return llvm::all_of(arrayValue.operands, [&](Value valueHandle) {
+    return loop.isDefinedOutsideOfLoop(valueHandle);
+  });
 }
 
 /// True if some op inside `loop` may write `mem`, or uses it opaquely.
@@ -282,13 +179,13 @@ static bool isMemrefWrittenInLoop(Value mem, AffineForOp loop) {
       return WalkResult::advance();
     auto eff = dyn_cast<MemoryEffectOpInterface>(op);
     if (!eff) {
-      written = true; // a call, a cast: unknown effects
+      written = true;
       return WalkResult::interrupt();
     }
     SmallVector<MemoryEffects::EffectInstance> effects;
     eff.getEffectsOnValue(mem, effects);
-    for (auto &e : effects)
-      if (!isa<MemoryEffects::Read>(e.getEffect())) {
+    for (auto &entryValue : effects)
+      if (!isa<MemoryEffects::Read>(entryValue.getEffect())) {
         written = true;
         return WalkResult::interrupt();
       }
@@ -300,14 +197,16 @@ static bool isMemrefWrittenInLoop(Value mem, AffineForOp loop) {
 /// Two loop-invariant addresses of one memory that provably never meet:
 /// same operands, and the maps differ by a nonzero constant in some
 /// dimension (`acc[0]` vs `acc[1]`, `buf[i][2]` vs `buf[i][5]`).
-static bool provablyDisjoint(const Access &x, const Access &y) {
-  if (x.operands != y.operands || x.map.getNumResults() != y.map.getNumResults())
+static bool provablyDisjoint(const Access &exprValue, const Access &rowValue) {
+  if (exprValue.operands != rowValue.operands ||
+      exprValue.map.getNumResults() != rowValue.map.getNumResults())
     return false;
-  for (auto [ex, ey] : llvm::zip(x.map.getResults(), y.map.getResults())) {
-    AffineExpr d = simplifyAffineExpr(ex - ey, x.map.getNumDims(),
-                                      x.map.getNumSymbols());
-    if (auto c = dyn_cast<AffineConstantExpr>(d))
-      if (c.getValue() != 0)
+  for (auto [ex, ey] :
+       llvm::zip(exprValue.map.getResults(), rowValue.map.getResults())) {
+    AffineExpr dimensionIndex = simplifyAffineExpr(
+        ex - ey, exprValue.map.getNumDims(), exprValue.map.getNumSymbols());
+    if (auto candidateValue = dyn_cast<AffineConstantExpr>(dimensionIndex))
+      if (candidateValue.getValue() != 0)
         return true;
   }
   return false;
@@ -322,34 +221,35 @@ static bool provablyDisjoint(const Access &x, const Access &y) {
 /// promoted). `groups`, if given, receives the accesses per address in
 /// program order, or stays empty when some access is nested in a region of
 /// the body (an `affine.if`), which the physical rewrite does not handle.
-static bool isPromotableIn(Value mem, AffineForOp loop,
-                           SmallVector<SmallVector<Access, 4>, 2> *groups =
-                               nullptr) {
+static bool
+isPromotableIn(Value mem, AffineForOp loop,
+               SmallVector<SmallVector<Access, 4>, 2> *groups = nullptr) {
   bool ok = true, anyStore = false, allDirect = true;
   SmallVector<SmallVector<Access, 4>, 2> found;
   loop.getBody()->walk([&](Operation *op) {
     if (!llvm::is_contained(op->getOperands(), mem))
       return WalkResult::advance();
-    std::optional<Access> a = getAccess(op);
-    if (!a || a->mem != mem || !isInvariantIn(*a, loop)) {
-      ok = false; // stored as a value, passed to a call, variant address
+    std::optional<Access> arrayValue = getAccess(op);
+    if (!arrayValue || arrayValue->mem != mem ||
+        !isInvariantIn(*arrayValue, loop)) {
+      ok = false;
       return WalkResult::interrupt();
     }
-    anyStore |= a->isWrite;
+    anyStore |= arrayValue->isWrite;
     if (op->getBlock() != loop.getBody())
       allDirect = false;
-    auto *g = llvm::find_if(found, [&](auto &grp) {
-      return sameAddress(grp.front(), *a);
+    auto *globalOp = llvm::find_if(found, [&](auto &grp) {
+      return sameAddress(grp.front(), *arrayValue);
     });
-    if (g != found.end()) {
-      g->push_back(*a);
+    if (globalOp != found.end()) {
+      globalOp->push_back(*arrayValue);
     } else {
       for (auto &grp : found)
-        if (!provablyDisjoint(grp.front(), *a)) {
-          ok = false; // may alias another promoted location
+        if (!provablyDisjoint(grp.front(), *arrayValue)) {
+          ok = false;
           return WalkResult::interrupt();
         }
-      found.push_back({*a});
+      found.push_back({*arrayValue});
     }
     return WalkResult::advance();
   });
@@ -383,22 +283,21 @@ public:
   /// loop of the function).
   AffineForOp effectiveLoop(Operation *op) {
     AffineForOp cur = op->getParentOfType<AffineForOp>();
-    std::optional<Access> a = getAccess(op);
-    if (!a)
+    std::optional<Access> arrayValue = getAccess(op);
+    if (!arrayValue)
       return cur;
-    while (cur && movableOutOf(*a, cur))
+    while (cur && movableOutOf(*arrayValue, cur))
       cur = cur->getParentOfType<AffineForOp>();
     return cur;
   }
 
-  bool movableOutOf(const Access &a, AffineForOp loop) {
-    if (!isInvariantIn(a, loop))
+  bool movableOutOf(const Access &arrayValue, AffineForOp loop) {
+    if (!isInvariantIn(arrayValue, loop))
       return false;
-    if (!a.isWrite && !written(a.mem, loop))
-      // LICM hoist (confirmed for integer elements; a float load stays put
-      // for the decision under float-loads-perfect).
-      return !(floatLoadsPerfect && hasFloatElement(a.mem));
-    return promotable(a.mem, loop);
+    if (!arrayValue.isWrite && !written(arrayValue.mem, loop))
+
+      return !(floatLoadsPerfect && hasFloatElement(arrayValue.mem));
+    return promotable(arrayValue.mem, loop);
   }
 
   const bool floatLoadsPerfect;
@@ -410,25 +309,21 @@ private:
     auto it = writtenCache.find(key);
     if (it != writtenCache.end())
       return it->second;
-    bool w = isMemrefWrittenInLoop(mem, loop);
-    writtenCache[key] = w;
-    return w;
+    bool widthValue = isMemrefWrittenInLoop(mem, loop);
+    writtenCache[key] = widthValue;
+    return widthValue;
   }
   bool promotable(Value mem, AffineForOp loop) {
     Key key{mem, loop.getOperation()};
     auto it = promotableCache.find(key);
     if (it != promotableCache.end())
       return it->second;
-    bool p = isPromotableIn(mem, loop);
-    promotableCache[key] = p;
-    return p;
+    bool portValue = isPromotableIn(mem, loop);
+    promotableCache[key] = portValue;
+    return portValue;
   }
   DenseMap<Key, bool> writtenCache, promotableCache;
 };
-
-//===----------------------------------------------------------------------===//
-// Loop forest
-//===----------------------------------------------------------------------===//
 
 struct Node {
   /// Perfect chain, outermost first. The decision treats it as one loop.
@@ -443,16 +338,16 @@ struct Node {
   /// Some chain member keeps a partial user unroll (`hls.unroll_partial`):
   /// never unrolled by an enclosing pipeline, pipelined on its own.
   bool userFixed = false;
-  uint64_t trip = 1; // product of the chain's trip counts (if !dynamic)
-  int userPipelineIdx = -1; // outermost user-pipelined chain member
-  bool pipelineOff = false; // chain.back() carries hls.pipeline_off
+  uint64_t trip = 1;
+  int userPipelineIdx = -1;
+  bool pipelineOff = false;
   /// The node is one `hls.uncounted` loop that would have collapsed with its
   /// only child (a perfect pair, constant inner trip count) had it been
   /// counted (step 1); it may still be flattened into that child (step 3).
   bool uncountedPerfect = false;
-  // Derived over the subtree.
+
   bool constInside = true;
-  uint64_t maxPath = 1; // trip * max over children of maxPath
+  uint64_t maxPath = 1;
   bool hasUserPipeline = false;
   bool hasUserFixed = false;
   /// The pipelined loop that absorbs this node: the node's own innermost
@@ -471,10 +366,10 @@ static bool isSinkableFloatLoad(Operation *op, AffineForOp outer,
                                 AffineForOp inner) {
   if (op->getBlock() != outer.getBody())
     return false;
-  std::optional<Access> a = getAccess(op);
-  if (!a || a->isWrite || !hasFloatElement(a->mem))
+  std::optional<Access> arrayValue = getAccess(op);
+  if (!arrayValue || arrayValue->isWrite || !hasFloatElement(arrayValue->mem))
     return false;
-  return !isMemrefWrittenInLoop(a->mem, inner);
+  return !isMemrefWrittenInLoop(arrayValue->mem, inner);
 }
 
 /// Does `outer` form a perfect nest with `inner` (the only loop directly in
@@ -492,20 +387,19 @@ static bool isPerfectPair(AffineForOp outer, AffineForOp inner,
       return WalkResult::interrupt();
     }
     if (op->getNumRegions() > 0)
-      return WalkResult::advance(); // look inside ifs
+      return WalkResult::advance();
     if (isMemoryEffectFree(op))
       return WalkResult::advance();
     if (licm.effectiveLoop(op) != outer)
-      return WalkResult::advance(); // hoisted further out
+      return WalkResult::advance();
     if (licm.floatLoadsPerfect && isSinkableFloatLoad(op, outer, inner))
-      return WalkResult::advance(); // sunk back by Vitis' nest conversion
+      return WalkResult::advance();
     perfect = false;
     return WalkResult::interrupt();
   });
   if (!perfect)
     return false;
-  // Memory ops of the inner nest that LICM / promotion move into outer's
-  // body.
+
   inner.getBody()->walk([&](Operation *op) {
     if (!getAccess(op))
       return WalkResult::advance();
@@ -518,11 +412,11 @@ static bool isPerfectPair(AffineForOp outer, AffineForOp inner,
   return perfect;
 }
 
-static uint64_t saturatingMul(uint64_t a, uint64_t b) {
-  uint64_t r;
-  if (__builtin_mul_overflow(a, b, &r))
+static uint64_t saturatingMul(uint64_t arrayValue, uint64_t buildPoint) {
+  uint64_t resultValue;
+  if (__builtin_mul_overflow(arrayValue, buildPoint, &resultValue))
     return std::numeric_limits<uint64_t>::max();
-  return r;
+  return resultValue;
 }
 
 class Forest {
@@ -545,14 +439,13 @@ public:
         opaqueLoop = true;
         return WalkResult::skip();
       }
-      if (auto call = dyn_cast<CallOpInterface>(op)) {
+      if (auto callSite = dyn_cast<CallOpInterface>(op)) {
         auto callee = dyn_cast_or_null<func::FuncOp>(
-            call.resolveCallableInTable(&symbolTable));
+            callSite.resolveCallableInTable(&symbolTable));
         if (!callee || callee.isExternal() ||
             !callStack.insert(callee.getOperation()).second)
           return WalkResult::advance();
-        collectChildren(callee.getBody(), /*viaCall=*/true, loops, opaqueLoop,
-                        callStack);
+        collectChildren(callee.getBody(), true, loops, opaqueLoop, callStack);
         callStack.erase(callee.getOperation());
       }
       return WalkResult::advance();
@@ -570,20 +463,17 @@ public:
     while (true) {
       childLoops.clear();
       opaqueLoop = false;
-      collectChildren(cur.getRegion(), /*viaCall=*/false, childLoops,
-                      opaqueLoop, callStack);
+      collectChildren(cur.getRegion(), false, childLoops, opaqueLoop,
+                      callStack);
       if (childLoops.size() != 1 || opaqueLoop || childLoops[0].second)
         break;
       AffineForOp child = childLoops[0].first;
-      // A dynamic inner loop is never flattened (Vitis' semi-perfect rule
-      // allows a variable bound on the outermost loop only).
-      if (!getConstantTripCount(child) ||
-          child->hasAttr(kLoopUnrollOffAttr))
+
+      if (!getConstantTripCount(child) || child->hasAttr(kLoopUnrollOffAttr))
         break;
       if (!isPerfectPair(cur, child, licm))
         break;
-      // An uncounted loop (only ever the first chain member: its trip count
-      // is not constant) does not collapse with its child (step 1, N15).
+
       if (cur->hasAttr(kLoopUncountedAttr)) {
         node->uncountedPerfect = true;
         break;
@@ -598,29 +488,25 @@ public:
       else
         node->trip = saturatingMul(node->trip, *trip);
     }
-    for (auto [idx, loop] : llvm::enumerate(node->chain)) {
+    for (auto [indexValue, loop] : llvm::enumerate(node->chain)) {
       if (node->userPipelineIdx < 0 && isUserPipelined(loop))
-        node->userPipelineIdx = static_cast<int>(idx);
+        node->userPipelineIdx = static_cast<int>(indexValue);
       if (loop->hasAttr(kLoopUnrollPartialAttr))
         node->userFixed = true;
     }
     node->pipelineOff = node->chain.back()->hasAttr(kLoopPipelineOffAttr);
     for (auto [loop, childViaCall] : childLoops) {
-      // A child reached through a call: keep its function on the call stack
-      // while its subtree is built, so that a call back into that function
-      // (direct or mutual recursion) is cut there too, not only during
-      // collectChildren. Children of this function are already covered by
-      // the entry runOnOperation pushed.
+
       Operation *owner = nullptr;
-      if (auto fn = loop->getParentOfType<func::FuncOp>())
-        owner = fn.getOperation();
+      if (auto function = loop->getParentOfType<func::FuncOp>())
+        owner = function.getOperation();
       bool pushed = owner && callStack.insert(owner).second;
       node->children.push_back(build(loop, childViaCall, callStack));
       if (pushed)
         callStack.erase(owner);
     }
     if (opaqueLoop) {
-      // A loop that is not an affine.for: a dynamic child.
+
       auto opaque = std::make_unique<Node>();
       opaque->dynamic = true;
       opaque->constInside = false;
@@ -630,11 +516,11 @@ public:
     node->hasUserPipeline = node->userPipelineIdx >= 0;
     node->hasUserFixed = node->userFixed;
     uint64_t maxChild = 1;
-    for (auto &c : node->children) {
-      node->constInside &= c->constInside;
-      node->hasUserPipeline |= c->hasUserPipeline;
-      node->hasUserFixed |= c->hasUserFixed;
-      maxChild = std::max(maxChild, c->maxPath);
+    for (auto &candidateValue : node->children) {
+      node->constInside &= candidateValue->constInside;
+      node->hasUserPipeline |= candidateValue->hasUserPipeline;
+      node->hasUserFixed |= candidateValue->hasUserFixed;
+      maxChild = std::max(maxChild, candidateValue->maxPath);
     }
     node->maxPath = saturatingMul(node->trip, maxChild);
     return node;
@@ -644,10 +530,6 @@ public:
   SymbolTableCollection symbolTable;
 };
 
-//===----------------------------------------------------------------------===//
-// Physical transforms: hoist, promote, unroll
-//===----------------------------------------------------------------------===//
-
 /// Vitis LICM on a loop about to be unrolled: ops directly in `loop`'s body
 /// whose operands are all defined outside it (or by ops hoisted before them)
 /// move before the loop - pure speculatable ops, and loads from a memory the
@@ -655,17 +537,18 @@ public:
 /// such load instead of trip-count copies of it.
 static unsigned hoistInvariantOps(AffineForOp loop) {
   DenseSet<Value> invariant;
-  auto isInvariantValue = [&](Value v) {
-    return loop.isDefinedOutsideOfLoop(v) || invariant.contains(v);
+  auto isInvariantValue = [&](Value valueHandle) {
+    return loop.isDefinedOutsideOfLoop(valueHandle) ||
+           invariant.contains(valueHandle);
   };
   DenseMap<Value, bool> writtenCache;
   auto writtenInLoop = [&](Value mem) {
     auto it = writtenCache.find(mem);
     if (it != writtenCache.end())
       return it->second;
-    bool w = isMemrefWrittenInLoop(mem, loop);
-    writtenCache[mem] = w;
-    return w;
+    bool widthValue = isMemrefWrittenInLoop(mem, loop);
+    writtenCache[mem] = widthValue;
+    return widthValue;
   };
   SmallVector<Operation *> toHoist;
   for (Operation &op : loop.getBody()->without_terminator()) {
@@ -687,8 +570,8 @@ static unsigned hoistInvariantOps(AffineForOp loop) {
     if (!hoistable)
       continue;
     toHoist.push_back(&op);
-    for (Value r : op.getResults())
-      invariant.insert(r);
+    for (Value resultValue : op.getResults())
+      invariant.insert(resultValue);
   }
   for (Operation *op : toHoist)
     op->moveBefore(loop);
@@ -703,20 +586,20 @@ static unsigned hoistInvariantOps(AffineForOp loop) {
 /// (a new op, with the same attributes, when something was promoted).
 static AffineForOp promoteInvariantAccesses(AffineForOp loop,
                                             unsigned &promoted) {
-  // Memories accessed directly in the body, in first-access order.
+
   SmallVector<Value, 4> mems;
   for (Operation &op : loop.getBody()->without_terminator()) {
-    std::optional<Access> a = getAccess(&op);
-    if (a && !llvm::is_contained(mems, a->mem))
-      mems.push_back(a->mem);
+    std::optional<Access> arrayValue = getAccess(&op);
+    if (arrayValue && !llvm::is_contained(mems, arrayValue->mem))
+      mems.push_back(arrayValue->mem);
   }
   for (Value mem : mems) {
     SmallVector<SmallVector<Access, 4>, 2> groups;
     if (!isPromotableIn(mem, loop, &groups) || groups.empty())
       continue;
     bool allAffine = llvm::all_of(groups, [](auto &grp) {
-      return llvm::all_of(grp, [](const Access &a) {
-        return isa<AffineLoadOp, AffineStoreOp>(a.op);
+      return llvm::all_of(grp, [](const Access &arrayValue) {
+        return isa<AffineLoadOp, AffineStoreOp>(arrayValue.op);
       });
     });
     Type elemType = cast<MemRefType>(mem.getType()).getElementType();
@@ -724,36 +607,38 @@ static AffineForOp promoteInvariantAccesses(AffineForOp loop,
       continue;
     for (auto &accesses : groups) {
       const Access &first = accesses.front();
-      bool anyStore = llvm::any_of(
-          accesses, [](const Access &a) { return a.isWrite; });
-      OpBuilder b(loop);
-      Value init;
+      bool anyStore = llvm::any_of(accesses, [](const Access &arrayValue) {
+        return arrayValue.isWrite;
+      });
+      OpBuilder buildPoint(loop);
+      Value initialValue;
       if (!first.isWrite) {
-        init = AffineLoadOp::create(b, first.op->getLoc(), mem, first.map,
-                                    first.operands);
+        initialValue = AffineLoadOp::create(buildPoint, first.op->getLoc(), mem,
+                                            first.map, first.operands);
       } else {
-        // The first access is a store: no value flows in.
-        init = arith::ConstantOp::create(b, loop.getLoc(), elemType,
-                                         b.getZeroAttr(elemType));
+
+        initialValue =
+            arith::ConstantOp::create(buildPoint, loop.getLoc(), elemType,
+                                      buildPoint.getZeroAttr(elemType));
       }
       if (!anyStore) {
-        // A read-only location: LICM hoists it (one load before the loop).
-        for (const Access &a : accesses) {
-          a.op->getResult(0).replaceAllUsesWith(init);
-          a.op->erase();
+
+        for (const Access &arrayValue : accesses) {
+          arrayValue.op->getResult(0).replaceAllUsesWith(initialValue);
+          arrayValue.op->erase();
         }
         ++promoted;
         continue;
       }
       IRRewriter rewriter(loop.getContext());
       SmallPtrSet<Operation *, 8> accessOps;
-      for (const Access &a : accesses)
-        accessOps.insert(a.op);
+      for (const Access &arrayValue : accesses)
+        accessOps.insert(arrayValue.op);
       Block *body = loop.getBody();
       DictionaryAttr attrs = loop->getDiscardableAttrDictionary();
       FailureOr<LoopLikeOpInterface> replaced =
           loop.replaceWithAdditionalYields(
-              rewriter, init, /*replaceInitOperandUsesInLoop=*/false,
+              rewriter, initialValue, false,
               [&](OpBuilder &, Location, ArrayRef<BlockArgument> newArgs) {
                 Value cur = newArgs[0];
                 SmallVector<Operation *> toErase;
@@ -776,8 +661,8 @@ static AffineForOp promoteInvariantAccesses(AffineForOp loop,
       loop->setDiscardableAttrs(attrs);
       OpBuilder after(loop.getContext());
       after.setInsertionPointAfter(loop);
-      AffineStoreOp::create(after, loop.getLoc(), loop.getResults().back(),
-                            mem, first.map, first.operands);
+      AffineStoreOp::create(after, loop.getLoc(), loop.getResults().back(), mem,
+                            first.map, first.operands);
       ++promoted;
     }
   }
@@ -785,10 +670,10 @@ static AffineForOp promoteInvariantAccesses(AffineForOp loop,
 }
 
 static std::string locString(Location loc) {
-  std::string s;
-  llvm::raw_string_ostream os(s);
+  std::string stringValue;
+  llvm::raw_string_ostream os(stringValue);
   loc.print(os);
-  return s;
+  return stringValue;
 }
 
 struct AutoPipelineUnrollPass
@@ -835,8 +720,8 @@ struct AutoPipelineUnrollPass
            "(config_compile -pipeline_loops)";
   }
 
-  void getDependentDialects(DialectRegistry &registry) const override {
-    registry.insert<arith::ArithDialect, memref::MemRefDialect>();
+  void getDependentDialects(DialectRegistry &targetRegistry) const override {
+    targetRegistry.insert<arith::ArithDialect, memref::MemRefDialect>();
   }
 
   void remark(Location loc, const Twine &msg) {
@@ -856,17 +741,16 @@ struct AutoPipelineUnrollPass
       uint64_t factor = *userUnrollFactor(loop);
       std::optional<uint64_t> trip = getConstantTripCount(loop);
       loop->removeAttr(kLoopUnrollAttr);
-      Builder b(loop.getContext());
+      Builder buildPoint(loop.getContext());
       if (factor == 1) {
-        loop->setAttr(kLoopUnrollPartialAttr, b.getI64IntegerAttr(1));
+        loop->setAttr(kLoopUnrollPartialAttr, buildPoint.getI64IntegerAttr(1));
         remark(loop.getLoc(), "user unroll: factor 1, the loop is never "
                               "auto-unrolled into a parent pipeline");
         continue;
       }
       if (factor == 0 || (trip && factor >= *trip)) {
         if (!trip) {
-          remark(loop.getLoc(),
-                 "user unroll: dynamic trip count, left rolled");
+          remark(loop.getLoc(), "user unroll: dynamic trip count, left rolled");
           continue;
         }
         remark(loop.getLoc(),
@@ -893,26 +777,25 @@ struct AutoPipelineUnrollPass
   /// if it is still a loop - gets `hls.unroll_partial`, so no second
   /// partially-unrolled pipeline appears.
   void applyPartialUnroll(AffineForOp loop, uint64_t factor) {
-    Builder b(loop.getContext());
+    Builder buildPoint(loop.getContext());
     auto markMain = [&](AffineForOp main) {
       main->setAttr(kLoopUnrollPartialAttr,
-                    b.getI64IntegerAttr(static_cast<int64_t>(factor)));
+                    buildPoint.getI64IntegerAttr(static_cast<int64_t>(factor)));
     };
-    // An empty body: loopUnrollByFactor leaves the loop as it is.
+
     if (llvm::hasSingleElement(loop.getBody()->getOperations())) {
       markMain(loop);
       return;
     }
-    // Where the results of the call will sit: between `prev` and `next`
-    // (both survive it; a loop always has a terminator after it).
+
     Block *block = loop->getBlock();
     Operation *prev = loop->getPrevNode();
     Operation *next = loop->getNextNode();
     int64_t step = loop.getStepAsInt();
-    // A temporary marker the cleanup clone inherits, to find both loops.
-    loop->setAttr(kUnrollPendingAttr, b.getUnitAttr());
+
+    loop->setAttr(kUnrollPendingAttr, buildPoint.getUnitAttr());
     if (failed(loopUnrollByFactor(loop, factor))) {
-      // Fails before touching the IR (bounds with several results).
+
       LLVM_DEBUG(llvm::dbgs() << "  loopUnrollByFactor failed\n");
       loop->removeAttr(kUnrollPendingAttr);
       markMain(loop);
@@ -927,7 +810,7 @@ struct AutoPipelineUnrollPass
     for (AffineForOp forOp : results) {
       forOp->removeAttr(kUnrollPendingAttr);
       if (forOp.getStepAsInt() != step) {
-        markMain(forOp); // the main loop, step * factor
+        markMain(forOp);
         continue;
       }
       remark(forOp.getLoc(),
@@ -946,9 +829,9 @@ struct AutoPipelineUnrollPass
     region.walk<WalkOrder::PostOrder>([&](Operation *op) {
       if (auto forOp = dyn_cast<AffineForOp>(op)) {
         out.push_back(forOp);
-      } else if (auto call = dyn_cast<CallOpInterface>(op)) {
+      } else if (auto callSite = dyn_cast<CallOpInterface>(op)) {
         auto callee = dyn_cast_or_null<func::FuncOp>(
-            call.resolveCallableInTable(&symbolTable));
+            callSite.resolveCallableInTable(&symbolTable));
         if (callee && !callee.isExternal() &&
             visitedCallees.insert(callee.getOperation()).second)
           collectInner(callee.getBody(), out, visitedCallees, symbolTable);
@@ -961,13 +844,11 @@ struct AutoPipelineUnrollPass
   void unrollInside(AffineForOp pipelined, SymbolTableCollection &symbolTable) {
     SmallVector<AffineForOp> inner;
     SmallPtrSet<Operation *, 4> visitedCallees;
-    // The function that owns `pipelined` is never re-entered through a call
-    // (direct or mutual recursion): that would collect `pipelined` itself,
-    // or an ancestor of it, and erase it under our feet.
+
     if (auto owner = pipelined->getParentOfType<func::FuncOp>())
       visitedCallees.insert(owner.getOperation());
     collectInner(pipelined.getRegion(), inner, visitedCallees, symbolTable);
-    Builder b(pipelined.getContext());
+    Builder buildPoint(pipelined.getContext());
     SmallVector<Attribute> record;
     if (auto prev = pipelined->getAttrOfType<ArrayAttr>(kLoopAutoUnrolledAttr))
       record.append(prev.begin(), prev.end());
@@ -982,12 +863,12 @@ struct AutoPipelineUnrollPass
       unsigned hoisted = hoistInvariantOps(loop);
       unsigned promoted = 0;
       loop = promoteInvariantAccesses(loop, promoted);
-      remark(loop.getLoc(),
-             "unrolling loop completely with a factor of " + Twine(*trip) +
-                 " (implied by the pipeline of the loop at " +
-                 locString(pipelined.getLoc()) + "; hoisted " +
-                 Twine(hoisted) + " invariant op(s), promoted " +
-                 Twine(promoted) + " memory(ies) to registers)");
+      remark(loop.getLoc(), "unrolling loop completely with a factor of " +
+                                Twine(*trip) +
+                                " (implied by the pipeline of the loop at " +
+                                locString(pipelined.getLoc()) + "; hoisted " +
+                                Twine(hoisted) + " invariant op(s), promoted " +
+                                Twine(promoted) + " memory(ies) to registers)");
       loop->removeAttr(kLoopPipelineAttr);
       loop->removeAttr(kLoopFlattenedParentsAttr);
       loop->removeAttr(kLoopAutoUnrolledAttr);
@@ -996,13 +877,14 @@ struct AutoPipelineUnrollPass
         LLVM_DEBUG(llvm::dbgs() << "  loopUnrollFull failed\n");
         continue;
       }
-      record.push_back(b.getDictionaryAttr(
-          {b.getNamedAttr("factor",
-                          b.getI64IntegerAttr(static_cast<int64_t>(*trip))),
-           b.getNamedAttr("loc", loc)}));
+      record.push_back(buildPoint.getDictionaryAttr(
+          {buildPoint.getNamedAttr("factor", buildPoint.getI64IntegerAttr(
+                                                 static_cast<int64_t>(*trip))),
+           buildPoint.getNamedAttr("loc", loc)}));
     }
     if (!record.empty())
-      pipelined->setAttr(kLoopAutoUnrolledAttr, b.getArrayAttr(record));
+      pipelined->setAttr(kLoopAutoUnrolledAttr,
+                         buildPoint.getArrayAttr(record));
   }
 
   /// LLVM LICM also promotes the accesses that became loop-invariant in the
@@ -1019,91 +901,247 @@ struct AutoPipelineUnrollPass
     return result;
   }
 
-  void decide(Node &n, SymbolTableCollection &symbolTable) {
-    if (n.chain.empty())
-      return; // placeholder for a non-affine loop
+  void decide(Node &elementCount, SymbolTableCollection &symbolTable) {
+    if (elementCount.chain.empty())
+      return;
     unsigned T = pipelineLoops;
-    if (n.userPipelineIdx >= 0) {
-      AffineForOp u = n.chain[n.userPipelineIdx];
-      n.tagged = u;
-      addFlattenedParents(u, n.userPipelineIdx);
-      remark(u.getLoc(), "user pipeline: unrolling everything inside, " +
-                             Twine(n.userPipelineIdx) +
-                             " perfect parent(s) flattened into it");
-      unrollInside(u, symbolTable);
-      // Promotion replaces the loop op; keep the node's handles current (the
-      // parent's flatten step reads chain.front()).
-      n.tagged = promotePipelined ? promoteOutOfPipeline(u) : u;
-      n.chain[n.userPipelineIdx] = n.tagged;
+    if (elementCount.userPipelineIdx >= 0) {
+      AffineForOp useValue = elementCount.chain[elementCount.userPipelineIdx];
+      elementCount.tagged = useValue;
+      addFlattenedParents(useValue, elementCount.userPipelineIdx);
+      remark(useValue.getLoc(), "user pipeline: unrolling everything inside, " +
+                                    Twine(elementCount.userPipelineIdx) +
+                                    " perfect parent(s) flattened into it");
+      unrollInside(useValue, symbolTable);
+
+      elementCount.tagged =
+          promotePipelined ? promoteOutOfPipeline(useValue) : useValue;
+      elementCount.chain[elementCount.userPipelineIdx] = elementCount.tagged;
       return;
     }
-    bool feasible = T > 0 && !n.pipelineOff;
-    for (auto &c : n.children)
-      feasible &= c->constInside && c->maxPath <= T && !c->hasUserPipeline &&
-                  !c->hasUserFixed;
+    bool feasible = T > 0 && !elementCount.pipelineOff;
+    for (auto &candidateValue : elementCount.children)
+      feasible &= candidateValue->constInside && candidateValue->maxPath <= T &&
+                  !candidateValue->hasUserPipeline &&
+                  !candidateValue->hasUserFixed;
     if (feasible) {
-      AffineForOp p = n.chain.back();
-      n.tagged = p;
-      tagAutoPipeline(p);
-      addFlattenedParents(p, n.chain.size() - 1);
-      remark(p.getLoc(),
-             "automatically set the pipeline for the loop (trip " +
-                 (n.dynamic ? Twine("?") : Twine(n.trip)) + ", " +
-                 Twine(n.chain.size() - 1) + " perfect parent(s) flattened, " +
-                 Twine(n.children.size()) + " inner loop(s) to unroll)");
-      unrollInside(p, symbolTable);
-      n.tagged = promotePipelined ? promoteOutOfPipeline(p) : p;
-      n.chain.back() = n.tagged;
+      AffineForOp portValue = elementCount.chain.back();
+      elementCount.tagged = portValue;
+      tagAutoPipeline(portValue);
+      addFlattenedParents(portValue, elementCount.chain.size() - 1);
+      remark(
+          portValue.getLoc(),
+          "automatically set the pipeline for the loop (trip " +
+              (elementCount.dynamic ? Twine("?") : Twine(elementCount.trip)) +
+              ", " + Twine(elementCount.chain.size() - 1) +
+              " perfect parent(s) flattened, " +
+              Twine(elementCount.children.size()) +
+              " inner loop(s) to unroll)");
+      unrollInside(portValue, symbolTable);
+      elementCount.tagged =
+          promotePipelined ? promoteOutOfPipeline(portValue) : portValue;
+      elementCount.chain.back() = elementCount.tagged;
       return;
     }
-    for (auto &c : n.children)
-      if (!c->viaCall)
-        decide(*c, symbolTable);
-    // Flattening of this (imperfect) loop into its single pipelined child.
-    if (n.children.size() != 1)
+    for (auto &candidateValue : elementCount.children)
+      if (!candidateValue->viaCall)
+        decide(*candidateValue, symbolTable);
+
+    if (elementCount.children.size() != 1)
       return;
-    Node &c = *n.children.front();
-    // An uncounted loop that is a perfect parent (not collapsed in step 1)
-    // is flattened into its pipelined child as the counted loop is through
-    // the collapse: its runtime bound is the variable outermost bound the
-    // semi-perfect rule allows (N15: nc_f_u8 is flattened like nc_f_int). A
-    // loop around it is not (c.dynamic).
-    if (c.viaCall || c.chain.empty() || !c.tagged ||
-        (n.dynamic && !n.uncountedPerfect) || c.dynamic)
+    Node &candidateValue = *elementCount.children.front();
+
+    if (candidateValue.viaCall || candidateValue.chain.empty() ||
+        !candidateValue.tagged ||
+        (elementCount.dynamic && !elementCount.uncountedPerfect) ||
+        candidateValue.dynamic)
       return;
-    if (c.chain.front()->getBlock() != n.chain.back().getBody())
-      return; // the child loop is conditional
-    addFlattenedParents(c.tagged, n.chain.size());
-    n.tagged = c.tagged;
-    remark(n.chain.front().getLoc(),
-           "flattening the loop (and " + Twine(n.chain.size() - 1) +
+    if (candidateValue.chain.front()->getBlock() !=
+        elementCount.chain.back().getBody())
+      return;
+    addFlattenedParents(candidateValue.tagged, elementCount.chain.size());
+    elementCount.tagged = candidateValue.tagged;
+    remark(elementCount.chain.front().getLoc(),
+           "flattening the loop (and " + Twine(elementCount.chain.size() - 1) +
                " perfect inner loop(s)) into the pipelined loop at " +
-               locString(c.tagged.getLoc()));
+               locString(candidateValue.tagged.getLoc()));
+  }
+
+  /// The functions with a body, every caller before its callees (reverse
+  /// post-order of the call graph; a call cycle is cut where the walk meets
+  /// it). With calls kept (`#pragma HLS inline off`, W3), Vitis decides a
+  /// caller loop against the callee's loops as they are written, before the
+  /// callee's own decision changes them (VITIS_NOTES.md N14 R7: `inl_f2` a
+  /// 16-trip callee loop is unrolled into the pipelined caller loop; corpus
+  /// attn_breakdown_op1 and kernel w3h_cb_nest256: a callee nest of 8 x 8 x 4
+  /// trips keeps the 8-trip caller loop sequential, the callee pipelines its
+  /// own flattened loop). Deciding the callee first would unroll its inner
+  /// loops and let the caller pass the trip-count test on what is left.
+  static SmallVector<func::FuncOp>
+  callersFirst(ModuleOp rootModule, SymbolTableCollection &symbolTable) {
+    SmallVector<func::FuncOp> postOrder;
+    DenseSet<Operation *> visited;
+    std::function<void(func::FuncOp)> visit = [&](func::FuncOp function) {
+      if (!visited.insert(function.getOperation()).second)
+        return;
+      function.walk([&](CallOpInterface callSite) {
+        auto callee = dyn_cast_or_null<func::FuncOp>(
+            callSite.resolveCallableInTable(&symbolTable));
+        if (callee && !callee.isExternal())
+          visit(callee);
+      });
+      postOrder.push_back(function);
+    };
+    for (auto function : rootModule.getOps<func::FuncOp>())
+      if (!function.isExternal())
+        visit(function);
+    return SmallVector<func::FuncOp>(llvm::reverse(postOrder));
+  }
+
+  /// Whether `fn`, or a function it calls, still holds a loop.
+  static bool hasLoops(func::FuncOp function,
+                       SymbolTableCollection &symbolTable,
+                       SmallPtrSetImpl<Operation *> &stack) {
+    if (!stack.insert(function.getOperation()).second)
+      return false;
+    bool found = false;
+    function.walk([&](Operation *op) {
+      if (isa<LoopLikeOpInterface>(op)) {
+        found = true;
+        return WalkResult::interrupt();
+      }
+      if (auto callSite = dyn_cast<CallOpInterface>(op))
+        if (auto callee = dyn_cast_or_null<func::FuncOp>(
+                callSite.resolveCallableInTable(&symbolTable)))
+          if (!callee.isExternal() && hasLoops(callee, symbolTable, stack)) {
+            found = true;
+            return WalkResult::interrupt();
+          }
+      return WalkResult::advance();
+    });
+    stack.erase(function.getOperation());
+    return found;
+  }
+
+  /// Cycles one call of the loop-free `fn` holds its instance: its accesses
+  /// to each memory (an argument, a local array, a global), two per cycle
+  /// (a memory's two ports), the busiest memory deciding; at least 1. A
+  /// nested call counts with its own occupancy.
+  static unsigned occupancy(func::FuncOp function,
+                            SymbolTableCollection &symbolTable,
+                            SmallPtrSetImpl<Operation *> &stack) {
+    if (!stack.insert(function.getOperation()).second)
+      return 1;
+    unsigned cycles = 1;
+    llvm::MapVector<std::pair<Value, Operation *>, unsigned> perMemory;
+
+    std::set<
+        std::tuple<const void *, bool, const void *, std::vector<const void *>>>
+        seen;
+    function.walk([&](Operation *op) {
+      Value mem;
+      bool isWrite = false;
+      Attribute map;
+      ValueRange indices;
+      if (auto lowerIndex = dyn_cast<AffineLoadOp>(op)) {
+        mem = lowerIndex.getMemRef();
+        map = lowerIndex.getMapAttr();
+        indices = lowerIndex.getMapOperands();
+      } else if (auto stringValue = dyn_cast<AffineStoreOp>(op)) {
+        mem = stringValue.getMemRef();
+        isWrite = true;
+        map = stringValue.getMapAttr();
+        indices = stringValue.getMapOperands();
+      } else if (auto lowerIndex = dyn_cast<memref::LoadOp>(op)) {
+        mem = lowerIndex.getMemRef();
+        indices = lowerIndex.getIndices();
+      } else if (auto stringValue = dyn_cast<memref::StoreOp>(op)) {
+        mem = stringValue.getMemRef();
+        isWrite = true;
+        indices = stringValue.getIndices();
+      } else if (auto callSite = dyn_cast<CallOpInterface>(op)) {
+        if (auto callee = dyn_cast_or_null<func::FuncOp>(
+                callSite.resolveCallableInTable(&symbolTable)))
+          if (!callee.isExternal())
+            cycles = std::max(cycles, occupancy(callee, symbolTable, stack));
+        return;
+      }
+      if (!mem)
+        return;
+      std::vector<const void *> address;
+      for (Value valueHandle : indices)
+        address.push_back(valueHandle.getAsOpaquePointer());
+      const void *memKey = mem.getAsOpaquePointer();
+      const void *mapKey = map ? map.getAsOpaquePointer() : nullptr;
+
+      if (!isWrite && seen.count({memKey, true, mapKey, address}))
+        return;
+      if (!seen.insert({memKey, isWrite, mapKey, std::move(address)}).second)
+        return;
+      circt::hls_analysis::StorageRoot root =
+          circt::hls_analysis::storageRoot(mem);
+      ++perMemory[{root.value, root.global}];
+    });
+    for (auto &[key, elementCount] : perMemory)
+      cycles = std::max(cycles, (elementCount + 1) / 2);
+    stack.erase(function.getOperation());
+    return cycles;
+  }
+
+  /// The call boundary after the decisions (VITIS_NOTES.md N14 R7): a loop
+  /// that is not pipelined and calls a kept function that still has loops
+  /// gets `hls.call_boundary` (Vitis pipelines the callee's loops in the
+  /// callee and leaves the caller loop sequential: w3h_cb_nest256,
+  /// attn_breakdown_op1 `VITIS_LOOP_232_1`); a call inside a pipelined loop
+  /// gets `hls.call_occupancy` (its callee is loop-free by then, R7).
+  static void markCallBoundaries(ModuleOp rootModule,
+                                 SymbolTableCollection &symbolTable) {
+    rootModule.walk([&](CallOpInterface callSite) {
+      auto callee = dyn_cast_or_null<func::FuncOp>(
+          callSite.resolveCallableInTable(&symbolTable));
+      if (!callee || callee.isExternal())
+        return;
+      auto loop = callSite->getParentOfType<AffineForOp>();
+      if (!loop)
+        return;
+      OpBuilder buildPoint(callSite.getContext());
+      SmallPtrSet<Operation *, 8> stack;
+      if (loop->hasAttr(kLoopPipelineAttr)) {
+        callSite->setAttr(kCallOccupancyAttr,
+                          buildPoint.getI64IntegerAttr(
+                              occupancy(callee, symbolTable, stack)));
+        return;
+      }
+      if (!loop->hasAttr(kLoopCallBoundaryAttr) &&
+          hasLoops(callee, symbolTable, stack))
+        loop->setAttr(kLoopCallBoundaryAttr,
+                      buildPoint.getStringAttr(callee.getSymName()));
+    });
   }
 
   void runOnOperation() override {
-    ModuleOp module = getOperation();
+    ModuleOp rootModule = getOperation();
     SymbolTableCollection symbolTable;
 
-    // Idempotency: drop the tags of a previous run.
-    module.walk([&](AffineForOp loop) {
+    rootModule.walk([&](AffineForOp loop) {
       if (isAutoPipelineTag(loop->getAttr(kLoopPipelineAttr)))
         loop->removeAttr(kLoopPipelineAttr);
       loop->removeAttr(kLoopFlattenedParentsAttr);
       loop->removeAttr(kLoopAutoUnrolledAttr);
+      loop->removeAttr(kLoopCallBoundaryAttr);
+    });
+    rootModule.walk([&](CallOpInterface callSite) {
+      callSite->removeAttr(kCallOccupancyAttr);
     });
 
-    for (auto func : module.getOps<func::FuncOp>())
+    for (auto func : rootModule.getOps<func::FuncOp>())
       if (!func.isExternal())
         applyUserUnrolls(func);
 
-    for (auto func : module.getOps<func::FuncOp>()) {
-      if (func.isExternal())
-        continue;
+    for (func::FuncOp func : callersFirst(rootModule, symbolTable)) {
       LicmModel licm(floatLoadsPerfect);
       Forest forest(licm);
-      // Top-level loops of this function; callee loops are decided with
-      // their own function and only take part in the feasibility test.
+
       SmallVector<AffineForOp, 8> roots;
       func.getBody().walk<WalkOrder::PreOrder>([&](AffineForOp loop) {
         roots.push_back(loop);
@@ -1113,10 +1151,11 @@ struct AutoPipelineUnrollPass
       SmallPtrSet<Operation *, 4> callStack;
       callStack.insert(func.getOperation());
       for (AffineForOp loop : roots)
-        nodes.push_back(forest.build(loop, /*viaCall=*/false, callStack));
+        nodes.push_back(forest.build(loop, false, callStack));
       for (auto &node : nodes)
         decide(*node, symbolTable);
     }
+    markCallBoundaries(rootModule, symbolTable);
   }
 };
 
