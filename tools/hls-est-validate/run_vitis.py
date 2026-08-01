@@ -18,6 +18,7 @@ import argparse
 import concurrent.futures as cf
 import contextlib
 import fcntl
+import hashlib
 import os
 import re
 import shutil
@@ -213,6 +214,21 @@ def harvest(work_wsl, cdir):
             (cdir / "db" / "DISASSEMBLY_FAILED").write_text(str(e))
 
 
+# Vitis's IP export nests <work>/hls/hls/impl/ip/subcore_prj/subcore_prj.srcs/sources_1/ip/<ip>/<ip>.xci (the IP
+# name, <top>_<core>_ip, twice) under the work dir. With a long dataset/benchmark that passes Windows' 260-byte path
+# limit after csynth has finished (Common 17-680, class_ece8893_spring_2025/NeuroFPGA_Project__symbolic_HLS), and v++
+# exits non-zero. Such a design gets a short hashed work dir; the work dir is not part of the cache key, so keys and
+# results are unchanged. DESIGN.txt in the dir names the design.
+MAX_WORK_NAME = 24
+
+
+def work_name(d):
+    name = f"{d['dataset']}/{d['benchmark']}"
+    if len(name) <= MAX_WORK_NAME:
+        return name
+    return "h/" + hashlib.sha1(name.encode()).hexdigest()[:12]
+
+
 def run_one(d, args):
     key = cache_key(d)
     cdir = cache_dir(d, key)
@@ -225,7 +241,7 @@ def run_one(d, args):
         return {"dataset": d["dataset"], "benchmark": d["benchmark"], "status": "dry-run", "key": key}
 
     tag = "" if EXTRA_CFG == list(C.EXTRA_HLS_CFG) else "td-" + EXTRA_CFG[-1].split("=")[-1] + "/"
-    work_wsl = f"{C.WORK_WSL_ROOT}/{tag}{d['dataset']}/{d['benchmark']}"
+    work_wsl = f"{C.WORK_WSL_ROOT}/{tag}{work_name(d)}"
     with file_lock(work_wsl + ".lock", blocking=False) as mine:
         if not mine:
             return {"dataset": d["dataset"], "benchmark": d["benchmark"], "top": d["top"], "key": key,
@@ -238,9 +254,10 @@ def run_one(d, args):
 
 
 def synthesise(d, args, key, cdir, res_path, tag, work_wsl, lock_fd):
-    work_win = f"{C.WORK_WIN_ROOT}/{tag}{d['dataset']}/{d['benchmark']}"
+    work_win = f"{C.WORK_WIN_ROOT}/{tag}{work_name(d)}"
     shutil.rmtree(work_wsl, ignore_errors=True)
     Path(work_wsl).mkdir(parents=True, exist_ok=True)
+    (Path(work_wsl) / "DESIGN.txt").write_text(f"{d['dataset']}/{d['benchmark']}" + os.linesep)
     cfg_wsl = Path(work_wsl) / "hls_config.cfg"
     cfg_wsl.write_text(make_cfg(d, work_win))
     cfg_win = C.win_backslash(cfg_wsl)
