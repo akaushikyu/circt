@@ -334,6 +334,8 @@ def design_status(r, v):
         return "exact" if r["exact"] else "mismatch"
     if r["status"] == "vitis missing":
         return f"no ground truth: excluded ({exclusion(v)[0]})"
+    if r["status"] == "sources differ":
+        return "ground truth is for other sources: excluded (compare.py `sources differ`)"
     return r["hlsest_status"]            # the hls-est failure text (CLAUDE.md status strings)
 
 

@@ -95,10 +95,28 @@ def cflags_for(d):
     return flags
 
 
-def cache_key(d):
+def extra_cfg_for(td):
+    """The [hls] lines a run with --td <td> adds (C.EXTRA_HLS_CFG with its throughput_driven setting)."""
+    return ([l for l in C.EXTRA_HLS_CFG if not l.startswith("syn.array_partition.throughput_driven")]
+            + [f"syn.array_partition.throughput_driven={td}"])
+
+
+def cache_key(d, extra_cfg=None, files=None):
+    """The cache key of design record d: its files, top, flags and sources, the Vitis configuration and the
+    [hls] lines (extra_cfg; default this run's EXTRA_CFG)."""
+    cfg = EXTRA_CFG if extra_cfg is None else extra_cfg
     extra = "|".join([d["top"], C.PART, C.CLOCK, C.VITIS_VERSION, C.FLOW_TARGET,
-                      " ".join(cflags_for(d)), " ".join(d["sources"]), " ".join(EXTRA_CFG), "cfg-v2"])
-    return C.sha256_of_files(design_files(d), extra)[:16]
+                      " ".join(cflags_for(d)), " ".join(d["sources"]), " ".join(cfg), "cfg-v2"])
+    return C.sha256_of_files(design_files(d) if files is None else files, extra)[:16]
+
+
+def cache_keys(d):
+    """{td: cache key} for both --td settings: the identity of the sources a ground-truth entry was
+    synthesised from (each entry records its key), which compare.py checks against the hls-est side, so a
+    result from one catalogue is never compared with a design of another (two catalogues can give one
+    dataset/benchmark key different sources)."""
+    files = design_files(d)
+    return {td: cache_key(d, extra_cfg_for(td), files) for td in ("off", "auto")}
 
 
 def cache_dir(d, key):
@@ -313,10 +331,10 @@ def main():
                          "its Polygeist copy is that copy's record, so its cache entry is reused")
     args = ap.parse_args()
     global EXTRA_CFG
-    EXTRA_CFG = [l for l in C.EXTRA_HLS_CFG if not l.startswith("syn.array_partition.throughput_driven")]
-    EXTRA_CFG.append(f"syn.array_partition.throughput_driven={args.td}")
+    EXTRA_CFG = extra_cfg_for(args.td)
 
-    designs = [d for d in D.load_designs(catalog=args.catalog) if d.get("sources")]
+    catalog = args.catalog or D.default_catalog()
+    designs = [d for d in D.load_designs(catalog=catalog) if d.get("sources")]
     if args.datasets:
         ds = set(args.datasets.split(","))
         designs = [d for d in designs if d["dataset"] in ds]
@@ -333,7 +351,7 @@ def main():
         with file_lock(str(args.out) + ".lock"):
             reparse(designs, args)
         return
-    print(f"{len(designs)} designs, -j{args.j}, timeout {args.timeout}s", flush=True)
+    print(f"{len(designs)} designs (catalogue {catalog}), -j{args.j}, timeout {args.timeout}s", flush=True)
     done = 0
     with cf.ThreadPoolExecutor(max_workers=args.j) as ex:
         futs = {ex.submit(run_one, d, args): d for d in designs}
@@ -345,6 +363,7 @@ def main():
                 r = {"dataset": d["dataset"], "benchmark": d["benchmark"], "top": d["top"],
                      "status": "harness error", "note": repr(e)[:300]}
             done += 1
+            r["catalog"] = catalog          # which catalogue's record produced this summary entry
             if not args.dry_run and r.get("status") != "locked":
                 update_summary(args.out, {C.design_key(d): r})
             tot = r.get("totals", {}) or {}

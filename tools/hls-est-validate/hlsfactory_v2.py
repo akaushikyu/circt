@@ -29,10 +29,16 @@ completely still yields its top and files.
 Design sources = the add_files entries without -tb (directories expand to their C/C++ files; a missing file
 is looked up by name in the design tree, as the harvest did); with none, every C/C++ file of the design
 tree whose name does not look like a testbench (the harvest's fallback).  A file added both as a design
-file and with -tb counts as a testbench file (synthesis only covers the top's call graph; cgeist
---function='*' would lower its main and file I/O, which hls-est cannot parse).  Includes =
+file and with -tb counts as a testbench file (cgeist --function='*' would lower its main and file I/O,
+which hls-est cannot parse), unless it defines the top function: Vitis compiles every design file, and the
+file that defines the top is part of what it synthesizes (accelerators/DGNN_Booster_* add their only design
+file both ways).  What Vitis does with the other both-ways files is unconfirmed.  Includes =
 "." + the src/include/inc/hls/cpp subdirectories that exist (generate.py's rule) + the -I of design-file
 cflags; defines = their -D.
+
+A directory that cannot be listed and a file that cannot be read are problems (discover() and load()
+report them; designs.load_hlsfactory_v2() raises on them), never a design or a file that silently goes
+missing: os.walk drops an unlistable directory without a word.
 
 Key stability: a design that also exists in the Polygeist copy keeps that copy's key (dataset/benchmark,
 benchmark = the design path below the dataset with "/" -> "__").  Its source set (the design sources and
@@ -113,14 +119,77 @@ def _L(p: str) -> str:
 # /mnt/d, where every listing and stat crosses the WSL file-system bridge.
 _DIRS: dict[str, tuple[list[str], list[str]]] = {}
 _BYTES: dict[str, bytes] = {}
+# Every listing / stat / read failure met since the last _drain_io_errors(); discover() and load() move
+# them into `problems`.  A listing failure is cached with the listing (_SCAN_ERRORS, by the directory whose
+# listing failed or held the entry) and reported again by every _walk() through that directory, so a second
+# load in the same process reports it too.
+IO_ERRORS: list[str] = []
+_SCAN_ERRORS: dict[str, list[str]] = {}
+
+
+def _io_error_text(path: str, what: str, e: OSError) -> str:
+    return f"{path}: cannot {what} ({e.strerror or e})"
+
+
+def _io_error(path: str, what: str, e: OSError) -> None:
+    IO_ERRORS.append(_io_error_text(path, what, e))
+
+
+def _drain_io_errors(problems: list[str]) -> None:
+    for e in dict.fromkeys(IO_ERRORS):
+        if e not in problems:
+            problems.append(e)
+    IO_ERRORS.clear()
+
+
+def _is_dir_entry(entry, path: str, errors: list[str]) -> bool | None:
+    """entry.is_dir() (following symlinks, as os.walk does); None and an error line when it fails, where
+    os.walk would silently take the entry for a file."""
+    try:
+        return entry.is_dir()
+    except OSError as e:
+        errors.append(_io_error_text(path, "stat", e))
+        return None
 
 
 def _scan(top: str) -> None:
-    lt = _L(top)
-    for dp, dn, fn in os.walk(lt):
-        dn[:] = sorted(d for d in dn if d != "__pycache__" and not d.startswith("."))
-        rel = os.path.relpath(dp, lt).replace("\\", "/")
-        _DIRS[top if rel == "." else posixpath.join(top, rel)] = (list(dn), sorted(fn))
+    """Fill _DIRS for the tree under `top` the way os.walk(top) lists it (top-down; symlinked directories are
+    listed but not entered; __pycache__ and hidden directories left out), except that a directory that cannot
+    be listed (cached as empty) and an entry that cannot be stat'ed (left out) are recorded in _SCAN_ERRORS
+    instead of vanishing; _walk() reports them."""
+    stack = [posixpath.normpath(top)]
+    while stack:
+        dp = stack.pop()
+        try:
+            with os.scandir(_L(dp)) as it:
+                entries = list(it)
+        except OSError as e:
+            _SCAN_ERRORS[dp] = [_io_error_text(dp, "list directory", e)]
+            _DIRS[dp] = ([], [])
+            continue
+        dn, fn, enter, errors = [], [], [], []
+        for e in entries:
+            path = posixpath.join(dp, e.name)
+            is_dir = _is_dir_entry(e, path, errors)
+            if is_dir is None:
+                continue
+            if not is_dir:
+                fn.append(e.name)
+                continue
+            if e.name == "__pycache__" or e.name.startswith("."):
+                continue
+            dn.append(e.name)
+            try:
+                link = e.is_symlink()
+            except OSError:
+                link = False
+            if not link:
+                enter.append(e.name)
+        dn.sort()
+        _DIRS[dp] = (dn, sorted(fn))
+        if errors:
+            _SCAN_ERRORS[dp] = errors
+        stack.extend(posixpath.join(dp, d) for d in sorted(enter, reverse=True))
 
 
 def _isfile(p):
@@ -1521,7 +1590,7 @@ def _sources_root(root: str) -> str:
 
 def _walk(top: str):
     """os.walk (top-down, sorted, without __pycache__ / hidden directories) from the listing cache;
-    yields WSL-style paths."""
+    yields WSL-style paths.  The listing errors of every directory it passes go to IO_ERRORS."""
     top = posixpath.normpath(top)
     if top not in _DIRS:
         if not os.path.isdir(_L(top)):
@@ -1531,6 +1600,7 @@ def _walk(top: str):
     while stack:
         dp = stack.pop()
         dn, fn = _DIRS[dp]
+        IO_ERRORS.extend(_SCAN_ERRORS.get(dp, ()))
         yield dp, list(dn), list(fn)
         stack.extend(posixpath.join(dp, d) for d in reversed(dn) if posixpath.join(dp, d) in _DIRS)
 
@@ -1592,10 +1662,12 @@ def evaluate_script(design_dir: str, script: str, env=None, links=None, text_ove
 
 def _sources_from_tcl(t: TclSubset, design_dir: str) -> tuple[list[str], list[str], list[str]]:
     """(design sources as paths relative to design_dir, header files named by add_files, notes).
-    A file the script adds both as a design file and with -tb is a testbench file: hp_fft_hls's common.tcl
-    and hlsyn-vitis' project.tcl add testbench.cpp (main, file I/O) both ways; synthesis only covers the
-    top's call graph, so dropping it cannot change what Vitis builds, while cgeist --function='*' would
-    lower main too."""
+    A file the script adds both as a design file and with -tb is a testbench file unless it defines the top:
+    hp_fft_hls's common.tcl and hlsyn-vitis' project.tcl add testbench.cpp (main, file I/O) both ways, and
+    cgeist --function='*' would lower its main too.  The file that defines the top stays a design source:
+    Vitis compiles every design file and synthesizes the top from it (accelerators/DGNN_Booster_* add their
+    only design file, top and main, both ways).  A both-ways file that defines only functions the top calls
+    would still be dropped (no such design known; what Vitis does with both-ways files is unconfirmed)."""
     srcs, hdrs, notes = [], [], []
     tb_files = {posixpath.normpath(f["abs"]) for f in t.files if f["tb"]}
     for f in t.files:
@@ -1603,8 +1675,11 @@ def _sources_from_tcl(t: TclSubset, design_dir: str) -> tuple[list[str], list[st
             continue
         p = f["abs"]
         if posixpath.normpath(p) in tb_files:
-            notes.append(f"add_files {f['path']}: also added with -tb; treated as a testbench file")
-            continue
+            if not (_isfile(p) and _defines_function(p, t.top)):
+                notes.append(f"add_files {f['path']}: also added with -tb; treated as a testbench file")
+                continue
+            notes.append(f"add_files {f['path']}: also added with -tb; kept as a design file "
+                         f"(it defines the top {t.top})")
         if _isdir(p):
             for c in _c_files(p):
                 srcs.append(c)
@@ -1632,6 +1707,29 @@ def _sources_from_tcl(t: TclSubset, design_dir: str) -> tuple[list[str], list[st
             seen.add(r)
             out.append(r)
     return out, [_rel(h, design_dir) for h in hdrs], notes
+
+
+C_COMMENT = re.compile(r"//[^\n]*|/\*.*?\*/", re.S)
+
+
+def _text_defines_function(text: str, name: str) -> bool:
+    """Whether C/C++ `text` defines a function `name`: the name right after a type-like token (identifier,
+    `>`, `*`, `&`; optionally qualified `ns::`), a parameter list without ';', braces or parentheses, then
+    `{` (after an optional const), comments removed.  A call (`name(a);`, `x = name(a)`, `if (n * name(a)) {`)
+    is not a definition; neither is a definition with a function-pointer parameter (the rule then treats the
+    file as before the fix).  A heuristic for the both-ways rule of _sources_from_tcl."""
+    if not name:
+        return False
+    pat = r"[\w>*&]\s*(?:\w+\s*::\s*)*\b" + re.escape(name) + r"\s*\([^;{}()]*\)\s*(?:const\s*)?\{"
+    return re.search(pat, C_COMMENT.sub(" ", text)) is not None
+
+
+def _defines_function(path: str, name: str) -> bool:
+    try:
+        return _text_defines_function(_read_text(path), name)
+    except OSError as e:
+        _io_error(path, "read", e)
+        return False
 
 
 def _cflag_parts(t: TclSubset, design_dir: str):
@@ -1781,7 +1879,8 @@ def discover(root: str, problems: list[str]) -> tuple[list[dict], list[dict]]:
                     continue
                 try:
                     text = _read_text(posixpath.join(dp, f))
-                except OSError:
+                except OSError as e:
+                    _io_error(posixpath.join(dp, f), "read", e)
                     continue
                 if _has_set_top(text):
                     cands.append((f, text))
@@ -1847,6 +1946,7 @@ def discover(root: str, problems: list[str]) -> tuple[list[dict], list[dict]]:
             skipped.append({"rel": f"{d['v2']['rel']}/{d['v2']['tcl']['script']}",
                             "reason": "no design source file exists ("
                                       + "; ".join(d["v2"]["source_notes"][:2]) + ")"})
+    _drain_io_errors(problems)
     return out, skipped
 
 
@@ -1898,7 +1998,8 @@ def _file_set(ddir: str, sources: list[str], includes=(".",)) -> dict[str, bytes
             continue
         try:
             out[r] = _read_bytes(p)
-        except OSError:
+        except OSError as e:
+            _io_error(p, "read", e)
             out[r] = None
             continue
         for kind, name in INCLUDE_LINE.findall(out[r]):
@@ -2024,6 +2125,7 @@ def load(root: str, polygeist_records: list[dict], test_hls_wsl: str, problems: 
     vanished = [{"key": f"{d['dataset']}/{d['benchmark']}", "rel": _rel(d["dir"], inputs), "top": d["top"],
                  "mode": d.get("mode")}
                 for d in polygeist_records if id(d) not in matched_pg]
+    _drain_io_errors(problems)
     return out, {"skipped": skipped, "vanished": vanished, "root": root}
 
 
@@ -2088,6 +2190,15 @@ def _self_test() -> None:
           'flow_name = "VitisHLSSynthFlow"\nsynth_tcl = "dataset_hls.tcl"\n'
     cfg = design_config_from_mapping(parse_toml_subset(doc))
     assert cfg["flows"][0]["settings"]["synth_tcl"] == "dataset_hls.tcl" and cfg["env_vars"] == {"A": "1"}
+    for text, want in [("void k(int a[4]) {", True), ("void\nk (int *a,\n int n)\n{", True),
+                       ("ap_uint<8> k(ap_uint<8> x) const {", True), ("void ns::k(int a) {", True),
+                       ('extern "C" { void k(int a[4]){ a[0] = 1; } }', True),
+                       ("int main() { k(a); return 0; }", False), ("x = k(a); if (k(b)) { y(); }", False),
+                       ("void k(int a[4]);", False), ("// void k(int a) {\n", False),
+                       ("/* void k(int a) { */ int z;", False), ("void kk(int a) {", False),
+                       ("if (n * k(a)) { y(); }", False), ("while (a > k(b)) {", False),
+                       ("if (x && k(a)) {", False)]:
+        assert _text_defines_function(text, "k") == want, text
 
 
 def _check_toml(root: str) -> int:

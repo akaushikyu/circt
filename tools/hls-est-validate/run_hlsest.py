@@ -45,6 +45,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import common as C                       # noqa: E402
 import designs as D                      # noqa: E402
+import run_vitis as RV                   # noqa: E402  (cache_keys: the ground truth's source identity)
 
 LOCK = threading.Lock()
 MLIR_ROOT = Path.home() / "hls-est-work" / "mlir"
@@ -387,6 +388,13 @@ def run_hlsest(mlir, top_fn, pipeline, timeout, log_prefix, privatize=True, debu
 def process(d, args, shim, run_id):
     r = {"dataset": d["dataset"], "benchmark": d["benchmark"], "top": d["top"], "mode": d.get("mode"),
          "pipeline": args.pipeline, "shim": str(shim)}
+    if d.get("sources") and d.get("mode") != "mlir-only":
+        try:
+            # the Vitis cache keys of this record (both --td): compare.py compares a design only with a
+            # ground-truth entry synthesised from the same sources
+            r["vitis_keys"] = RV.cache_keys(d)
+        except OSError as e:
+            r["vitis_keys_error"] = repr(e)[:200]
     prev = mlir_from_record(d, args)
     if prev and prev.get("mlir") and Path(prev["mlir"]).exists():
         st, mlir, note = "ok", Path(prev["mlir"]), f"from {args.mlir_from}"
@@ -464,8 +472,8 @@ def main():
                                         + ("top=<top> on --bram-analysis" if bram_top_supported(C.HLS_EST)
                                          else "no top= (this hls-est build has no such option)")),
                          "timeout": args.timeout, "run_id": run_id, "hls_est": C.HLS_EST}}
-    if catalog != "polygeist":
-        results["_meta"]["catalog"] = f"{catalog} ({D.hlsfactory_root()})"
+    results["_meta"]["catalog"] = (f"{catalog} ({D.hlsfactory_root()})" if catalog != "polygeist"
+                                   else catalog)
     if not args.quiet:
         print(f"{len(designs)} designs; pipeline: {args.pipeline}; shim: {shim}; git {ghash}", flush=True)
     done = 0

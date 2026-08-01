@@ -9,6 +9,10 @@ Per design the comparison records:
   arrays: one row per C array name, with the Vitis BRAM (summed over partition
           banks and modules), the hls-est BRAM (summed over banks of the same
           variable), the diff, Vitis words/bits/banks/core and the hls-est RAM type.
+A design whose hls-est record carries its Vitis cache keys (run_hlsest.py `vitis_keys`) is compared
+only with a ground-truth entry whose `key` is one of them; any other entry was synthesised from other
+sources (another catalogue's record under the same dataset/benchmark key, or an edited design) and the
+row gets status "sources differ".  Older result files without the keys are compared as before.
 Array names: Vitis reports `<name>_U` instances per module (partition banks are
 `<name>_<k>_U`); hls-est's debug JSON (--bram-debug-json) carries the
 `polygeist.varname` / global symbol of each memref.  Without the debug JSON only
@@ -140,7 +144,13 @@ def compare_one(key, v, h):
     r["vitis_note"] = (v or {}).get("note", "")
     r["hlsest_status"] = (h or {}).get("status", "missing")
     r["vitis_bram"], r["hlsest_bram"] = vb, hb
-    if vb is not None and hb is not None:
+    vkey, hkeys = (v or {}).get("key"), (h or {}).get("vitis_keys")
+    if vb is not None and hb is not None and vkey and hkeys and vkey not in hkeys.values():
+        r["diff"], r["exact"] = None, False
+        r["status"] = "sources differ"
+        r["vitis_key"], r["hlsest_vitis_keys"] = vkey, hkeys
+        r["vitis_catalog"] = (v or {}).get("catalog")
+    elif vb is not None and hb is not None:
         r["diff"] = hb - vb
         r["exact"] = (hb == vb)
         r["status"] = "compared"
@@ -211,6 +221,7 @@ def summarize(rows):
         "total_abs_error": sum(abs(r["diff"]) for r in cmp_),
         "vitis_missing": sum(1 for r in rows if r["status"] == "vitis missing"),
         "hlsest_missing": sum(1 for r in rows if r["status"] == "hls-est missing"),
+        "sources_differ": sum(1 for r in rows if r["status"] == "sources differ"),
         "per_dataset": {},
     }
     by = defaultdict(list)
@@ -227,9 +238,11 @@ def summarize(rows):
 
 
 def print_report(rows, s, meta, show_arrays):
-    print(f"pipeline: {meta.get('pipeline')}   hls-est git: {meta.get('hls_est_git')}")
+    print(f"pipeline: {meta.get('pipeline')}   hls-est git: {meta.get('hls_est_git')}   "
+          f"catalogue: {meta.get('catalog', 'not recorded')}")
     print(f"designs {s['designs']}  compared {s['compared']}  exact {s['exact']}  "
-          f"|err| {s['total_abs_error']}  vitis-missing {s['vitis_missing']}  hls-est-missing {s['hlsest_missing']}")
+          f"|err| {s['total_abs_error']}  vitis-missing {s['vitis_missing']}  hls-est-missing {s['hlsest_missing']}"
+          + (f"  sources-differ {s['sources_differ']}" if s.get("sources_differ") else ""))
     print(f"{'dataset':28s} {'n':>4s} {'cmp':>4s} {'exact':>5s} {'|err|':>7s} {'est-fail':>8s} {'vit-fail':>8s}")
     for ds, d in s["per_dataset"].items():
         print(f"{ds:28s} {d['designs']:4d} {d['compared']:4d} {d['exact']:5d} {d['abs_error']:7d} "
@@ -249,6 +262,11 @@ def print_report(rows, s, meta, show_arrays):
     if fails:
         print(f"\nnot compared ({len(fails)}):")
         for r in fails:
+            if r["status"] == "sources differ":
+                print(f"  {r['key']:50s} sources differ: ground truth key {r['vitis_key']} "
+                      f"(catalogue {r.get('vitis_catalog') or 'not recorded'}), hls-est record "
+                      f"{r['hlsest_vitis_keys'].get('off')} (td=off)")
+                continue
             print(f"  {r['key']:50s} vitis: {r['vitis_status']} {r['vitis_note'][:60]} | hls-est: {r['hlsest_status']}")
 
 

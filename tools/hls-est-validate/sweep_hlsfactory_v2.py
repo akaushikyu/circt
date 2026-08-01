@@ -4,7 +4,7 @@ not, and why.
 
     HLS_EST_BIN=<frozen hls-est> CGEIST_BIN=<frozen cgeist> HOME=<private home> \\
     python3 sweep_hlsfactory_v2.py [-j 8] [--timeout 120] [--datasets a,b] [--benchmarks x,y]
-                                   [--out results/hlsfactory-v2-sweep.json] [--merge]
+                                   [--out results/hlsfactory-v2-sweep.json] [--merge [--drop-stale]]
 
 Every HLSFactory design of designs.load_hlsfactory_v2() (polybench_pragmas / basic are not HLSFactory
 designs and are left out) goes through run_hlsest.process(): cgeist with run_hlsest's command, MLIR
@@ -17,8 +17,11 @@ writes for it, plus
   v2            catalogue facts: source_match, config, flows, Tcl part / clock / directives, notes
   cause / cause_detail / error_line   make_hlsfactory_report.classify() of a failure
 --merge updates an existing --out file with the designs of this run (a re-sweep of a subset; with
---changed-only, of the designs whose record a loader change altered; designs the catalogue no longer has
-are dropped and listed in _meta.resweeps).  --followup star,synmacro adds diagnostics to an existing
+--changed-only, of the designs whose record a loader change altered).  Designs of --out that the loaded
+catalogue lacks are dropped (and listed in _meta.resweeps) only with --drop-stale; without it --merge
+stops and names them, because a design can also be missing when the tree walk did not see its directory.
+A catalogue load that reports a problem (an unreadable directory or file, an invalid hlsfactory.toml, a
+duplicate key) stops the sweep before anything runs.  --followup star,synmacro adds diagnostics to an existing
 --out: the '*' attempt of empty-module designs (record star_attempt) and a -D__SYNTHESIS__ run of failed
 designs whose sources mention the macro (record synthesis_macro_experiment); neither changes a status.
 --catalogue / --save-catalogue reuse a loaded catalogue (the tree walk over /mnt/d is slow under load).
@@ -189,6 +192,9 @@ def main():
     ap.add_argument("--hlsfactory-root", default=None)
     ap.add_argument("--out", default=str(C.RESULTS_DIR / "hlsfactory-v2-sweep.json"))
     ap.add_argument("--merge", action="store_true", help="update --out instead of replacing it")
+    ap.add_argument("--drop-stale", action="store_true",
+                    help="with --merge: drop the designs of --out that the loaded catalogue lacks (after a loader "
+                         "change that renames or removes designs); without it --merge refuses to drop them")
     ap.add_argument("--force-cgeist", action="store_true")
     ap.add_argument("--run-id", default=None)
     ap.add_argument("--extra-define", action="append", default=[],
@@ -219,7 +225,11 @@ def main():
         cat = C.load_json(a.catalogue)
         designs, info = cat["records"], cat["info"]
     else:
-        designs = D.load_hlsfactory_v2(a.hlsfactory_root, info=info)
+        problems: list[str] = []
+        designs = D.load_hlsfactory_v2(a.hlsfactory_root, problems=problems, info=info)
+        if problems:
+            sys.exit(f"catalogue load reported {len(problems)} problems (unreadable directories or files, invalid "
+                     "hlsfactory.toml, duplicate keys); nothing swept:\n  " + "\n  ".join(problems[:20]))
     load_s = round(time.time() - t0, 1)
     if a.save_catalogue:
         C.dump_json({"records": designs, "info": info}, a.save_catalogue)
@@ -264,6 +274,11 @@ def main():
         if (old.get("cgeist_md5"), old.get("hls_est_sha256")) != (md5, bsha):
             sys.exit("--merge: this run's cgeist / hls-est differ from the ones of --out; use a new --out")
         stale = sorted(k for k in out if k != "_meta" and k not in all_keys)
+        if stale and not a.drop_stale:
+            sys.exit(f"--merge: {len(stale)} designs of {a.out} are not in the loaded catalogue "
+                     f"({', '.join(stale[:5])}{', ...' if len(stale) > 5 else ''}); after a loader change that "
+                     "renames or removes designs re-run with --drop-stale, otherwise load the catalogue again "
+                     "(a directory the walk did not see)")
         for k in stale:                     # designs the catalogue no longer has (renamed by a loader fix)
             del out[k]
         hist = old.get("resweeps", [])
