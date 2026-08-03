@@ -1350,3 +1350,23 @@ Polygeist:
   being re-run with the short work dir of d71fb9eca (NeuroFPGA re-run: ok, BRAM 272). The remaining failure is
   sreenidhireddy lab3 (its top function is not in the sources: UNSUPPORTED). No failure came from the old timeout
   killer. Tier 2 (327 designs) started on the fixed runner.
+
+## 2026-10-11 night: Peter's decisions #38-#40; W6 stopped; W11 real headers launched
+
+- #38: the plugin design must be hardware-agnostic. Workflow `hw-agnostic-study` (wf_10f08a77-fb3) runs five vendor and
+  HLS-tool surveys, a code audit and a design audit (AMD/Vitis specificity), then a design, a critique on Intel, Microchip
+  and Lattice targets, and a revision. A writer workflow applies the result to the design memo after it finishes.
+- Scheduler-interface design (#37) finished: 1dda02772, plus review fixes 00927a7aa (14 defects).
+- #39: no more header shims; cgeist compiles the real Vitis headers. #40: hls-llvm-project's Xilinx HLS files are
+  Apache-2.0 and its LLVM base is NCSA, so code may be ported (CLAUDE.md ground rule annotated). W6 (shim proxy classes,
+  #15) stopped as superseded. W8b restarted with a no-new-shim note: its shim-gap classes go to W11. W10's gate is now
+  `w5.done`.
+- Feasibility inventory (scratchpad/realhdr/inventory.md). Vitis synthesis reads `Vitis/common/technology/autopilot`
+  with `-D__VITIS_HLS__ -DAESL_SYN -D__SYNTHESIS__ -D__HLS_SYN__ -D__DSP48E1__ -include etc/autopilot_ssdm_op.h`.
+  `bitwidth(N)` needs a small clang patch (mapping to `_BitInt`). The bit builtins are lowered in cgeist. Streams,
+  tasks, ap_float, the FFT IP and the float math library need separate hls-est models.
+- W11 launched (wf_c04f21dc-46a): plan, implement (private Polygeist and llvm-project worktrees and builds on ext4, under
+  /home/peter/w11), independent validation (lit on the real headers; at least 300 differential kernels bit-exact against
+  g++ with the real headers in C-simulation mode; widths compared with Vitis's a.g.ld.5.gdce.ll; harness `--shim real`
+  against exactclass), review, fix. Integration into the shared build happens after W10.
+- Correction: the minute timestamps on MEMOS #38-#40 were estimates and are removed (the clock read 03:52 just after #40).
