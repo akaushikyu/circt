@@ -1370,3 +1370,14 @@ Polygeist:
   g++ with the real headers in C-simulation mode; widths compared with Vitis's a.g.ld.5.gdce.ll; harness `--shim real`
   against exactclass), review, fix. Integration into the shared build happens after W10.
 - Correction: the minute timestamps on MEMOS #38-#40 were estimates and are removed (the clock read 03:52 just after #40).
+
+## 2026-10-11 night: two study workflows paused at Peter's request
+
+- Peter: "pause the ip-task modelling proposal and dse latency until the other agents are done then resume it". I stopped
+  both: `ip-task-modelling-proposal` (wf_2cc8ddfe-0ef; memo M13) and `dse-latency-profile` (wf_166b34c1-070; memo M14,
+  decision #41). Resume condition: when the workflows running at the time of the pause have finished. Those are W3
+  (wlszx3338), W5 (wklfig0w5), W8/W8b (wjnnkc91v, up to the end of fix:w8b; W8c then waits for w1.done), W11
+  (wg1qa3jyj), hw-agnostic-study (wqs7d2ges) and real-headers-feasibility (w56blukk2). The later gate-launched tracks
+  (W7, W10, W2, W1b, W9, P1-P3) are not part of the condition. Resume with resumeFromRunId and the same script paths
+  (workflows/scripts/ip-task-modelling-proposal-wf_2cc8ddfe-0ef.js and dse-latency-profile-wf_166b34c1-070.js).
+  Completed steps replay from cache.
