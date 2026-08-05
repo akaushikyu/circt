@@ -33,6 +33,7 @@ hls-est error: <status> | hls-est timeout <N>s.
 import argparse
 import concurrent.futures as cf
 import hashlib
+import os
 import re
 import shlex
 import shutil
@@ -77,10 +78,33 @@ def shim_cgeist_flags(shim):
     return flags
 
 
+# What Vitis 2025.1's front end is given beyond the design's own flags (VITIS_NOTES N19, OPEN_ISSUES
+# O30 / O31): the synthesis macros, and the language standard (C++ sources get no -std= and compile
+# as C++14, the hls-llvm-project clang's default gnu++14; C sources get -std=gnu99).  Opt-in with
+# VITIS_FRONTEND=1 until it is measured on the harness subset (W8b).
+VITIS_FRONTEND_DEFINES = ("__SYNTHESIS__", "__VITIS_HLS__", "__HLS_SYN__", "AESL_SYN")
+VITIS_FRONTEND = os.environ.get("VITIS_FRONTEND", "0") not in ("0", "off", "no", "")
+
+
+def vitis_frontend_flags(d):
+    """The macros and -std= flag Vitis' front end adds for design d ([] when VITIS_FRONTEND is off).
+    -std= only when all sources are one language: a single flag cannot serve C and C++ at once, and
+    clang rejects a C++ standard for a C file."""
+    if not VITIS_FRONTEND:
+        return []
+    flags = ["-D" + m for m in VITIS_FRONTEND_DEFINES]
+    langs = {"c" if s.endswith(".c") else "c++" for s in d["sources"]}
+    if langs == {"c"}:
+        flags.append("-std=gnu99")
+    elif langs == {"c++"}:
+        flags.append("-std=gnu++14")
+    return flags
+
+
 def cgeist_cmd(d, shim, out, func):
     cmd = [C.CGEIST, *d["sources"], f"--function={func}", "-S", "--hls-annotate",
            "--raise-scf-to-affine", "--memref-fullrank", *shim_cgeist_flags(shim),
-           f"-resource-dir={C.CLANG_RESOURCE_DIR}", "-I", str(shim), "-I", "."]
+           f"-resource-dir={C.CLANG_RESOURCE_DIR}", *vitis_frontend_flags(d), "-I", str(shim), "-I", "."]
     for inc in d.get("includes", []):
         if inc != ".":
             cmd += ["-I", inc]
@@ -122,6 +146,9 @@ def source_hash(d, shim):
     flags = shim_cgeist_flags(shim)
     if flags:   # only then, so that the keys of shims without cgeist_flags do not change
         extra += "|cgeist-flags:" + " ".join(flags)
+    fe = vitis_frontend_flags(d)
+    if fe:      # likewise: VITIS_FRONTEND=0 keeps the keys from before W8b
+        extra += "|vitis-frontend:" + " ".join(fe)
     extra += "|cgeist-md5:" + cgeist_md5_or_raise()
     return C.sha256_of_files(files, extra)[:16]
 

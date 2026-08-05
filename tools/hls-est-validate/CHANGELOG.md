@@ -3,6 +3,74 @@
 Newest entry first. One entry per logical change, including changes that were
 tried and reverted. Branch: `hls-est-vitis-match` in `~/circt`.
 
+## 2026-10-11 — check_semantics.py: each design's cgeist MLIR run against its native build, bit for bit, with the real Vitis headers in C simulation as the reference; first run over the HLSFactory_v2 sweep; cause classes for decision #39 (W8b part 1)
+- **Commit:** the commit that adds this entry (branch `hls-est-vitis-match`). It changes only the harness, notes and docs: no C++, cgeist or shim code, no estimate, no MLIR cache key, no harness command. The new cgeist flags are opt-in.
+- **Files:**
+  - `tools/hls-est-validate/check_semantics.py` (new; the first W8b attempt started it, this one finishes it).
+  - `run_hlsest.py`: `VITIS_FRONTEND=1`, which is opt-in. It adds N19's `-D__SYNTHESIS__ -D__VITIS_HLS__ -D__HLS_SYN__ -DAESL_SYN` and `-std=gnu++14` / `-std=gnu99` to the cgeist command, and names them in the MLIR cache key only when on.
+  - `make_hlsfactory_report.py`:
+    - The shim-gap classes now name track W11 (#39).
+    - A cgeist crash after a clang error takes the error's class.
+    - New class `absolute-include`.
+    - An ambiguous call involving hls:: or ap_ types is `shim-hls-api`.
+    - `--semantics` adds the semantic-check columns.
+  - Notes: VITIS_NOTES N20, N21, N22 (new); OPEN_ISSUES O36, O37, O38 (new); MEMOS #28 status.
+  - Docs: `hls-doc/semantics.md` (new, generated), `hls-doc/harness.md`, `hls-doc/README.md`.
+- **What:**
+  - **Candidate:** the MLIR file hls-est reads, plus a wrapper `cs_entry`. CIRCT's MLIR (`mlir-opt` / `mlir-translate`, the parser hls-est uses) lowers it, and `llc -O0` compiles it. The shim only declares the `hls::stream` methods, so the script generates definitions for them (LLVM IR) on token FIFOs keyed by the object's address.
+  - **Reference `real` (#39):** the design's sources built with `g++-13 -O1` against an ext4 mirror of the Vitis 2025.1 headers, without `__SYNTHESIS__`. This is Vitis' own C simulation.
+    - A generated thunk converts every argument between the MLIR layout and the native objects.
+    - `ap_int` / `ap_fixed` values go through `ap_int_base<W,false>`. The C-simulation `ap_private` keeps signed values sign-extended, and from 65 bits it is larger than `iN`.
+    - `hls::stream` arguments go through a real `hls::stream`, filled from the driver's FIFO before the call and drained back into it afterwards.
+  - **Reference `shim`:** clang 18 against the headers cgeist read, with no conversion.
+  - **Which reference decides:** the first one that builds. The next one runs after a mismatch or an n/a. A mismatch under both references is a frontend bug. A mismatch under `real` only is a header-semantics difference (W11).
+  - **Driver (shared by both sides):**
+    - Every argument gets guard zones and the same seeded values: modes small / wide / pos, seeds 1 and 2, two calls per run.
+    - It compares every buffer, the guards and the tokens left in each stream, bit for bit. A NaN counts as one value.
+    - A run counts only if the reference passes AddressSanitizer.
+    - On a mismatch it rebuilds with `-ftrivial-auto-var-init=pattern|zero`; outputs that then change mean uninitialised reads, which is reported as n/a. It also runs UBSan; the design's own reports come first, ahead of the headers'.
+  - **Robustness:**
+    - The standard headers come before the design's sources.
+    - The thunk's identifiers are prefixed, and the library names it uses are shielded from design macros with `push_macro`. Two designs broke without this: spector_hls dct (`#define size ...`) and vitis_examples 06-13 (`#define N`).
+    - Overloaded tops are resolved.
+    - There is a reference-build cache.
+  - **Modes:** `--probe a.cpp` (small kernels through the harness cgeist command), `--top-fn` (bisect one function of a design), `--md`, `--self-test`.
+- **Why:**
+  - Definition of done item 1 ("semantically correct (checked by differential execution ...)").
+  - MEMOS #39 ("validate it with tests on real xilinx headers").
+  - The lessons skill's rule 5: every frontend change gets a runtime check.
+  - The cause-class changes apply #39: no new shim headers, so the shim-gap classes belong to W11.
+- **Effect:** run on the W8a sweep's MLIR (installed cgeist c70ba2b0, md5 6ff60ea1, exactclass shim). The first pass used `--ref real` on all 801 designs (47 min at -j 10). A second pass used `--ref real,shim --all-refs` on the 22 designs that mismatched or were n/a under `real`, and a third re-ran 6 designs after the thunk fixes. The merged result is `results/semantics.json` (gitignored) and the page is `hls-doc/semantics.md`.
+  - **292 designs checked:** 291 decided by the real headers, 1 by the shim.
+    - **279 equal.** Per dataset: polybench 9/9, polybench__reproducible 183/183, machsuite 11/11, vitis_examples 15/15, spector_hls 7/7, forgebench 19 of 27, class 2023 6/6, class 2025 24 of 29, hlsyn-vitis 1, pp4fpgas 3, rosetta 1.
+    - **13 mismatches.** 12 are "real only (shim equal)": the shim's `hls::exp` / `tanh` / `sqrt` on `ap_fixed` is not Vitis' C simulation (O38, W11). These are forgebench activation_module / op1-3, attention_op_p2/p3, mlp, and the five class_ece8893_spring_2025 lab2 softmax designs. **1 is a frontend wrong-code bug:** forgebench gpt_transformer_p1 (O37). The bisection with `--top-fn` narrowed it to `dropout`, and the plain-C++ probe `q3.cpp` reproduces it. It is still present in W5's cgeist (md5 95b960fc).
+  - **Not checked:**
+    - 332 have `polygeist.*` ops; they need a polygeist-opt build after the W8b gate.
+    - 146 have no MLIR (cgeist failed; W8a classes).
+    - The reference itself has undefined behaviour on 16: 9 out-of-bounds accesses (forgebench conv_block_* locals, GradCAM, spector normals, ...) and 7 divisions by zero (forgebench attention_op_p1 / tiled_attn_*, which divide by zero by construction, N1; polybench fixed cholesky).
+    - 6 need Vitis' C-simulation math library, which ships only as a Windows binary (cordic tables, `hls::powf`, `hls::atan(double)`). Their shim reference is n/a as well (FPE / OOB).
+    - 3 reference timeouts (Analog-CIM).
+    - 2 have argument buffers over 1 GiB (Yolo-v3 synth).
+    - 2 read uninitialised memory.
+    - 1 candidate does not link: cgeist emits `__builtin_inff()` as an external call (a frontend gap, reproduced by a probe).
+    - 1 top is not a function of the sources (sreenidhireddy lab3, W8a `top-not-in-sources`).
+  - **Probes (all equal under both references):**
+    - 4 `hls::stream` kernels: argument streams, a local stream, `ap_fixed` tokens, `read_nb` / `size`.
+    - The q4 / q5 controls for O37.
+    - Polybench and machsuite re-run through the CIRCT-MLIR path give the first attempt's 20 of 20 equal again.
+  - **Cause classes** (reclassifying the W8a sweep): 8 of the 26 `cgeist-crash` designs crashed after a clang error and move to that error's class:
+    - edgemoe: `missing-vendor-header` `gmp.h` (W11).
+    - GNN-virtual-node bitstream / pipelined: new `absolute-include` (`/tools/software/xilinx/Vitis_HLS/2021.1/include/gmp.h`, UNSUPPORTED).
+    - gramschmidt x3, streaming_vadd: `shim-hls-api`.
+    - flowgnn gat: `shim-ap-feature`.
+    The page will be regenerated from the W8b re-sweep.
+  - **Vitis evidence for the W8b fixes (new notes):**
+    - N20: `unroll` outside a loop and a partition `dim` beyond the rank are warnings that Vitis ignores; a partition naming an undeclared variable is an error.
+    - N21: a cyclic / block factor above the dimension clamps silently to a complete partition.
+    - N22: two `interface` pragmas on one port are accepted, and the later one decides the bundle.
+    - Each rests on `vitis_adhoc` kernels `w8b_pragma_*`, `w8b_factor_*`, `w8b_iface_*`.
+- **Reverted?:** no
+
 ## 2026-10-11 — cgeist lit: `Test/HLS/Inputs/vitis` becomes a copy of the exactclass shim, every `%vitis_include` RUN line passes `--scalar-wrapper-abi`, the HLSFactory tests are regenerated (MEMOS decision #10; W5 item 3)
 - **Commit:** Polygeist 95a5ce16 (branch `hls-est-vitis-match` in `/mnt/d/HLS`; test headers, tests and docs only, no cgeist code); circt: the commit that adds this entry. W5's private binary is unchanged by this item: `/home/peter/tmp/w5g/cgeist.i2b`, md5 95b960fc13d458da755563eb3a80cecb, the code of Polygeist 5432780b (items 1 + 2). **Not installed** (the coordinator installs it).
 - **Files (Polygeist):** tools/cgeist/Test/HLS/Inputs/vitis/{ap_fixed.h, ap_int.h, hls_half.h, hls_math.h} (now byte-identical to `shim/exactclass` of circt 25060c328; ap_axi_sdata.h, ap_cint.h, hls_stream.h and hls_vector.h were identical already); Inputs/vitis/README.md (new: where the headers come from, the flag, what is missing); Inputs/vitis/cgeist_flags (new, the shim's flag file: `run_hlsest.py --shim polygeist` now passes `--scalar-wrapper-abi` too, checked on bicg 8 and attention_op_p1 73); Test/HLS/lit.local.cfg (comment); HLSAllocation.cpp and regressions/hlsfactory-subscripted-variable.cpp (RUN lines); hlsfactory/generate.py (runs and writes the flag); hlsfactory/*/*.test (776 RUN lines, 287 tests regenerated); hlsfactory/SUMMARY.md; docs/hls-pragmas.md.

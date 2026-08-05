@@ -31,9 +31,11 @@ import common as C                         # noqa: E402
 VITIS_INCLUDE = Path(C.VITIS_INCLUDE_WSL)
 
 # cause class -> (stage, meaning, fix track)
+# MEMOS decision #39 (Peter, 2026-10-11): no new shim headers or members.  Every shim-gap class waits for
+# track W11, which makes cgeist compile the real Vitis 2025.1 headers (-D__SYNTHESIS__).
+W11 = "waiting for W11 (real Vitis headers, MEMOS #39)"
 CLASSES = {
-    "missing-vendor-header": ("cgeist", "a Vitis 2025.1 header the harness shim does not provide",
-                              "W8b shim (stand-in header)"),
+    "missing-vendor-header": ("cgeist", "a Vitis 2025.1 header the harness shim does not provide", W11),
     "missing-legacy-vendor-header": ("cgeist", "a Xilinx library header Vitis 2025.1 no longer ships "
                                                "(hls_video.h, hls_opencv.h, ...): Vitis cannot compile it either",
                                      "UNSUPPORTED (needs the old Vitis library)"),
@@ -44,15 +46,17 @@ CLASSES = {
                             "UNSUPPORTED (dataset incomplete)"),
     "include-path": ("harness", "the header is in the design tree but not on the include path",
                      "harness (loader include dirs)"),
-    "shim-range-select": ("cgeist", "shim gap: assignable range() / bit select (O15)", "W6 / W8b shim"),
-    "shim-ap-feature": ("cgeist", "shim gap: an ap_int / ap_fixed member or operator exactclass lacks",
-                        "W8b shim"),
-    "shim-hls-api": ("cgeist", "shim gap: hls::stream / hls::vector / hls_math / other hls:: API", "W8b shim"),
+    "absolute-include": ("cgeist", "the design #includes a file by an absolute path of its author's machine "
+                                   "(e.g. a Vitis 2021.1 install under /tools/software): Vitis cannot compile "
+                                   "it on another machine either",
+                         "UNSUPPORTED (design bug)"),
+    "shim-range-select": ("cgeist", "shim gap: assignable range() / bit select (O15)", W11),
+    "shim-ap-feature": ("cgeist", "shim gap: an ap_int / ap_fixed member or operator exactclass lacks", W11),
+    "shim-hls-api": ("cgeist", "shim gap: hls::stream / hls::vector / hls_math / other hls:: API", W11),
     "shim-std-include": ("cgeist", "shim gap: the Vitis headers include <stdint.h>, <stdio.h>, <stdlib.h>, "
                                    "<cmath>, <iostream>, <string> (etc/ap_common.h, hls_math.h); the stand-ins do "
                                    "not, so a design that relies on them misses uint32_t, memcpy, stderr, ... "
-                                   "(only designs whose include closure has a Vitis header)",
-                         "W8b shim"),
+                                   "(only designs whose include closure has a Vitis header)", W11),
     "design-std-include": ("cgeist", "the design uses a standard-library name (stderr, uint32_t, memcpy, ...) "
                                      "without including its header, and no Vitis header is in its include "
                                      "closure: it compiles only where another standard header happens to "
@@ -193,6 +197,13 @@ def classify_cgeist(r, stderr):
     if st == "cgeist timeout":
         return "cgeist-timeout", "", f"no output within {r.get('cgeist_note') or 'the timeout'}"
     if st == "cgeist crash":
+        # cgeist goes on after a clang error and may then crash: the clang error is the cause
+        # (edgemoe: 'gmp.h' not found; gramschmidt: an ambiguous hls::nextafter)
+        k_assert = next((i for i, ln in enumerate(lines)
+                         if re.search(r"Assertion .* failed|UNREACHABLE executed|LLVM ERROR", ln)), len(lines))
+        if any(re.search(r":\d+:\d+: (fatal )?error:|^(fatal )?error:", ln) for ln in lines[:k_assert]):
+            cause, detail, first = classify_cgeist(dict(r, status="cgeist error"), "\n".join(lines[:k_assert]))
+            return cause, detail, (first + " (cgeist then crashed)")[:300]
         a = _first(lines, r"Assertion .* failed|UNREACHABLE executed|LLVM ERROR|Segmentation|Aborted")
         loc = _first(lines, r"^\s*#\d+ .* in .*(clang-mlir|CGCall|cgeist|polygeist|mlir::)")
         return "cgeist-crash", "", (a or loc or (lines[-1].strip() if lines else ""))[:300]
@@ -205,6 +216,8 @@ def classify_cgeist(r, stderr):
     m = re.search(r"fatal error: '([^']+)' file not found", first)
     if m:
         h = m.group(1)
+        if os.path.isabs(h):
+            return "absolute-include", h, first
         if HOST_HEADER.search(h):
             return "missing-host-header", h, first
         if _vendor_has(h):
@@ -228,6 +241,9 @@ def classify_cgeist(r, stderr):
         return ("shim-std-include" if _includes_vitis_header(r) else "design-std-include"), name, first
     if re.search(r"ISO C\+\+1[7-9] does not allow|C\+\+17 removed|no longer supported in C\+\+17", first):
         return "cxx-standard", "", first
+    if "is ambiguous" in first and k is not None and re.search(r"hls_math|hls::|ap_(u)?fixed|ap_(u)?int",
+                                                                 "\n".join(lines[k:k + 14])):
+        return "shim-hls-api", "", first
     if "no matching function for call" in first or "no matching constructor" in first:
         notes = "\n".join(lines[k:k + 12]) if k is not None else ""
         if re.search(r"hls::(stream|vector)", notes):
@@ -344,7 +360,17 @@ def truth_of(key, r, vitis):
     return (v.get("totals") or {}).get("BRAM"), "ok"
 
 
-def build_page(sweep, vitis, src_name, vitis_name="results/vitis.json"):
+def semantics_of(sem, key):
+    """'equal' / 'mismatch' / 'n/a: <reason>' of a design in a check_semantics.py result ('' if absent)."""
+    s = (sem or {}).get(key)
+    if not s:
+        return ""
+    if s.get("status") in ("equal", "mismatch"):
+        return s["status"] + (f" ({s['ref_used']})" if s.get("ref_used") else "")
+    return "n/a: " + (s.get("reason") or "")[:80]
+
+
+def build_page(sweep, vitis, src_name, vitis_name="results/vitis.json", sem=None, sem_name=""):
     meta = sweep.get("_meta", {})
     recs = {k: v for k, v in sweep.items() if k != "_meta"}
     per = defaultdict(Counter)
@@ -355,6 +381,10 @@ def build_page(sweep, vitis, src_name, vitis_name="results/vitis.json"):
         ds = r["dataset"]
         c = per[ds]
         c["designs"] += 1
+        sv = semantics_of(sem, k)
+        c["semantics checked"] += sv.startswith(("equal", "mismatch"))
+        c["equal"] += sv.startswith("equal")
+        c["mismatch"] += sv.startswith("mismatch")
         cg_ok = r.get("cgeist_status") == "ok"
         he_ok = r.get("status") == "ok" and r.get("cause") is None
         c["cgeist ok"] += cg_ok
@@ -372,8 +402,9 @@ def build_page(sweep, vitis, src_name, vitis_name="results/vitis.json"):
             causes[r["cause"]].append(k)
         rows.append((k, r, tb, why))
     out = [f"generated by tools/hls-est-validate/make_hlsfactory_report.py from {src_name} and the ground truth "
-           f"{vitis_name} ({len(vitis)} designs) on {time.strftime('%Y-%m-%d %H:%M')}", "",
-           "# HLSFactory v2 catalogue: cgeist and hls-est on every design (W8a)", "",
+           f"{vitis_name} ({len(vitis)} designs)" + (f" and the semantic check {sem_name}" if sem else "")
+           + f" on {time.strftime('%Y-%m-%d %H:%M')}", "",
+           "# HLSFactory v2 catalogue: cgeist and hls-est on every design (W8a, W8b)", "",
            "Every design of the HLSFactory 1.1.0 tree (`D:\\HLSFactory_v2\\HLSFactory`, decision #28) as the "
            "harness catalogue reads it (`designs.py --catalog v2`, rules in `hlsfactory_v2.py`), run through the "
            "installed cgeist and the current hls-est with the harness defaults (shim, pipeline, per-design top "
@@ -384,8 +415,9 @@ def build_page(sweep, vitis, src_name, vitis_name="results/vitis.json"):
     items = [("HLSFactory tree", f"{meta.get('hlsfactory_root')} (git {meta.get('hlsfactory_head')})"),
              ("catalogue", f"{len(recs)} HLSFactory designs (polybench_pragmas and basic are not HLSFactory "
                            f"designs and are not swept); load {meta.get('catalogue_load_s')} s"),
-             ("cgeist", f"`{meta.get('cgeist')}` md5 {meta.get('cgeist_md5')} (installed build/bin/cgeist, "
-                        f"Polygeist c70ba2b0)"),
+             ("cgeist", f"`{meta.get('cgeist')}` md5 {meta.get('cgeist_md5')}"
+                        + (f" (Polygeist {meta['polygeist_head']})" if meta.get("polygeist_head") not in (None, "unknown")
+                           else "")),
              ("hls-est", f"`{meta.get('hls_est')}` sha256 {meta.get('hls_est_sha256')}: {meta.get('hls_est_git')}"),
              ("shim", f"`{meta.get('shim')}` (harness default)"),
              ("pipeline", f"`{meta.get('pipeline')}` (common.DEFAULT_PIPELINE; run_hlsest adds the top "
@@ -399,10 +431,15 @@ def build_page(sweep, vitis, src_name, vitis_name="results/vitis.json"):
     out += [f"| {a} | {_md(b)} |" for a, b in items]
 
     cols = ["designs", "cgeist ok", "hls-est ok", "with Vitis truth", "exact", "same sources", "differ", "new"]
+    if sem:
+        cols += ["semantics checked", "equal", "mismatch"]
     out += ["", "## Per dataset", "",
             "*same sources*: the design's source set equals its Polygeist copy (its key, MLIR and Vitis cache "
             "entries carry over); *differ*: same key, other sources (the ground truth is re-run in W8c); *new*: "
-            "no Polygeist copy. *hls-est ok* excludes designs where the top was not found.", "",
+            "no Polygeist copy. *hls-est ok* excludes designs where the top was not found."
+            + (" *semantics*: `check_semantics.py` ran the design's cgeist MLIR against its native build "
+               "(real Vitis headers in C simulation, or the shim) and compared every output bit for bit "
+               "([semantics.md](semantics.md) has the reasons a design is not checked)." if sem else ""), "",
             "| dataset | " + " | ".join(cols) + " |", "|---|" + "---:|" * len(cols)]
     tot = Counter()
     for ds in sorted(per, key=str.lower):
@@ -492,15 +529,17 @@ def build_page(sweep, vitis, src_name, vitis_name="results/vitis.json"):
     out += [f"| {_md(v['key'])} | {_md(v['top'])} | {_md(v['mode'])} |" for v in va]
 
     out += ["", "## Per design", "",
-            "| design | sources | cgeist | hls-est | BRAM | Vitis BRAM | time (s) | cause |",
-            "|---|---|---|---|---:|---:|---:|---|"]
+            "| design | sources | cgeist | hls-est | BRAM | Vitis BRAM | time (s) | cause |"
+            + (" semantics |" if sem else ""),
+            "|---|---|---|---|---:|---:|---:|---|" + ("---|" if sem else "")]
     for k, r, tb, why in rows:
         cg = r.get("cgeist_status", "")
         he = r.get("status", "") if cg == "ok" else ""
         vb = tb if tb is not None else (why if why != "no Vitis result" else "")
         out.append(f"| {_md(k)} | {_md((r.get('v2') or {}).get('source_match'))} | "
                    f"{'ok' if cg == 'ok' else _md(cg[:40])} | {'ok' if he == 'ok' else _md(he[:40])} | "
-                   f"{_md(r.get('total_bram'))} | {_md(vb)} | {_md(r.get('wall_s'))} | {_md(r.get('cause') or '')} |")
+                   f"{_md(r.get('total_bram'))} | {_md(vb)} | {_md(r.get('wall_s'))} | {_md(r.get('cause') or '')} |"
+                   + (f" {_md(semantics_of(sem, k)[:60])} |" if sem else ""))
     return "\n".join(out) + "\n"
 
 
@@ -513,9 +552,12 @@ def main():
     ap.add_argument("--csv", default=None, help="per-design CSV (default: --out with .csv)")
     ap.add_argument("--reclassify", action="store_true",
                     help="re-read the logs, classify again and write the classes into --sweep")
+    ap.add_argument("--semantics", default=None,
+                    help="a check_semantics.py result for the same sweep: adds the semantic-check columns")
     a = ap.parse_args()
     sweep = C.load_json(a.sweep, {}) or {}
     vitis = C.load_json(a.vitis, {}) or {}
+    sem = C.load_json(a.semantics, {}) if a.semantics else None
     if a.reclassify:
         for k, r in sweep.items():
             if k != "_meta":
@@ -526,7 +568,7 @@ def main():
             return str(Path(p).resolve().relative_to(here.parent.parent))
         except ValueError:
             return p
-    page = build_page(sweep, vitis, shown(a.sweep), shown(a.vitis))
+    page = build_page(sweep, vitis, shown(a.sweep), shown(a.vitis), sem, shown(a.semantics) if sem else "")
     Path(a.out).parent.mkdir(parents=True, exist_ok=True)
     Path(a.out).write_text(page)
     csv_path = Path(a.csv or str(Path(a.out).with_suffix(".csv")))
