@@ -3,6 +3,50 @@
 Newest entry first. One entry per logical change, including changes that were
 tried and reverted. Branch: `hls-est-vitis-match` in `~/circt`.
 
+## 2026-10-11 — cgeist lit: `Test/HLS/Inputs/vitis` becomes a copy of the exactclass shim, every `%vitis_include` RUN line passes `--scalar-wrapper-abi`, the HLSFactory tests are regenerated (MEMOS decision #10; W5 item 3)
+- **Commit:** Polygeist 95a5ce16 (branch `hls-est-vitis-match` in `/mnt/d/HLS`; test headers, tests and docs only, no cgeist code); circt: the commit that adds this entry. W5's private binary is unchanged by this item: `/home/peter/tmp/w5g/cgeist.i2b`, md5 95b960fc13d458da755563eb3a80cecb, the code of Polygeist 5432780b (items 1 + 2). **Not installed** (the coordinator installs it).
+- **Files (Polygeist):** tools/cgeist/Test/HLS/Inputs/vitis/{ap_fixed.h, ap_int.h, hls_half.h, hls_math.h} (now byte-identical to `shim/exactclass` of circt 25060c328; ap_axi_sdata.h, ap_cint.h, hls_stream.h and hls_vector.h were identical already); Inputs/vitis/README.md (new: where the headers come from, the flag, what is missing); Inputs/vitis/cgeist_flags (new, the shim's flag file: `run_hlsest.py --shim polygeist` now passes `--scalar-wrapper-abi` too, checked on bicg 8 and attention_op_p1 73); Test/HLS/lit.local.cfg (comment); HLSAllocation.cpp and regressions/hlsfactory-subscripted-variable.cpp (RUN lines); hlsfactory/generate.py (runs and writes the flag); hlsfactory/*/*.test (776 RUN lines, 287 tests regenerated); hlsfactory/SUMMARY.md; docs/hls-pragmas.md.
+- **What:** the old stand-ins kept a `long long` behind every `ap_[u]int<W>` and a `double` behind every `ap_fixed`. The lit tests now use the harness's bit-exact exactclass headers (classes around a `_BitInt(W)`); decision #9 keeps `--scalar-wrapper-abi` opt-in, so each RUN line passes it. The hlsfactory tests were regenerated with the W5 binary the way generate.py writes them, from the tests' own design list (generate.py itself needs the harvested tree and rewrites Inputs). With the old headers the same procedure reproduces 768 of the 776 committed tests and SUMMARY.md byte for byte. The other 8 differ because of earlier cgeist commits (below).
+- **Why:** MEMOS decisions #10 (exactclass replaces the lit shim, after W3) and #9. The old headers hid every width and stopped 220 designs in cgeist with struct-operand errors.
+- **Effect:**
+  - **Polygeist lit** (private lit tree with the W5 binary, private HOME):
+    - hlsfactory: 714 pass / 61 XFAIL / 1 fail -> **692 pass / 84 XFAIL / 0 fail**. With the new headers and the old CHECK lines it was 662 / 60 / 53 fail / 1 XPASS.
+    - HLS without hlsfactory: 95 pass / 2 fail / 3 unsupported, before and after. The 2 failures (array_partition/lowering.c, pipeline/lowering.c) also fail with 2ec1956c.
+    - Verification: 135 pass + 8 XFAIL, before and after.
+  - **What the new headers change in the hlsfactory tests** (old headers vs new, same binary):
+    - 220 designs go from check-only to full: they now compile end to end. With the old headers, 204 stopped at a `func.call` operand type mismatch between `llvm.struct` memrefs, 15 at a `math.exp` / `cos` / `log` / `ceil` on a struct or integer operand, and 1 at the 180 s limit. Every pragma the check-only test placed is still checked, now with its target op.
+    - 28 full designs change:
+      - Mangled names: functions with `ap_fixed` parameters change, because the Q / O template parameters are the `ap_q_mode` / `ap_o_mode` enums of the Vitis headers, not `int`.
+      - Loops: in 6 class_ece8893_spring_2025 designs, loops with `ap_int` counters or bounds are `scf.for` / `affine.for` instead of `scf.while`.
+      - Inlined copies: callees whose `ap_fixed` member calls now fold to integer ops have no calls left, and cgeist inlines them into their callers. Their pragmas are therefore also reported for the inlined copy (forgebench conv_A/B/C, mult_op_p1/p2/p3, testing_impl, and 3 class designs). Under exactclass the harness already saw this.
+      - GNN-virtual-node: the write-only `psum` buffer is removed because its stores now forward to the loads, so its `array_partition` is reported "not applied: ... removed during optimization".
+    - **24 designs become XFAIL**, because the headers lack what they use. Each is a compile error quoted in its test:
+      - 20 assign to a range select (O15): the 11 soda designs, Mask-Net, SkyNet, 6 class labs and vitis_examples fixed_point_sqrt.
+      - 3 polybench fixed gramschmidt call `hls::nextafter` on `ap_fixed`. Only the `float` / `double` overloads exist, so the call is ambiguous.
+      - FLAT-acceleration calls an unqualified `exp` on an `ap_fixed`. The call is ambiguous between the `<cmath>` overloads (shim-gap class `shim-hls-api` in hls-doc/hlsfactory-v2.md).
+      - Under decision #39 these gaps are W11's (real headers), not new shim work.
+    - 1 XFAIL design now compiles (mohammad_zain_lab_2: the old `ap_fixed` had an ambiguous `operator^`).
+    - 8 quoted reasons change (4 check-only, 4 XFAIL).
+    - flowgnn/pna and gnnbuilder fpga_gin_qm9 now compile within generate.py's 180 s limit (171 s / 151 s, re-measured at low load because the -j 10 regeneration timed them out) and become full.
+  - **Changes from cgeist commits made after the tests were generated** (the same with W3's 2ec1956c):
+    - chstone gsm and machsuite aes_table / aes_tableless / bfs_bulk / viterbi compile end to end (check-only -> full).
+    - accelerators GP_selection_kernel_float_dataset reports 3 copies of each `array_partition` instead of 12 (inline off, 62c40544 / 2ec1956c). It failed with 2ec1956c before this item.
+  - **SUMMARY.md:** full 454 -> 666, check-only 254 -> 19, xfail 61 -> 84. Unchanged: errors 5, errors-check-only 2, skip 3.
+  - **Harness:** no harness input changes. `shim/exactclass` and `shim/scalar` are untouched, and the Polygeist copy is read only by `--shim polygeist`. As a check of the final W5 binary against the installed cgeist, both were run with the current hls-est and the default pipeline:
+    - Setup: committed harness of circt 974acde4b, hls-est `build/clion` of 02:26 (sources = HEAD; md5 071f97ba67586eee0c7d66d505a4423a, frozen copy `/home/peter/tmp/w5h/hls-est`), private HOMEs, `--force-cgeist`, runs `/home/peter/tmp/w5h/h_{x,s}_{inst,w5}.json`. Installed = 2ec1956c (md5 947214ff...).
+    - exactclass: exact 55 / 89, |err| 5243, both sides.
+    - scalar: 45 / 89, |err| 28718, both sides.
+    - Statuses and totals: identical in all 112 designs under both shims.
+    - MLIR: differs only in spector_hls/fir and spector_hls/histogram (unsigned index arithmetic is no longer raised without a proof; item 1 entry).
+    - Gates exact: bicg 8, gesummv 16, mvt 8, syrk 32.
+  - **Runtime checks of the final binary (items 1 + 2)** against native clang 18 (`scratchpad/w5g/run_dir3.sh`; prev = 2ec1956c):
+    - round 4's v4/orig: 81 / 81 kernels OK, both binaries. This includes the verify3 n3-n11 probes. n1_exact / n2_countdown hold intentionally infinite loops and are checked structurally: identical loop forms, except `e_ap8_lt_ap9` / `e_ap8_le_ap8` (runtime bounds), which are now raised by the termination assumption (item 2).
+    - v4/probes 76 / 76, probes2 13 / 13, probes3 10 / 10, probes_xc 9 / 9, r6 57 / 57.
+    - W5 probes: 31 / 31; prev fails the M9 reproducer (t1, u32_mul_div).
+    - nc_term: 16 / 16 under exact and exactclass.
+- **Left as is:** `shim/exactclass/README.md` still says the shim "does not yet replace" the Polygeist lit headers. Every file in that directory is part of the harness MLIR cache key, so editing it would recompile every cached exactclass design. The line is for the coordinator to update when the cache is next invalidated anyway.
+- **Reverted?:** no
+
 ## 2026-10-11 — hls-est: calls to `inline off` callees are kept, priced per instance and scheduled at the call boundary; `--lower-polygeist-subindex` leads the default pipeline; the W3 cgeist (Polygeist 2ec1956c) is installed (MEMOS decisions #11 / #12, VITIS_NOTES N14; W3-hlsest)
 - **Commit:** 21a959f47 (hls-est, lit tests, harness pipeline); the notes and the install record are in the commit that adds this entry (branch `hls-est-vitis-match`). **Installed:** Polygeist 2ec1956c (the W3-cgeist private binary `/home/peter/tmp/w3cg/cgeist.2ec1956c`, md5 947214ff4640d47c32387d20df58493e) is `build/bin/cgeist` since 2026-10-11 04:24. The binary it replaced is `cgeist.prev-c70ba2b0` (md5 6ff60ea1c05f11f99420dd672a5ce457). Install log: `~/hls-est-work/w3h/install.log`.
 - **Files:** include/circt/Dialect/Resource/Passes/CallInstances.h + lib/.../CallInstances.cpp (new: `computeInstances`, `groupConcurrentCalls`, `storageRoot`, `allocationLimit`, `InstanceModel`); HlsInliner.{h,cpp} (new: hls-est's func inliner interface, `--inline-ignore-inline-off`); PolygeistCompat.{h,cpp} (new: a minimal `polygeist` dialect with `subindex`, pass `--lower-polygeist-subindex`); LoopPragmas.h (`hls.call_boundary`, `hls.call_occupancy`); MemoryDS.h; BRAMAnalysis.cpp (per-instance charge, accesses of a callee to an argument priced on the caller's array, debug text / JSON); AutoPipelineUnroll.cpp (`markCallBoundaries`, `occupancy`, `hasLoops`, callers decided before callees); AffineToLoopScheduleModified.cpp (`chainSharedCalleeInstances`, call latency, `--loopschedule-kept-call-latency`); DeadMemoryElimination.cpp (unused memref parameters of kept callees); MemoryBankModified.cpp (`unbankableUser`); MemrefBankClassification.cpp; CMakeLists.txt; tools/hls-est/main.cpp; tools/hls-est-validate/common.py (`DME_FRONT`), check_debug_invariance.sh; lit tests test/hls-est/Passes/{inline_off_kept, call_instances_bram, call_args_owner, auto_pipeline_call_boundary, call_in_pipeline_sched, call_symbol_dce_top, dme_unused_callee_param, lower_subindex}.mlir (new) and bram_debug_json.mlir. Notes: VITIS_NOTES.md N14 (R7 addendum, hls-est bullet), OPEN_ISSUES.md (O5, O10, O25 updated; O33, O34, O35 new), MEMOS.md (rows #11, #12, #43).
