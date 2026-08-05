@@ -45,7 +45,7 @@ vitis_examples (73 compared designs) at hls-est 22d473858 unless stated. They wi
 | 36 | **DELEGATION:** "I want minimal supervision until you're done; do whatever you feel best replicates Vitis behaviour" - the coordinator and agents decide defaults, pipeline order, shim and frontend behaviour by the criterion *best replicates Vitis*, backed by Vitis evidence, working-loop rule 4 and the gates, and recorded here and in the CHANGELOG. Unchanged: no push / PR, Phase 6 (DSP/FF/LUT) on hold, never decompile Vitis, no name/size special cases | Peter 2026-10-10 23:20 | in force |
 | 37 | Scheduling as a plugin interface (overrides #30 row 7, the design memo's section 8.1 "schedulers stay fixed until O1") | Peter, 2026-10-11 02:25: "it seems like scheduling must be part of the plugin infrastructure then make note of that". This followed the DSP/FF/LUT feasibility check (137 ground-truth designs; whole-hierarchy shares of Vitis's own estimate). FF is 62% pipeline/state registers. LUT is 54% operator logic and 24% multiplexers. DSP is the bound multipliers and cores. All of these depend on Vitis's schedule and operator binding. P2 therefore makes scheduling a plugin interface: the operation delay/latency model, the scheduling algorithm for pipelined and sequential regions, operator binding/sharing, and the schedule result that the BRAM port model (and later DSP/FF/LUT models) read. The built-in greedy resource-bound modulo scheduler and today's dependence analysis are the default plugins, with byte-identical output. | approved (Peter); designed 2026-10-11: five interfaces (OperatorTimingModel, DependenceModel, ModuloScheduler, SequentialScheduler, Binder) and the ScheduleView result contract, design memo section 8.7 (1dda02772; adversarial review: 14 defects, fixed in 00927a7aa); the vendor-neutral revision under #38 follows |
 | 38 | The P2 configuration/plugin design must be hardware-agnostic | Peter, 2026-10-11 (night): "for plugin design the only [thing] I want [is] it to [be] hardware agnostic; study other fpga and how they allocate resources when doing the designing; look at intel fpga and other provider fpga designs". The target description and every plugin interface, including the scheduling interfaces of #37, must express the memory, DSP, logic and register resources of other vendors' devices (Intel/Altera, AMD families beyond 7-series, Lattice, Microchip, Achronix, Efinix, Gowin and others) and the allocation policies of their HLS tools (Intel HLS / oneAPI, SmartHLS, Catapult, Bambu and others). Vendor resources (BRAM_18K, RAMB18 aspect modes, DSP48, LUTRAM) become data of one target description. Vitis-specific allocation rules become one tool-policy plugin. AMD xc7z020 + Vitis 2025.1 stays the default target, with byte-identical output. | approved (Peter); vendor survey and design: hls-doc/design/fpga-resource-survey.md and the design memo |
-| 39 | Real Vitis headers instead of header shims | Peter, 2026-10-11 (night): "I do not want to maintain a shim for every header file change cgeist to understand xilinx attributes validate it with test on real xilinx headers". cgeist compiles designs against the real Vitis 2025.1 headers in synthesis mode (-D__SYNTHESIS__). It understands the Xilinx front-end extensions those headers use: `__attribute__((bitwidth(N)))` on int/unsigned (etc/ap_common.h:252, :531) as an exact N-bit integer, the bit, part-select and concat builtins (etc/autopilot_ssdm_bits.h), and the `__fpga_*` intrinsics the stream, math and DSP headers need. It is validated by tests on the real headers: Polygeist lit tests that compile the real headers; differential execution of cgeist's MLIR against g++ with the real headers (C-simulation semantics) on random inputs, bit-exact; element widths compared with Vitis's own front-end IR (db/a.g.ld.5.gdce.ll in the ground-truth cache); and the harness under a new `--shim real`. No new shim headers are written (W8b's shim-gap classes move to this track, W11). W6 (exactclass proxy classes for range selects, #15) is superseded and stopped. exactclass stays the default until `real` matches or beats it on the harness, then it is frozen and retired. | approved (Peter); track W11; feasibility inventory/probe in scratchpad/realhdr/ |
+| 39 | Real Vitis headers instead of header shims | Peter, 2026-10-11 (night): "I do not want to maintain a shim for every header file change cgeist to understand xilinx attributes validate it with test on real xilinx headers". cgeist compiles designs against the real Vitis 2025.1 headers in synthesis mode (-D__SYNTHESIS__). It understands the Xilinx front-end extensions those headers use: `__attribute__((bitwidth(N)))` on int/unsigned (etc/ap_common.h:252, :531) as an exact N-bit integer, the bit, part-select and concat builtins (etc/autopilot_ssdm_bits.h), and the `__fpga_*` intrinsics the stream, math and DSP headers need. It is validated by tests on the real headers: Polygeist lit tests that compile the real headers; differential execution of cgeist's MLIR against g++ with the real headers (C-simulation semantics) on random inputs, bit-exact; element widths compared with Vitis's own front-end IR (db/a.g.ld.5.gdce.ll in the ground-truth cache); and the harness under a new `--shim real`. No new shim headers are written (W8b's shim-gap classes move to this track, W11). W6 (exactclass proxy classes for range selects, #15) is superseded and stopped. exactclass stays the default until `real` matches or beats it on the harness, then it is frozen and retired. | approved (Peter); track W11; feasibility memo M12 (evidence, staged plan; go/no-go includes compile time, #41) |
 | 40 | Reuse Xilinx's open-source front-end code in cgeist | Peter, 2026-10-11 (night): "is xilinx clang open source? if it has the appropriate license take the code and repurpose it for cgeist". Licence check (local checkout of github.com/Xilinx/hls-llvm-project at ee930469a6e, 2025-10-10). Xilinx's HLS front-end files (clang/lib/Sema/SemaXlxAttr.cpp, clang/lib/CodeGen/CGXlxAttr.cpp, clang/lib/Parse/ParseXlxPragma.cpp and any other file with the same header) are Apache-2.0: they may be copied and adapted into Polygeist (Apache-2.0 with LLVM exception), keeping the copyright and licence header and marking our changes. The LLVM 7 clang/llvm base is University of Illinois/NCSA (clang/LICENSE.TXT, llvm/LICENSE.TXT): permissive, keep the notice. Not copied: llvm/lib/Support/XilinxPlat/* (CoreQuerier.cpp: copyright only, no licence grant; reference reading only, as before) and the Vitis-installed headers (A:/Vitis/2025.1/Vitis/include: 'All Rights Reserved'): we compile against them and never vendor them. Headers checked into tests come from github.com/Xilinx/HLS_arbitrary_Precision_Types (Apache-2.0). There is no top-level LICENSE or NOTICE in hls-llvm-project. Xilinx edits inside NCSA upstream files whose licence is not stated are re-implemented, not copied. The code is LLVM-7-era: it is ported to cgeist's LLVM-18 clang. Example: the BitWidth TypeAttr (Attr.td:554, GNU spelling 'bitwidth', unsigned argument) maps onto clang 18's _BitInt(N). Each copied file is listed with its origin commit in the CHANGELOG. | approved (Peter); used by track W11 (#39) |
 | 41 | Speed is a requirement: near-instant feedback for design-space exploration | Peter, 2026-10-11 (night): "the point of this tool is get near instant feedback for resource utilization for design changes to enable DSE how quick is hls-est currently". Measured from the HLSFactory_v2 sweep (hls-doc/hlsfactory-v2.csv: 319 designs where cgeist and hls-est both succeed; run at -j 8 on a loaded machine, so wall times are high): cgeist median 9.2 s, p90 33.8 s, max 371 s; hls-est median under 0.1 s, p90 1.9 s, max 58 s, 6 timeouts at 120 s; total median 9.3 s; Vitis csynth on the same designs median 86 s (median speed-up 8x). Proposed targets: a directive-only change (unroll, partition, pipeline II, bind_storage, inline as hls-est overrides, like set_directive_*) under 1 s, with no frontend re-run; a source change median under 2 s. Means: directive overrides in hls-est, precompiled headers, a single cgeist run per design, profiled cgeist and hls-est hot spots, schedule reuse for identical unrolled copies, a persistent server mode. Every P2/P3 change and every W11 change reports its effect on latency. | approved (Peter's stated goal); profiling and memo M14 in progress |
 | 42 | May hls-est work read Vitis's installed device database platform.db? (design memo decision row 20) | Peter, 2026-10-11: "Yes". platform.db is a SQLite data file in the Vitis 2025.1 install (/mnt/a/Vitis/2025.1/Vitis/common/technology/xilinx/common/platform.db). It may be read read-only, with sqlite3 or Python's sqlite3 module, for device facts (resource counts, primitive geometries, operator and core data) for the device description files. It is data, not a binary, so the ground rule against disassembling or decompiling closed Vitis binaries and libraries is unaffected. The file, and dumps of it, are never copied into ~/circt, /mnt/d/HLS or hls-doc. Values taken from it are cited by table and key, and checked against a Vitis run before they become a default. | approved (Peter) |
@@ -649,3 +649,218 @@ match Vitis is not known until they run. No effect on any design that compiles t
 **Recommendation.** Yes, as a time-boxed experiment on one soda design and SkyNet first (steps 1-3), run after the
 W3 cgeist work (one frontend change at a time). If the scalar-replacement step turns out large or fragile, stop and
 report; the 23 designs then stay excluded as "cgeist error". Waiting for your OK on this plan.
+
+## M12 — Real Vitis headers through cgeist vs the exactclass shim
+
+**Question** (Peter, 2026-10-11): "should you get the real headers instead of relying on a shim which is better".
+
+**Status.** Peter has already chosen the direction. Decision #39 says cgeist compiles designs against the real
+2025.1 headers in synthesis mode, and exactclass stays the default until `--shim real` matches or beats it
+(MEMOS.md:48). Decision #40 allows copying Xilinx's Apache-2.0 front-end files (MEMOS.md:49). Decision #41 makes speed
+a requirement (MEMOS.md:50). This memo does not reopen #39. It records the evidence from the W11 inventory and probe,
+corrects four facts in #39's text, scopes what the real headers can and cannot fix, and gives the staged plan with
+a go/no-go experiment. Evidence files: `scratchpad/realhdr/inventory.md`, `scratchpad/realhdr/probe.md`, artifacts under
+`~/hls-est-work/realhdr/`.
+
+### Short answer
+
+Yes, for `ap_int`, `ap_fixed`, the fixed-point `hls_math` and `hls_vector`. The real headers are better there,
+because they are by definition what Vitis compiles, and they carry the header pragmas (BIND_STORAGE on the math
+tables) that no shim reproduces. But the installed cgeist cannot use them today. In synthesis mode every ap design
+fails, and once the hard errors are hidden, every ap value silently becomes `i32`. Making them work needs a patched
+embedded clang. As measured, the real headers also parse 18–115x slower than exactclass, which conflicts with the
+speed goal (#41) until the cause is found. Streams, tasks, `ap_float` and the FFT IP need new hls-est models
+whichever headers are used. The real headers make those designs parse. They do not make them estimable.
+
+### Corrections to the facts in decision #39
+
+1. **Include directory.** Vitis synthesis passes `-I .../common/technology/autopilot`, not `Vitis/include`
+   (`autopilot.flow.log:331` in `vitis-cache/polybench/atax/36433f38cda6d555/db/`). The full line is
+   `-fhls -D__VITIS_HLS__ -DAESL_SYN -D__SYNTHESIS__ -D__HLS_SYN__ -include etc/autopilot_ssdm_op.h -D__DSP48E1__`.
+   Eight headers differ between the two trees (`rh_hdrdiff.sh`). `Vitis/include/hls_stream.h` is the simulation
+   model (`X_HLS_STREAM_SIM_H`, with `<thread>`, `<mutex>`). The synthesis model is `autopilot/hls_stream_39.h`.
+   The 68 other headers, all ap_* included, are identical.
+2. **`ap_common.h:252` is dead code for us.** The `1024*mode` width encoding sits in the clang-3.1 branch
+   (`etc/ap_common.h:239`). Clang 18 takes the `#else` at :523. The active storage is `ssdm_int<N,S>` with
+   `int/unsigned V __attribute__((bitwidth(_AP_N)))` (`:529-542`).
+3. **hls_math is not blocked by intrinsics.** `hls_math.h` and the `etc/hls_*_apfixed.h` headers have no direct
+   `__fpga_*` use (grep count 0, probe section 1). They are blocked by `__fp16` arguments and returns
+   (`ap_common.h:632`, `hls_half.h:12`) and by cgeist's pragma parser (`HLSPragmaParse.cc:327` rejects the qualified
+   `variable=fourth_order_double::sin_cos_K0` at `etc/hls_hotbm_apfixed.h:91-95`). The float `hls_math` functions are
+   only declared (`hls_math.h:577-601`); their bodies are in the closed `libhlsm_39.bc`, which we may not read.
+4. **Builtin count.** `autopilot_ssdm_bits.h` has 15 lines with `__builtin_bit` (`grep -c`). The ap headers reach the
+   builtins through the `_AP_ROOT_op_*` macros (`ap_common.h:645-661`): about 173 uses. In the 9 probe kernels clang
+   reports 1336 undeclared-builtin uses (`errinv.txt`).
+
+### Evidence
+
+**The installed cgeist with the real headers** (probe; cgeist md5 6ff60ea1, hls-est md5 071f97ba):
+- *Synthesis mode:* all 8 ap/hls micro-kernels stop at the 20-error limit. The causes are 12 undeclared
+  `__builtin_bit_*` builtins, `__fp16` arguments, and (with the autopilot tree) `__fpga_fifo_*`.
+- *Synthesis mode with a probe prelude* that declares the builtins as opaque functions and maps `__fp16` to
+  `_Float16`: clang parses all 9 kernels. cgeist then **silently drops every width**. `bitwidth` is ignored with one
+  warning per template. ap_int<17>, ap_int<34>, ap_uint<256> and ap_fixed<16,5> all become `i32`. `ap_int<12>[1024]`
+  becomes `memref<1024xi32>`, and hls-est reports 2 BRAM_18K where exactclass gives 1. No error is raised. Design
+  `vitis_examples/05 ap_arithmetic` gets `i32` for every argument, ap_int<33> included. Every bit or range operation
+  becomes an opaque call on a local's address, which hls-est rejects.
+- *Without `__SYNTHESIS__` (ap_private):* clang parses everything. cgeist asserts (`ValueCategory.cc:154`,
+  `Casting.h:578`) or emits `memref<!llvm.struct<...>>` with widths rounded to C types (k3: 13052 lines against
+  478 with the shim). hls-est rejects all of it.
+- *Designs:* the four that pass under the real headers are plain C (byte-identical MLIR to exactclass). The one ap
+  design that passes under exactclass (forgebench/attention_op_p1, 73 = Vitis) fails under every real-header
+  configuration.
+
+**The exactclass shim today.** 1667 lines (`wc -l shim/exactclass/*`), validated bit-exact against g++ with the real
+headers by `check_shim.py` (417 lines) and `check_shim_cgeist.py` (334 lines). It is the only configuration that gives
+correct widths for ap designs today. Its gaps, from the W8a sweep (`hls-doc/hlsfactory-v2.md`, failure table):
+
+| class | designs | what the real headers would do |
+|---|---:|---|
+| `shim-range-select` (assignable `range()`) | 27 | the real `ap_range_ref` exists (`etc/ap_int_ref.h:295-297`); fixed only if cgeist reduces the proxy (pointer + two ints) to scalars, the same open step as M10 step 2 |
+| `missing-vendor-header`: `hls_fft.h` 16, `hls_task.h` 1, `ap_float.h` 1 | 18 | parse once F2/F6/F7/F11/F14 work; estimation needs an FFT IP model, a task/dataflow model, and `llvm.fpga.float.*` costs |
+| `needs-synthesis-macro` | 18 | fixed: the flow defines the macros |
+| `shim-hls-api` (stream, vector, math) | 11 | vector and fixed-point math fixed after F1/F2/F4/F7; streams need `__fpga_fifo_*` lowering and a FIFO model |
+| `shim-std-include` | 5 | fixed: the real headers include `<stdint.h>`, `<cmath>` and so on (`hls_math.h:26-29`) |
+| `shim-ap-feature` | 4 | fixed: the real class has every member |
+
+The sweep total is 483 failing designs. The largest class, `hlsest-parse` (334), is unchanged by any header choice.
+
+**Compile time** (this step, `scratchpad/rh_memo_time.sh` and `rh_memo_time2.sh`, clang 18 `-fsyntax-only` from
+Polygeist's llvm-project build, which is `CMAKE_BUILD_TYPE=DEBUG` with assertions (`llvm-project/build/CMakeCache.txt`);
+the machine was shared, load average 20 on 32 cores at 04:48). Absolute times are inflated by the debug build and the
+load. The ratios are the evidence.
+
+| kernel | real headers + prelude | exactclass |
+|---|---:|---:|
+| k1 ap_int<17> arithmetic, 3 runs | 34.0, 47.5, 40.4 s | 2.07, 2.44, 2.29 s |
+| k4 ap_int<12>[1024], 3 runs | 41.9, 35.2, 33.6 s | 2.14, 2.26, 1.62 s |
+| k6a hls::sqrt/exp on ap_fixed, 1 run | 434.8 s | 2.76 s |
+
+The split (`realhdr/memo_time2.txt`, one run each) shows the cost is parsing, not reading `/mnt/a`:
+
+| kernel | preprocess real (reads `/mnt/a`) | preprocessed lines real / shim | parse `.ii` real | parse `.ii` shim |
+|---|---:|---:|---:|---:|
+| k1 | 8.8 s | 7926 / 866 | 32.2 s | 1.7 s |
+| k6a | 1.6 s | 30234 / 7857 | 836.4 s | 7.3 s |
+
+The real headers give 4–9x more lines but 18–115x more parse time. Something in them (template instantiation or
+constexpr evaluation, perhaps made worse by the prelude's opaque builtins or by the ignored `bitwidth`) is superlinear.
+The cause is **unconfirmed**. The same debug clang libraries are linked into cgeist, so cgeist pays the same cost.
+Decision #41 asks for a source-change median under 2 s. Exactclass is already near that bound; the real headers, as
+measured, are 1–2 orders of magnitude away from it. Two levers exist and are both untested: a release build of the
+embedded clang (helps every configuration), and a precompiled header per (header set, flags) built once in a private
+work directory (a derived file, never checked in).
+
+### Options
+
+**(1) Keep exactclass and fill its gaps by hand.**
+- *Effort:* proxy classes for `range()`/bit refs plus a cgeist scalar-replacement step (M10, both unbuilt); stand-in
+  headers for `hls_fft.h`, `hls_task.h`, `ap_float.h`, `hls::vector`, `hls::stream` and the std includes. Each is
+  new shim code, about 100–500 lines each (estimate, unmeasured).
+- *Risks:* semantics are only as exact as the differential tests cover. The header pragmas in the fixed-point math
+  (26 `BIND_STORAGE`, 110 `unroll`, 55 `pipeline`, 10 `array_partition`; inventory F7) are lost, so a math table's
+  storage kind comes from hls-est's own rules or from the per-core cost of N16. Every Vitis header change means
+  shim work. Licence is clean (our own code).
+- *Fixes:* range 27 (after M10 step 2), ap-feature 4, std 5, synthesis-macro 18 (harness flags), API 11 partly.
+  The 18 missing-header designs only as stand-ins.
+- *Against:* Peter rejected maintaining a shim per header (#39). Not recommended.
+
+**(2) Real headers in synthesis mode, with cgeist support for the Xilinx extensions.**
+- *Components:*
+  - Harness and driver: `-I .../autopilot`, the five `-D` macros, `-include etc/autopilot_ssdm_op.h`, gnu++14
+    mode for `typeof`, native half arguments and returns. Tens of lines.
+  - F1, `bitwidth(N)` as `_BitInt(N)`, including a template-dependent N (clang 18 has `DependentBitIntType`): a patch
+    to the embedded clang (`Attr.td` entry plus a `processTypeAttrs` case), about 50–150 lines. Polygeist's
+    llvm-project becomes a fork, and the clang libraries must be rebuilt. Under `--shim real` an unknown or ignored
+    `bitwidth` must become an error, because today it fails silently.
+  - F2, the 12 bit builtins: intercept the calls in cgeist and emit `arith` shift/mask/trunc/ext, taking the width
+    from the operand before its `(void*)` cast. About 300–600 lines plus tests. hls-est needs nothing new.
+  - F7, the pragma parser: accept qualified `variable=` names and `variable=this`. Small to medium.
+  - F6 `no_ctor`, F8 `_ssdm_op_*` calls: ignore or interpret. Small.
+  - The ValueCategory/Casting asserts behind the parse errors: unknown size.
+  - F9 streams: `__fpga_fifo_*` lowering plus a FIFO model in hls-est. Medium to large, a modelling track.
+  - F10 tasks, F11 `ap_float`, F14 FFT IP, F12 float math: new hls-est operations and resource models. Large; each
+    is its own track. F12 already has the N16 per-core model through external calls.
+- *Risks:*
+  - Semantic exactness. `bitwidth` types up to 32 bits promote to `int`, 33–64 bits to `i64`, wider ones not at all
+    (hls-llvm-project `SemaExpr.cpp:743-756`). `_BitInt` never promotes. The ap binary operators widen both operands
+    first (`ap_int_base.h:1465-1471`), which hides most of this. Shifts, compares and `ap_fixed` quantisation on the
+    raw `V` are unconfirmed. Differential testing must cover them.
+  - Width exactness: exact by construction once F1 lands. Today it is silently wrong, which is the worst failure mode.
+  - Compile time: the measurement above. This is the largest risk against #41.
+  - Upstream compatibility: a clang fork inside Polygeist, kept across LLVM bumps. Rebuild cost: the clang libraries
+    on `/mnt/d` link slowly; build objects with ninja and link on ext4.
+  - Licence: allowed by #40 for the Apache-2.0 Xlx files. Implementing independently is simpler, because H's
+    `APIntType` AST node on LLVM 7 does not carry over to clang 18. The Vitis headers ("All Rights Reserved") are
+    never copied; lit tests point at the install and are UNSUPPORTED without it, or use the Apache-2.0
+    `HLS_arbitrary_Precision_Types` headers.
+- *Fixes:* synthesis-macro 18, std 5, ap-feature 4, API 11 except streams, range 27 if the proxy reduces to scalars.
+  Missing-header 18 parse only.
+
+**(3) Hybrid: exactclass for ap_int/ap_fixed, real headers for hls_math, hls_fft and the rest.**
+- *Effort:* the include order puts the shim's `ap_fixed.h` before the real one. The real fixed-point math headers use
+  only the public ap API: no `_ssdm_`, `_AP_ROOT`, `__builtin_bit` or `.V` uses (grep count 0 over
+  `etc/hls_*_apfixed.h`, this step). They still need `__fp16` arguments (`hls_half.h`), the pragma-parser fixes, and
+  whatever ap members exactclass lacks.
+- *Risks:* two semantic sources mixed in one design. Shim maintenance for ap_* stays, which #39 rejects. The real
+  `hls_fft.h`, `hls_stream_39.h` and `ap_float.h` use `__fpga_*` builtins and `no_ctor` directly, so the hybrid does
+  not help them.
+- *Fixes:* the fixed-point math part of `shim-hls-api`, and the header pragmas of the math tables. Nothing else.
+- *Use:* as a stage of option 2, not as an end state.
+
+**(4) What the evidence suggests instead: option 2, staged, with exactclass as the oracle.**
+- Keep exactclass frozen as the reference. Every real-header MLIR is compared with the exactclass MLIR on the designs
+  both compile: same element types, same per-array BRAM. This catches silent width loss at once.
+- Rejected alternatives:
+  - Use Xilinx's own clang (hls-llvm-project) to produce LLVM IR and import it into MLIR. hls-est needs
+    affine/memref, and the LLVM-dialect import gives neither. It would also need a second compiler build.
+  - Use Vitis's own `a.g.ld.5.gdce.ll`. That needs a Vitis run per design, which defeats #41.
+  - ap_private mode. It never gives MLIR that hls-est accepts, and its widths are rounded to C types.
+
+### Validation (all options)
+
+1. **Bit-exact semantics.** Lower cgeist's MLIR, run it on random and edge inputs, and compare every output buffer bit
+   for bit with g++ built against the real headers (C-simulation semantics). Extend `check_shim_cgeist.py` to a
+   `--shim real` mode. Include kernels that target promotion: shifts by more than the width, signed compares across
+   widths, `ap_fixed` RND/SAT on 31-, 32-, 33- and 64-bit boundaries, and range selects with Lo > Hi.
+2. **Widths.** Compare the element type of every memref with the alloca or global type in Vitis's
+   `db/a.g.ld.5.gdce.ll` (534 cached captures) and with the csynth memory-table word width.
+3. **BRAM.** The harness under `--shim real` against exactclass and Vitis, per array. Rule 4 applies.
+4. **Speed.** cgeist wall time per design, median and p90, against exactclass (#41).
+
+### Recommendation
+
+Take option 2 in stages, with option 4's oracle, by the criterion best-replicates-Vitis (#36, #39). Exactclass stays
+the default until stage 3 passes. No new shim code is written.
+
+- **Stage 0 (done).** Inventory and probe: the gaps are known and the installed cgeist cannot use the real headers.
+- **Stage 1a, cheap, no rebuild.** Find the parse-time cause: `-ftime-trace` on the saved
+  `realhdr/memo-time/{k1_apint17,k6a_math_fixed}.real.ii`, and the same parse with a release clang 18 if one is on the
+  machine. If the cost is in code the F1 patch changes (for example, overloads that collapse when every width is
+  `i32`), stage 1b re-measures it; if it is inherent to the headers, a precompiled header is the remedy to test.
+- **Stage 1b, go/no-go experiment, private cgeist build only.** Patch the private embedded clang for F1 (`bitwidth` →
+  `_BitInt(N)`, dependent N included, ignored attribute is an error under `--shim real`), add F2 (bit builtins to
+  `arith`), native half arguments, and the two pragma-parser fixes. Point at the autopilot tree with the flow's
+  macros. Run the 9 probe kernels, `vitis_examples/05 ap_arithmetic`, `vitis_examples/01 fixed_point_sqrt` and
+  `forgebench/attention_op_p1`.
+  - **Go** if all of these hold: (a) every ap value has the exact `iN` width, equal to exactclass and to Vitis's
+    `a.g.ld.5.gdce.ll`; (b) the differential check is bit-exact on all 9 kernels; (c) attention_op_p1 gives 73 with
+    the same per-array split as exactclass; (d) fixed_point_sqrt reaches hls-est as plain `iW` memrefs (the
+    `ap_range_ref` question); (e) cgeist wall time on each of these designs is at most 2x exactclass, with a
+    precompiled header if needed.
+  - **No-go** if F1 needs more than about 300 lines or breaks template deduction, or if compile time stays more than
+    5x exactclass with precompiled headers. Then stop, report, and keep exactclass as the default; the 18
+    synthesis-macro and 5 std-include designs can still be fixed by harness flags alone.
+- **Stage 2.** The fixed-point math and `hls::vector` (the header pragmas reach hls-annotate). Then the range-proxy
+  scalar replacement if (d) failed. Re-run the HLSFactory_v2 sweep under `--shim real`.
+- **Stage 3.** The harness subset under `--shim real` against exactclass and Vitis. Switch the default when `real`
+  has at least as many exact designs and no unexplained per-array regression (rule 4); freeze and retire exactclass
+  after that, as #39 says.
+- **Stage 4, separate modelling tracks, each with its own memo.** Streams (FIFO model), `hls::task` (dataflow),
+  `ap_float`, the FFT IP. The real headers are a precondition for these, not a solution.
+
+**Cost of the switch.** Changing the default shim changes the input of every ap design, so every baseline is re-run
+once at stage 3 (as for O6).
+
+
+**Coordinator addendum (2026-10-11).** Speed is part of W11's go/no-go (#41). `--shim real` replaces exactclass only if its cgeist compile time on the harness is acceptable against #41's targets (median under 2 s for a source change), with a release-built clang and, if needed, a precompiled header, and the cause of the superlinear parse time found. The DSE latency study (M14) measures real against exactclass when it resumes.
