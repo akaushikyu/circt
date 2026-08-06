@@ -302,12 +302,12 @@ static bool calleeMayWriteArg(func::FuncOp callee, unsigned indexValue,
   return writes;
 }
 
-static bool calleeWritesGlobal(func::FuncOp function, ArgWriteMemo &memo,
+static bool calleeWritesGlobal(func::FuncOp fn, ArgWriteMemo &memo,
                                SmallPtrSetImpl<Operation *> &visited) {
-  if (!visited.insert(function.getOperation()).second)
+  if (!visited.insert(fn.getOperation()).second)
     return false;
   bool writes = false;
-  function.walk([&](Operation *op) {
+  fn.walk([&](Operation *op) {
     if (auto globalUse = dyn_cast<memref::GetGlobalOp>(op)) {
       writes = mayBeWritten(globalUse.getResult(), memo);
     } else if (auto callSite = dyn_cast<CallOpInterface>(op)) {
@@ -604,8 +604,8 @@ unsigned groupConcurrentCalls(func::FuncOp parent, ArrayRef<Operation *> sites,
 }
 
 unsigned InstanceModel::instancesAt(Operation *op) const {
-  if (auto function = op->getParentOfType<func::FuncOp>())
-    return instancesOf(function);
+  if (auto fn = op->getParentOfType<func::FuncOp>())
+    return instancesOf(fn);
   return 1;
 }
 
@@ -672,8 +672,8 @@ unsigned InstanceModel::ownerInstances(ArrayRef<func::FuncOp> users) const {
   return opHandle ? instancesOf(opHandle) : 1u;
 }
 
-unsigned InstanceModel::instanceSites(func::FuncOp function) const {
-  auto it = parents.find(function.getOperation());
+unsigned InstanceModel::instanceSites(func::FuncOp fn) const {
+  auto it = parents.find(fn.getOperation());
   if (it == parents.end())
     return 0;
   unsigned sites = 0;
@@ -698,7 +698,7 @@ InstanceModel::singleInstanceOwner(ArrayRef<func::FuncOp> users) const {
   return opHandle;
 }
 
-bool InstanceModel::argReachesSharedModule(func::FuncOp function,
+bool InstanceModel::argReachesSharedModule(func::FuncOp fn,
                                            unsigned argIndex) const {
   SmallPtrSet<Operation *, 8> stack;
   std::function<bool(func::FuncOp, unsigned)> shared =
@@ -733,16 +733,16 @@ bool InstanceModel::argReachesSharedModule(func::FuncOp function,
     stack.erase(fieldValue.getOperation());
     return result;
   };
-  return shared(function, argIndex);
+  return shared(fn, argIndex);
 }
 
 InstanceModel computeInstances(ModuleOp rootModule,
                                llvm::function_ref<bool(func::FuncOp)> inScope) {
   InstanceModel memoryOp;
   SmallVector<func::FuncOp> funcs;
-  for (auto function : rootModule.getOps<func::FuncOp>())
-    if (!function.isExternal() && (!inScope || inScope(function)))
-      funcs.push_back(function);
+  for (auto fn : rootModule.getOps<func::FuncOp>())
+    if (!fn.isExternal() && (!inScope || inScope(fn)))
+      funcs.push_back(fn);
   DenseSet<Operation *> scope;
   for (func::FuncOp fieldValue : funcs)
     scope.insert(fieldValue.getOperation());

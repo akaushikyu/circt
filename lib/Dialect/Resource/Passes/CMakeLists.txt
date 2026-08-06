@@ -14,6 +14,7 @@ add_mlir_library(HLSPasses
         CallInstances.cpp
         HlsInliner.cpp
         PolygeistCompat.cpp
+        PartitionLayout.cpp
 
         DEPENDS
         CIRCTTransformsPassIncGen

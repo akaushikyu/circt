@@ -502,8 +502,8 @@ public:
     for (auto [loop, childViaCall] : childLoops) {
 
       Operation *owner = nullptr;
-      if (auto function = loop->getParentOfType<func::FuncOp>())
-        owner = function.getOperation();
+      if (auto fn = loop->getParentOfType<func::FuncOp>())
+        owner = fn.getOperation();
       bool pushed = owner && callStack.insert(owner).second;
       node->children.push_back(build(loop, childViaCall, callStack));
       if (pushed)
@@ -745,16 +745,16 @@ public:
   /// Depth (latency + 1) of one call of `fn`, or nullopt when `fn` (or a
   /// function it calls) still has loops, calls itself or calls a function
   /// without a body.
-  std::optional<unsigned> depth(func::FuncOp function,
+  std::optional<unsigned> depth(func::FuncOp fn,
                                 SymbolTableCollection &symbolTable) {
-    auto it = memo.find(function.getOperation());
+    auto it = memo.find(fn.getOperation());
     if (it != memo.end())
       return it->second;
-    if (!onStack.insert(function.getOperation()).second)
+    if (!onStack.insert(fn.getOperation()).second)
       return std::nullopt;
-    std::optional<unsigned> dimensionIndex = schedule(function, symbolTable);
-    onStack.erase(function.getOperation());
-    memo[function.getOperation()] = dimensionIndex;
+    std::optional<unsigned> dimensionIndex = schedule(fn, symbolTable);
+    onStack.erase(fn.getOperation());
+    memo[fn.getOperation()] = dimensionIndex;
     return dimensionIndex;
   }
 
@@ -842,7 +842,7 @@ private:
     return nullptr;
   }
 
-  std::optional<unsigned> schedule(func::FuncOp function,
+  std::optional<unsigned> schedule(func::FuncOp fn,
                                    SymbolTableCollection &symbolTable) {
     DenseMap<Value, Ready> ready;
 
@@ -881,7 +881,7 @@ private:
       return cycle;
     };
 
-    function.getBody().walk<WalkOrder::PreOrder>([&](Operation *op) {
+    fn.getBody().walk<WalkOrder::PreOrder>([&](Operation *op) {
       if (isa<LoopLikeOpInterface>(op)) {
         unsupported = true;
         return WalkResult::interrupt();
@@ -1296,31 +1296,30 @@ struct AutoPipelineUnrollPass
   callersFirst(ModuleOp rootModule, SymbolTableCollection &symbolTable) {
     SmallVector<func::FuncOp> postOrder;
     DenseSet<Operation *> visited;
-    std::function<void(func::FuncOp)> visit = [&](func::FuncOp function) {
-      if (!visited.insert(function.getOperation()).second)
+    std::function<void(func::FuncOp)> visit = [&](func::FuncOp fn) {
+      if (!visited.insert(fn.getOperation()).second)
         return;
-      function.walk([&](CallOpInterface callSite) {
+      fn.walk([&](CallOpInterface callSite) {
         auto callee = dyn_cast_or_null<func::FuncOp>(
             callSite.resolveCallableInTable(&symbolTable));
         if (callee && !callee.isExternal())
           visit(callee);
       });
-      postOrder.push_back(function);
+      postOrder.push_back(fn);
     };
-    for (auto function : rootModule.getOps<func::FuncOp>())
-      if (!function.isExternal())
-        visit(function);
+    for (auto fn : rootModule.getOps<func::FuncOp>())
+      if (!fn.isExternal())
+        visit(fn);
     return SmallVector<func::FuncOp>(llvm::reverse(postOrder));
   }
 
   /// Whether `fn`, or a function it calls, still holds a loop.
-  static bool hasLoops(func::FuncOp function,
-                       SymbolTableCollection &symbolTable,
+  static bool hasLoops(func::FuncOp fn, SymbolTableCollection &symbolTable,
                        SmallPtrSetImpl<Operation *> &stack) {
-    if (!stack.insert(function.getOperation()).second)
+    if (!stack.insert(fn.getOperation()).second)
       return false;
     bool found = false;
-    function.walk([&](Operation *op) {
+    fn.walk([&](Operation *op) {
       if (isa<LoopLikeOpInterface>(op)) {
         found = true;
         return WalkResult::interrupt();
@@ -1334,7 +1333,7 @@ struct AutoPipelineUnrollPass
           }
       return WalkResult::advance();
     });
-    stack.erase(function.getOperation());
+    stack.erase(fn.getOperation());
     return found;
   }
 
@@ -1342,10 +1341,9 @@ struct AutoPipelineUnrollPass
   /// to each memory (an argument, a local array, a global), two per cycle
   /// (a memory's two ports), the busiest memory deciding; at least 1. A
   /// nested call counts with its own occupancy.
-  static unsigned occupancy(func::FuncOp function,
-                            SymbolTableCollection &symbolTable,
+  static unsigned occupancy(func::FuncOp fn, SymbolTableCollection &symbolTable,
                             SmallPtrSetImpl<Operation *> &stack) {
-    if (!stack.insert(function.getOperation()).second)
+    if (!stack.insert(fn.getOperation()).second)
       return 1;
     unsigned cycles = 1;
     llvm::MapVector<std::pair<Value, Operation *>, unsigned> perMemory;
@@ -1353,7 +1351,7 @@ struct AutoPipelineUnrollPass
     std::set<
         std::tuple<const void *, bool, const void *, std::vector<const void *>>>
         seen;
-    function.walk([&](Operation *op) {
+    fn.walk([&](Operation *op) {
       Value mem;
       bool isWrite = false;
       Attribute map;
@@ -1399,7 +1397,7 @@ struct AutoPipelineUnrollPass
     });
     for (auto &[key, elementCount] : perMemory)
       cycles = std::max(cycles, (elementCount + 1) / 2);
-    stack.erase(function.getOperation());
+    stack.erase(fn.getOperation());
     return cycles;
   }
 
@@ -1498,17 +1496,16 @@ struct AutoPipelineUnrollPass
     using namespace circt::hls_analysis;
     InstanceModel model = computeInstances(rootModule);
     OpBuilder buildPoint(rootModule.getContext());
-    for (auto function : rootModule.getOps<func::FuncOp>()) {
-      if (function.isExternal())
+    for (auto fn : rootModule.getOps<func::FuncOp>()) {
+      if (fn.isExternal())
         continue;
       SmallVector<int64_t> bound;
-      for (BlockArgument arg : function.getArguments())
+      for (BlockArgument arg : fn.getArguments())
         if (isa<BaseMemRefType>(arg.getType()) &&
-            model.argReachesSharedModule(function, arg.getArgNumber()))
+            model.argReachesSharedModule(fn, arg.getArgNumber()))
           bound.push_back(arg.getArgNumber());
       if (!bound.empty())
-        function->setAttr(kPortBoundArgsAttr,
-                          buildPoint.getI64ArrayAttr(bound));
+        fn->setAttr(kPortBoundArgsAttr, buildPoint.getI64ArrayAttr(bound));
     }
   }
 };

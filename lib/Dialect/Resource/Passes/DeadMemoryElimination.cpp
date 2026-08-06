@@ -150,9 +150,9 @@ void ObjectTable::close(unsigned id) {
   llvm::SetVector<Operation *> writers;
   while (!work.empty()) {
     Value valueHandle = work.pop_back_val();
-    if (auto function =
+    if (auto fn =
             valueHandle.getParentRegion()->getParentOfType<func::FuncOp>())
-      opHandle.functions.insert(function);
+      opHandle.functions.insert(fn);
     for (OpOperand &use : valueHandle.getUses()) {
       Operation *user = use.getOwner();
 
@@ -384,25 +384,24 @@ static Operation *findKiller(Operation *store, const ObjectTable &table,
 /// Returns the number of parameters removed.
 static unsigned dropUnusedMemrefParams(ModuleOp rootModule, bool remarks) {
   unsigned dropped = 0;
-  for (auto function : rootModule.getOps<func::FuncOp>()) {
-    if (function.isExternal() || !function.isPrivate())
+  for (auto fn : rootModule.getOps<func::FuncOp>()) {
+    if (fn.isExternal() || !fn.isPrivate())
       continue;
-    llvm::BitVector unused(function.getNumArguments());
-    for (BlockArgument arg : function.getArguments())
+    llvm::BitVector unused(fn.getNumArguments());
+    for (BlockArgument arg : fn.getArguments())
       if (isa<BaseMemRefType>(arg.getType()) && arg.use_empty())
         unused.set(arg.getArgNumber());
     if (unused.none())
       continue;
     std::optional<SymbolTable::UseRange> symbolUses =
-        SymbolTable::getSymbolUses(function, rootModule);
+        SymbolTable::getSymbolUses(fn, rootModule);
     if (!symbolUses)
       continue;
     SmallVector<func::CallOp> calls;
     bool onlyCalls = true;
     for (const SymbolTable::SymbolUse &use : *symbolUses) {
       auto callSite = dyn_cast<func::CallOp>(use.getUser());
-      if (!callSite ||
-          callSite.getNumOperands() != function.getNumArguments()) {
+      if (!callSite || callSite.getNumOperands() != fn.getNumArguments()) {
         onlyCalls = false;
         break;
       }
@@ -414,11 +413,10 @@ static unsigned dropUnusedMemrefParams(ModuleOp rootModule, bool remarks) {
       callSite->eraseOperands(unused);
     if (remarks)
       for (unsigned loopIndex : unused.set_bits())
-        function.emitRemark()
-            << "dead-memory: memref parameter #" << loopIndex
-            << " is not accessed; removed with its operand in " << calls.size()
-            << " call(s)";
-    if (failed(function.eraseArguments(unused)))
+        fn.emitRemark() << "dead-memory: memref parameter #" << loopIndex
+                        << " is not accessed; removed with its operand in "
+                        << calls.size() << " call(s)";
+    if (failed(fn.eraseArguments(unused)))
       continue;
     dropped += unused.count();
   }
@@ -835,14 +833,13 @@ static Attribute describeDead(Builder &buildPoint, const MemObject &opHandle,
   if (auto globalOp = dyn_cast<memref::GlobalOp>(def))
     fieldValue.push_back(buildPoint.getNamedAttr(
         "symbol", buildPoint.getStringAttr(globalOp.getSymName())));
-  if (auto function = def->getParentOfType<func::FuncOp>())
+  if (auto fn = def->getParentOfType<func::FuncOp>())
     fieldValue.push_back(buildPoint.getNamedAttr(
-        "func", buildPoint.getStringAttr(function.getName())));
+        "func", buildPoint.getStringAttr(fn.getName())));
   else if (!opHandle.anchors.empty())
-    if (auto function =
-            opHandle.anchors.front()->getParentOfType<func::FuncOp>())
+    if (auto fn = opHandle.anchors.front()->getParentOfType<func::FuncOp>())
       fieldValue.push_back(buildPoint.getNamedAttr(
-          "func", buildPoint.getStringAttr(function.getName())));
+          "func", buildPoint.getStringAttr(fn.getName())));
   Type memRefType = isa<memref::GlobalOp>(def)
                         ? Type(cast<memref::GlobalOp>(def).getType())
                         : def->getResult(0).getType();
@@ -974,10 +971,10 @@ bool DeadMemoryEliminationPass::eliminateOnce(
   }
 
   SmallVector<Operation *> dead;
-  for (auto function : rootModule.getOps<func::FuncOp>()) {
-    if (function.isExternal())
+  for (auto fn : rootModule.getOps<func::FuncOp>()) {
+    if (fn.isExternal())
       continue;
-    function.getBody().walk<WalkOrder::PreOrder>([&](Operation *op) {
+    fn.getBody().walk<WalkOrder::PreOrder>([&](Operation *op) {
       if (live.survives(op))
         return WalkResult::advance();
       dead.push_back(op);

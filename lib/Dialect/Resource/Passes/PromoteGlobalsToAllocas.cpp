@@ -77,13 +77,13 @@ struct PromoteGlobalsToAllocasPass
       bool eligible = true;
       for (const SymbolTable::SymbolUse &use : *symbolUses) {
         auto globalUse = dyn_cast<memref::GetGlobalOp>(use.getUser());
-        auto function = globalUse ? globalUse->getParentOfType<func::FuncOp>()
-                                  : func::FuncOp();
-        if (!globalUse || !function || (owner && function != owner)) {
+        auto fn = globalUse ? globalUse->getParentOfType<func::FuncOp>()
+                            : func::FuncOp();
+        if (!globalUse || !fn || (owner && fn != owner)) {
           eligible = false;
           break;
         }
-        owner = function;
+        owner = fn;
         sites.push_back(globalUse);
       }
       if (!eligible || !owner || sites.empty())

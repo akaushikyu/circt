@@ -131,8 +131,8 @@ struct TopScope {
       return true;
     if (auto globalOp = dyn_cast<memref::GlobalOp>(op))
       return globals.contains(globalOp.getSymName());
-    auto function = op->getParentOfType<func::FuncOp>();
-    return function && funcs.contains(function.getOperation());
+    auto fn = op->getParentOfType<func::FuncOp>();
+    return fn && funcs.contains(fn.getOperation());
   }
 };
 
@@ -173,6 +173,10 @@ struct PartitionRecord {
   int64_t factor = 0, dim = 0;
   std::optional<int64_t> bankIndex, bankCount;
   std::optional<std::string> reason;
+
+  SmallVector<std::tuple<std::string, int64_t, int64_t>> dims;
+
+  std::optional<std::string> from;
 };
 
 struct BankMathRecord {
@@ -966,8 +970,8 @@ Operation *sequentialScope(Operation *op) {
   for (Operation *cur = op->getParentOp(); cur; cur = cur->getParentOp())
     if (isa<LoopLikeOpInterface>(cur))
       return cur;
-  if (auto function = op->getParentOfType<func::FuncOp>())
-    return function.getOperation();
+  if (auto fn = op->getParentOfType<func::FuncOp>())
+    return fn.getOperation();
   return nullptr;
 }
 
@@ -1142,8 +1146,8 @@ static void describeMemref(Operation *op, unsigned index,
     resultValue.kind = opName.starts_with("memref.")
                            ? opName.drop_front(7).str()
                            : opName.str();
-    if (auto function = op->getParentOfType<func::FuncOp>())
-      resultValue.func = function.getName().str();
+    if (auto fn = op->getParentOfType<func::FuncOp>())
+      resultValue.func = fn.getName().str();
     resultValue.id = (resultValue.func ? *resultValue.func : std::string("?")) +
                      "#" + std::to_string(index);
   }
@@ -1185,6 +1189,18 @@ static void describeMemref(Operation *op, unsigned index,
       portValue.bankIndex = bi.getInt();
     if (auto bc = op->getAttrOfType<IntegerAttr>("hls.bank_count"))
       portValue.bankCount = bc.getInt();
+    if (auto all = dimensionIndex.getAs<ArrayAttr>("dims"))
+      for (Attribute arrayValue : all)
+        if (auto dd = dyn_cast<DictionaryAttr>(arrayValue)) {
+          auto keyValue = dd.getAs<StringAttr>("kind");
+          auto fieldValue = dd.getAs<IntegerAttr>("factor");
+          auto dm = dd.getAs<IntegerAttr>("dim");
+          if (keyValue && fieldValue && dm)
+            portValue.dims.push_back(
+                {keyValue.getValue().str(), fieldValue.getInt(), dm.getInt()});
+        }
+    if (auto from = dimensionIndex.getAs<StringAttr>("from"))
+      portValue.from = from.getValue().str();
   } else if (auto arr = op->getAttrOfType<ArrayAttr>("hls.array_partition")) {
     if (!arr.empty())
       if (auto dimensionIndex = dyn_cast<DictionaryAttr>(arr[0])) {
@@ -1216,8 +1232,8 @@ static void recordAccesses(ArrayRef<AccessSummary> accesses,
     ar.mergedLoads = counterAttr(arrayValue.op, "hls.merged_loads");
     ar.forwardedLoads = counterAttr(arrayValue.op, "hls.forwarded_loads");
     ar.removedStores = counterAttr(arrayValue.op, "hls.removed_stores");
-    if (auto function = arrayValue.op->getParentOfType<func::FuncOp>())
-      ar.inFunc = function.getName().str();
+    if (auto fn = arrayValue.op->getParentOfType<func::FuncOp>())
+      ar.inFunc = fn.getName().str();
     if (arrayValue.via) {
       std::string valueHandle = "call";
       if (auto callSite = dyn_cast<CallOpInterface>(arrayValue.via))
@@ -1690,15 +1706,15 @@ struct PipelineRecord {
 };
 
 static SmallVector<PipelineRecord>
-collectPipelineRecords(ModuleOp rootModule, const TopScope &scope) {
+collectPipelineRecords(ModuleOp module, const TopScope &scope) {
   SmallVector<PipelineRecord> out;
-  rootModule.walk([&](LoopSchedulePipelineOp portValue) {
+  module.walk([&](LoopSchedulePipelineOp portValue) {
     if (!scope.covers(portValue))
       return;
     PipelineRecord resultValue;
     resultValue.loc = locString(portValue.getLoc());
-    if (auto function = portValue->getParentOfType<func::FuncOp>())
-      resultValue.func = function.getName().str();
+    if (auto fn = portValue->getParentOfType<func::FuncOp>())
+      resultValue.func = fn.getName().str();
     resultValue.ii = static_cast<unsigned>(portValue.getII());
     if (auto tc = portValue.getTripCount())
       resultValue.tripCount = static_cast<int64_t>(*tc);
@@ -1747,11 +1763,9 @@ struct FoldSummary {
   bool wholeModule = false;
 };
 
-static FoldSummary collectFoldSummary(ModuleOp rootModule,
-                                      const TopScope &scope) {
+static FoldSummary collectFoldSummary(ModuleOp module, const TopScope &scope) {
   FoldSummary stringValue;
-  auto dimensionIndex =
-      rootModule->getAttrOfType<DictionaryAttr>("hls.vitis_fold");
+  auto dimensionIndex = module->getAttrOfType<DictionaryAttr>("hls.vitis_fold");
   if (!dimensionIndex)
     return stringValue;
   stringValue.present = true;
@@ -1781,8 +1795,8 @@ static FoldSummary collectFoldSummary(ModuleOp rootModule,
       if (!rd)
         continue;
       if (scoped) {
-        auto function = rd.getAs<StringAttr>("func");
-        if (!function || !scope.funcNames.contains(function.getValue()))
+        auto fn = rd.getAs<StringAttr>("func");
+        if (!fn || !scope.funcNames.contains(fn.getValue()))
           continue;
       }
       FoldSummary::Rewrite widthValue;
@@ -1905,6 +1919,16 @@ static void printDebugText(ArrayRef<MemrefRecord> records,
       const PartitionRecord &portValue = resultValue.partition;
       os << "  partition: " << portValue.kind << " factor=" << portValue.factor
          << " dim=" << portValue.dim << " source=" << portValue.source;
+      if (!portValue.dims.empty()) {
+        os << " dims=[";
+        llvm::interleaveComma(portValue.dims, os, [&](const auto &typeValue) {
+          os << std::get<0>(typeValue) << " " << std::get<1>(typeValue)
+             << " on dim " << std::get<2>(typeValue);
+        });
+        os << "]";
+      }
+      if (portValue.from)
+        os << " from " << *portValue.from;
       if (portValue.applied) {
         os << " (bank";
         if (portValue.bankIndex)
@@ -2141,6 +2165,16 @@ static llvm::json::Object toJson(const MemrefRecord &resultValue) {
     part["reason"] = optStr(portValue.reason);
     part["bank_index"] = optInt(portValue.bankIndex);
     part["bank_count"] = optInt(portValue.bankCount);
+
+    if (!portValue.dims.empty()) {
+      llvm::json::Array dims;
+      for (const auto &[keyValue, fieldValue, dm] : portValue.dims)
+        dims.push_back(llvm::json::Object{
+            {"kind", keyValue}, {"factor", fieldValue}, {"dim", dm}});
+      part["dims"] = std::move(dims);
+    }
+    if (portValue.from)
+      part["from"] = *portValue.from;
     opHandle["partition"] = std::move(part);
   } else {
     opHandle["partition"] = nullptr;
@@ -2439,16 +2473,15 @@ static int64_t intField(DictionaryAttr dimensionIndex, StringRef name,
 }
 
 static SmallVector<std::pair<func::FuncOp, AdapterRecord>>
-collectAdapters(ModuleOp rootModule) {
+collectAdapters(ModuleOp module) {
   SmallVector<std::pair<func::FuncOp, AdapterRecord>> out;
-  for (auto function : rootModule.getOps<func::FuncOp>()) {
-    if (function.isPrivate() || function.isExternal())
+  for (auto fn : module.getOps<func::FuncOp>()) {
+    if (fn.isPrivate() || fn.isExternal())
       continue;
     SmallVector<AdapterRecord> bundles;
-    for (unsigned loopIndex = 0, entryValue = function.getNumArguments();
+    for (unsigned loopIndex = 0, entryValue = fn.getNumArguments();
          loopIndex < entryValue; ++loopIndex) {
-      auto ifaces =
-          function.getArgAttrOfType<ArrayAttr>(loopIndex, "hls.interface");
+      auto ifaces = fn.getArgAttrOfType<ArrayAttr>(loopIndex, "hls.interface");
       if (!ifaces)
         continue;
       for (Attribute attr : ifaces) {
@@ -2473,7 +2506,7 @@ collectAdapters(ModuleOp rootModule) {
         }
         if (auto portValue = dimensionIndex.getAs<StringAttr>("port"))
           arrayValue->ports.push_back(portValue.getValue().str());
-        Value arg = function.getArgument(loopIndex);
+        Value arg = fn.getArgument(loopIndex);
         unsigned bits = 32;
         if (auto mt = dyn_cast<BaseMemRefType>(arg.getType())) {
           Type elt = mt.getElementType();
@@ -2540,15 +2573,15 @@ collectAdapters(ModuleOp rootModule) {
         if (arrayValue.writeBurst < 32)
           arrayValue.writeRule += " (bursts 17..31 unconfirmed)";
       }
-      out.push_back({function, std::move(arrayValue)});
+      out.push_back({fn, std::move(arrayValue)});
     }
   }
   return out;
 }
 
-static void appendDeadRecords(ModuleOp rootModule, unsigned &index,
+static void appendDeadRecords(ModuleOp module, unsigned &index,
                               std::vector<MemrefRecord> &records) {
-  auto arr = rootModule->getAttrOfType<ArrayAttr>("hls.dead_memrefs");
+  auto arr = module->getAttrOfType<ArrayAttr>("hls.dead_memrefs");
   if (!arr)
     return;
   for (Attribute attr : arr) {
@@ -2600,21 +2633,20 @@ static void appendDeadRecords(ModuleOp rootModule, unsigned &index,
   }
 }
 
-static bool computeTopScope(ModuleOp rootModule, StringRef top,
-                            TopScope &scope) {
+static bool computeTopScope(ModuleOp module, StringRef top, TopScope &scope) {
   scope.symbol = top.str();
-  auto topFn = rootModule.lookupSymbol<func::FuncOp>(top);
+  auto topFn = module.lookupSymbol<func::FuncOp>(top);
   if (!topFn || topFn.isExternal()) {
-    mlir::emitError(rootModule.getLoc(), "--bram-analysis: top=")
+    mlir::emitError(module.getLoc(), "--bram-analysis: top=")
         << top << ": no func.func with a body of that name in the module";
     return false;
   }
   SmallVector<func::FuncOp> work{topFn};
   scope.funcs.insert(topFn.getOperation());
   while (!work.empty()) {
-    func::FuncOp function = work.pop_back_val();
-    scope.funcNames.insert(function.getName());
-    function.walk([&](Operation *op) {
+    func::FuncOp fn = work.pop_back_val();
+    scope.funcNames.insert(fn.getName());
+    fn.walk([&](Operation *op) {
       op->getAttrDictionary().walk<WalkOrder::PreOrder>([&](SymbolRefAttr ref) {
         Operation *symbolName = SymbolTable::lookupNearestSymbolFrom(op, ref);
         if (auto globalOp = dyn_cast_or_null<memref::GlobalOp>(symbolName))
@@ -2630,13 +2662,13 @@ static bool computeTopScope(ModuleOp rootModule, StringRef top,
   return true;
 }
 
-static SmallVector<StringRef> publicFuncsWithMemrefs(ModuleOp rootModule) {
+static SmallVector<StringRef> publicFuncsWithMemrefs(ModuleOp module) {
   SmallVector<StringRef> out;
-  for (auto function : rootModule.getOps<func::FuncOp>()) {
-    if (function.isPrivate() || function.isExternal())
+  for (auto fn : module.getOps<func::FuncOp>()) {
+    if (fn.isPrivate() || fn.isExternal())
       continue;
     bool holds = false;
-    function.walk([&](Operation *op) {
+    fn.walk([&](Operation *op) {
       if (isa<memref::AllocaOp, memref::AllocOp, memref::GetGlobalOp>(op)) {
         holds = true;
         return WalkResult::interrupt();
@@ -2644,7 +2676,7 @@ static SmallVector<StringRef> publicFuncsWithMemrefs(ModuleOp rootModule) {
       return WalkResult::advance();
     });
     if (holds)
-      out.push_back(function.getName());
+      out.push_back(fn.getName());
   }
   return out;
 }
@@ -2724,15 +2756,15 @@ struct BRAMAnalysisLoopSchedule
       llvm::cl::init("")};
 
   void runOnOperation() override {
-    ModuleOp rootModule = getOperation();
+    ModuleOp module = getOperation();
     TopScope scope;
     if (!topOpt.empty()) {
-      if (!computeTopScope(rootModule, topOpt, scope))
+      if (!computeTopScope(module, topOpt, scope))
         return signalPassFailure();
     } else {
-      SmallVector<StringRef> tops = publicFuncsWithMemrefs(rootModule);
+      SmallVector<StringRef> tops = publicFuncsWithMemrefs(module);
       if (tops.size() > 1) {
-        InFlightDiagnostic widthValue = mlir::emitWarning(rootModule.getLoc())
+        InFlightDiagnostic widthValue = mlir::emitWarning(module.getLoc())
                                         << "--bram-analysis: " << tops.size()
                                         << " public functions hold memrefs (";
         llvm::interleaveComma(tops, widthValue, [&](StringRef elementCount) {
@@ -2754,29 +2786,28 @@ struct BRAMAnalysisLoopSchedule
 
     llvm::StringMap<SmallVector<Value>> globalSites;
     if (bramAttributeGlobalsOpt)
-      rootModule.walk([&](memref::GetGlobalOp globalUse) {
+      module.walk([&](memref::GetGlobalOp globalUse) {
         if (scope.covers(globalUse))
           globalSites[globalUse.getName()].push_back(globalUse.getResult());
       });
 
     InstanceModel instanceModel =
-        computeInstances(rootModule, [&](func::FuncOp function) {
-          return !scope.active() ||
-                 scope.funcs.contains(function.getOperation());
+        computeInstances(module, [&](func::FuncOp fn) {
+          return !scope.active() || scope.funcs.contains(fn.getOperation());
         });
     llvm::StringMap<SmallVector<func::FuncOp>> globalUsers;
 
     llvm::StringMap<SmallVector<Value>> globalUseSites;
-    rootModule.walk([&](memref::GetGlobalOp globalUse) {
-      auto function = globalUse->getParentOfType<func::FuncOp>();
-      if (!function || !scope.covers(globalUse))
+    module.walk([&](memref::GetGlobalOp globalUse) {
+      auto fn = globalUse->getParentOfType<func::FuncOp>();
+      if (!fn || !scope.covers(globalUse))
         return;
       globalUseSites[globalUse.getName()].push_back(globalUse.getResult());
       auto &users = globalUsers[globalUse.getName()];
-      if (!llvm::is_contained(users, function))
-        users.push_back(function);
+      if (!llvm::is_contained(users, fn))
+        users.push_back(fn);
     });
-    rootModule.walk([&](Operation *op) {
+    module.walk([&](Operation *op) {
       auto iface = dyn_cast<MemoryResourceOpInterface>(op);
       if (!iface)
         return;
@@ -2852,25 +2883,25 @@ struct BRAMAnalysisLoopSchedule
     });
 
     if (bramMaxiAdaptersOpt)
-      for (auto &[function, arrayValue] : collectAdapters(rootModule)) {
-        if (scope.active() && function.getName() != scope.symbol)
+      for (auto &[fn, arrayValue] : collectAdapters(module)) {
+        if (scope.active() && fn.getName() != scope.symbol)
           continue;
         unsigned bram = arrayValue.readBram + arrayValue.writeBram;
         llvm::outs() << "m_axi.adapter bundle=" << arrayValue.bundle
-                     << " func=@" << function.getName() << " bram=" << bram
+                     << " func=@" << fn.getName() << " bram=" << bram
                      << " (read FIFO " << arrayValue.readDepth << "x"
                      << arrayValue.busBits << "b -> " << arrayValue.readBram
                      << ", write burst " << arrayValue.writeBurst << " -> "
                      << arrayValue.writeBram << ")\n";
         total += bram;
         MemrefRecord rec;
-        rec.id = function.getName().str() + "#m_axi:" + arrayValue.bundle;
+        rec.id = fn.getName().str() + "#m_axi:" + arrayValue.bundle;
         rec.kind = "m_axi_adapter";
         rec.name = arrayValue.bundle;
         rec.varname = arrayValue.bundle + "_m_axi";
-        rec.func = function.getName().str();
-        rec.locText = locString(function.getLoc());
-        if (auto fieldValue = findFileLoc(function.getLoc())) {
+        rec.func = fn.getName().str();
+        rec.locText = locString(fn.getLoc());
+        if (auto fieldValue = findFileLoc(fn.getLoc())) {
           rec.hasLoc = true;
           rec.locFile = fieldValue.getFilename().str();
           rec.locLine = fieldValue.getLine();
@@ -2891,7 +2922,7 @@ struct BRAMAnalysisLoopSchedule
     llvm::outs() << "Total BRAM: " << total << "\n";
     if (bramDebugOpt || !bramDebugJsonOpt.empty()) {
       size_t first = records.size();
-      appendDeadRecords(rootModule, index, records);
+      appendDeadRecords(module, index, records);
       if (scope.active())
         records.erase(std::remove_if(records.begin() + first, records.end(),
                                      [&](const MemrefRecord &resultValue) {
@@ -2910,7 +2941,7 @@ struct BRAMAnalysisLoopSchedule
       instanceRecords = collectInstanceRecords(instanceModel);
     FoldSummary fold;
     if (bramDebugOpt || !bramDebugJsonOpt.empty())
-      fold = collectFoldSummary(rootModule, scope);
+      fold = collectFoldSummary(module, scope);
     if (bramDebugOpt)
       printDebugText(records, pipelines, instanceRecords, total, fold,
                      formulaOpt, scope, llvm::errs());

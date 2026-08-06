@@ -57,11 +57,14 @@ bool SubIndexOp::isRowSelect() {
 namespace {
 
 static DictionaryAttr shiftPartitionDims(DictionaryAttr argAttrs,
-                                         MLIRContext *context) {
+                                         MLIRContext *context,
+                                         MemRefType wholeType) {
   if (!argAttrs)
     return DictionaryAttr::get(context, {});
   auto arr = argAttrs.getAs<ArrayAttr>("hls.array_partition");
   if (!arr)
+    return argAttrs;
+  if (wholeType && wholeType.getRank() >= 1 && wholeType.getShape()[0] == 1)
     return argAttrs;
   SmallVector<Attribute> entries;
   for (Attribute arrayValue : arr) {
@@ -127,9 +130,9 @@ struct LowerSubIndexPass
                             SmallVectorImpl<SubIndexOp> &worklist) {
     CloneKey key{callee.getOperation(), SmallVector<std::pair<unsigned, Type>>(
                                             rows.begin(), rows.end())};
-    for (auto &[keyValue, function] : clones)
+    for (auto &[keyValue, fn] : clones)
       if (keyValue == key)
-        return function;
+        return fn;
     MLIRContext *context = callee.getContext();
     func::FuncOp clone = callee.clone();
 
@@ -156,7 +159,8 @@ struct LowerSubIndexPass
         continue;
       }
       types.push_back(it->second);
-      attrs.push_back(shiftPartitionDims(arrayValue, context));
+      attrs.push_back(shiftPartitionDims(arrayValue, context,
+                                         dyn_cast<MemRefType>(it->second)));
       types.push_back(IndexType::get(context));
       attrs.push_back(DictionaryAttr::get(context, {}));
     }
@@ -320,10 +324,10 @@ struct LowerSubIndexPass
   }
 
   void runOnOperation() override {
-    ModuleOp rootModule = getOperation();
-    SymbolTable symbols(rootModule);
+    ModuleOp module = getOperation();
+    SymbolTable symbols(module);
     SmallVector<SubIndexOp> worklist;
-    rootModule.walk([&](SubIndexOp si) { worklist.push_back(si); });
+    module.walk([&](SubIndexOp si) { worklist.push_back(si); });
 
     for (unsigned elementCount = 0;
          elementCount < worklist.size() && elementCount < 100000;
@@ -348,7 +352,7 @@ struct LowerSubIndexPass
       worklist[elementCount] = nullptr;
     }
 
-    rootModule.walk([&](SubIndexOp si) {
+    module.walk([&](SubIndexOp si) {
       if (si->use_empty()) {
         si->erase();
         return;
@@ -361,17 +365,16 @@ struct LowerSubIndexPass
     });
 
     SmallVector<func::FuncOp> candidates(clonedFrom.begin(), clonedFrom.end());
-    for (auto &[key, function] : clones)
-      if (!llvm::is_contained(candidates, function))
-        candidates.push_back(function);
+    for (auto &[key, fn] : clones)
+      if (!llvm::is_contained(candidates, fn))
+        candidates.push_back(fn);
     for (bool erased = true; erased;) {
       erased = false;
-      for (func::FuncOp &function : candidates) {
-        if (!function || !function.isPrivate() ||
-            !symbols.symbolKnownUseEmpty(function, rootModule))
+      for (func::FuncOp &fn : candidates) {
+        if (!fn || !fn.isPrivate() || !symbols.symbolKnownUseEmpty(fn, module))
           continue;
-        symbols.erase(function);
-        function = nullptr;
+        symbols.erase(fn);
+        fn = nullptr;
         erased = true;
       }
     }

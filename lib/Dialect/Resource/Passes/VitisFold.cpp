@@ -310,11 +310,11 @@ bool UndefFolder::run(SmallVectorImpl<FoldNote> &notes) {
   OpBuilder buildPoint(root->getContext());
   auto note = [&](StringRef rule, Operation *op, Value useValue,
                   std::string dimensionIndex = {}) {
-    std::string function;
+    std::string fn;
     if (auto fieldValue = op->getParentOfType<FunctionOpInterface>())
-      function = fieldValue.getName().str();
+      fn = fieldValue.getName().str();
     notes.push_back({rule.str(), op->getLoc(), srcOf(useValue),
-                     std::move(dimensionIndex), std::move(function)});
+                     std::move(dimensionIndex), std::move(fn)});
   };
   auto firstU = [&](Operation *op) -> Value {
     for (Value opHandle : op->getOperands())

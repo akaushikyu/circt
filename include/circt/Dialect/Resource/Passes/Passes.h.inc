@@ -16,12 +16,12 @@
 namespace impl {
 
 template <typename DerivedT>
-class MemoryBankingBase : public ::mlir::OperationPass<::mlir::func::FuncOp> {
+class MemoryBankingBase : public ::mlir::OperationPass<::mlir::ModuleOp> {
 public:
   using Base = MemoryBankingBase;
 
-  MemoryBankingBase() : ::mlir::OperationPass<::mlir::func::FuncOp>(::mlir::TypeID::get<DerivedT>()) {}
-  MemoryBankingBase(const MemoryBankingBase &other) : ::mlir::OperationPass<::mlir::func::FuncOp>(other) {}
+  MemoryBankingBase() : ::mlir::OperationPass<::mlir::ModuleOp>(::mlir::TypeID::get<DerivedT>()) {}
+  MemoryBankingBase(const MemoryBankingBase &other) : ::mlir::OperationPass<::mlir::ModuleOp>(other) {}
   MemoryBankingBase& operator=(const MemoryBankingBase &) = delete;
   MemoryBankingBase(MemoryBankingBase &&) = delete;
   MemoryBankingBase& operator=(MemoryBankingBase &&) = delete;

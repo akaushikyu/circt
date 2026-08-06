@@ -6,7 +6,9 @@
 // carries an `hls.bank_of` so the report can add the banks of one array up:
 //
 //   a  `complete` with no factor/dim  -> factor = dimension extent (4), dim 1
-//   d  Vitis `dim = 0` (all dims)     -> banked along the first dim: dim 1
+//   d  Vitis `dim = 0` (all dims)     -> every dimension split (VITIS_NOTES
+//      N24, w7_dim0c: cyclic 2 dim 0 of int[8][64] = 4 banks): 2 x 2 banks,
+//      the first split dimension in kind/factor/dim, all of them in dims=[...]
 //   %u no polygeist.varname, has loc  -> bank_of "<unnamed@p.cpp:3:3>"
 //   %v no polygeist.varname, no loc   -> bank_of "<unnamed#3>" (its position
 //      among the function's storage declarations: a, d, u come before it)
@@ -58,10 +60,10 @@ module {
 // CHECK:      ] a[bank 3/4] (alloca) @ p.cpp:1:3
 // CHECK:        partition: complete factor=4 dim=1 source=pragma (bank 3 of 4)
 
-// CHECK:      ] d[bank 0/2] (alloca) @ p.cpp:2:3
-// CHECK:        partition: cyclic factor=2 dim=1 source=pragma (bank 0 of 2)
-// CHECK:      ] d[bank 1/2] (alloca) @ p.cpp:2:3
-// CHECK:        partition: cyclic factor=2 dim=1 source=pragma (bank 1 of 2)
+// CHECK:      ] d[bank 0/4] (alloca) @ p.cpp:2:3
+// CHECK:        partition: cyclic factor=2 dim=1 source=pragma dims=[cyclic 2 on dim 1, cyclic 2 on dim 2] (bank 0 of 4)
+// CHECK:      ] d[bank 3/4] (alloca) @ p.cpp:2:3
+// CHECK:        partition: cyclic factor=2 dim=1 source=pragma dims=[cyclic 2 on dim 1, cyclic 2 on dim 2] (bank 3 of 4)
 
 // CHECK:      ] <unnamed@p.cpp:3:3>[bank 0/2] (alloca) @ p.cpp:3:3
 // CHECK:        partition: cyclic factor=2 dim=1 source=pragma (bank 0 of 2)
