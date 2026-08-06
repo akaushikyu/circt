@@ -309,3 +309,10 @@ Kernels `~/hls-est-work/exp-src/w8b_iface/k_*.cpp`, runs `~/hls-est-work/experim
 - `k_two_maxi` (`port=out bundle=fm` with depth 64, then depth 32): synthesizes, no WARNING; the pragma table of the report lists both lines; one `m_axi_fm` bundle.
 - `k_two_maxi_bundle` (`port=out bundle=fm`, then `port=out bundle=wt`): synthesizes, no WARNING; the writes are inferred on bundle `wt` (`[HLS 214-115] ... has been inferred on bundle 'wt'`) and the RTL has both `m_axi_fm` (still used by `in`) and `m_axi_wt`. So the later pragma decides. Which `depth` Vitis keeps is not visible in the synthesis reports (it only sizes the co-simulation model).
 - **cgeist:** reports "'#pragma HLS interface' conflicts with an earlier pragma on the same variable" and emits nothing. It should accept the later pragma (OPEN_ISSUES O36).
+
+## N23. HLSFactory_v2 designs whose own code clang rejects fail in Vitis 2025.1 with the same error (confirmed; 3 runs covering 4 designs, W8b 2026-10-11)
+Runs `~/hls-est-work/experiments/w8b_unsup_*/<hash>/` (vitis_adhoc, td=off, the design's sources and headers staged as given):
+- class_ece8893_2022_fall Ray-tracing golden_c (`render`): `ERROR: [HLS 207-3776] use of undeclared identifier 'stderr' (src/trianglemesh.cpp:238:17)`. No header of the design includes `<cstdio>`, and Vitis' front end does not either.
+- class_ece8893_2022_fall Yolo-v3-tiny src_24Layers conv_synth (`conv_3x3`; the src_4Layers copy is the same source): `ERROR: [HLS 207-3776] use of undeclared identifier 'IN_BUF_DEPTH' (src/conv_3x3.cpp:8:16)`.
+- class_ece8893_spring_2025 ece8893_dataset_lab_1 0001 (`compute_attention_HLS`): `ERROR: [HLS 207-3339] no matching function for call to 'softmax_HLS' (src/top.cpp:137:5)`.
+- **Harness:** these are UNSUPPORTED: Vitis cannot synthesize them either (classes `clang-error` and `design-std-include` of hls-doc/hlsfactory-v2.md).

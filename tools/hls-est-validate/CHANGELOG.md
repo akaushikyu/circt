@@ -3,6 +3,28 @@
 Newest entry first. One entry per logical change, including changes that were
 tried and reverted. Branch: `hls-est-vitis-match` in `~/circt`.
 
+## 2026-10-11 — HLSFactory_v2 cause classes: UNSUPPORTED designs backed by Vitis runs, a page section that lists them (W8b part 1b)
+- **Commit:** the commit that adds this entry. Changes the harness report and notes only.
+- **Files:**
+  - `tools/hls-est-validate/make_hlsfactory_report.py`:
+    - New class `pragma-undeclared-variable`, UNSUPPORTED (Vitis HLS 207-3777, N20).
+    - Classes `clang-error` and `design-std-include` become UNSUPPORTED, because each of their designs fails in Vitis too (N23).
+    - `hls-pragma-error` now points at O36.
+    - New page section "UNSUPPORTED designs" that lists every design whose class's track is UNSUPPORTED, with the error line as evidence, and counts the designs waiting for W11.
+  - VITIS_NOTES N23 (new).
+- **Why:** the definition of done requires every design. A design that cannot be made to work gets UNSUPPORTED with evidence, never silence. Three `vitis_adhoc` runs (`w8b_unsup_*`) give the evidence for the 4 designs whose own code clang rejects: Ray-tracing (`stderr` undeclared), Yolo-v3-tiny conv_synth x2 (`IN_BUF_DEPTH`), and lab_1 0001 (`softmax_HLS` arity). Vitis rejects each with the same error.
+- **Effect:** on a reclassified copy of the W8a sweep, the page lists 14 UNSUPPORTED designs:
+  - 2 `absolute-include`
+  - 3 `missing-design-file`
+  - 3 `missing-legacy-vendor-header` (hls_video.h)
+  - 1 `pragma-undeclared-variable`
+  - 1 `top-not-in-sources`
+  - 3 `clang-error`
+  - 1 `design-std-include`
+
+  71 more designs wait for W11. No status, estimate or harness command changes. The committed `hls-doc/hlsfactory-v2.md` is regenerated from the W8b re-sweep after the gate.
+- **Reverted?:** no
+
 ## 2026-10-11 — check_semantics.py: each design's cgeist MLIR run against its native build, bit for bit, with the real Vitis headers in C simulation as the reference; first run over the HLSFactory_v2 sweep; cause classes for decision #39 (W8b part 1)
 - **Commit:** the commit that adds this entry (branch `hls-est-vitis-match`). It changes only the harness, notes and docs: no C++, cgeist or shim code, no estimate, no MLIR cache key, no harness command. The new cgeist flags are opt-in.
 - **Files:**

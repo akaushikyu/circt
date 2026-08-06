@@ -59,10 +59,9 @@ CLASSES = {
                                    "(only designs whose include closure has a Vitis header)", W11),
     "design-std-include": ("cgeist", "the design uses a standard-library name (stderr, uint32_t, memcpy, ...) "
                                      "without including its header, and no Vitis header is in its include "
-                                     "closure: it compiles only where another standard header happens to "
-                                     "include that one (whether the headers Vitis 2025.1 compiles with do is "
-                                     "unconfirmed)",
-                           "check per design (design bug: a missing #include)"),
+                                     "closure. Vitis 2025.1 rejects it the same way (Ray-tracing golden_c: "
+                                     "ERROR HLS 207-3776, VITIS_NOTES N23)",
+                           "UNSUPPORTED (design bug: a missing #include)"),
     "needs-synthesis-macro": ("harness", "compiles only with __SYNTHESIS__ defined: Vitis' front-end clang runs "
                                          "with -D__SYNTHESIS__ -D__VITIS_HLS__ -D__HLS_SYN__ -DAESL_SYN "
                                          "(VITIS_NOTES N19), the harness cgeist command defines none of them "
@@ -75,12 +74,18 @@ CLASSES = {
                      "W8b harness flag -std=c++14 (a default)"),
     "cxx-rejected": ("cgeist", "a C++ construct cgeist does not lower (reported as unsupported)", "W8b cgeist"),
     "hls-pragma-error": ("cgeist", "cgeist's pragma checks (--hls-annotate) reject one of the design's pragmas "
-                                   "(misplaced unroll, dim out of range, unknown variable, two array_partition "
-                                   "pragmas on one dimension). Vitis keeps the larger factor for the last "
-                                   "(VITIS_NOTES N17 (c)); its handling of the others is unconfirmed",
-                         "W8b cgeist (pragma handling: Peter's call)"),
-    "clang-error": ("cgeist", "clang rejects the code (C/C++ error in the design's own sources)",
-                    "check per design: design bug, Vitis-only extension, or harness"),
+                                   "(misplaced unroll, dim out of range, two interface or array_partition "
+                                   "pragmas on one variable). Vitis ignores the first two with a warning "
+                                   "(VITIS_NOTES N20), takes the later interface pragma (N22) and keeps the "
+                                   "larger partition factor (N17 (c))",
+                         "W8b cgeist (OPEN_ISSUES O36)"),
+    "pragma-undeclared-variable": ("cgeist", "a pragma names a variable that is not declared where it stands: "
+                                             "Vitis rejects it too (ERROR HLS 207-3777, VITIS_NOTES N20)",
+                                   "UNSUPPORTED (Vitis cannot synthesize it)"),
+    "clang-error": ("cgeist", "clang rejects the code (C/C++ error in the design's own sources). Each design "
+                              "of the W8b sweep in this class fails in Vitis 2025.1 with the same error "
+                              "(VITIS_NOTES N23); a new member needs that check",
+                    "UNSUPPORTED (design bug)"),
     "cgeist-crash": ("cgeist", "cgeist crash / assertion", "W8b cgeist"),
     "cgeist-timeout": ("cgeist", "cgeist timeout", "W8b cgeist"),
     "cgeist-empty-module": ("cgeist", "cgeist exits 0 but emits no function", "W8b cgeist (W7 empty modules)"),
@@ -231,6 +236,8 @@ def classify_cgeist(r, stderr):
     if re.search(r"no viable overloaded '='|expression is not assignable|cannot assign", first) and \
             re.search(r"\.range\s*\(|\.bit\s*\(|\w\s*\(\s*[^()]+,\s*[^()]+\)\s*=|\w\s*\[[^\]]+\]\s*=", snippet):
         return "shim-range-select", "", first
+    if re.search(r"use of undeclared variable '[^']+' in '#pragma HLS", first):
+        return "pragma-undeclared-variable", "", first
     if re.search(r"#pragma HLS|pragma HLS|conflicts with an earlier pragma|expected a pragma name|"
                  r"expected an option name|option '.*' is specified more than once", first):
         return "hls-pragma-error", "", first
@@ -479,6 +486,18 @@ def build_page(sweep, vitis, src_name, vitis_name="results/vitis.json", sem=None
         for cz in order:
             if details.get(cz):
                 out.append(f"- `{cz}`: " + ", ".join(f"`{_md(d)}` {n}" for d, n in details[cz].most_common(25)))
+
+    unsupported = [(k, recs[k]) for cz in order for k in causes[cz]
+                   if CLASSES.get(cz, ("", "", ""))[2].startswith("UNSUPPORTED")]
+    waiting = [(k, recs[k]) for cz in order for k in causes[cz] if CLASSES.get(cz, ("", "", ""))[2] == W11]
+    out += ["", "## UNSUPPORTED designs", "",
+            f"{len(unsupported)} designs cannot be made to work here: Vitis cannot compile them either, or the "
+            "dataset lacks files they need. Each row names the class and the error that shows it. "
+            f"{len(waiting)} more wait for track W11 (cgeist on the real Vitis headers, MEMOS #39); they are "
+            "listed under their classes above.", "",
+            "| design | class | evidence |", "|---|---|---|"]
+    for k, r in sorted(unsupported, key=lambda x: (x[1].get("cause") or "", x[0].lower())):
+        out.append(f"| {_md(k)} | `{r.get('cause')}` | `{_md((r.get('error_line') or '')[:200])}` |")
 
     exp_rows = [(k, r, r["synthesis_macro_experiment"]) for k, r, _, _ in rows
                 if r.get("synthesis_macro_experiment")]
