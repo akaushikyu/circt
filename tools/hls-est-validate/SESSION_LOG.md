@@ -1381,3 +1381,17 @@ Polygeist:
   (W7, W10, W2, W1b, W9, P1-P3) are not part of the condition. Resume with resumeFromRunId and the same script paths
   (workflows/scripts/ip-task-modelling-proposal-wf_2cc8ddfe-0ef.js and dse-latency-profile-wf_166b34c1-070.js).
   Completed steps replay from cache.
+
+## 2026-10-11 ~10:40: v2 ground-truth runner restarted without hlsyn-vitis (memory)
+
+- At 10:19 tier 2 was at 212 of 327 (vitis-v2.json: 434 ok, 10 timeouts, 2 failures). Then hlsyn-vitis/doitgen-red
+  failed with "[HLS 200-103] Unexpected exception occurred: Out of Memory". Windows had 4.3 of 63.9 GB free, and one
+  vitis_hls.exe held 15.2 GB. Every hlsyn-vitis design so far had timed out at 1 h or run out of memory (2mm, 3mm, adi,
+  doitgen-red), and about 40 remained at 6 slots.
+- The runner script and the runner were stopped. 34 Windows processes kept running under the ground-truth work root:
+  the 6 in-flight hlsyn-vitis designs, plus two tier-1 class designs from before the killer fix (anirudh_tulasi lab3,
+  shibao_su lab2), whose vitis_hls.exe children the old timeout killer missed. Stopping those processes was denied by
+  the permission check, so Peter decides that. They end on their own, by finishing or by running out of memory.
+- Relaunch (`scratchpad/vitis_v2_run2.sh`): tier 2 without hlsyn-vitis, then tier 3, at -j 4 (memory). Then hlsyn-vitis
+  designs without an ok result, with --force, -j 2 and a 2 h timeout. No relaunched design is one of the orphans' designs,
+  so their work directories are untouched.
