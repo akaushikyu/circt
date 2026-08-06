@@ -10,6 +10,7 @@
 #include "mlir/Dialect/Affine/LoopUtils.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/Dialect/Math/IR/Math.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinOps.h"
@@ -29,6 +30,8 @@
 
 #include <functional>
 #include <limits>
+#include <map>
+#include <optional>
 #include <set>
 #include <tuple>
 #include <vector>
@@ -38,6 +41,7 @@
 using namespace mlir;
 using namespace mlir::affine;
 using circt::hls_analysis::getFlattenedParents;
+using circt::hls_analysis::kCallDepthAttr;
 using circt::hls_analysis::kCallOccupancyAttr;
 using circt::hls_analysis::kLoopAutoUnrolledAttr;
 using circt::hls_analysis::kLoopCallBoundaryAttr;
@@ -676,6 +680,305 @@ static std::string locString(Location loc) {
   return stringValue;
 }
 
+namespace call_depth {
+
+constexpr double kLoadDataNs = 3.25;
+constexpr double kLogicNs = 0.99;
+constexpr double kSelectNs = 0.69;
+constexpr double kVariableShiftNs = 4.42;
+constexpr double kConstantMultiplierNs = 5.58;
+constexpr unsigned kNarrowMultiplyCycles = 2;
+constexpr unsigned kMultiCycleOpCycles = 3;
+constexpr unsigned kPortsPerMemory = 2;
+
+/// Carry-chain delay (adder, subtractor, comparator) of a `bits`-wide op.
+inline double carryChainNs(unsigned bits) {
+  if (bits <= 10)
+    return 1.91;
+  if (bits <= 16)
+    return 2.07;
+  if (bits <= 32)
+    return 2.55;
+  return 3.52;
+}
+
+/// Delay of a three-input adder (`TernaryAdder`) of a `bits`-wide result:
+/// Vitis groups an add / sub whose only use is another add / sub into one
+/// three-input operator that starts when its three inputs are ready (W3
+/// review 2 D3, w3r2_k8 `a[i] + a[1023 - i] + a[(i * 7) & 1023]`: the third
+/// load arrives 3.25 ns into cycle 2, 3.25 + 4.37 > 7.3 ns, the root add in
+/// cycle 3, latency 3, II 16 = 4 calls x depth 4). Values: the mode per width
+/// of the `root node of TernaryAdder` delays in the verbose schedule reports
+/// of the ground-truth cache and the experiments (i4 3.31 ... i10 3.72, i16
+/// 3.90, i32 4.37, i34 4.42 ns), taken at the top of each band.
+inline double ternaryAdderNs(unsigned bits) {
+  if (bits <= 10)
+    return 3.72;
+  if (bits <= 16)
+    return 3.90;
+  if (bits <= 32)
+    return 4.37;
+  return 4.42;
+}
+
+/// Data width of a value for the delay table: an index is an address, which
+/// Vitis narrows (w3rev_k2: `i10`); treat it as 32 bits.
+inline unsigned bitsOf(Type typeValue) {
+  if (typeValue.isIntOrFloat())
+    return typeValue.getIntOrFloatBitWidth();
+  return 32;
+}
+
+/// When a value is ready: the cycle and the nanoseconds used in it.
+struct Ready {
+  unsigned cycle = 0;
+  double ns = 0.0;
+  bool operator<(const Ready &opHandle) const {
+    return cycle != opHandle.cycle ? cycle < opHandle.cycle : ns < opHandle.ns;
+  }
+};
+
+class Model {
+public:
+  explicit Model(double budgetNs) : budgetNs(budgetNs) {}
+
+  /// Depth (latency + 1) of one call of `fn`, or nullopt when `fn` (or a
+  /// function it calls) still has loops, calls itself or calls a function
+  /// without a body.
+  std::optional<unsigned> depth(func::FuncOp function,
+                                SymbolTableCollection &symbolTable) {
+    auto it = memo.find(function.getOperation());
+    if (it != memo.end())
+      return it->second;
+    if (!onStack.insert(function.getOperation()).second)
+      return std::nullopt;
+    std::optional<unsigned> dimensionIndex = schedule(function, symbolTable);
+    onStack.erase(function.getOperation());
+    memo[function.getOperation()] = dimensionIndex;
+    return dimensionIndex;
+  }
+
+private:
+  double budgetNs;
+  DenseMap<Operation *, std::optional<unsigned>> memo;
+  SmallPtrSet<Operation *, 4> onStack;
+
+  /// `start` plus a combinational delay, moved to the next cycle when it
+  /// does not fit the budget.
+  Ready chain(Ready start, double delayNs) const {
+    if (delayNs <= 0.0)
+      return start;
+    if (start.ns + delayNs <= budgetNs)
+      return {start.cycle, start.ns + delayNs};
+    return {start.cycle + 1, delayNs};
+  }
+
+  static std::optional<int64_t> constantInt(Value valueHandle) {
+    if (auto candidateValue = valueHandle.getDefiningOp<arith::ConstantOp>())
+      if (auto loopIndex = dyn_cast<IntegerAttr>(candidateValue.getValue()))
+        return loopIndex.getValue().getSExtValue();
+    return std::nullopt;
+  }
+
+  /// Ready time of a multiply: a constant factor is shifts and adds, two
+  /// variables a pipelined multiplier.
+  Ready multiply(arith::MulIOp mul, Ready start) const {
+    unsigned bits = bitsOf(mul.getType());
+    std::optional<int64_t> candidateValue = constantInt(mul.getLhs());
+    if (!candidateValue)
+      candidateValue = constantInt(mul.getRhs());
+    if (candidateValue) {
+      uint64_t mag = *candidateValue < 0
+                         ? 0 - static_cast<uint64_t>(*candidateValue)
+                         : static_cast<uint64_t>(*candidateValue);
+      unsigned setBits = llvm::popcount(mag);
+      if (setBits <= 1)
+        return start;
+      if (setBits == 2)
+        return chain(start, carryChainNs(bits));
+      return chain(start, kConstantMultiplierNs);
+    }
+    unsigned cycles = bits <= 32 ? kNarrowMultiplyCycles : kMultiCycleOpCycles;
+    return {start.cycle + cycles, 0.0};
+  }
+
+  /// Latency in whole cycles of a floating-point or math op (the operator
+  /// table of --convert-affine-to-loopschedule), 0 for a combinational one.
+  static unsigned floatCycles(Operation *op) {
+    if (isa<arith::MulFOp>(op))
+      return 4;
+    if (isa<arith::AddFOp, arith::SubFOp, arith::MaximumFOp, arith::MinimumFOp,
+            arith::MaxNumFOp, arith::MinNumFOp, math::FmaOp, math::FloorOp,
+            math::CeilOp, math::RoundOp, math::RoundEvenOp, math::TruncOp>(op))
+      return 5;
+    if (isa<arith::DivFOp, arith::RemFOp>(op))
+      return 12;
+    if (isa<math::SqrtOp, math::RsqrtOp>(op))
+      return 16;
+    if (isa<math::AbsFOp, math::AbsIOp, math::CopySignOp>(op))
+      return 0;
+    if (isa_and_nonnull<math::MathDialect>(op->getDialect()))
+      return 20;
+    return 0;
+  }
+
+  /// For an integer add / sub `op`, the add / sub of the same type that is
+  /// only used by `op` and is not itself the root of a three-input adder:
+  /// the two form one TernaryAdder (ternaryAdderNs). Null otherwise; index
+  /// arithmetic (addresses) is never grouped.
+  static Operation *ternaryInner(Operation *op,
+                                 const SmallPtrSetImpl<Operation *> &roots) {
+    if (!isa<arith::AddIOp, arith::SubIOp>(op) ||
+        !isa<IntegerType>(op->getResult(0).getType()))
+      return nullptr;
+    for (Value valueHandle : op->getOperands()) {
+      Operation *dimensionIndex = valueHandle.getDefiningOp();
+      if (dimensionIndex && isa<arith::AddIOp, arith::SubIOp>(dimensionIndex) &&
+          valueHandle.hasOneUse() &&
+          valueHandle.getType() == op->getResult(0).getType() &&
+          !roots.contains(dimensionIndex))
+        return dimensionIndex;
+    }
+    return nullptr;
+  }
+
+  std::optional<unsigned> schedule(func::FuncOp function,
+                                   SymbolTableCollection &symbolTable) {
+    DenseMap<Value, Ready> ready;
+
+    std::map<std::tuple<const void *, const void *, unsigned>, unsigned> ports;
+    unsigned latency = 0;
+    bool unsupported = false;
+
+    SmallPtrSet<Operation *, 8> ternaryRoots;
+
+    auto readyOf = [&](Value valueHandle) {
+      auto it = ready.find(valueHandle);
+      return it == ready.end() ? Ready{} : it->second;
+    };
+    auto latest = [&](ValueRange vs) {
+      Ready resultValue;
+      for (Value valueHandle : vs)
+        resultValue = std::max(resultValue, readyOf(valueHandle));
+      return resultValue;
+    };
+    auto latestCycle = [&](ValueRange vs) {
+      unsigned candidateValue = 0;
+      for (Value valueHandle : vs)
+        candidateValue = std::max(candidateValue, readyOf(valueHandle).cycle);
+      return candidateValue;
+    };
+
+    auto issue = [&](Value mem, unsigned cycle) {
+      circt::hls_analysis::StorageRoot root =
+          circt::hls_analysis::storageRoot(mem);
+      const void *valueKey =
+          root.value ? root.value.getAsOpaquePointer() : nullptr;
+      const void *globalKey = root.global;
+      while (ports[{valueKey, globalKey, cycle}] >= kPortsPerMemory)
+        ++cycle;
+      ++ports[{valueKey, globalKey, cycle}];
+      return cycle;
+    };
+
+    function.getBody().walk<WalkOrder::PreOrder>([&](Operation *op) {
+      if (isa<LoopLikeOpInterface>(op)) {
+        unsupported = true;
+        return WalkResult::interrupt();
+      }
+      Ready start = latest(op->getOperands());
+      Ready done = start;
+      Value mem;
+      ValueRange indices;
+      bool isLoad = false, isStore = false;
+      if (auto lowerIndex = dyn_cast<AffineLoadOp>(op)) {
+        mem = lowerIndex.getMemRef();
+        indices = lowerIndex.getMapOperands();
+        isLoad = true;
+      } else if (auto lowerIndex = dyn_cast<memref::LoadOp>(op)) {
+        mem = lowerIndex.getMemRef();
+        indices = lowerIndex.getIndices();
+        isLoad = true;
+      } else if (auto stringValue = dyn_cast<AffineStoreOp>(op)) {
+        mem = stringValue.getMemRef();
+        indices = stringValue.getMapOperands();
+        isStore = true;
+      } else if (auto stringValue = dyn_cast<memref::StoreOp>(op)) {
+        mem = stringValue.getMemRef();
+        indices = stringValue.getIndices();
+        isStore = true;
+      }
+      if (isLoad) {
+        unsigned candidateValue = issue(mem, latestCycle(indices));
+        done = {candidateValue + 1, kLoadDataNs};
+      } else if (isStore) {
+        unsigned candidateValue =
+            issue(mem, std::max(latestCycle(indices),
+                                readyOf(op->getOperand(0)).cycle));
+        latency = std::max(latency, candidateValue);
+      } else if (auto callSite = dyn_cast<CallOpInterface>(op)) {
+        auto callee = dyn_cast_or_null<func::FuncOp>(
+            callSite.resolveCallableInTable(&symbolTable));
+        std::optional<unsigned> inner;
+        if (callee && !callee.isExternal())
+          inner = depth(callee, symbolTable);
+        if (!inner) {
+          unsupported = true;
+          return WalkResult::interrupt();
+        }
+        done = {start.cycle + *inner, 0.0};
+        latency = std::max(latency, done.cycle);
+      } else if (auto mul = dyn_cast<arith::MulIOp>(op)) {
+        done = multiply(mul, start);
+      } else if (isa<arith::DivSIOp, arith::DivUIOp, arith::RemSIOp,
+                     arith::RemUIOp, arith::CeilDivSIOp, arith::CeilDivUIOp,
+                     arith::FloorDivSIOp>(op)) {
+        done = {start.cycle + kMultiCycleOpCycles, 0.0};
+      } else if (Operation *inner = ternaryInner(op, ternaryRoots)) {
+
+        SmallVector<Value, 3> leaves(inner->getOperands());
+        for (Value valueHandle : op->getOperands())
+          if (valueHandle.getDefiningOp() != inner)
+            leaves.push_back(valueHandle);
+        done = chain(latest(leaves),
+                     ternaryAdderNs(bitsOf(op->getResult(0).getType())));
+        ternaryRoots.insert(op);
+      } else if (isa<arith::AddIOp, arith::SubIOp, arith::CmpIOp>(op)) {
+        done = chain(start, carryChainNs(bitsOf(op->getOperand(0).getType())));
+      } else if (isa<arith::AndIOp, arith::OrIOp, arith::XOrIOp>(op)) {
+        done = chain(start, kLogicNs);
+      } else if (isa<arith::SelectOp>(op)) {
+        done = chain(start, kSelectNs);
+      } else if (isa<arith::ShLIOp, arith::ShRSIOp, arith::ShRUIOp>(op)) {
+        if (!constantInt(op->getOperand(1)))
+          done = chain(start, kVariableShiftNs);
+      } else if (unsigned candidateValue = floatCycles(op)) {
+        done = {start.cycle + candidateValue, 0.0};
+      } else if (isa<func::ReturnOp>(op)) {
+        latency = std::max(latency, start.cycle);
+      } else if (op->hasTrait<OpTrait::IsTerminator>()) {
+
+        if (Operation *parent = op->getParentOp())
+          if (parent->getNumResults() == op->getNumOperands())
+            for (auto [resultValue, valueHandle] :
+                 llvm::zip(parent->getResults(), op->getOperands()))
+              ready[resultValue] =
+                  std::max(readyOf(resultValue), readyOf(valueHandle));
+      }
+
+      for (Value resultValue : op->getResults())
+        if (!ready.count(resultValue))
+          ready[resultValue] = done;
+      return WalkResult::advance();
+    });
+    if (unsupported)
+      return std::nullopt;
+    return latency + 1;
+  }
+};
+
+} // namespace call_depth
+
 struct AutoPipelineUnrollPass
     : public PassWrapper<AutoPipelineUnrollPass, OperationPass<ModuleOp>> {
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(AutoPipelineUnrollPass)
@@ -713,6 +1016,18 @@ struct AutoPipelineUnrollPass
       llvm::cl::desc("Print one remark per decision (pipeline, unroll, "
                      "flatten, user unroll)"),
       llvm::cl::init(false)};
+
+  Option<double> clockPeriodNs{
+      *this, "clock-period-ns",
+      llvm::cl::desc("Target clock period in ns for the depth of a call in "
+                     "a pipelined loop (Vitis create_clock; default 10, the "
+                     "ground-truth configuration)"),
+      llvm::cl::init(10.0)};
+  Option<double> clockUncertaintyPct{
+      *this, "clock-uncertainty-pct",
+      llvm::cl::desc("Clock uncertainty in percent of the period (Vitis "
+                     "default 27)"),
+      llvm::cl::init(27.0)};
 
   StringRef getArgument() const final { return "auto-pipeline-unroll"; }
   StringRef getDescription() const final {
@@ -1093,9 +1408,12 @@ struct AutoPipelineUnrollPass
   /// gets `hls.call_boundary` (Vitis pipelines the callee's loops in the
   /// callee and leaves the caller loop sequential: w3h_cb_nest256,
   /// attn_breakdown_op1 `VITIS_LOOP_232_1`); a call inside a pipelined loop
-  /// gets `hls.call_occupancy` (its callee is loop-free by then, R7).
+  /// gets `hls.call_occupancy` (its callee is loop-free by then, R7) and
+  /// `hls.call_depth` (the states of one call, for calls that share an
+  /// instance; N14 R2 in a pipelined loop).
   static void markCallBoundaries(ModuleOp rootModule,
-                                 SymbolTableCollection &symbolTable) {
+                                 SymbolTableCollection &symbolTable,
+                                 call_depth::Model &depthModel) {
     rootModule.walk([&](CallOpInterface callSite) {
       auto callee = dyn_cast_or_null<func::FuncOp>(
           callSite.resolveCallableInTable(&symbolTable));
@@ -1107,9 +1425,14 @@ struct AutoPipelineUnrollPass
       OpBuilder buildPoint(callSite.getContext());
       SmallPtrSet<Operation *, 8> stack;
       if (loop->hasAttr(kLoopPipelineAttr)) {
+        unsigned occ = occupancy(callee, symbolTable, stack);
         callSite->setAttr(kCallOccupancyAttr,
-                          buildPoint.getI64IntegerAttr(
-                              occupancy(callee, symbolTable, stack)));
+                          buildPoint.getI64IntegerAttr(occ));
+        if (std::optional<unsigned> dimensionIndex =
+                depthModel.depth(callee, symbolTable))
+          callSite->setAttr(
+              kCallDepthAttr,
+              buildPoint.getI64IntegerAttr(std::max(*dimensionIndex, occ)));
         return;
       }
       if (!loop->hasAttr(kLoopCallBoundaryAttr) &&
@@ -1132,7 +1455,10 @@ struct AutoPipelineUnrollPass
     });
     rootModule.walk([&](CallOpInterface callSite) {
       callSite->removeAttr(kCallOccupancyAttr);
+      callSite->removeAttr(kCallDepthAttr);
     });
+    for (auto func : rootModule.getOps<func::FuncOp>())
+      func->removeAttr(circt::hls_analysis::kPortBoundArgsAttr);
 
     for (auto func : rootModule.getOps<func::FuncOp>())
       if (!func.isExternal())
@@ -1155,7 +1481,35 @@ struct AutoPipelineUnrollPass
       for (auto &node : nodes)
         decide(*node, symbolTable);
     }
-    markCallBoundaries(rootModule, symbolTable);
+    call_depth::Model depthModel(clockPeriodNs *
+                                 (1.0 - clockUncertaintyPct / 100.0));
+    markCallBoundaries(rootModule, symbolTable, depthModel);
+    markPortBoundArgs(rootModule);
+  }
+
+  /// `hls.port_bound_args` on every function whose memref arguments name an
+  /// array that crosses a module instantiated at more than one place
+  /// (VITIS_NOTES.md N14 R6; W3 review D2: w3rev_k3 / k3b / w3fx_d2_conc).
+  /// MemrefBankClassification gives such an argument two ports instead of
+  /// the replicable pool, so the callee's loop II rises as in Vitis (rd3
+  /// II 2). The instances are counted after the unroll decisions, on the
+  /// final call sites.
+  static void markPortBoundArgs(ModuleOp rootModule) {
+    using namespace circt::hls_analysis;
+    InstanceModel model = computeInstances(rootModule);
+    OpBuilder buildPoint(rootModule.getContext());
+    for (auto function : rootModule.getOps<func::FuncOp>()) {
+      if (function.isExternal())
+        continue;
+      SmallVector<int64_t> bound;
+      for (BlockArgument arg : function.getArguments())
+        if (isa<BaseMemRefType>(arg.getType()) &&
+            model.argReachesSharedModule(function, arg.getArgNumber()))
+          bound.push_back(arg.getArgNumber());
+      if (!bound.empty())
+        function->setAttr(kPortBoundArgsAttr,
+                          buildPoint.getI64ArrayAttr(bound));
+    }
   }
 };
 

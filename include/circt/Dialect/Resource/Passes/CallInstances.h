@@ -15,16 +15,31 @@
 //   R2  Inside one parent module, calls of one callee that can run
 //       concurrently get one instance each; calls that are ordered share
 //       one. Two calls are ordered when a value of one reaches an operand of
-//       the other (a scalar data dependence, `g(g(x))`), when both access a
-//       common array (any memref operand with the same storage root: an
-//       alloca, a global, a function argument, through views), or when the
-//       parent carries `#pragma HLS allocation function instances=<callee>
-//       limit=N` (at most N instances). A call site inside a loop is one
-//       instance whatever the trip count.
+//       the other (a scalar data dependence, `g(g(x))`; through memory only
+//       when the write can precede the read: later in program order or in
+//       the next iteration of a common loop), when both access a common
+//       array (any memref operand with the same storage root: an alloca, a
+//       global, a function argument, through views), or when the parent
+//       carries `#pragma HLS allocation function instances=<callee> limit=N`
+//       (at most N instances). Calls in different branches of one
+//       conditional never run together and are ordered too (w3r2_k5). The
+//       instance count is the most calls that can run at once (the width of
+//       the order, not the number of its connected groups: w3r2_k6, two
+//       independent calls joined by a third keep 2 instances). A call site
+//       inside a loop is one instance whatever the trip count.
 //   R3  Every parent module that calls the callee gets its own instances, so
 //       a function's instance count is the sum over its parents of the
 //       parent's count times the instances it holds (the product down the
 //       instance tree). The top (a function nobody calls) counts 1.
+//   R6  A caller's array is replicated for the pipelined loops of a callee
+//       it is passed to only when every module it crosses is instantiated
+//       at one place in the module hierarchy (one instance in one parent;
+//       the parent's own multiplicity does not matter): w3rev_k3a / k3c /
+//       w3fx_d2_nested replicate, w3rev_k3 / k3b / w3fx_d2_conc (two places)
+//       do not, and the callee's loop II rises instead.
+//   R9  A written `static` (global) array is one memory however many
+//       instances its functions have (w3rev_k5, w3fx_d3_mix: in the top);
+//       a read-only one (a ROM) is duplicated per instance (inl_c4).
 //
 // Not modelled (observed without a confirmed trigger, N14): the clones Vitis
 // makes for different array argument forms (R4) and the outlined loops that
@@ -58,6 +73,15 @@ constexpr llvm::StringLiteral kAllocationAttr = "hls.allocation";
 /// `hls.orig_name` (string, on a func.func): the C/C++ name of a mangled
 /// function, which the allocation pragma names.
 constexpr llvm::StringLiteral kOrigNameAttr = "hls.orig_name";
+/// `hls.port_bound_args` (array of i64, on a func.func): the indices of the
+/// memref arguments whose array reaches the function through a module that
+/// is instantiated at more than one place (InstanceModel::
+/// argReachesSharedModule, R6). Vitis does not replicate such an array for
+/// the function's loops: the accesses go through the module's two ports and
+/// the loop's II rises (w3rev_k3: rd3's loop II 2). Written by
+/// --auto-pipeline-unroll (a module pass) for MemrefBankClassification,
+/// which runs inside function passes and cannot look at the call sites.
+constexpr llvm::StringLiteral kPortBoundArgsAttr = "hls.port_bound_args";
 
 /// The func.func with a body that `call` resolves to in the enclosing module,
 /// or null (an indirect call, an external declaration).
@@ -132,6 +156,19 @@ struct InstanceModel {
   unsigned ownerInstances(llvm::ArrayRef<mlir::func::FuncOp> users) const;
   /// The owner itself (null when none / several roots).
   mlir::func::FuncOp owner(llvm::ArrayRef<mlir::func::FuncOp> users) const;
+  /// Where a written global used from `users` lives (R9): the nearest
+  /// function at or above the owner that has one instance (the top in
+  /// w3rev_k5); null when none is found.
+  mlir::func::FuncOp
+  singleInstanceOwner(llvm::ArrayRef<mlir::func::FuncOp> users) const;
+  /// Places in the module hierarchy where `fn` is instantiated: the sum over
+  /// its parents of the instances each parent holds, without the parents'
+  /// own multiplicity (the rows of the csynth instance tables); 0 for a root.
+  unsigned instanceSites(mlir::func::FuncOp fn) const;
+  /// Whether the array passed as memref argument `argIndex` of `fn` crosses
+  /// a module instantiated at more than one place on its way from its owner
+  /// (`fn` itself, or a caller up the chain of arguments) (R6).
+  bool argReachesSharedModule(mlir::func::FuncOp fn, unsigned argIndex) const;
 
   // Call-graph helpers (parents of a function, as func.funcs).
   llvm::DenseMap<mlir::Operation *, llvm::SmallVector<mlir::func::FuncOp>>
@@ -146,10 +183,16 @@ computeInstances(mlir::ModuleOp module,
                  llvm::function_ref<bool(mlir::func::FuncOp)> inScope = nullptr);
 
 /// Group the calls `sites` (all to one callee, in program order within one
-/// parent) into instances by rule R2: union over "share a storage root" and
-/// "a value of the earlier reaches an operand of the later", then capped by
-/// `limit`. Returns the group of each site and the number of groups; `rule`
-/// receives a one-line explanation.
+/// parent) into instances by rule R2: two calls are ordered when they share
+/// a storage root, when a value of one reaches an operand of the other
+/// (forward in program order, or around a common loop; a terminator forwards
+/// each operand to its own result / iter_arg), or when they lie in different
+/// branches of one conditional; the groups are a minimum cover of the
+/// transitively closed order by chains (each chain one instance, its calls
+/// run one after the other), then capped by `limit`. Returns the group of
+/// each site and the number of groups; `rule` receives a one-line
+/// explanation. Works on the affine form (--convert-affine-to-loopschedule)
+/// and on the loopschedule form (--bram-analysis) alike.
 unsigned groupConcurrentCalls(mlir::func::FuncOp parent,
                               llvm::ArrayRef<mlir::Operation *> sites,
                               std::optional<int64_t> limit,

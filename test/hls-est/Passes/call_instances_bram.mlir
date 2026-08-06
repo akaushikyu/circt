@@ -76,12 +76,14 @@
 // INLOOP:  kind=RAM_1P  bram=1
 // INLOOP:  Total BRAM: 1
 // A static table shared by two callees lives in their deepest common caller
-// (here the top, one instance); a global of one callee follows that callee.
+// (here the top, one instance). @own is written by @u2: both calls of @u2
+// write it, so they are ordered and share one instance (w3fx_d3_samepar),
+// and a written static is one memory anyway (N14 R9, w3rev_k5): charged once.
 // GLOBAL:      memref.global @ loc({{.*}}:[[# @LINE + 7]]:3)
 // GLOBAL-NEXT:   kind={{.*}}  bram=1
 // GLOBAL:      memref.global @ loc({{.*}}:[[# @LINE + 6]]:3)
-// GLOBAL-NEXT:   kind={{.*}}  bram=2
-// GLOBAL:      Total BRAM: 3
+// GLOBAL-NEXT:   kind={{.*}}  bram=1
+// GLOBAL:      Total BRAM: 2
 
 module {
   memref.global "private" @shared : memref<512xi32> = uninitialized
@@ -169,7 +171,8 @@ module {
   }
   // Globals: @shared is used by @u1 and @u2 (both one instance under the
   // top) -> charged once for the top; @own only by @u2, which the top calls
-  // twice on disjoint arrays -> 2 instances -> charged twice.
+  // twice on disjoint arrays, but both calls write @own -> 1 instance
+  // (before the W3 review fixes: 2 instances, charged twice).
   func.func private @u1(%o: memref<512xi32>) attributes {hls.inline_off} {
     %s = memref.get_global @shared : memref<512xi32>
     affine.for %i = 0 to 512 {

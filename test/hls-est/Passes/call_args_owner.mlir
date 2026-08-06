@@ -16,8 +16,10 @@
 //   @buf2  read by two calls of @get2 (two reads each) from inside the
 //          caller's pipelined loop: the reads go through the one instance's
 //          port in the callee's own sequential scope, no replication; the
-//          calls share the instance (common array) and are serialized, so
-//          the caller loop's II rises (inl_e3: II 4, buf RAM 2 BRAM).
+//          calls share the instance (common array) and are serialized, each
+//          for its depth (here the call latency 1 + 1), so the caller loop's
+//          II rises to 4 (inl_e3: II 4, buf RAM 2 BRAM; II 2 before the W3
+//          review fix D4).
 //   The debug record names the call and the function of every such access.
 
 // CHECK:      memref.alloca
@@ -46,7 +48,7 @@
 // DBG:        @rd3: 1 instance(s) (inline off)
 // DBG:      --- pipelines
 // DBG-DAG:    pipeline @ {{.*}} in @rd3: ii=1
-// DBG-DAG:    pipeline @ {{.*}} in @top: ii=2
+// DBG-DAG:    pipeline @ {{.*}} in @top: ii=4
 
 // JSON:      "in_func": "rd3",
 // JSON:      "via_call": "call @rd3 @ {{.*}}"

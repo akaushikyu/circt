@@ -9,8 +9,9 @@
 //           instances).
 //   @shared two calls of @get2 on the same array: one instance, the calls are
 //           serialized (Vitis: a carried dependence between the call
-//           operations), II >= 2 at the default call latency 1 (inl_e3: II 4
-//           with 2-cycle calls).
+//           operations), each for its whole depth: without hls.call_depth
+//           the call latency (default 1) + 1 = 2, so II 4 (inl_e3: II 4,
+//           get2 depth 2; W3 review D4, before it II 2).
 //   @extern a call without a body in the module (a math function) still
 //           leaves the loop sequential unless --loopschedule-call-latency
 //           is set, as before.
@@ -22,7 +23,7 @@
 // CHECK:         func.call @h
 // CHECK:         func.call @h
 // CHECK-LABEL: func.func @shared
-// CHECK:       loopschedule.pipeline II = 2 trip_count = 1024
+// CHECK:       loopschedule.pipeline II = 4 trip_count = 1024
 // CHECK:         func.call @get2
 // CHECK:         func.call @get2
 // CHECK-LABEL: func.func @occupied

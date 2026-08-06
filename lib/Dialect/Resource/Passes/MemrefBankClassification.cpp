@@ -108,10 +108,18 @@ void BRAMClassification::enumerateBanks(Operation *root) {
 
   if (auto function = dyn_cast<func::FuncOp>(root)) {
     bool isCallee = function.isPrivate() || function->hasAttr(kInlineOffAttr);
+    SmallVector<int64_t> portBound;
+    if (auto bound = function->getAttrOfType<ArrayAttr>(kPortBoundArgsAttr))
+      for (Attribute arrayValue : bound)
+        if (auto loopIndex = dyn_cast<IntegerAttr>(arrayValue))
+          portBound.push_back(loopIndex.getInt());
     if (isCallee)
       for (BlockArgument arg : function.getArguments()) {
         auto memTy = dyn_cast<MemRefType>(arg.getType());
         if (!memTy || !memTy.hasStaticShape())
+          continue;
+        if (llvm::is_contained(portBound,
+                               static_cast<int64_t>(arg.getArgNumber())))
           continue;
         Type elt = memTy.getElementType();
         if (!elt.isIntOrFloat() && !isa<IndexType>(elt))

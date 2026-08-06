@@ -3,6 +3,70 @@
 Newest entry first. One entry per logical change, including changes that were
 tried and reverted. Branch: `hls-est-vitis-match` in `~/circt`.
 
+## 2026-10-11 — hls-est: non-inlined calls review fixes (two W3 reviews: call ordering, instance count = most concurrent calls, exclusive branches, call depth chains with three-input adders, port-bound arrays of shared modules, written statics charged once)
+- **Commit:** the commit that adds this entry (branch `hls-est-vitis-match`), "hls-est: non-inlined calls review fixes". It contains the first review's fixes, which an earlier attempt of this step made but did not commit, and the second review's fixes.
+- **Files:**
+  - `CallInstances.{h,cpp}`:
+    - `groupConcurrentCalls` orders a write after a read only when the write can come first: later in program order, or in the next iteration of a common loop.
+    - A tainted terminator forwards each operand to its own result or iter_arg.
+    - A callee that writes a global orders all of its calls (`calleeWritesGlobal`).
+    - New: calls in different branches of an `scf.if` / `affine.if` / `scf.index_switch`, or carrying different arms of one `hls.if_arms` id, are ordered (`mutuallyExclusive`).
+    - New: the order is closed transitively and covered by a minimum set of chains, one instance per chain (`chainCover`). This replaces the union-find components.
+    - New `InstanceModel::{instanceSites, singleInstanceOwner, argReachesSharedModule}`.
+    - The debug rule line adds ", N by exclusive branches" when there are any.
+  - `AutoPipelineUnroll.cpp`:
+    - `call_depth::Model` is an ASAP schedule of a loop-free callee: two ports per memory, delays from the verbose schedule reports, a 7.3 ns budget. New: `ternaryInner` / `ternaryAdderNs` group add(add(x, y), z) into one three-input adder.
+    - `hls.call_depth` on calls in pipelined loops.
+    - `markPortBoundArgs` writes `hls.port_bound_args`.
+  - `AffineToLoopScheduleModified.cpp`: `chainSharedCalleeInstances` chains the calls of one instance at their depth (`hls.call_depth`) instead of their occupancy, with a distance-1 back edge. `hoistIfBodies` also records `hls.if_arms` on calls.
+  - `BRAMAnalysis.cpp`: accesses reached through a module instantiated at more than one place are port-bound and never replicate the bank (debug text "port-bound", JSON `port_bound`, additive). A written global is charged once, in the nearest single-instance owner (N14 R9).
+  - `MemrefBankClassification.cpp`: skips port-bound arguments.
+  - `MemoryDS.h`: `portBound`.
+  - `LoopPragmas.h`: `hls.call_depth`, and `hls.if_arms` now also on calls.
+  - Lit:
+    - New: `test/hls-est/Passes/call_instances_width.mlir`, `call_instances_review.mlir`, `call_chain_depth.mlir`.
+    - Updated: `auto_pipeline_call_boundary`, `call_args_owner`, `call_in_pipeline_sched`, `call_instances_bram`.
+  - Notes: VITIS_NOTES N14 "W3 review addendum".
+- **Why:** VITIS_NOTES N14 W3 review addendum, from 25 kernels in `~/hls-est-work/exp-src/{w3rev,w3fx,w3r2}`.
+  - Review 1:
+    - D1(a) `w3rev_k6`: a write after a read.
+    - D1(b) `w3rev_k2`: per-operand forwarding.
+    - D2 `w3rev_k3` / `k3b`, `w3fx_d2_conc`: port-bound.
+    - D3 `w3rev_k5`, `w3fx_d3_mix`, `w3fx_d3_samepar`: written statics.
+    - D4 `inl_e3`, `w3rev_k2` / `k4`, `w3fx_d4_*`: II = sum of the call depths.
+  - Review 2:
+    - D1 `w3r2_k5_branches`: if/else calls share one instance, Vitis 4 BRAM, hls-est gave 8.
+    - D2 `w3r2_k6_join`: two concurrent calls joined by a third keep 2 instances, Vitis 12, hls-est gave 8.
+    - D3 `w3r2_k8_unrolled_calls`: Vitis II 16 = 4 calls x depth 4. `get3`'s two adds form one 4.37 ns TernaryAdder after the third load (`db/get3.verbose.sched.rpt`). hls-est at HEAD gave II 8 (occupancy); the first fix gave 12 (depth 3, two plain adds).
+  - D1 and D2 of review 2 rest on one kernel each; their variants are unconfirmed (N14).
+- **Effect:**
+  - **Kernels** (exactclass, installed cgeist 2ec1956c, default pipeline, BRAM = Vitis; `~/hls-est-work/w3g/kern/{head,fix1,g3}/summary.txt`). These are the 88 kernels: 60 N14 (`inl_*`), 3 w3h, 9 w3rev, 8 w3fx and 8 w3r2.
+    - HEAD (21a959f47, md5 071f97ba…): 73 / 88.
+    - First fix attempt: 82 / 88.
+    - This commit (frozen `~/hls-est-work/w3g/bin/hls-est.g3`, md5 6b0d4609b1f30917ee8328a00508b8be): **84 / 88**.
+    - Newly equal: w3rev_k2, k3, k3b, k4, k5, k6, w3fx_d2_conc, d3_mix, d3_samepar, w3r2_k5_branches, w3r2_k6_join.
+    - Still different (unchanged, recorded): inl_c5_unrolled_loop (R4), inl_g_loopbig_dep2 (N18 / W10), inl_o5_f8 / i8 (O5).
+    - Caller-loop II (Vitis / HEAD / this commit):
+      - k8: 16 / 8 / 16
+      - inl_e3: 4 / 2 / 4
+      - d4_rd4: 8 / 4 / 8
+      - d4_three: 6 / 3 / 6
+      - d4_add3: 6 / 2 / 6
+      - d4_mul: 8 / 2 / 8
+      - w3rev_k2 p1: 6 / 2 / 6
+      - w3rev_k4: 4 / 2 / 4
+  - **Harness** (catalogue polygeist, which now has 787 designs; 95 compared with `results/vitis.json`; MLIR from `w3h/r3/{xinst,sinst}.json` plus the shared cache; runs `~/hls-est-work/w3g/r/{x,s}_{head,g3}.json`):
+    - exactclass: 56 / 95 → 56 / 95, \|err\| 5631 → 5631, 62 → 62 in the goal band.
+    - scalar: 45 / 95 → 45 / 95, \|err\| 29209 → 29209.
+    - Every compared design has the same total before and after, under both shims.
+    - Gates bicg 8, gesummv 16, mvt 8 and syrk 32 are exact.
+    - The counts differ from the W3 entry's 55 / 89 because the catalogue and the ground truth grew (W8), not because of this change.
+  - **Lit** `test/hls-est`: 82 pass, 4 fail (the baseline activation_op1 and tiled_attn_module / p1 / p2), 24 unresolved, 1 expected failure, out of 111.
+  - **Debug invariance:**
+    - The 42 Estimation inputs: 38 pass, 0 fail, 4 ERR as before (sha, gin, pna, matrix_multiplication).
+    - The 25 w3rev / w3fx / w3r2 kernels: 25 / 25 pass.
+- **Reverted?:** no
+
 ## 2026-10-11 — HLSFactory_v2 cause classes: UNSUPPORTED designs backed by Vitis runs, a page section that lists them (W8b part 1b)
 - **Commit:** the commit that adds this entry. Changes the harness report and notes only.
 - **Files:**

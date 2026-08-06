@@ -27,10 +27,11 @@ constexpr llvm::StringLiteral kLoopPipelineAttr = "hls.pipeline";
 /// `hls.pipeline_off` (unit): `#pragma HLS pipeline off`.
 constexpr llvm::StringLiteral kLoopPipelineOffAttr = "hls.pipeline_off";
 /// `hls.if_arms` (DenseI64ArrayAttr, pairs [if id, arm number, ...]) on a
-/// memory access that --convert-affine-to-loopschedule hoisted out of the arms
-/// of an scf.if (hoistIfBodies), innermost if first. Ids are unique within the
-/// function. Two accesses that carry the same if id with different arm numbers
-/// never execute together (--bram-seq-dual-port, VITIS_NOTES.md N12).
+/// memory access or a call that --convert-affine-to-loopschedule hoisted out
+/// of the arms of an scf.if (hoistIfBodies), innermost if first. Ids are
+/// unique within the function. Two ops that carry the same if id with
+/// different arm numbers never execute together (accesses: --bram-seq-dual-
+/// port, VITIS_NOTES.md N12; calls: one instance, groupConcurrentCalls).
 constexpr llvm::StringLiteral kIfArmsAttr = "hls.if_arms";
 /// `hls.unroll = [{factor = F : i32, ...}]`, F = 0 for a complete unroll.
 constexpr llvm::StringLiteral kLoopUnrollAttr = "hls.unroll";
@@ -71,11 +72,22 @@ constexpr llvm::StringLiteral kLoopPipelineAutoSource = "auto";
 constexpr llvm::StringLiteral kLoopCallBoundaryAttr = "hls.call_boundary";
 /// `hls.call_occupancy = N : i64` on a func.call inside a pipelined loop
 /// (written by --auto-pipeline-unroll): the cycles one call holds its callee
-/// instance, estimated from the callee's memory accesses, at most two per
-/// memory per cycle (VITIS_NOTES.md N14 R7: `inl_f2_unroll_off`, 16 accesses
-/// of each row per call, II 8). --convert-affine-to-loopschedule uses it as
-/// the call's latency and as the II bound of the calls an instance serves.
+/// instance before the next call of the same call site can start (the
+/// callee's own II), estimated from the callee's memory accesses, at most two
+/// per memory per cycle (VITIS_NOTES.md N14 R7: `inl_f2_unroll_off`, 16
+/// accesses of each row per call, II 8). --convert-affine-to-loopschedule
+/// uses it as the call's latency and as the II bound of a call alone on its
+/// instance.
 constexpr llvm::StringLiteral kCallOccupancyAttr = "hls.call_occupancy";
+/// `hls.call_depth = N : i64` on a func.call inside a pipelined loop (written
+/// by --auto-pipeline-unroll): the states of one call of the loop-free callee
+/// (its latency + 1), estimated with the callee's operator latencies and the
+/// combinational delays Vitis chains into one cycle. Calls of one iteration
+/// that share an instance run one after the other, each for its whole depth:
+/// the loop's II is the sum of their depths (VITIS_NOTES.md N14 R2 in a
+/// pipelined loop: inl_e3 / w3rev_k4 2 x 2 = II 4, w3rev_k2 2 x 3 = 6,
+/// w3fx_d4_three 3 x 2 = 6, w3fx_d4_rd4 2 x 4 = 8).
+constexpr llvm::StringLiteral kCallDepthAttr = "hls.call_depth";
 /// `hls.uncounted` (unit, from cgeist): a loop whose exit test compares a
 /// counter with a runtime bound of a wider type that the counter is not known
 /// to reach (`for (uint8_t i = 0; i < n; i++)`, int n), raised by assuming

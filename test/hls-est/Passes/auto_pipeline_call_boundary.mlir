@@ -16,7 +16,11 @@
 //              w3h_cb_flat64 and w3h_cb_nest64 with a 4 x 4 x 4 nest). The
 //              call holds its instance for 16 accesses of each row, two per
 //              cycle: hls.call_occupancy 8, the II bound in
-//              --convert-affine-to-loopschedule.
+//              --convert-affine-to-loopschedule. hls.call_depth (the
+//              states of one call, for calls that share an instance; N14 R2
+//              in a pipelined loop) is 9: 16 loads over two ports from
+//              cycle 0 to 7, the last data in cycle 8 (Vitis row16: latency
+//              10; only calls that share an instance use it).
 //   A loop that is not pipelined and calls a callee that keeps loops gets
 //   hls.call_boundary (--convert-affine-to-loopschedule leaves it a
 //   sequential affine.for).
@@ -36,7 +40,7 @@
 // CHECK:         return
 // CHECK-LABEL: func.func @unroll_off
 // CHECK:         affine.for %{{.*}} = 0 to 128 {
-// CHECK:           func.call @row16(%{{.*}}, %{{.*}}) {hls.call_occupancy = 8 : i64}
+// CHECK:           func.call @row16(%{{.*}}, %{{.*}}) {hls.call_depth = 9 : i64, hls.call_occupancy = 8 : i64}
 // CHECK:         } {hls.auto_unrolled = [{factor = 16 : i64, loc = #loc{{[0-9]*}}}], hls.pipeline = [{II = 0 : i32, source = "auto"}]}
 //   @nest_caller a caller loop (8 trips) around @nest, whose nest has
 //              8 x 8 x 4 = 256 trips: the caller stays sequential and
@@ -57,7 +61,7 @@
 // CHECK-NEXT:    return
 // CHECK-LABEL: func.func @acc4_caller
 // CHECK:         affine.for %{{.*}} = 0 to 64 {
-// CHECK-NEXT:      func.call @acc4(%{{.*}}, %{{.*}}) {hls.call_occupancy = 2 : i64}
+// CHECK-NEXT:      func.call @acc4(%{{.*}}, %{{.*}}) {hls.call_depth = 4 : i64, hls.call_occupancy = 2 : i64}
 // CHECK-NEXT:    } {hls.pipeline = [{II = 0 : i32, source = "auto"}]}
 
 module {

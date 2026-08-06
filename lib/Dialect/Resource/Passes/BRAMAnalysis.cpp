@@ -152,6 +152,8 @@ struct AccessRecord {
 
   std::string inFunc;
   std::optional<std::string> viaCall;
+
+  bool portBound = false;
 };
 
 struct ScopeDemandRecord {
@@ -197,6 +199,8 @@ struct ReplicationLoopRecord {
   unsigned writes = 0;
   unsigned need = 0;
   unsigned copies = 0;
+
+  bool portBound = false;
 };
 
 struct ReplicationRecord {
@@ -206,6 +210,8 @@ struct ReplicationRecord {
   unsigned copies = 1;
   SmallVector<ReplicationLoopRecord> loops;
   std::optional<std::string> limitingLoop;
+
+  bool portBoundLimited = false;
 };
 
 struct AdapterRecord {
@@ -965,11 +971,10 @@ Operation *sequentialScope(Operation *op) {
   return nullptr;
 }
 
-static void
-collectAccessesFrom(Value mem, Operation *via,
-                    DenseSet<std::pair<Operation *, unsigned>> &visitedArgs,
-                    DenseSet<Operation *> &seen,
-                    SmallVectorImpl<AccessSummary> &out) {
+static void collectAccessesFrom(
+    Value mem, Operation *via, bool portBound, const InstanceModel *model,
+    DenseSet<std::pair<Operation *, unsigned>> &visitedArgs,
+    DenseSet<Operation *> &seen, SmallVectorImpl<AccessSummary> &out) {
   for (OpOperand &use : mem.getUses()) {
     Operation *user = use.getOwner();
     if (auto callSite = dyn_cast<CallOpInterface>(user)) {
@@ -981,15 +986,17 @@ collectAccessesFrom(Value mem, Operation *via,
         continue;
       if (!visitedArgs.insert({callee.getOperation(), *indexValue}).second)
         continue;
+      bool shared = portBound || (model && model->instanceSites(callee) > 1);
       collectAccessesFrom(callee.getArgument(*indexValue), via ? via : user,
-                          visitedArgs, seen, out);
+                          shared, model, visitedArgs, seen, out);
       continue;
     }
     if (auto view = dyn_cast<ViewLikeOpInterface>(user))
       if (view.getViewSource() == mem) {
         for (Value resultValue : user->getResults())
           if (isa<BaseMemRefType>(resultValue.getType()))
-            collectAccessesFrom(resultValue, via, visitedArgs, seen, out);
+            collectAccessesFrom(resultValue, via, portBound, model, visitedArgs,
+                                seen, out);
         continue;
       }
     bool isWrite = false;
@@ -1003,6 +1010,7 @@ collectAccessesFrom(Value mem, Operation *via,
     arrayValue.isWrite = isWrite;
     arrayValue.latency = portOccupancy(isWrite);
     arrayValue.via = via;
+    arrayValue.portBound = portBound;
 
     if (auto pipeline = user->getParentOfType<LoopSchedulePipelineOp>()) {
       auto stage = user->getParentOfType<LoopSchedulePipelineStageOp>();
@@ -1020,12 +1028,14 @@ collectAccessesFrom(Value mem, Operation *via,
   }
 }
 
-SmallVector<AccessSummary> collectAccessSummaries(ArrayRef<Value> banks) {
+SmallVector<AccessSummary>
+collectAccessSummaries(ArrayRef<Value> banks,
+                       const InstanceModel *model = nullptr) {
   SmallVector<AccessSummary> out;
   DenseSet<std::pair<Operation *, unsigned>> visitedArgs;
   DenseSet<Operation *> seen;
   for (Value mem : banks)
-    collectAccessesFrom(mem, nullptr, visitedArgs, seen, out);
+    collectAccessesFrom(mem, nullptr, false, model, visitedArgs, seen, out);
   return out;
 }
 
@@ -1215,6 +1225,7 @@ static void recordAccesses(ArrayRef<AccessSummary> accesses,
           valueHandle += " @" + callee.getName().str();
       ar.viaCall = valueHandle + " @ " + locString(arrayValue.via->getLoc());
     }
+    ar.portBound = arrayValue.portBound;
     resultValue.accesses.push_back(std::move(ar));
     if (!llvm::is_contained(scopeOrder, arrayValue.scope))
       scopeOrder.push_back(arrayValue.scope);
@@ -1246,6 +1257,7 @@ static ReplicationRecord analyzeReplication(ArrayRef<AccessSummary> accesses,
   struct ScopeStats {
     Operation *scope = nullptr;
     unsigned reads = 0, writes = 0, ii = 0;
+    bool portBound = false;
   };
   SmallVector<ScopeStats> scopes;
   for (const AccessSummary &arrayValue : accesses) {
@@ -1254,10 +1266,11 @@ static ReplicationRecord analyzeReplication(ArrayRef<AccessSummary> accesses,
       if (stringValue.scope == arrayValue.scope)
         st = &stringValue;
     if (!st) {
-      scopes.push_back({arrayValue.scope, 0, 0, arrayValue.ii});
+      scopes.push_back({arrayValue.scope, 0, 0, arrayValue.ii, false});
       st = &scopes.back();
     }
     (arrayValue.isWrite ? st->writes : st->reads)++;
+    st->portBound |= arrayValue.portBound;
   }
 
   resultValue.maxStoresPerLoop = 0;
@@ -1284,6 +1297,12 @@ static ReplicationRecord analyzeReplication(ArrayRef<AccessSummary> accesses,
         ceilDiv(stringValue.reads + stringValue.writes, stringValue.ii));
     unsigned candidateValue = lr.need > 1 ? lr.need - 1 : 1;
     lr.copies = std::min(candidateValue, kMaxReplicationCopies);
+
+    if (stringValue.portBound) {
+      lr.portBound = true;
+      lr.copies = 1;
+      resultValue.portBoundLimited |= lr.need > 2;
+    }
     if (resultValue.replicable && lr.copies > resultValue.copies) {
       resultValue.copies = lr.copies;
       resultValue.limitingLoop = lr.scopeLoc;
@@ -1333,7 +1352,11 @@ static std::string ramReasonFor(const PortDemand &dimensionIndex,
     os << ": " << kr.note;
     return stringValue;
   }
-  if (demandClamped)
+  if (demandClamped && rep.portBoundLimited)
+    os << ", clamped to 2 ports (a callee instantiated at more than one "
+          "place reads it through the module's ports: no replication across "
+          "the call, Vitis raises that loop's II instead; N14 R6)";
+  else if (demandClamped)
     os << ", clamped to 2 ports (replicable bank, but no pipelined loop needs "
           "more than ceil((R+W)/II) <= 2 port-cycles, so Vitis spreads the "
           "accesses over the II)";
@@ -1359,7 +1382,8 @@ static std::string ramReasonFor(const PortDemand &dimensionIndex,
 
 static BRAMCost estimateBRAM(MemoryResourceOpInterface iface, MemrefRecord &rec,
                              ArrayRef<Value> banks, bool attributed,
-                             SeqScopeIndex *seq, BramFormula formula) {
+                             SeqScopeIndex *seq, BramFormula formula,
+                             const InstanceModel *instances) {
   BRAMCost cost;
   cost.kind = StorageKind::RAM_1P;
   cost.bramCount = 0;
@@ -1392,7 +1416,8 @@ static BRAMCost estimateBRAM(MemoryResourceOpInterface iface, MemrefRecord &rec,
                   " is not an integer / float; not estimated";
       rec.status = "excluded_type";
       rec.excludeReason = cost.note;
-      SmallVector<AccessSummary> accesses = collectAccessSummaries(banks);
+      SmallVector<AccessSummary> accesses =
+          collectAccessSummaries(banks, instances);
       recordAccesses(accesses, rec, seq);
       rec.demand = computePortDemand(accesses, seq);
       rec.ramType = kindName(cost.kind);
@@ -1410,7 +1435,8 @@ static BRAMCost estimateBRAM(MemoryResourceOpInterface iface, MemrefRecord &rec,
     cost.note = "hls.registers: " + why + " -> registers, 0 BRAM";
     rec.status = "registers";
     rec.excludeReason = "registers (hls.registers): " + why;
-    SmallVector<AccessSummary> accesses = collectAccessSummaries(banks);
+    SmallVector<AccessSummary> accesses =
+        collectAccessSummaries(banks, instances);
     recordAccesses(accesses, rec, seq);
     rec.demand = computePortDemand(accesses, seq);
     rec.ramType = "none";
@@ -1444,7 +1470,8 @@ static BRAMCost estimateBRAM(MemoryResourceOpInterface iface, MemrefRecord &rec,
                           " -> BRAM); distributed RAM, 0 BRAM";
     }
 
-    SmallVector<AccessSummary> accesses = collectAccessSummaries(banks);
+    SmallVector<AccessSummary> accesses =
+        collectAccessSummaries(banks, instances);
     recordAccesses(accesses, rec, seq);
     rec.demand = computePortDemand(accesses, seq);
     rec.replication = analyzeReplication(accesses, rec.accessesAttributed);
@@ -1479,7 +1506,8 @@ static BRAMCost estimateBRAM(MemoryResourceOpInterface iface, MemrefRecord &rec,
     return cost;
   }
 
-  SmallVector<AccessSummary> accesses = collectAccessSummaries(banks);
+  SmallVector<AccessSummary> accesses =
+      collectAccessSummaries(banks, instances);
   PortDemand demand = computePortDemand(accesses, seq);
   ReplicationRecord rep = analyzeReplication(accesses, rec.accessesAttributed);
   KindResult kr;
@@ -1905,7 +1933,7 @@ static void printDebugText(ArrayRef<MemrefRecord> records,
           os << " ii=" << arrayValue.ii << " stage=" << arrayValue.stageStart;
         if (arrayValue.viaCall)
           os << " (in @" << arrayValue.inFunc << " via " << *arrayValue.viaCall
-             << ")";
+             << (arrayValue.portBound ? ", port-bound" : "") << ")";
         if (arrayValue.storeEnable)
           os << " (store_enable: write-only, no read port)";
         if (arrayValue.mergedLoads)
@@ -1951,7 +1979,12 @@ static void printDebugText(ArrayRef<MemrefRecord> records,
            << lowerIndex.writes << "W per iteration -> ceil("
            << (lowerIndex.reads + lowerIndex.writes) << "/" << lowerIndex.ii
            << ")=" << lowerIndex.need << " port-cycles -> copies "
-           << lowerIndex.copies << "\n";
+           << lowerIndex.copies
+           << (lowerIndex.portBound
+                   ? " (port-bound: a callee instantiated at more "
+                     "than one place, N14 R6)"
+                   : "")
+           << "\n";
     }
     os << "  ram type: " << resultValue.ramType << " -- "
        << resultValue.ramReason << "\n";
@@ -2131,6 +2164,8 @@ static llvm::json::Object toJson(const MemrefRecord &resultValue) {
                         ? llvm::json::Value(nullptr)
                         : llvm::json::Value(arrayValue.inFunc);
     ao["via_call"] = optStr(arrayValue.viaCall);
+
+    ao["port_bound"] = arrayValue.portBound;
     accesses.push_back(std::move(ao));
   }
   opHandle["accesses"] = std::move(accesses);
@@ -2175,6 +2210,8 @@ static llvm::json::Object toJson(const MemrefRecord &resultValue) {
       lo["writes"] = static_cast<int64_t>(lowerIndex.writes);
       lo["need"] = static_cast<int64_t>(lowerIndex.need);
       lo["copies"] = static_cast<int64_t>(lowerIndex.copies);
+
+      lo["port_bound"] = lowerIndex.portBound;
       loops.push_back(std::move(lo));
     }
     rp["loops"] = std::move(loops);
@@ -2728,10 +2765,13 @@ struct BRAMAnalysisLoopSchedule
                  scope.funcs.contains(function.getOperation());
         });
     llvm::StringMap<SmallVector<func::FuncOp>> globalUsers;
+
+    llvm::StringMap<SmallVector<Value>> globalUseSites;
     rootModule.walk([&](memref::GetGlobalOp globalUse) {
       auto function = globalUse->getParentOfType<func::FuncOp>();
       if (!function || !scope.covers(globalUse))
         return;
+      globalUseSites[globalUse.getName()].push_back(globalUse.getResult());
       auto &users = globalUsers[globalUse.getName()];
       if (!llvm::is_contained(users, function))
         users.push_back(function);
@@ -2760,16 +2800,28 @@ struct BRAMAnalysisLoopSchedule
       }
       MemrefRecord rec;
       describeMemref(op, index++, rec);
-      BRAMCost cost =
-          estimateBRAM(iface, rec, banks, attributed, seq, formulaOpt);
+      BRAMCost cost = estimateBRAM(iface, rec, banks, attributed, seq,
+                                   formulaOpt, &instanceModel);
 
       unsigned instances = 1;
+      bool sharedGlobal = false;
       if (auto globalOp = dyn_cast<memref::GlobalOp>(op)) {
         auto it = globalUsers.find(globalOp.getSymName());
         if (it != globalUsers.end()) {
-          instances = instanceModel.ownerInstances(it->second);
-          if (func::FuncOp owner = instanceModel.owner(it->second))
-            rec.ownerFunc = owner.getName().str();
+          auto sites = globalUseSites.find(globalOp.getSymName());
+          bool written = !globalOp.getConstant() &&
+                         sites != globalUseSites.end() &&
+                         !neverWritten(sites->second);
+          if (written && instanceModel.ownerInstances(it->second) > 1) {
+            sharedGlobal = true;
+            if (func::FuncOp home =
+                    instanceModel.singleInstanceOwner(it->second))
+              rec.ownerFunc = home.getName().str();
+          } else {
+            instances = instanceModel.ownerInstances(it->second);
+            if (func::FuncOp owner = instanceModel.owner(it->second))
+              rec.ownerFunc = owner.getName().str();
+          }
         }
       } else {
         instances = instanceModel.instancesAt(op);
@@ -2785,6 +2837,11 @@ struct BRAMAnalysisLoopSchedule
             " (non-inlined callee, N14)";
         rec.bram = cost.bramCount;
       }
+      if (sharedGlobal)
+        cost.note += " (written static shared by every instance of its "
+                     "functions: one memory in @" +
+                     (rec.ownerFunc ? *rec.ownerFunc : std::string("?")) +
+                     ", N14 R9)";
       llvm::outs() << op->getName() << " @ " << op->getLoc() << "\n"
                    << "  kind=" << kindName(cost.kind)
                    << "  bram=" << cost.bramCount

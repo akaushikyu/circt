@@ -786,6 +786,22 @@ static void chainSharedCalleeInstances(AffineForOp forOp,
     if (succeeded(problem.insertDependence(self)))
       problem.setDistance(self, 1);
   };
+
+  auto holdForDepth = [&](Operation *callSite) {
+    unsigned depth = 0;
+    if (auto dimensionIndex = callSite->getAttrOfType<IntegerAttr>(
+            circt::hls_analysis::kCallDepthAttr))
+      depth =
+          static_cast<unsigned>(std::max<int64_t>(1, dimensionIndex.getInt()));
+    else if (auto opr = problem.getLinkedOperatorType(callSite))
+      depth = problem.getLatency(*opr).value_or(0) + 1;
+    if (depth == 0)
+      return;
+    Problem::OperatorType held = problem.getOrInsertOperatorType(
+        "call_kept_held_" + std::to_string(depth));
+    problem.setLatency(held, depth);
+    problem.setLinkedOperatorType(callSite, held);
+  };
   for (auto &[calleeOp, sites] : byCallee) {
     if (sites.size() < 2) {
       boundBySelf(sites.front());
@@ -802,6 +818,8 @@ static void chainSharedCalleeInstances(AffineForOp forOp,
         boundBySelf(chain.front());
         continue;
       }
+      for (Operation *callSite : chain)
+        holdForDepth(callSite);
       for (unsigned keyValue = 1; keyValue < chain.size(); ++keyValue)
         (void)problem.insertDependence(
             Problem::Dependence(chain[keyValue - 1], chain[keyValue]));
@@ -1408,8 +1426,9 @@ static void hoistIfBodies(Operation *root) {
         continue;
       for (Operation &inner :
            llvm::make_early_inc_range(blk->without_terminator())) {
-        if (isa<memref::LoadOp, memref::StoreOp, hls_analysis::StoreEnableOp>(
-                inner)) {
+
+        if (isa<memref::LoadOp, memref::StoreOp, hls_analysis::StoreEnableOp,
+                CallOpInterface>(inner)) {
           SmallVector<int64_t> arms;
           if (auto prev = inner.getAttrOfType<DenseI64ArrayAttr>(
                   circt::hls_analysis::kIfArmsAttr))

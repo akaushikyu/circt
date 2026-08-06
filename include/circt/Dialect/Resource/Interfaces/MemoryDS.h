@@ -74,6 +74,10 @@ namespace circt::hls_analysis {
       // callee that received the memref as an argument (the outermost call
       // in the owner's function); null for a direct access.
       mlir::Operation *via = nullptr;
+      // The access reaches the array through a module instantiated at more
+      // than one place (VITIS_NOTES.md N14 R6): it goes through the module's
+      // two ports and never makes the array replicated.
+      bool portBound = false;
     };
 
     struct BRAMCost {
