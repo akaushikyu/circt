@@ -1,0 +1,13 @@
+# shim "real" (track W11): compile against the real Vitis HLS 2025.1 headers, the way the Vitis
+# front end does (autopilot.flow.log:331 of every cached run: -I <autopilot tree>, the synthesis
+# macros, -include etc/autopilot_ssdm_op.h; C++ also -fno-threadsafe-statics -fno-use-cxa-atexit),
+# plus cgeist's Xilinx extensions. Needs a cgeist with --xlx-prelude / -Xclang and a clang with
+# -fxlx-bitwidth (Polygeist branch w11-real-headers). See README.md.
+--xlx-prelude
+-I /mnt/a/Vitis/2025.1/Vitis/common/technology/autopilot
+-D__SYNTHESIS__ -D__VITIS_HLS__ -DAESL_SYN -D__HLS_SYN__ -D__DSP48E1__
+-include /mnt/a/Vitis/2025.1/Vitis/common/technology/autopilot/etc/autopilot_ssdm_op.h
+-Xclang -fxlx-bitwidth -Xclang -fxlx-apint-promote
+-Xclang -fnative-half-type -Xclang -fnative-half-arguments-and-returns
+-Xclang -Wno-unknown-attributes
+--scalar-wrapper-abi --xlx-headers

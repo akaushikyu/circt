@@ -19,6 +19,11 @@ Two C entry points per expression and variant return the low / high 64 bits of
 the result's raw bits; a C driver prints them. The expressions are a targeted list
 (wide-integer constants, rounding-mode ties, the double -> ap_int 25-bit path of
 ap_int_base(double), signed 1-bit types) plus `--n` seeded random ones per run.
+--shim real (the real Vitis headers through cgeist, track W11) has no headers of its own, so
+the host variant is skipped. --bit-ops adds the bit and range operations (select / set, range read
+and assignment with constant, runtime and reversed indices, concat, the reductions,
+countLeadingZeros), which only shims that implement them can build. --flag-drop / --flag-add
+remove / append cgeist flags (e.g. --flag-drop=-fxlx-apint-promote compares the promotion choice).
 Exit status 1 when any comparison against Vitis mismatches (hls::exp may differ by
 one LSB, and a fixed-point min / -1 LSB division is `divcsim`, where g++ runs Vitis'
 C-simulation path and csynth differs (VITIS_NOTES N11): counted, not failed); 2 when
@@ -176,6 +181,69 @@ def gen_exprs(seed, n):
     return E
 
 
+def gen_bit_exprs(seed):
+    """Bit and range operations (W11): every one goes through the Vitis bit builtins under
+    __SYNTHESIS__ (ap_common.h _AP_ROOT_op_*), and through ap_private in the g++ reference."""
+    rng = random.Random(seed * 7919 + 1)
+    E = []
+    U = "unsigned long long"
+    for W in (8, 12, 33, 64, 70, 100):
+        for _ in range(3):
+            hi, lo = sorted(rng.sample(range(W), 2), reverse=True)
+            a = float(rng.randint(0, (1 << min(W, 52)) - 1))
+            b = float(rng.randint(0, (1 << min(W, 40)) - 1))
+            # constant indices, forward and reversed
+            E.append((f"rng{W}", f"ap_uint<{W}> x = ({U})a; ap_uint<{W}> r = x.range({hi}, {lo});", a, 0.0))
+            E.append((f"rngrev{W}", f"ap_uint<{W}> x = ({U})a; ap_uint<{W}> r = x.range({lo}, {hi});", a, 0.0))
+            E.append((f"rngset{W}", f"ap_uint<{W}> r = ({U})a; r.range({hi}, {lo}) = ({U})b;", a, b))
+            E.append((f"rngsetrev{W}", f"ap_uint<{W}> r = ({U})a; r.range({lo}, {hi}) = ({U})b;", a, b))
+            E.append((f"rngop{W}", f"ap_int<{W}> r = (long long)a; r({hi}, {lo}) = ({U})b;", a, b))
+            # runtime indices: hi and lo packed into b
+            enc = float(hi * 4096 + lo)
+            E.append((f"rngrt{W}", f"ap_uint<{W}> x = ({U})a; int h = (int)b / 4096, l = (int)b % 4096; "
+                                   f"ap_uint<{W}> r = x.range(h, l);", a, enc))
+            E.append((f"rngrtrev{W}", f"ap_uint<{W}> x = ({U})a; int h = (int)b / 4096, l = (int)b % 4096; "
+                                      f"ap_uint<{W}> r = x.range(l, h);", a, enc))
+            E.append((f"rngrtset{W}", f"ap_uint<{W}> r = ({U})a; int h = (int)b / 4096, l = (int)b % 4096; "
+                                      f"r.range(h, l) = ({U})(a * 3);", a, enc))
+            k = rng.randrange(W)
+            E.append((f"bit{W}", f"ap_int<{W}> x = (long long)a; bool r = x[{k}];", a, 0.0))
+            E.append((f"bitrt{W}", f"ap_int<{W}> x = (long long)a; bool r = x[(int)b];", a, float(k)))
+            E.append((f"bitset{W}", f"ap_int<{W}> r = (long long)a; r[{k}] = (int)b & 1;", a, float(rng.randint(0, 1))))
+            E.append((f"bitsetrt{W}", f"ap_uint<{W}> r = ({U})a; r.set_bit((int)b, true); r.clear((int)b ^ 1);",
+                      a, float(k)))
+        for red in ("and_reduce", "or_reduce", "xor_reduce", "nand_reduce", "nor_reduce", "xnor_reduce"):
+            v = rng.choice([0.0, float((1 << min(W, 52)) - 1), float(rng.randint(0, (1 << min(W, 52)) - 1))])
+            E.append((f"{red}{W}", f"ap_uint<{W}> x = ({U})a; bool r = x.{red}();", v, 0.0))
+        E.append((f"clz{W}", f"ap_uint<{W}> x = ({U})a; ap_int<32> r = x.countLeadingZeros();",
+                  float(rng.randint(0, (1 << min(W, 52)) - 1) >> rng.randint(0, 20)), 0.0))
+        E.append((f"clz0_{W}", f"ap_uint<{W}> x = ({U})a; ap_int<32> r = x.countLeadingZeros();", 0.0, 0.0))
+    for A, B in ((5, 7), (12, 20), (33, 31), (64, 8), (3, 100)):
+        a = float(rng.randint(0, (1 << min(A, 52)) - 1))
+        b = float(rng.randint(0, (1 << min(B, 52)) - 1))
+        E.append((f"cat{A}_{B}", f"ap_uint<{A}> x = ({U})a; ap_uint<{B}> y = ({U})b; ap_uint<{A + B}> r = (x, y);", a, b))
+        E.append((f"catm{A}_{B}", f"ap_int<{A}> x = (long long)a; ap_uint<{B}> y = ({U})b; "
+                                  f"ap_uint<{A + B}> r = x.concat(y);", a, b))
+    # ap_fixed bit access
+    E.append(("fxrng", "ap_fixed<16,5> x = a; ap_uint<8> r = x.range(11, 4);", -3.40625, 0.0))
+    E.append(("fxrngset", "ap_fixed<16,5> r = a; r.range(7, 0) = (unsigned long long)b;", 2.75, 201.0))
+    E.append(("fxbit", "ap_fixed<12,4> x = a; bool r = x[10];", -1.25, 0.0))
+    E.append(("fxbitset", "ap_ufixed<12,4> r = a; r[3] = 1; r[11] = 0;", 9.5, 0.0))
+    # shifts and unary operators on narrow and 32-bit types (the integer promotion question)
+    for W, S in ((8, False), (8, True), (17, True), (32, False), (32, True), (31, False)):
+        t = f"ap_{'' if S else 'u'}int<{W}>"
+        c = "long long" if S else U
+        a = float(rng.randint(-(1 << (W - 2)), (1 << (W - 2)) - 1)) if S else float(rng.randint(0, (1 << (W - 1)) - 1))
+        E.append((f"shl{W}{'s' if S else 'u'}", f"{t} x = ({c})a; {t} r = x << 5;", a, 0.0))
+        E.append((f"shr{W}{'s' if S else 'u'}", f"{t} x = ({c})a; {t} r = x >> 3;", a, 0.0))
+        E.append((f"neg{W}{'s' if S else 'u'}", f"{t} x = ({c})a; {t} r = -x;", a, 0.0))
+        E.append((f"not{W}{'s' if S else 'u'}", f"{t} x = ({c})a; {t} r = ~x;", a, 0.0))
+        E.append((f"shlw{W}{'s' if S else 'u'}", f"{t} x = ({c})a; ap_int<64> r = x << 9;", a, 0.0))
+        E.append((f"mulw{W}{'s' if S else 'u'}", f"{t} x = ({c})a; {t} y = ({c})b; auto r = x * y;", a,
+                  float(rng.randint(1, 1000))))
+    return E
+
+
 COMMON = "#include <ap_fixed.h>\n#include <ap_int.h>\n#include <hls_math.h>\n"
 SHIM_HELPERS = """
 template <class T> unsigned long long LO(const T &r) { typedef unsigned _BitInt(T::width) U; return (unsigned long long)(U)r.V; }
@@ -208,6 +276,10 @@ def write_sources(E, out):
         sh.append(f'extern "C" unsigned long long bx{k}_c_lo() {{ const double a = {a!r}, b = {b!r}; {code} return LO(r); }}')
         sh.append(f'extern "C" unsigned long long bx{k}_c_hi() {{ const double a = {a!r}, b = {b!r}; {code} return HI(r); }}')
     (out / "bx_shim.cpp").write_text("\n".join(sh) + "\n")
+    # The same functions split into bx_shim_<i>.cpp (--chunks): one cgeist run on hundreds of
+    # functions over the real headers takes longer than the step timeout.
+    for f in out.glob("bx_shim_*.cpp"):
+        f.unlink()
     dr = ["#include <stdio.h>"]
     for k in range(len(E)):
         dr.append(f"unsigned long long bx{k}_r_lo(double, double); unsigned long long bx{k}_r_hi(double, double);"
@@ -259,22 +331,67 @@ def main():
     ap.add_argument("--seed", type=int, default=1)
     ap.add_argument("--n", type=int, default=30)
     ap.add_argument("--out-dir", default=str(Path.home() / "hls-est-work" / "shim-check-cgeist"))
+    ap.add_argument("--bit-ops", action="store_true", help="add the bit and range operations (gen_bit_exprs)")
+    ap.add_argument("--no-math", action="store_true", help="leave out hls::sqrt / hls::exp")
+    ap.add_argument("--flag-drop", action="append", default=[], help="drop this cgeist flag (and a preceding -Xclang)")
+    ap.add_argument("--flag-add", action="append", default=[], help="append this cgeist flag")
+    ap.add_argument("--chunks", type=int, default=1, help="compile the cgeist variant in this many parts, in parallel")
     args = ap.parse_args()
     shim = R.resolve_shim(args.shim)
     out = Path(args.out_dir) / f"s{args.seed}"
     out.mkdir(parents=True, exist_ok=True)
     E = gen_exprs(args.seed, args.n)
+    if args.no_math:
+        E = [e for e in E if e[0] not in ("sqrt", "exp")]
+    if args.bit_ops:
+        E += gen_bit_exprs(args.seed)
     write_sources(E, out)
+    chunks = []
+    if args.chunks > 1:
+        body = (out / "bx_shim.cpp").read_text().split("\n")
+        head = [COMMON, SHIM_HELPERS]
+        fns = [l for l in body if l.startswith('extern "C" unsigned long long bx')]
+        per = (len(fns) + args.chunks - 1) // args.chunks
+        per += (-per) % 4          # keep the four functions of an expression together
+        for i in range(0, len(fns), per):
+            name = f"bx_shim_{i // per}.cpp"
+            (out / name).write_text("\n".join(head + fns[i:i + per]) + "\n")
+            chunks.append(name)
+    # A shim without headers of its own (shim/real: the Vitis install's headers) has no host variant.
+    with_host = (Path(shim) / "ap_int.h").is_file()
+    shim_flags = []
+    for f in R.shim_cgeist_flags(shim):
+        if f in args.flag_drop:
+            if shim_flags and shim_flags[-1] == "-Xclang":
+                shim_flags.pop()
+            continue
+        shim_flags.append(f)
     flags = ["--function=*", "-S", "-emit-llvm", "--hls-annotate", "--raise-scf-to-affine", "--memref-fullrank",
-             *R.shim_cgeist_flags(shim), f"-resource-dir={C.CLANG_RESOURCE_DIR}", "-I", str(shim)]
+             *shim_flags, *args.flag_add, f"-resource-dir={C.CLANG_RESOURCE_DIR}", "-I", str(shim)]
+    if chunks:
+        import concurrent.futures as cf
+        lls = [c.replace(".cpp", ".ll") for c in chunks]
+        with cf.ThreadPoolExecutor(min(16, len(chunks))) as ex:
+            res = list(ex.map(lambda c: sh([args.cgeist, c, *flags, "-o", c.replace(".cpp", ".ll")], out,
+                                            f"cgeist-{c}.log"), chunks))
+        for c, p in zip(chunks, res):
+            if p.returncode != 0:
+                print(f"[cgeist {c}] failed rc={p.returncode} (log {out / ('cgeist-' + c + '.log')})")
+                print(p.stderr[-3000:])
+                sys.exit(2)
+        cg_steps = [("cg-link", [CLANG, "-O0", "-w", *lls, "bx_drv.c", "-lm", "-o", "bx_cg"])]
+    else:
+        cg_steps = [("cgeist", [args.cgeist, "bx_shim.cpp", *flags, "-o", "bx_shim.ll"]),
+                    ("cg-link", [CLANG, "-O0", "-w", "bx_shim.ll", "bx_drv.c", "-lm", "-o", "bx_cg"])]
     steps = [
-        ("cgeist", [args.cgeist, "bx_shim.cpp", *flags, "-o", "bx_shim.ll"]),
-        ("cg-link", [CLANG, "-O0", "-w", "bx_shim.ll", "bx_drv.c", "-lm", "-o", "bx_cg"]),
+        *cg_steps,
         ("host-cc", [CLANGXX, "-std=c++17", "-O0", "-w", "-fwrapv", "-I", str(shim), "-c", "bx_shim.cpp", "-o", "bx_host.o"]),
         ("host-drv", [CLANG, "-O0", "-w", "-c", "bx_drv.c", "-o", "bx_drv.o"]),
         ("host-link", [CLANGXX, "bx_host.o", "bx_drv.o", "-lm", "-o", "bx_host"]),
         ("vitis-cc", ["g++", "-std=c++17", "-O0", "-w", "-I", args.vitis_include, "bx_vitis.cpp", "-o", "bx_vitis"]),
     ]
+    if not with_host:
+        steps = [s for s in steps if not s[0].startswith("host-")]
     for name, cmd in steps:
         p = sh(cmd, out, f"{name}.log")
         if p.returncode != 0:
@@ -283,6 +400,9 @@ def main():
             sys.exit(2)
     res = {}
     for name, exe in (("cg", "./bx_cg"), ("host", "./bx_host"), ("vitis", "./bx_vitis")):
+        if name == "host" and not with_host:
+            res[name] = ""
+            continue
         p = subprocess.run([exe], cwd=out, capture_output=True, text=True, timeout=600)
         (out / f"{name}.out").write_text(p.stdout)
         res[name] = p.stdout
@@ -301,6 +421,8 @@ def main():
             bad["host"] += 1
             continue
         got = {"host": h.get(nm, "?"), "cg-runtime": cg.get(nm, ("?", "?"))[0], "cg-const": cg.get(nm, ("?", "?"))[1]}
+        if not with_host:
+            del got["host"]
         tags = []
         hard = False
         for lab, val in got.items():
@@ -321,7 +443,7 @@ def main():
             n, code, a, b = E[k]
             lines.append(f"{'BAD' if hard else 'TOL'} {nm:28s} vitis={vv:24s} {' '.join(tags)}   [a={a!r} b={b!r}] {code}")
     (out / "report.txt").write_text("\n".join(lines) + "\n")
-    print(f"shim={shim} cgeist={args.cgeist}\nseed={args.seed} n={args.n}: {len(E)} expressions x 3 "
+    print(f"shim={shim} cgeist={args.cgeist} flags={' '.join(shim_flags + args.flag_add)}\nseed={args.seed} n={args.n}: {len(E)} expressions x 3 "
           f"(host clang++, cgeist runtime, cgeist constants) vs g++ + Vitis headers")
     print(f"mismatches: host {bad['host']}, cgeist runtime {bad['cg-runtime']}, cgeist constants {bad['cg-const']}"
           f" (hls::exp 1-LSB differences tolerated: {lsb}; known divcsim differences: {known})")
