@@ -11,7 +11,7 @@
 // global whose accesses cannot be attributed (`coef`).
 
 module {
-  memref.global "private" constant @coef : memref<64xi32> = dense<1>
+  memref.global "private" @coef : memref<64xi32> = uninitialized
   func.func @kernel(%arg0: memref<1024xi32>, %arg1: memref<256xi32>) {
     %c1_i32 = arith.constant 1 : i32
     %buf = memref.alloca() {hls.array_partition = [{dim = 1 : i32, factor = 2 : i32, kind = "cyclic", variable = "buf"}], hls.preserve, polygeist.varname = "buf"} : memref<1024xi32> loc("kernel.cpp":12:5)
@@ -46,7 +46,9 @@ module {
 // CHECK:      === bram-debug: how each BRAM number was derived ===
 
 // The global comes first in module walk order; its accesses go through
-// memref.get_global and are not attributed to the declaration.
+// memref.get_global and are not attributed to the declaration. (It is
+// uninitialised: a constant table would be priced as a ROM through its
+// get_global sites, W7 item 3.)
 // CHECK:      [global#0] coef (global) @
 // CHECK-NEXT:   shape [64] x i32 (32 bits) = 64 words
 // CHECK-NEXT:   status: counted

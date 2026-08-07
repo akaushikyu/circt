@@ -53,7 +53,7 @@
 // TOPB:      Total BRAM: 8
 
 module {
-  memref.global "private" constant @tbl : memref<512xi64> = dense<3>
+  memref.global "private" constant @tbl : memref<512xi64> = dense<-7285624870399999999>
   func.func private @viaptr() {
     %buf = memref.alloca() {hls.preserve, polygeist.varname = "via_buf"} : memref<64xi32>
     return

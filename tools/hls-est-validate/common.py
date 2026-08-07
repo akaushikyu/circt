@@ -89,8 +89,10 @@ HLS_EST = os.environ.get("HLS_EST_BIN") or HLS_EST_DEFAULT
 # row argument of a kept `inline off` call (`f(a[k])`) as polygeist.subindex; the pass
 # indexes the whole array instead and gives the callee a clone per argument form
 # (OPEN_ISSUES O25). `--inline` keeps the calls to `hls.inline_off` callees (VITIS_NOTES N14).
-DME_FRONT = ("--lower-polygeist-subindex --inline --canonicalize --sccp --vitis-fold "
-             "--dead-memory-elimination")
+# --mark-constant-fills (W7 item 3, decision #45 under #36) marks the arrays whose every write
+# stores a compile-time constant, which Vitis turns into ROMs, before the folds (VITIS_NOTES N26).
+DME_FRONT = ("--lower-polygeist-subindex --inline --mark-constant-fills --canonicalize --sccp "
+             "--vitis-fold --dead-memory-elimination")
 NO_FRONT_PIPELINE = ("--affine-loop-normalize --auto-pipeline-unroll "
                      "--memory-banking-bram --convert-affine-to-loopschedule --bram-analysis")
 DEFAULT_PIPELINE = DME_FRONT + " " + NO_FRONT_PIPELINE

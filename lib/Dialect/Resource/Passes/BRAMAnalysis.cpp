@@ -12,6 +12,7 @@
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/Dialect/Utils/StaticValueUtils.h"
 #include "mlir/IR/BuiltinOps.h"
+#include "mlir/IR/Matchers.h"
 #include "mlir/IR/SymbolTable.h"
 #include "mlir/Interfaces/CallInterfaces.h"
 #include "mlir/Interfaces/LoopLikeInterface.h"
@@ -1400,10 +1401,30 @@ static std::string ramReasonFor(const PortDemand &dimensionIndex,
   return stringValue;
 }
 
+static unsigned narrowRomWidth(ArrayRef<APInt> vals) {
+  bool anyNegative = llvm::any_of(
+      vals, [](const APInt &valueHandle) { return valueHandle.isNegative(); });
+  unsigned width = 0;
+  if (anyNegative) {
+    for (const APInt &valueHandle : vals)
+      width = std::max(width, valueHandle.getSignificantBits());
+    return width;
+  }
+  unsigned arrayValue = 0;
+  for (const APInt &valueHandle : vals)
+    arrayValue = std::max(arrayValue, valueHandle.getActiveBits());
+  if (arrayValue == 0)
+    return 0;
+  for (const APInt &valueHandle : vals)
+    width = std::max(width, valueHandle.trunc(arrayValue).getSignificantBits());
+  return width;
+}
+
 static BRAMCost estimateBRAM(MemoryResourceOpInterface iface, MemrefRecord &rec,
                              ArrayRef<Value> banks, bool attributed,
                              SeqScopeIndex *seq, BramFormula formula,
-                             const InstanceModel *instances) {
+                             const InstanceModel *instances,
+                             ArrayRef<Value> allSites) {
   BRAMCost cost;
   cost.kind = StorageKind::RAM_1P;
   cost.bramCount = 0;
@@ -1535,10 +1556,89 @@ static BRAMCost estimateBRAM(MemoryResourceOpInterface iface, MemrefRecord &rec,
   int64_t blocks;
 
   auto global = dyn_cast<memref::GlobalOp>(iface.getOperation());
-  rec.rom = attributed && global && !global.isExternal() &&
-            !global.isUninitialized() &&
-            (global.getConstant() || neverWritten(banks));
+
+  bool initRom = global && !global.isExternal() && !global.isUninitialized() &&
+                 (global.getConstant() || neverWritten(allSites));
+
+  std::optional<unsigned> romBits;
+  bool fillRom = false;
+  Type eltTy = iface.getElementType();
+  SmallVector<AccessSummary> romAccesses =
+      attributed ? accesses : collectAccessSummaries(allSites, instances);
+  if (!initRom)
+    if (auto mark = iface->getAttrOfType<IntegerAttr>("hls.const_fill")) {
+      bool anyRead =
+          llvm::any_of(romAccesses, [](const AccessSummary &arrayValue) {
+            return !arrayValue.isWrite;
+          });
+      bool anyWrite =
+          llvm::any_of(romAccesses, [](const AccessSummary &arrayValue) {
+            return arrayValue.isWrite;
+          });
+      fillRom = anyRead && anyWrite;
+      if (fillRom)
+        romBits = static_cast<unsigned>(mark.getInt());
+    }
+  if (initRom && eltTy.isInteger())
+    if (auto dimensionIndex = dyn_cast_or_null<DenseIntElementsAttr>(
+            global.getInitialValueAttr())) {
+      SmallVector<APInt> vals(dimensionIndex.getValues<APInt>().begin(),
+                              dimensionIndex.getValues<APInt>().end());
+      romBits = narrowRomWidth(vals);
+    }
+  rec.rom = initRom || fillRom;
   if (rec.rom) {
+
+    if (fillRom || !attributed) {
+      SmallVector<AccessSummary> reads;
+      for (const AccessSummary &arrayValue : romAccesses)
+        if (!arrayValue.isWrite)
+          reads.push_back(arrayValue);
+      accesses = std::move(reads);
+      rec.accessesAttributed = true;
+      demand = computePortDemand(accesses, seq);
+      rep = analyzeReplication(accesses, true);
+    }
+    unsigned declaredBits = elemBits;
+    std::string widthNote;
+    if (romBits) {
+      unsigned widthValue = *romBits;
+      widthNote = "; element width " + std::to_string(widthValue) + " of " +
+                  std::to_string(declaredBits) + " bits from its values (N26)";
+      if (widthValue == 0) {
+        cost.kind = StorageKind::ROM_1P;
+        cost.bramCount = 0;
+        cost.note = std::to_string(numElems) + "x" +
+                    std::to_string(declaredBits) +
+                    "b ROM whose values are all 0: no memory (N1a, N26)";
+        recordAccesses(accesses, rec, seq);
+        rec.demand = demand;
+        rec.status = "zero_rom";
+        rec.excludeReason = cost.note;
+        rec.ramType = "none";
+        rec.ramReason = "not selected: " + cost.note;
+        rec.bram = 0;
+        return cost;
+      }
+      elemBits = widthValue;
+      if (numElems * static_cast<int64_t>(widthValue) < kBRAMPromotionBits) {
+        cost.kind = StorageKind::ROM_1P;
+        cost.bramCount = 0;
+        cost.note = std::to_string(numElems) + "x" +
+                    std::to_string(widthValue) + "b ROM (narrowed from " +
+                    std::to_string(declaredBits) + " bits, N26) < " +
+                    std::to_string(kBRAMPromotionBits) +
+                    " bits: distributed ROM, 0 BRAM";
+        recordAccesses(accesses, rec, seq);
+        rec.demand = demand;
+        rec.status = "excluded_small";
+        rec.excludeReason = cost.note;
+        rec.ramType = kindName(cost.kind);
+        rec.ramReason = "not selected: " + cost.note;
+        rec.bram = 0;
+        return cost;
+      }
+    }
     unsigned elementCount = std::max(demand.total, 1u);
     for (ReplicationLoopRecord &lowerIndex : rep.loops) {
       elementCount = std::max(elementCount, lowerIndex.need);
@@ -1569,11 +1669,12 @@ static BRAMCost estimateBRAM(MemoryResourceOpInterface iface, MemrefRecord &rec,
     }
     cost.kind = kr.kind;
     cost.bramCount = static_cast<unsigned>(blocks);
+    const char *what = fillRom ? "b array written only with constants -> "
+                       : global.getConstant()
+                           ? "b constant global -> "
+                           : "b initialised global, never written -> ";
     cost.note = std::to_string(numElems) + "x" + std::to_string(elemBits) +
-                (global.getConstant() ? "b constant global -> "
-                                      : "b initialised global, never "
-                                        "written -> ") +
-                kindName(kr.kind) + " (" + std::to_string(elementCount) +
+                what + kindName(kr.kind) + " (" + std::to_string(elementCount) +
                 " read port(s)/cycle) = " + std::to_string(blocks) +
                 " BRAM_18K";
     recordAccesses(accesses, rec, seq);
@@ -1582,12 +1683,14 @@ static BRAMCost estimateBRAM(MemoryResourceOpInterface iface, MemrefRecord &rec,
     rec.status = "counted";
     rec.ramType = kindName(kr.kind);
     rec.ramReason =
-        std::string(global.getConstant()
+        std::string(fillRom ? "every write stores a constant (ROM of those "
+                              "values, N26)"
+                    : global.getConstant()
                         ? "constant-initialised global (ROM, never written)"
                         : "initialised global that no get_global site writes "
                           "(ROM)") +
-        ": peak " + std::to_string(elementCount) + " read(s) per cycle -> " +
-        kindName(kr.kind) +
+        widthNote + ": peak " + std::to_string(elementCount) +
+        " read(s) per cycle -> " + kindName(kr.kind) +
         (elementCount <= 2
              ? std::string(": read-only ports are simple dual port, x36 "
                            "allowed (N8)")
@@ -2839,8 +2942,16 @@ struct BRAMAnalysisLoopSchedule
       }
       MemrefRecord rec;
       describeMemref(op, index++, rec);
+      SmallVector<Value> allSites;
+      if (auto globalOp = dyn_cast<memref::GlobalOp>(op)) {
+        auto it = globalUseSites.find(globalOp.getSymName());
+        if (it != globalUseSites.end())
+          allSites = it->second;
+      } else {
+        allSites = banks;
+      }
       BRAMCost cost = estimateBRAM(iface, rec, banks, attributed, seq,
-                                   formulaOpt, &instanceModel);
+                                   formulaOpt, &instanceModel, allSites);
 
       unsigned instances = 1;
       bool sharedGlobal = false;

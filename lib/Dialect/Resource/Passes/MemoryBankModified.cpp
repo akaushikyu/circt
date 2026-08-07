@@ -401,9 +401,7 @@ private:
   DictionaryAttr partitionAttr(OpBuilder &buildPoint,
                                const BankLayout &lowerIndex);
   DictionaryAttr bankAttrs(OpBuilder &buildPoint, const BankLayout &lowerIndex,
-                           unsigned bankIdx, Attribute varName,
-                           Attribute preserve, Attribute reason,
-                           StringRef bankOf, Attribute kept = Attribute());
+                           unsigned bankIdx, Operation *from, StringRef bankOf);
   SmallVector<Value> createAllocaBanks(memref::AllocaOp localAlloca,
                                        const BankLayout &lowerIndex);
   void createGlobalBanks(memref::GlobalOp globalOp, ArrayRef<Value> sites,
@@ -541,15 +539,16 @@ DictionaryAttr BankingPlan::partitionAttr(OpBuilder &buildPoint,
 
 DictionaryAttr BankingPlan::bankAttrs(OpBuilder &buildPoint,
                                       const BankLayout &lowerIndex,
-                                      unsigned bankIdx, Attribute varName,
-                                      Attribute preserve, Attribute reason,
-                                      StringRef bankOf, Attribute kept) {
+                                      unsigned bankIdx, Operation *from,
+                                      StringRef bankOf) {
 
   SmallVector<NamedAttribute, 8> attrs;
-  if (varName)
-    attrs.push_back(buildPoint.getNamedAttr("polygeist.varname", varName));
-  if (preserve)
-    attrs.push_back(buildPoint.getNamedAttr("hls.preserve", preserve));
+  if (from)
+    for (StringRef name :
+         {"polygeist.varname", "hls.preserve", "hls.partition_reason",
+          "hls.kept_reason", "hls.const_fill"})
+      if (Attribute arrayValue = from->getAttr(name))
+        attrs.push_back(buildPoint.getNamedAttr(name, arrayValue));
   if (!bankOf.empty())
     attrs.push_back(buildPoint.getNamedAttr("hls.bank_of",
                                             buildPoint.getStringAttr(bankOf)));
@@ -561,10 +560,6 @@ DictionaryAttr BankingPlan::bankAttrs(OpBuilder &buildPoint,
       buildPoint.getI32IntegerAttr(static_cast<int32_t>(lowerIndex.numBanks))));
   attrs.push_back(buildPoint.getNamedAttr(
       "hls.partition", partitionAttr(buildPoint, lowerIndex)));
-  if (reason)
-    attrs.push_back(buildPoint.getNamedAttr("hls.partition_reason", reason));
-  if (kept)
-    attrs.push_back(buildPoint.getNamedAttr("hls.kept_reason", kept));
   return buildPoint.getDictionaryAttr(attrs);
 }
 
@@ -615,10 +610,8 @@ BankingPlan::createAllocaBanks(memref::AllocaOp localAlloca,
     auto bank = memref::AllocaOp::create(buildPoint, localAlloca.getLoc(),
                                          lowerIndex.bankType);
     bank->setAttrs(bankAttrs(buildPoint, lowerIndex,
-                             static_cast<unsigned>(loopIndex), varName,
-                             localAlloca->getAttr("hls.preserve"),
-                             localAlloca->getAttr("hls.partition_reason"),
-                             bankOf, localAlloca->getAttr("hls.kept_reason")));
+                             static_cast<unsigned>(loopIndex), localAlloca,
+                             bankOf));
     banks.push_back(bank.getResult());
   }
   return banks;
@@ -694,10 +687,7 @@ void BankingPlan::createGlobalBanks(memref::GlobalOp globalOp,
         initAttr, globalOp.getConstantAttr(), globalOp.getAlignmentAttr());
     for (NamedAttribute arrayValue :
          bankAttrs(buildPoint, lowerIndex, static_cast<unsigned>(loopIndex),
-                   globalOp->getAttr("polygeist.varname"),
-                   globalOp->getAttr("hls.preserve"),
-                   globalOp->getAttr("hls.partition_reason"), bankOf,
-                   globalOp->getAttr("hls.kept_reason")))
+                   globalOp, bankOf))
       bg->setAttr(arrayValue.getName(), arrayValue.getValue());
     symbols.insert(bg);
     buildPoint.setInsertionPointAfter(bg);
@@ -844,9 +834,9 @@ void BankingPlan::bank() {
       BlockArgument ba = entry.insertArgument(
           portValue.arg.getArgNumber() + 1 + static_cast<unsigned>(loopIndex),
           portValue.layout.bankType, portValue.arg.getLoc());
-      newArgAttrs[ba] = bankAttrs(buildPoint, portValue.layout,
-                                  static_cast<unsigned>(loopIndex), Attribute(),
-                                  Attribute(), Attribute(), bankOf);
+      newArgAttrs[ba] =
+          bankAttrs(buildPoint, portValue.layout,
+                    static_cast<unsigned>(loopIndex), nullptr, bankOf);
       banks.push_back(ba);
     }
     banksOf[portValue.arg] = std::move(banks);

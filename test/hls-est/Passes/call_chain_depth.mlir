@@ -84,7 +84,7 @@
 // ONEPLACE:      Total BRAM: 8
 
 module {
-  memref.global "private" constant @tbl : memref<1024xi32> = dense<7>
+  memref.global "private" constant @tbl : memref<1024xi32> = dense<-1696654562>
 
   // a[i] + a[1023 - i] + tbl[(i * 5) & 1023] (w3rev_k2 get2).
   func.func private @get2(%a: memref<1024xi32>, %i: i32) -> i32 attributes {hls.inline_off} {

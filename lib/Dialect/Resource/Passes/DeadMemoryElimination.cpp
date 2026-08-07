@@ -1330,5 +1330,6 @@ void registerVitisCleanupPasses() {
   PassRegistration<DeadMemoryEliminationPass>();
   registerPass([] { return createVitisFoldPass(); });
   registerPass([] { return createPromoteGlobalsToAllocasPass(); });
+  registerPass([] { return createMarkConstantFillsPass(); });
 }
 } // namespace circt::hls_analysis

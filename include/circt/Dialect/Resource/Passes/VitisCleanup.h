@@ -14,6 +14,9 @@
 //                                 canonicalization folds
 //   --dead-memory-elimination     removes arrays whose values never reach a
 //                                 side effect that leaves the function
+//   --mark-constant-fills         marks arrays whose every write stores a
+//                                 compile-time constant: Vitis ROMs (N26);
+//                                 runs before the folds (after --inline)
 //
 // They are meant to run early, before --auto-pipeline-unroll:
 //   --inline --canonicalize --sccp --vitis-fold --dead-memory-elimination
@@ -32,6 +35,7 @@ namespace circt::hls_analysis {
 std::unique_ptr<mlir::Pass> createPromoteGlobalsToAllocasPass();
 std::unique_ptr<mlir::Pass> createVitisFoldPass();
 std::unique_ptr<mlir::Pass> createDeadMemoryEliminationPass();
+std::unique_ptr<mlir::Pass> createMarkConstantFillsPass();
 void registerVitisCleanupPasses();
 } // namespace circt::hls_analysis
 
