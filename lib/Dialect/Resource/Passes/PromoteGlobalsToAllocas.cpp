@@ -59,9 +59,8 @@ struct PromoteGlobalsToAllocasPass
   }
 
   void runOnOperation() override {
-    ModuleOp rootModule = getOperation();
-    SmallVector<memref::GlobalOp> globals(
-        rootModule.getOps<memref::GlobalOp>());
+    ModuleOp module = getOperation();
+    SmallVector<memref::GlobalOp> globals(module.getOps<memref::GlobalOp>());
     for (memref::GlobalOp globalOp : globals) {
       if (globalOp.getConstant() || !hasNoOrZeroInit(globalOp))
         continue;
@@ -69,7 +68,7 @@ struct PromoteGlobalsToAllocasPass
       if (!memRefType.hasStaticShape())
         continue;
       std::optional<SymbolTable::UseRange> symbolUses =
-          SymbolTable::getSymbolUses(globalOp, rootModule);
+          SymbolTable::getSymbolUses(globalOp, module);
       if (!symbolUses)
         continue;
       SmallVector<memref::GetGlobalOp> sites;

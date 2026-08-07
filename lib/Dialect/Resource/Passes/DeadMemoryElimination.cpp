@@ -1,5 +1,7 @@
 
 
+#include "circt/Dialect/Resource/Passes/CallInstances.h"
+#include "circt/Dialect/Resource/Passes/PartitionLayout.h"
 #include "circt/Dialect/Resource/Passes/VitisCleanup.h"
 
 #include "mlir/Dialect/Affine/Analysis/AffineAnalysis.h"
@@ -19,6 +21,7 @@
 #include "llvm/ADT/BitVector.h"
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/SetVector.h"
+#include "llvm/ADT/StringMap.h"
 #include "llvm/Support/Path.h"
 #include "llvm/Support/raw_ostream.h"
 
@@ -44,7 +47,7 @@ struct ObjectTable {
   std::vector<MemObject> objs;
   DenseMap<Value, unsigned> objOf;
 
-  void build(ModuleOp rootModule);
+  void build(ModuleOp module);
 
   std::optional<unsigned> lookup(Value valueHandle) const {
     auto it = objOf.find(valueHandle);
@@ -95,17 +98,20 @@ struct DeathNotes {
   DenseMap<Operation *, std::string> byValueDef;
   DenseMap<Operation *, std::string> byObject;
   DenseMap<Operation *, unsigned> killedStores;
+
+  DenseMap<Operation *, std::string> byDeadCall;
   void forget(Operation *op) {
     op->walk([&](Operation *opHandle) {
       byValueDef.erase(opHandle);
       byObject.erase(opHandle);
       killedStores.erase(opHandle);
+      byDeadCall.erase(opHandle);
     });
   }
 };
 
-void ObjectTable::build(ModuleOp rootModule) {
-  rootModule.walk([&](Operation *op) {
+void ObjectTable::build(ModuleOp module) {
+  module.walk([&](Operation *op) {
     if (!isa<memref::AllocaOp, memref::AllocOp>(op))
       return;
     MemObject opHandle;
@@ -114,11 +120,11 @@ void ObjectTable::build(ModuleOp rootModule) {
     opHandle.aliases.push_back(op->getResult(0));
     objs.push_back(std::move(opHandle));
   });
-  for (auto globalOp : rootModule.getOps<memref::GlobalOp>()) {
+  for (auto globalOp : module.getOps<memref::GlobalOp>()) {
     MemObject opHandle;
     opHandle.def = globalOp;
     std::optional<SymbolTable::UseRange> symbolUses =
-        SymbolTable::getSymbolUses(globalOp, rootModule);
+        SymbolTable::getSymbolUses(globalOp, module);
     if (!symbolUses) {
       opHandle.escaping = true;
       opHandle.escapeReason = "symbol uses unknown";
@@ -382,9 +388,9 @@ static Operation *findKiller(Operation *store, const ObjectTable &table,
 /// `split_wq` / `split_wk`, read by `grouped_multihead_attention_...` only
 /// into the dead Q / K). A parameter the callee still reads or writes stays.
 /// Returns the number of parameters removed.
-static unsigned dropUnusedMemrefParams(ModuleOp rootModule, bool remarks) {
+static unsigned dropUnusedMemrefParams(ModuleOp module, bool remarks) {
   unsigned dropped = 0;
-  for (auto fn : rootModule.getOps<func::FuncOp>()) {
+  for (auto fn : module.getOps<func::FuncOp>()) {
     if (fn.isExternal() || !fn.isPrivate())
       continue;
     llvm::BitVector unused(fn.getNumArguments());
@@ -394,7 +400,7 @@ static unsigned dropUnusedMemrefParams(ModuleOp rootModule, bool remarks) {
     if (unused.none())
       continue;
     std::optional<SymbolTable::UseRange> symbolUses =
-        SymbolTable::getSymbolUses(fn, rootModule);
+        SymbolTable::getSymbolUses(fn, module);
     if (!symbolUses)
       continue;
     SmallVector<func::CallOp> calls;
@@ -423,10 +429,10 @@ static unsigned dropUnusedMemrefParams(ModuleOp rootModule, bool remarks) {
   return dropped;
 }
 
-static unsigned killOverwrittenStores(ModuleOp rootModule, bool remarks,
+static unsigned killOverwrittenStores(ModuleOp module, bool remarks,
                                       DeathNotes &notes) {
   ObjectTable table;
-  table.build(rootModule);
+  table.build(module);
   SmallVector<Operation *> dead;
   for (unsigned id = 0; id < table.objs.size(); ++id) {
     const MemObject &opHandle = table.objs[id];
@@ -467,6 +473,281 @@ static unsigned killOverwrittenStores(ModuleOp rootModule, bool remarks,
   return dead.size();
 }
 
+/// What a function does to memory: per memref parameter whether it is read
+/// or written (also through further calls); `pure` when it touches nothing
+/// else that outlives it (no write to a global, no op with unknown effects,
+/// no memref returned or passed to a function without a body).
+struct CalleeEffects {
+  bool pure = true;
+  llvm::BitVector read, written;
+};
+
+class CalleeEffectTable {
+public:
+  const CalleeEffects &get(func::FuncOp fn) {
+    auto it = table.find(fn.getOperation());
+    if (it != table.end())
+      return it->second;
+
+    CalleeEffects &pending = table[fn.getOperation()];
+    pending.pure = false;
+    pending.read.resize(fn.getNumArguments());
+    pending.written.resize(fn.getNumArguments());
+    CalleeEffects computed = compute(fn);
+    return table[fn.getOperation()] = std::move(computed);
+  }
+
+private:
+  DenseMap<Operation *, CalleeEffects> table;
+
+  static constexpr int64_t kLocal = -1, kGlobal = -2, kUnknown = -3;
+  static int64_t paramOf(Value valueHandle, func::FuncOp fn) {
+    for (unsigned depth = 0; depth < 16; ++depth) {
+      if (auto arg = dyn_cast<BlockArgument>(valueHandle)) {
+        if (arg.getOwner() == &fn.getBody().front())
+          return arg.getArgNumber();
+        return kUnknown;
+      }
+      Operation *def = valueHandle.getDefiningOp();
+      if (!def)
+        return kUnknown;
+      if (isa<memref::AllocaOp, memref::AllocOp>(def))
+        return kLocal;
+      if (isa<memref::GetGlobalOp>(def))
+        return kGlobal;
+      auto view = dyn_cast<ViewLikeOpInterface>(def);
+      if (!view)
+        return kUnknown;
+      valueHandle = view.getViewSource();
+    }
+    return kUnknown;
+  }
+
+  CalleeEffects compute(func::FuncOp fn) {
+    CalleeEffects entryValue;
+    entryValue.read.resize(fn.getNumArguments());
+    entryValue.written.resize(fn.getNumArguments());
+    auto note = [&](Value mem, bool isWrite) {
+      int64_t portValue = paramOf(mem, fn);
+      if (portValue >= 0)
+        (isWrite ? entryValue.written : entryValue.read)
+            .set(static_cast<unsigned>(portValue));
+      else if (portValue == kUnknown || (portValue == kGlobal && isWrite))
+        entryValue.pure = false;
+    };
+    fn.walk([&](Operation *op) {
+      if (!entryValue.pure)
+        return;
+      if (auto callSite = dyn_cast<func::CallOp>(op)) {
+        func::FuncOp callee =
+            circt::hls_analysis::resolveDefinedCallee(callSite);
+        if (!callee) {
+
+          if (llvm::any_of(callSite.getOperands(), [](Value valueHandle) {
+                return isa<BaseMemRefType>(valueHandle.getType());
+              }))
+            entryValue.pure = false;
+          return;
+        }
+        const CalleeEffects &ce = get(callee);
+        if (!ce.pure) {
+          entryValue.pure = false;
+          return;
+        }
+        for (auto [loopIndex, valueHandle] :
+             llvm::enumerate(callSite.getArgOperands())) {
+          if (!isa<BaseMemRefType>(valueHandle.getType()) ||
+              loopIndex >= ce.read.size())
+            continue;
+          if (ce.read.test(loopIndex))
+            note(valueHandle, false);
+          if (ce.written.test(loopIndex))
+            note(valueHandle, true);
+        }
+        return;
+      }
+      if (isa<func::ReturnOp>(op)) {
+        if (llvm::any_of(op->getOperands(), [](Value valueHandle) {
+              return isa<BaseMemRefType>(valueHandle.getType());
+            }))
+          entryValue.pure = false;
+        return;
+      }
+      if (auto eff = dyn_cast<MemoryEffectOpInterface>(op)) {
+        SmallVector<MemoryEffects::EffectInstance> effects;
+        eff.getEffects(effects);
+        for (auto &fx : effects) {
+          if (isa<MemoryEffects::Allocate, MemoryEffects::Free>(fx.getEffect()))
+            continue;
+          if (!fx.getValue()) {
+            entryValue.pure = false;
+            return;
+          }
+          note(fx.getValue(), isa<MemoryEffects::Write>(fx.getEffect()));
+        }
+        return;
+      }
+      if (op->hasTrait<OpTrait::HasRecursiveMemoryEffects>() ||
+          op->hasTrait<OpTrait::IsTerminator>() || isa<func::FuncOp>(op))
+        return;
+      if (isMemoryEffectFree(op))
+        return;
+      entryValue.pure = false;
+    });
+    return entryValue;
+  }
+};
+
+/// Deletes the dead calls; marks the arrays of dead calls that must stay.
+static unsigned eraseDeadCalls(ModuleOp module, bool remarks,
+                               DeathNotes &notes) {
+  ObjectTable objects;
+  objects.build(module);
+  CalleeEffectTable effects;
+  circt::hls_analysis::PartitionRoots partitions(module, false);
+
+  std::vector<bool> objRead(objects.objs.size(), false);
+  for (unsigned id = 0; id < objects.objs.size(); ++id) {
+    const MemObject &opHandle = objects.objs[id];
+    if (!isa<memref::AllocaOp, memref::GlobalOp>(opHandle.def)) {
+      objRead[id] = true;
+      continue;
+    }
+    for (Value valueHandle : opHandle.aliases)
+      for (OpOperand &use : valueHandle.getUses()) {
+        Operation *user = use.getOwner();
+        if (auto callSite = dyn_cast<func::CallOp>(user)) {
+          func::FuncOp callee =
+              circt::hls_analysis::resolveDefinedCallee(callSite);
+          unsigned loopIndex = use.getOperandNumber();
+          if (!callee) {
+            objRead[id] = true;
+            continue;
+          }
+          const CalleeEffects &ce = effects.get(callee);
+          if (!ce.pure || loopIndex >= ce.read.size() ||
+              ce.read.test(loopIndex))
+            objRead[id] = true;
+          continue;
+        }
+        if (auto view = dyn_cast<ViewLikeOpInterface>(user))
+          if (view.getViewSource() == valueHandle)
+            continue;
+        if (isa<memref::DimOp>(user))
+          continue;
+        if (storedMemref(user) && use.getOperandNumber() == 0) {
+          objRead[id] = true;
+          continue;
+        }
+        auto eff = dyn_cast<MemoryEffectOpInterface>(user);
+        if (!eff) {
+          objRead[id] = true;
+          continue;
+        }
+        SmallVector<MemoryEffects::EffectInstance> fx;
+        eff.getEffects(fx);
+        bool named = false;
+        for (auto &fieldValue : fx) {
+          if (fieldValue.getValue() != valueHandle)
+            continue;
+          named = true;
+          if (isa<MemoryEffects::Read>(fieldValue.getEffect()))
+            objRead[id] = true;
+        }
+        if (!named)
+          objRead[id] = true;
+      }
+  }
+
+  struct Group {
+    SmallVector<func::CallOp> calls;
+    bool anyLive = false;
+  };
+  SmallVector<Group> groups;
+  llvm::StringMap<unsigned> groupIndex;
+  DenseMap<Operation *, SmallVector<unsigned>> outputsOf;
+  module.walk([&](func::CallOp callSite) {
+    func::FuncOp callee = circt::hls_analysis::resolveDefinedCallee(callSite);
+    if (!callee)
+      return;
+    const CalleeEffects &ce = effects.get(callee);
+    SmallVector<std::optional<circt::hls_analysis::BankLayout>> layouts;
+    std::string nonRoots;
+    bool dead = ce.pure && callSite->use_empty();
+    SmallVector<unsigned> outs;
+    for (auto [loopIndex, valueHandle] :
+         llvm::enumerate(callSite.getArgOperands())) {
+      if (!isa<BaseMemRefType>(valueHandle.getType())) {
+        layouts.push_back(std::nullopt);
+        continue;
+      }
+      std::optional<unsigned> obj = objects.lookup(valueHandle);
+      layouts.push_back(partitions.layoutOfRootValue(valueHandle));
+      if (!obj)
+        nonRoots += "P" + std::to_string(loopIndex);
+      if (loopIndex < ce.written.size() && ce.written.test(loopIndex)) {
+        if (!obj || objRead[*obj])
+          dead = false;
+        else
+          outs.push_back(*obj);
+      }
+    }
+    std::string key = callee.getName().str() + "|" +
+                      circt::hls_analysis::partitionFormKey(layouts) + nonRoots;
+    auto [git, inserted] = groupIndex.try_emplace(key, groups.size());
+    if (inserted)
+      groups.emplace_back();
+    Group &globalOp = groups[git->second];
+    globalOp.calls.push_back(callSite);
+    if (dead)
+      outputsOf[callSite.getOperation()] = std::move(outs);
+    else
+      globalOp.anyLive = true;
+  });
+
+  unsigned erased = 0;
+  for (Group &globalOp : groups) {
+    if (globalOp.anyLive) {
+
+      for (func::CallOp callSite : globalOp.calls) {
+        auto it = outputsOf.find(callSite.getOperation());
+        if (it == outputsOf.end())
+          continue;
+        for (unsigned id : it->second)
+          objects.objs[id].def->setAttr(
+              "hls.kept_reason",
+              StringAttr::get(
+                  module.getContext(),
+                  "kept: never read, written by a call of @" +
+                      callSite.getCallee().str() +
+                      ", which has another live call site of the same "
+                      "form; Vitis keeps the array as RAM_AUTO_0R0W at its "
+                      "full cost (VITIS_NOTES.md N17 (a), N25)"));
+      }
+      continue;
+    }
+    for (func::CallOp callSite : globalOp.calls) {
+      if (auto it = outputsOf.find(callSite.getOperation());
+          it != outputsOf.end())
+        for (unsigned id : it->second)
+          notes.byDeadCall.try_emplace(
+              objects.objs[id].def,
+              "its writer, the call of @" + callSite.getCallee().str() +
+                  " at " + shortLoc(callSite.getLoc()) +
+                  ", was deleted: no array it writes is read and no call of "
+                  "the same form is live (VITIS_NOTES.md N17 (a) / (d), N25)");
+      if (remarks)
+        callSite->emitRemark()
+            << "dead-memory-elimination: call of @" << callSite.getCallee()
+            << " deleted: no array it writes is read and no "
+               "call of the same form is live (N17 (a) / (d))";
+      callSite->erase();
+      ++erased;
+    }
+  }
+  return erased;
+}
+
 static bool isHandledLoop(Operation *op) {
   return isa<affine::AffineForOp, scf::ForOp>(op);
 }
@@ -479,8 +760,8 @@ static bool canMaterializeZero(Type typeValue) {
 
 class Liveness {
 public:
-  Liveness(ModuleOp rootModule, ObjectTable &table)
-      : rootModule(rootModule), typeValue(table) {}
+  Liveness(ModuleOp module, ObjectTable &table)
+      : module(module), typeValue(table) {}
 
   void run();
   bool isLive(Operation *op) const { return liveOps.contains(op); }
@@ -506,7 +787,7 @@ private:
   void markObject(unsigned id);
   void processOp(Operation *op);
 
-  ModuleOp rootModule;
+  ModuleOp module;
   ObjectTable &typeValue;
   DenseSet<Operation *> liveOps;
   DenseSet<Value> liveVals;
@@ -605,7 +886,7 @@ void Liveness::processOp(Operation *op) {
 
 void Liveness::run() {
 
-  rootModule.walk([&](Operation *op) {
+  module.walk([&](Operation *op) {
     if (isHandledLoop(op)) {
       for (Value arrayValue : cast<LoopLikeOpInterface>(op).getRegionIterArgs())
         if (!canMaterializeZero(arrayValue.getType()))
@@ -621,7 +902,7 @@ void Liveness::run() {
     if (typeValue.objs[id].escaping)
       markObject(id);
 
-  rootModule.walk([&](Operation *op) {
+  module.walk([&](Operation *op) {
     if (isa<func::FuncOp, ModuleOp, memref::GlobalOp>(op))
       return;
     if (!op->getParentOfType<func::FuncOp>())
@@ -676,7 +957,7 @@ unsigned Liveness::closeOverSurvivors() {
   bool grew = true;
   while (grew) {
     grew = false;
-    rootModule.walk([&](Operation *op) {
+    module.walk([&](Operation *op) {
       if (isa<func::FuncOp, ModuleOp, memref::GlobalOp>(op) ||
           !op->getParentOfType<func::FuncOp>() || !survives(op))
         return;
@@ -709,6 +990,14 @@ struct DeadMemoryEliminationPass
                      "with the same access overwrites before any read "
                      "(LICM scalar promotion + DSE in Vitis)"),
       llvm::cl::init(true)};
+  Option<bool> deadCalls{
+      *this, "dead-calls",
+      llvm::cl::desc("Delete a call of a non-inlined callee whose written "
+                     "arrays are never read when no call of the same callee "
+                     "form is live, and mark the arrays such a call writes "
+                     "otherwise (hls.kept_reason; VITIS_NOTES.md N17 (a) / "
+                     "(d), N25)"),
+      llvm::cl::init(true)};
   Option<bool> remarks{
       *this, "remarks",
       llvm::cl::desc("Emit one remark per eliminated array / store"),
@@ -727,7 +1016,7 @@ struct DeadMemoryEliminationPass
   void runOnOperation() override;
 
 private:
-  bool eliminateOnce(ModuleOp rootModule, SmallVectorImpl<Attribute> &records);
+  bool eliminateOnce(ModuleOp module, SmallVectorImpl<Attribute> &records);
   DeathNotes notes;
 };
 
@@ -858,10 +1147,10 @@ static Attribute describeDead(Builder &buildPoint, const MemObject &opHandle,
 }
 
 bool DeadMemoryEliminationPass::eliminateOnce(
-    ModuleOp rootModule, SmallVectorImpl<Attribute> &records) {
+    ModuleOp module, SmallVectorImpl<Attribute> &records) {
   ObjectTable table;
-  table.build(rootModule);
-  Liveness live(rootModule, table);
+  table.build(module);
+  Liveness live(module, table);
   live.run();
 
   bool changed = false;
@@ -900,11 +1189,14 @@ bool DeadMemoryEliminationPass::eliminateOnce(
     if (kn != notes.byObject.end())
       os << "; " << notes.killedStores.lookup(opHandle.def)
          << " overwritten store(s) deleted, first: " << kn->second;
+    auto dc = notes.byDeadCall.find(opHandle.def);
+    if (dc != notes.byDeadCall.end())
+      os << "; " << dc->second;
     if (opHandle.def->hasAttr("hls.preserve"))
       os << "; hls.preserve does not keep a dead array (Vitis removes it)";
   }
 
-  rootModule.walk([&](Operation *op) {
+  module.walk([&](Operation *op) {
     if (!live.isLive(op) || live.isConservative(op))
       return;
     if (isHandledLoop(op)) {
@@ -958,7 +1250,7 @@ bool DeadMemoryEliminationPass::eliminateOnce(
 
   live.closeOverSurvivors();
 
-  Builder buildPoint(rootModule.getContext());
+  Builder buildPoint(module.getContext());
   for (unsigned id = 0; id < table.objs.size(); ++id) {
     const MemObject &opHandle = table.objs[id];
     if (opHandle.live)
@@ -971,7 +1263,7 @@ bool DeadMemoryEliminationPass::eliminateOnce(
   }
 
   SmallVector<Operation *> dead;
-  for (auto fn : rootModule.getOps<func::FuncOp>()) {
+  for (auto fn : module.getOps<func::FuncOp>()) {
     if (fn.isExternal())
       continue;
     fn.getBody().walk<WalkOrder::PreOrder>([&](Operation *op) {
@@ -1005,24 +1297,26 @@ bool DeadMemoryEliminationPass::eliminateOnce(
 }
 
 void DeadMemoryEliminationPass::runOnOperation() {
-  ModuleOp rootModule = getOperation();
+  ModuleOp module = getOperation();
   notes = DeathNotes();
   SmallVector<Attribute> records;
-  if (auto prev = rootModule->getAttrOfType<ArrayAttr>("hls.dead_memrefs"))
+  if (auto prev = module->getAttrOfType<ArrayAttr>("hls.dead_memrefs"))
     records.append(prev.begin(), prev.end());
 
   for (unsigned round = 0; round < 16; ++round) {
     bool changed = false;
     if (overwrittenStores)
-      changed |= killOverwrittenStores(rootModule, remarks, notes) > 0;
-    changed |= dropUnusedMemrefParams(rootModule, remarks) > 0;
-    changed |= eliminateOnce(rootModule, records);
+      changed |= killOverwrittenStores(module, remarks, notes) > 0;
+    changed |= dropUnusedMemrefParams(module, remarks) > 0;
+    if (deadCalls)
+      changed |= eraseDeadCalls(module, remarks, notes) > 0;
+    changed |= eliminateOnce(module, records);
     if (!changed)
       break;
   }
   if (!records.empty())
-    rootModule->setAttr("hls.dead_memrefs",
-                        ArrayAttr::get(rootModule.getContext(), records));
+    module->setAttr("hls.dead_memrefs",
+                    ArrayAttr::get(module.getContext(), records));
 }
 
 } // namespace

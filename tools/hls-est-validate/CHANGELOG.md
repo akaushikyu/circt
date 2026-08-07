@@ -3,6 +3,22 @@
 Newest entry first. One entry per logical change, including changes that were
 tried and reverted. Branch: `hls-est-vitis-match` in `~/circt`.
 
+## 2026-10-11 — hls-est: `--dead-memory-elimination` deletes a kept call whose written arrays nothing reads when no call of the same form is live, and marks the arrays Vitis keeps at 0R0W (W7 item 2, forgebench-gap C4 / O34; VITIS_NOTES N25)
+- **Commit:** the commit that adds this entry (branch `hls-est-vitis-match`).
+- **Files:**
+  - `lib/Dialect/Resource/Passes/DeadMemoryElimination.cpp`: `CalleeEffectTable` (per function: which array parameters it reads / writes, also through further calls, and whether it touches anything else: a global write, an op with unknown effects, a memref returned or given to a function without a body) and `eraseDeadCalls`, run each round before the liveness under the new option `dead-calls` (default on). Calls are grouped by callee and argument partition (`PartitionRoots`, N24 (g)); a call is dead when its callee is pure in that sense, its results are unused and every array it writes is an alloca / global nothing reads (no load, no call whose callee reads the parameter, no other use). A group whose calls are all dead is deleted, and the liveness then removes the arrays, whose `hls.dead_memrefs` reason names the deleted call. In a group with a live call the dead calls stay and the arrays they write get `hls.kept_reason` ("kept: never read, written by a call of @f, which has another live call site of the same form; Vitis keeps the array as RAM_AUTO_0R0W at its full cost (VITIS_NOTES.md N17 (a), N25)").
+  - `lib/Dialect/Resource/Passes/BRAMAnalysis.cpp`: the reason in `--bram-debug` (one line under the memref) and `--bram-debug-json` (`kept_reason`, additive, only when present). `MemoryBankModified.cpp`: banks carry `hls.kept_reason` over.
+  - Lit: `test/hls-est/Passes/dme_dead_calls.mlir` (new: a single-site filler deleted with its array, a filler with a live call keeping its array and the reason, two forms of one filler).
+  - Notes: VITIS_NOTES N25 (new); OPEN_ISSUES O34 removed (fixed; its guess that Vitis deletes such locals was wrong, N25).
+- **Why:** VITIS_NOTES N25: kernels `exp-src/w7dead/w7_dl_local`, `w7_dl_global`, `w7_dl_toplocal` (a local or global written only by a call of a filler that has another live call site stays as `RAM_AUTO_0R0W` with its full BRAM, 2 each) with N17 (a) / (d); forgebench diff_orders_module (`BRAM_A3` / `BRAM_B3`: single-site fillers; `BRAM_C3`: the only call of its unpartitioned form of `load_64_128`, N24 (g); Vitis has no row for any of them) and mult_op_module_dot `BRAM_A3` (both calls of `load_16_32` write arrays nothing reads).
+- **Effect** (default pipeline, exactclass, x_g3 MLIR, 787 designs; before = W7 item 1, run `w7/r/a2.json`; after = run `w7/r/a3.json`, frozen `w7/bin/hls-est.a3` md5 a7279676...; the commit's tree (`hls-est.c2`, the a3 code plus the debug fields) gives the same totals on diff_orders_module, mult_op_module_dot and tiled_attn_module):
+  - subset: exact 66 -> **67** / 89, \|err\| 1608 -> **1583**, goal band 71 -> 71.
+  - whole catalogue: exact 68 -> **69** / 95, \|err\| 1993 -> **1968**.
+  - Newly exact: forgebench diff_orders_module 1562 -> **1538** (`BRAM_A3` / `B3` / `C3` 8 -> 0 each; every other row already = Vitis). mult_op_module_dot 101 -> 100 (`BRAM_A3` 1 -> 0; Vitis 58, the rest is O40). tiled_attn_module stays 268 (Vitis 270): `BRAM_A2` / `A3` (64 each) and `BRAM_B2` / `B3` (16 each) are the kept 0R0W arrays and now say so in the debug output.
+  - No exact design lost; no other compared design moved. Designs without ground truth that differ between the runs are 120 s timeouts under load (13 -> 17).
+  - Gates: bicg 8, gesummv 16, mvt 8, syrk 32 exact. Lit `test/hls-est` (commit tree, `hls-est.c2` md5 a0d4f9ef...): 86 pass, 4 fail (the baseline activation_op1, tiled_attn_module / p1 / p2), 24 unresolved, 1 expected failure, of 115.
+- **Reverted?:** no
+
 ## 2026-10-11 — hls-est: `--memory-banking-bram` partitions the way Vitis does: every dimension of a spec, `dim = 0`, the larger factor, callee-parameter pragmas on the caller's arrays across kept calls, a callee form per argument partition, globals banked in place (W7 item 1, forgebench-gap C1 / C2 / O17 item 2; VITIS_NOTES N24)
 - **Commit:** the commit that adds this entry (branch `hls-est-vitis-match`).
 - **Files:**

@@ -564,15 +564,15 @@ struct VitisFoldPass : PassWrapper<VitisFoldPass, OperationPass<>> {
     if (notes.empty())
       return;
 
-    auto rootModule = dyn_cast<ModuleOp>(getOperation());
-    if (!rootModule)
+    auto module = dyn_cast<ModuleOp>(getOperation());
+    if (!module)
       return;
     MLIRContext *context = &getContext();
     Builder buildPoint(context);
     llvm::StringMap<int64_t> counts;
     llvm::StringMap<llvm::StringMap<int64_t>> funcCounts;
     SmallVector<Attribute> records;
-    if (auto prev = rootModule->getAttrOfType<DictionaryAttr>(kNoteAttr)) {
+    if (auto prev = module->getAttrOfType<DictionaryAttr>(kNoteAttr)) {
       if (auto candidateValue = prev.getAs<DictionaryAttr>("counts"))
         for (NamedAttribute na : candidateValue)
           if (auto loopIndex = dyn_cast<IntegerAttr>(na.getValue()))
@@ -620,13 +620,13 @@ struct VitisFoldPass : PassWrapper<VitisFoldPass, OperationPass<>> {
     for (auto &entryValue : funcCounts)
       fcs.push_back(buildPoint.getNamedAttr(entryValue.getKey(),
                                             countDict(entryValue.getValue())));
-    rootModule->setAttr(
-        kNoteAttr, buildPoint.getDictionaryAttr(
-                       {buildPoint.getNamedAttr("counts", countDict(counts)),
-                        buildPoint.getNamedAttr(
-                            "func_counts", buildPoint.getDictionaryAttr(fcs)),
-                        buildPoint.getNamedAttr(
-                            "rewrites", buildPoint.getArrayAttr(records))}));
+    module->setAttr(kNoteAttr,
+                    buildPoint.getDictionaryAttr(
+                        {buildPoint.getNamedAttr("counts", countDict(counts)),
+                         buildPoint.getNamedAttr(
+                             "func_counts", buildPoint.getDictionaryAttr(fcs)),
+                         buildPoint.getNamedAttr(
+                             "rewrites", buildPoint.getArrayAttr(records))}));
   }
 };
 

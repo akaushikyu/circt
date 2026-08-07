@@ -1293,7 +1293,7 @@ struct AutoPipelineUnrollPass
   /// own flattened loop). Deciding the callee first would unroll its inner
   /// loops and let the caller pass the trip-count test on what is left.
   static SmallVector<func::FuncOp>
-  callersFirst(ModuleOp rootModule, SymbolTableCollection &symbolTable) {
+  callersFirst(ModuleOp module, SymbolTableCollection &symbolTable) {
     SmallVector<func::FuncOp> postOrder;
     DenseSet<Operation *> visited;
     std::function<void(func::FuncOp)> visit = [&](func::FuncOp fn) {
@@ -1307,7 +1307,7 @@ struct AutoPipelineUnrollPass
       });
       postOrder.push_back(fn);
     };
-    for (auto fn : rootModule.getOps<func::FuncOp>())
+    for (auto fn : module.getOps<func::FuncOp>())
       if (!fn.isExternal())
         visit(fn);
     return SmallVector<func::FuncOp>(llvm::reverse(postOrder));
@@ -1409,10 +1409,10 @@ struct AutoPipelineUnrollPass
   /// gets `hls.call_occupancy` (its callee is loop-free by then, R7) and
   /// `hls.call_depth` (the states of one call, for calls that share an
   /// instance; N14 R2 in a pipelined loop).
-  static void markCallBoundaries(ModuleOp rootModule,
+  static void markCallBoundaries(ModuleOp module,
                                  SymbolTableCollection &symbolTable,
                                  call_depth::Model &depthModel) {
-    rootModule.walk([&](CallOpInterface callSite) {
+    module.walk([&](CallOpInterface callSite) {
       auto callee = dyn_cast_or_null<func::FuncOp>(
           callSite.resolveCallableInTable(&symbolTable));
       if (!callee || callee.isExternal())
@@ -1441,28 +1441,28 @@ struct AutoPipelineUnrollPass
   }
 
   void runOnOperation() override {
-    ModuleOp rootModule = getOperation();
+    ModuleOp module = getOperation();
     SymbolTableCollection symbolTable;
 
-    rootModule.walk([&](AffineForOp loop) {
+    module.walk([&](AffineForOp loop) {
       if (isAutoPipelineTag(loop->getAttr(kLoopPipelineAttr)))
         loop->removeAttr(kLoopPipelineAttr);
       loop->removeAttr(kLoopFlattenedParentsAttr);
       loop->removeAttr(kLoopAutoUnrolledAttr);
       loop->removeAttr(kLoopCallBoundaryAttr);
     });
-    rootModule.walk([&](CallOpInterface callSite) {
+    module.walk([&](CallOpInterface callSite) {
       callSite->removeAttr(kCallOccupancyAttr);
       callSite->removeAttr(kCallDepthAttr);
     });
-    for (auto func : rootModule.getOps<func::FuncOp>())
+    for (auto func : module.getOps<func::FuncOp>())
       func->removeAttr(circt::hls_analysis::kPortBoundArgsAttr);
 
-    for (auto func : rootModule.getOps<func::FuncOp>())
+    for (auto func : module.getOps<func::FuncOp>())
       if (!func.isExternal())
         applyUserUnrolls(func);
 
-    for (func::FuncOp func : callersFirst(rootModule, symbolTable)) {
+    for (func::FuncOp func : callersFirst(module, symbolTable)) {
       LicmModel licm(floatLoadsPerfect);
       Forest forest(licm);
 
@@ -1481,8 +1481,8 @@ struct AutoPipelineUnrollPass
     }
     call_depth::Model depthModel(clockPeriodNs *
                                  (1.0 - clockUncertaintyPct / 100.0));
-    markCallBoundaries(rootModule, symbolTable, depthModel);
-    markPortBoundArgs(rootModule);
+    markCallBoundaries(module, symbolTable, depthModel);
+    markPortBoundArgs(module);
   }
 
   /// `hls.port_bound_args` on every function whose memref arguments name an
@@ -1492,11 +1492,11 @@ struct AutoPipelineUnrollPass
   /// the replicable pool, so the callee's loop II rises as in Vitis (rd3
   /// II 2). The instances are counted after the unroll decisions, on the
   /// final call sites.
-  static void markPortBoundArgs(ModuleOp rootModule) {
+  static void markPortBoundArgs(ModuleOp module) {
     using namespace circt::hls_analysis;
-    InstanceModel model = computeInstances(rootModule);
-    OpBuilder buildPoint(rootModule.getContext());
-    for (auto fn : rootModule.getOps<func::FuncOp>()) {
+    InstanceModel model = computeInstances(module);
+    OpBuilder buildPoint(module.getContext());
+    for (auto fn : module.getOps<func::FuncOp>()) {
       if (fn.isExternal())
         continue;
       SmallVector<int64_t> bound;

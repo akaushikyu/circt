@@ -237,6 +237,8 @@ struct MemrefRecord {
   std::optional<std::string> name;
   std::optional<std::string> varname;
   std::optional<std::string> fromGlobal;
+
+  std::optional<std::string> keptReason;
   std::string kind;
   std::optional<std::string> func;
   bool hasLoc = false;
@@ -1158,6 +1160,8 @@ static void describeMemref(Operation *op, unsigned index,
     resultValue.varname = buildPoint.getValue().str();
   if (auto globalOp = op->getAttrOfType<StringAttr>("hls.from_global"))
     resultValue.fromGlobal = globalOp.getValue().str();
+  if (auto keyValue = op->getAttrOfType<StringAttr>("hls.kept_reason"))
+    resultValue.keptReason = keyValue.getValue().str();
 
   if (auto fieldValue = findFileLoc(op->getLoc())) {
     resultValue.hasLoc = true;
@@ -1915,6 +1919,8 @@ static void printDebugText(ArrayRef<MemrefRecord> records,
       os << "  bram: 0\n";
       continue;
     }
+    if (resultValue.keptReason)
+      os << "  " << *resultValue.keptReason << "\n";
     if (resultValue.partition.present) {
       const PartitionRecord &portValue = resultValue.partition;
       os << "  partition: " << portValue.kind << " factor=" << portValue.factor
@@ -2154,6 +2160,8 @@ static llvm::json::Object toJson(const MemrefRecord &resultValue) {
   opHandle["words"] = optInt(resultValue.words);
   opHandle["status"] = resultValue.status;
   opHandle["exclude_reason"] = optStr(resultValue.excludeReason);
+  if (resultValue.keptReason)
+    opHandle["kept_reason"] = *resultValue.keptReason;
 
   if (resultValue.partition.present) {
     const PartitionRecord &portValue = resultValue.partition;

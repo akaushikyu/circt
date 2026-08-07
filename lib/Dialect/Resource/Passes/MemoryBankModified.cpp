@@ -403,7 +403,7 @@ private:
   DictionaryAttr bankAttrs(OpBuilder &buildPoint, const BankLayout &lowerIndex,
                            unsigned bankIdx, Attribute varName,
                            Attribute preserve, Attribute reason,
-                           StringRef bankOf);
+                           StringRef bankOf, Attribute kept = Attribute());
   SmallVector<Value> createAllocaBanks(memref::AllocaOp localAlloca,
                                        const BankLayout &lowerIndex);
   void createGlobalBanks(memref::GlobalOp globalOp, ArrayRef<Value> sites,
@@ -543,7 +543,7 @@ DictionaryAttr BankingPlan::bankAttrs(OpBuilder &buildPoint,
                                       const BankLayout &lowerIndex,
                                       unsigned bankIdx, Attribute varName,
                                       Attribute preserve, Attribute reason,
-                                      StringRef bankOf) {
+                                      StringRef bankOf, Attribute kept) {
 
   SmallVector<NamedAttribute, 8> attrs;
   if (varName)
@@ -563,6 +563,8 @@ DictionaryAttr BankingPlan::bankAttrs(OpBuilder &buildPoint,
       "hls.partition", partitionAttr(buildPoint, lowerIndex)));
   if (reason)
     attrs.push_back(buildPoint.getNamedAttr("hls.partition_reason", reason));
+  if (kept)
+    attrs.push_back(buildPoint.getNamedAttr("hls.kept_reason", kept));
   return buildPoint.getDictionaryAttr(attrs);
 }
 
@@ -612,10 +614,11 @@ BankingPlan::createAllocaBanks(memref::AllocaOp localAlloca,
   for (int64_t loopIndex = 0; loopIndex < lowerIndex.numBanks; ++loopIndex) {
     auto bank = memref::AllocaOp::create(buildPoint, localAlloca.getLoc(),
                                          lowerIndex.bankType);
-    bank->setAttrs(
-        bankAttrs(buildPoint, lowerIndex, static_cast<unsigned>(loopIndex),
-                  varName, localAlloca->getAttr("hls.preserve"),
-                  localAlloca->getAttr("hls.partition_reason"), bankOf));
+    bank->setAttrs(bankAttrs(buildPoint, lowerIndex,
+                             static_cast<unsigned>(loopIndex), varName,
+                             localAlloca->getAttr("hls.preserve"),
+                             localAlloca->getAttr("hls.partition_reason"),
+                             bankOf, localAlloca->getAttr("hls.kept_reason")));
     banks.push_back(bank.getResult());
   }
   return banks;
@@ -693,7 +696,8 @@ void BankingPlan::createGlobalBanks(memref::GlobalOp globalOp,
          bankAttrs(buildPoint, lowerIndex, static_cast<unsigned>(loopIndex),
                    globalOp->getAttr("polygeist.varname"),
                    globalOp->getAttr("hls.preserve"),
-                   globalOp->getAttr("hls.partition_reason"), bankOf))
+                   globalOp->getAttr("hls.partition_reason"), bankOf,
+                   globalOp->getAttr("hls.kept_reason")))
       bg->setAttr(arrayValue.getName(), arrayValue.getValue());
     symbols.insert(bg);
     buildPoint.setInsertionPointAfter(bg);

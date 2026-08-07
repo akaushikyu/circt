@@ -736,11 +736,11 @@ bool InstanceModel::argReachesSharedModule(func::FuncOp fn,
   return shared(fn, argIndex);
 }
 
-InstanceModel computeInstances(ModuleOp rootModule,
+InstanceModel computeInstances(ModuleOp module,
                                llvm::function_ref<bool(func::FuncOp)> inScope) {
   InstanceModel memoryOp;
   SmallVector<func::FuncOp> funcs;
-  for (auto fn : rootModule.getOps<func::FuncOp>())
+  for (auto fn : module.getOps<func::FuncOp>())
     if (!fn.isExternal() && (!inScope || inScope(fn)))
       funcs.push_back(fn);
   DenseSet<Operation *> scope;
