@@ -24,10 +24,14 @@ Requirements: the Vitis install at `/mnt/a/Vitis/2025.1` and a cgeist built from
 branch `w11-real-headers` against the patched clang of that branch (`CGEIST_BIN`). The
 installed cgeist does not know `--xlx-prelude` / `-Xclang` and fails on the first flag.
 
+`ap_int` / `ap_fixed` constructed from a string literal (`_ssdm_string2bits`, which the
+closed Vitis front end folds; the fixed-point math headers' lookup tables) are folded by
+cgeist too (`--xlx-headers`, Polygeist `Lib/XlxStringBits.cc`, the C simulation's
+conversion), so those tables are dense ROM globals.
+
 Not covered (separate modelling tracks): `hls::stream` (`__fpga_fifo_*`), `hls::task`,
 `ap_float`, the float / double `hls_math` functions (closed bitcode), the DSP builtins,
-the FFT IP, and `ap_int` / `ap_fixed` constructors from a string (`_ssdm_string2bits`,
-folded by the closed Vitis front end).
+the FFT IP.
 
 `autopilot.sha256` lists the sha256 of the Vitis headers this shim compiles against, so
 that every file in this directory (README and flags included) keys the MLIR cache as for
