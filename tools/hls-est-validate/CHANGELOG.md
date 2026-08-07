@@ -3,6 +3,14 @@
 Newest entry first. One entry per logical change, including changes that were
 tried and reverted. Branch: `hls-est-vitis-match` in `~/circt`.
 
+## 2026-10-11 — MEMOS M11: globals are banked in place; access attribution and promotion stay opt-in (W7 item 4, decision #46)
+- **Commit:** the commit that adds this entry (branch `hls-est-vitis-match`); notes only.
+- **Files:** `tools/hls-est-validate/MEMOS.md` (M11, row #46, #27 status).
+- **What:** measured the three routes for `memref.global` (hls-doc/forgebench-gap.md C2) with one binary on the whole catalogue: the W7 default (globals banked in place, W7 item 1; constant tables as ROMs, W7 item 3), the same plus `--bram-attribute-globals`, and plus `--promote-globals-to-allocas --bram-attribute-globals`.
+- **Why:** W7 item 4 and MEMOS M5 / O4 / O17.
+- **Effect** (`hls-est.a6`, x_g3 MLIR, runs `~/hls-est-work/w7/r/a6.json`, `a7.json`, `a8.json`): subset exact 68 / 68 / 65 of 89, \|err\| 1567 / 1655 / 2235; catalogue 70 / 70 / 67 of 95, \|err\| 1952 / 2037 / 2611; forgebench 23 / 23 / 20 of 40, \|err\| 1420 / 1508 / 2088. Attribution loses Llama_GPT_module (25 -> 123, Vitis 30: weights replicated for callee loops, O17 item 1); promotion also loses attention_op_p2 / p3 and gpt_transformer_p1 (exact -> 206 / 206 / 84) and conv_A (99 -> 995, O39). Adopted: none of the two; the default is unchanged by this entry.
+- **Reverted?:** no
+
 ## 2026-10-11 — hls-est: an array filled by one constant store is a ROM of that constant, and every ROM is priced at the width its values need; `--mark-constant-fills` joins the default pipeline (W7 item 3, forgebench-gap C5 / O18; VITIS_NOTES N26; MEMOS #45)
 - **Commit:** the commit that adds this entry (branch `hls-est-vitis-match`).
 - **Files:**

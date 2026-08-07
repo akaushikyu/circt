@@ -33,7 +33,7 @@ vitis_examples (73 compared designs) at hls-est 22d473858 unless stated. They wi
 | 24 | `hls-doc/`: home of all documentation, ground truth, current results, every note and the assistant's memory | Peter directed it | phase P0 (wf_2a1ab997-478) now; notes move in P1 |
 | 25 | every cgeist test mirrored as an hls-est lit test | Peter directed it | phase P1 |
 | 26 | refactor for readability / good engineering practice and speed, byte-identical outputs | Peter directed it ("nice and human readable, standard good software engineering practices") | phase P3 |
-| 27 | forgebench fixes track W7: replication overcount, never-accessed globals Vitis keeps, ROM width narrowing, globals-promotion measurement (memo M11 for the default), cgeist empty-module failures | Peter: "go" (2026-10-10 20:50) | wf_5074c6a1-dc8, after the diagnosis (fbgap.done) and W3; P1-P3 wait for it |
+| 27 | forgebench fixes track W7: replication overcount, never-accessed globals Vitis keeps, ROM width narrowing, globals-promotion measurement (memo M11 for the default), cgeist empty-module failures | Peter: "go" (2026-10-10 20:50) | wf_5074c6a1-dc8: items 1-3 implemented (W7, #44 #45), item 4 = M11 (#46), item 5 skipped (w6.done never written: W6 stopped by #39) |
 | 28 | HLSFactory_v2 (`D:\HLSFactory_v2\HLSFactory`) as the design catalogue; every design compilable by cgeist and ingested by hls-est | Peter directed it (21:05) | W8 wf_7474f3cd-7d5: W8a implemented (5ff9321ce: opt-in `--catalog v2`, 801 designs swept, 655 through cgeist, 318 through hls-est, failures classified in `hls-doc/hlsfactory-v2.md`); W8b part 1 done (CHANGELOG 2026-10-11 "check_semantics.py": the semantic check against the real Vitis headers, `hls-doc/semantics.md`; shim-gap classes moved to W11 per #39); W8b's cgeist / hls-est / harness-default fixes (OPEN_ISSUES O30 O31 O19 O25 O28 O36 O37) and W8c (ground truth for the 55 changed and 26 new designs, O32) open |
 | 29 | every case lit tested in cgeist and hls-est | Peter directed it (21:20) | cgeist side in W8c, hls-est side in P1a |
 | 30 | P2 configuration/plugin design: the 15 questions in `hls-doc/design/configuration-and-plugins.md` section 11 (format JSON, nested snake_case keys, registry delivery, explicit pass option beats the file, `td` default of the bare split pass `off`, fixed pragma attribute names, seven plugin interfaces, MLIR loader + `--load-plugin`, build-tree-only headers in P2, `pipeline.default` in the config, `math_costs.json` referenced, `target.resources` recorded, `circt::hlsest` namespace, duplicate plugin names are an error, `--config` in run_hlsest.py and experiment_pipeline.py) | asked 2026-10-10 21:50 | approved: go with every recommendation (Peter 23:20) |
@@ -52,6 +52,7 @@ vitis_examples (73 compared designs) at hls-est 22d473858 unless stated. They wi
 | 43 | default pipeline: `--lower-polygeist-subindex` first, so cgeist's row arguments of kept calls (`polygeist.subindex`, O25) reach hls-est | adopted under #36 (W3-hlsest: no output change with the installed c70ba2b0 on the 87 / 86 designs compared before; needed by Llama_GPT_module and mult_op_module_dot with the W3 cgeist) | implemented (21a959f47, common.py `DME_FRONT`) |
 | 44 | `--memory-banking-bram` partitions as Vitis: every entry of a spec, `dim = 0` = every dimension, the larger factor, callee-parameter pragmas on the arrays passed to them (kept calls), a callee form per argument partition, globals banked in place (VITIS_NOTES N24) | adopted under #36 (W7 item 1: subset 55 -> 66 / 89 exact, \|err\| 5243 -> 1608; no exact design lost) | implemented (W7 item 1 commit, CHANGELOG 2026-10-11 "partitions the way Vitis does") |
 | 45 | `--mark-constant-fills` in the default pipeline (after `--inline`, before the folds): an array filled by one constant store is a ROM of that constant, every ROM priced at the width its values need, constant tables priced as ROMs also without `--bram-attribute-globals` (VITIS_NOTES N26) | adopted under #36 (W7 item 3: subset 67 -> 68 / 89, \|err\| 1583 -> 1567; no exact design lost; 15 of 16 W7 ROM kernels and 7 of 9 dead_globals kernels = Vitis) | implemented (W7 item 3 commit, CHANGELOG 2026-10-11 "an array filled by one constant store is a ROM") |
+| 46 | M11: globals - bank in place (adopted, #44 / #45); `--bram-attribute-globals` and `--promote-globals-to-allocas` stay opt-in | adopted under #36 (W7 item 4: subset 68 / 89 \|err\| 1567 against 68 / 1655 with attribution and 65 / 2235 with promotion; per array O17 item 1 and O39) | recorded (MEMOS M11; nothing to implement) |
 
 Note: the "Regression gates" bullets of CLAUDE.md were restored on Peter's request (2026-10-10); the gates apply (test/hls-est no new
 failures; polybench_pragmas bicg 8, gesummv 16, mvt 8, syrk 32 exact; designs exact in the latest run stay exact unless
@@ -651,6 +652,39 @@ match Vitis is not known until they run. No effect on any design that compiles t
 **Recommendation.** Yes, as a time-boxed experiment on one soda design and SkyNet first (steps 1-3), run after the
 W3 cgeist work (one frontend change at a time). If the scalar-replacement step turns out large or fragile, stop and
 report; the 23 designs then stay excluded as "cgeist error". Waiting for your OK on this plan.
+
+## M11 — Globals: bank them in place (adopted), attribute their accesses or promote them to allocas (not adopted) (W7 item 4, 2026-10-11)
+
+**Question.** hls-doc/forgebench-gap.md C2: a `memref.global` was one unbanked, unattributed RAM_1P (OPEN_ISSUES O4). Three routes: (1) bank globals in place by their own pragma and the pragmas of the parameters they reach and keep pricing them without access attribution; (2) additionally `--bram-attribute-globals` (port demand, replication through the get_global sites, as for an alloca); (3) `--promote-globals-to-allocas --bram-attribute-globals` (MEMOS M5's "globals as locals").
+
+**Measurement.** One binary (`~/hls-est-work/w7/bin/hls-est.a6`, md5 24137668..., W7 items 1-3), the MLIR of `w3g/r/x_g3.json` (installed cgeist 2ec1956c, exactclass), the whole Polygeist catalogue (787 designs, 95 with Vitis ground truth; the harness subset is 89 of them). Route (1) is the W7 default (`w7/r/a6.json`); (2) appends `--bram-attribute-globals` (`a7.json`); (3) adds `--promote-globals-to-allocas` before `--dead-memory-elimination` plus the flag (`a8.json`, MEMOS M5's placement).
+
+| run | subset exact / 89 | subset \|err\| | catalogue exact / 95 | catalogue \|err\| | forgebench exact / 40 | forgebench \|err\| |
+|---|---|---|---|---|---|---|
+| before W7 (x_g3, hls-est bcfb9bb3a) | 55 | 5243 | 56 | 5631 | 10 | 5096 |
+| (1) W7 default: banked in place | **68** | **1567** | **70** | **1952** | **23** | **1420** |
+| (2) (1) + `--bram-attribute-globals` | 68 | 1655 | 70 | 2037 | 23 | 1508 |
+| (3) (1) + promotion + attribution | 65 | 2235 | 67 | 2611 | 20 | 2088 |
+
+Per design (forgebench rows that differ anywhere; bold = Vitis):
+
+| design | Vitis | x_g3 | (1) | (2) | (3) |
+|---|---|---|---|---|---|
+| Llama_GPT_module | 30 | 25 | 25 | 123 | 123 |
+| attention_op_p2 / p3 | 24 | **24** | **24** | **24** | 206 |
+| attn_breakdown_module / op2 | 17 | 13 | 13 | 13 | 69 |
+| attn_breakdown_op1 | 10 | 11 | 11 | 11 | 67 |
+| conv_A | 594 | 99 | 99 | 99 | 995 |
+| gpt_transformer_p1 | 28 | **28** | **28** | **28** | 84 |
+| llama_transformer_p2 | 30 | 25 | 25 | 25 | 81 |
+| mult_op_p2 / p3 | 2 | 4 | 4 | 4 | 32 |
+| diff_dims_p1 / p2 / p3, diff_orders_p1 / p2 / p3, testing_impl, vec_mtx_p1, vec_mtx_module | 210 / 114 / 354, 130 / 2 / 514, 2, 2, 2 | 162 / 66 / 194, 22 / 11 / 34, 6, 4, 12 | **all = Vitis** | **all = Vitis** | **all = Vitis** |
+
+Outside forgebench only class_ece8893_2023_spring ECG_Classifier Baseline moves (198 -> 201 with (2), 207 with (3); Vitis 357).
+
+**Why (2) and (3) lose.** Per array: in Llama_GPT_module (2) makes `FF_weights_2` 4 -> 60 and `BRAM_weights_q` / `k` / `v` 1 -> 15 (RAM_1WNR, 15 copies) where Vitis has 4 / 1 each: the reads sit in loops of callees Vitis keeps as modules (`grouped_multihead_attention_*`, the feed-forward), which hls-est sees inlined or as pipelined loops of the caller. OPEN_ISSUES O17 item 1 (Vitis does not replicate a global its sub-modules read through ports; unconfirmed as a rule). (3) adds the same on every global it promotes (attention_op_p2 / p3 `BRAM_weights_*` 4 -> 60) and conv_A's `BRAM_conv_weight` 64 -> 960: promoted, read 16 times per iteration, but still unpartitioned because cgeist lost the pragma when it inlined `conv2d` (O39).
+
+**Adopted (decision #46 under #36).** Route (1): `--memory-banking-bram` banks globals in place (W7 item 1, #44), and constant-initialised globals are priced as ROMs through their get_global sites without the flag (W7 item 3, #45). `--bram-attribute-globals` and `--promote-globals-to-allocas` stay opt-in. Revisit when O17 item 1 is modelled (no replication of an array for the loops of a callee Vitis keeps as a module) and O39 is fixed; then measure (2) again.
 
 ## M12 — Real Vitis headers through cgeist vs the exactclass shim
 
