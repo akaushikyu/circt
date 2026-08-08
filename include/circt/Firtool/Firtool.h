@@ -72,21 +72,6 @@ public:
     return disableRandom != RandomKind::All && disableRandom != kind;
   }
 
-  /// Advance the disabled-randomization lattice.  Calling this twice with
-  /// the two individual kinds is equivalent to calling it once with All.
-  static RandomKind mergeRandomKind(RandomKind current, RandomKind incoming) {
-    if (current == RandomKind::None)
-      return incoming;
-    if (current == incoming)
-      return current;
-    return RandomKind::All;
-  }
-
-  FirtoolOptions &mergeDisableRandom(RandomKind kind) {
-    disableRandom = mergeRandomKind(disableRandom, kind);
-    return *this;
-  }
-
   firrtl::PreserveValues::PreserveMode getPreserveMode() const {
     switch (buildMode) {
     case BuildModeDebug:
@@ -155,7 +140,6 @@ public:
     return disableAggressiveMergeConnections;
   }
   bool shouldEnableAnnotationWarning() const { return enableAnnotationWarning; }
-  bool shouldLowerToCore() const { return lowerToCore; }
   auto getVerificationFlavor() const { return verificationFlavor; }
   bool shouldEmitSeparateAlwaysBlocks() const {
     return emitSeparateAlwaysBlocks;
@@ -298,6 +282,11 @@ public:
     return *this;
   }
 
+  FirtoolOptions &setDisableRandom(RandomKind value) {
+    disableRandom = value;
+    return *this;
+  }
+
   FirtoolOptions &setOutputAnnotationFilename(StringRef value) {
     outputAnnotationFilename = value;
     return *this;
@@ -305,11 +294,6 @@ public:
 
   FirtoolOptions &setEnableAnnotationWarning(bool value) {
     enableAnnotationWarning = value;
-    return *this;
-  }
-
-  FirtoolOptions &setLowerToCore(bool value) {
-    lowerToCore = value;
     return *this;
   }
 
@@ -453,7 +437,6 @@ private:
   RandomKind disableRandom;
   std::string outputAnnotationFilename;
   bool enableAnnotationWarning;
-  bool lowerToCore;
   bool addMuxPragmas;
   firrtl::VerificationFlavor verificationFlavor;
   bool emitSeparateAlwaysBlocks;

@@ -480,6 +480,16 @@ struct PointerLikeTypeTraits<circt::firrtl::Annotation>
 template <>
 struct DenseMapInfo<circt::firrtl::Annotation> {
   using Annotation = circt::firrtl::Annotation;
+  static Annotation getEmptyKey() {
+    return Annotation(
+        mlir::DictionaryAttr(static_cast<mlir::Attribute::ImplType *>(
+            DenseMapInfo<void *>::getEmptyKey())));
+  }
+  static Annotation getTombstoneKey() {
+    return Annotation(
+        mlir::DictionaryAttr(static_cast<mlir::Attribute::ImplType *>(
+            llvm::DenseMapInfo<void *>::getTombstoneKey())));
+  }
   static unsigned getHashValue(Annotation val) {
     return mlir::hash_value(val.getAttr());
   }
@@ -491,6 +501,16 @@ template <>
 struct DenseMapInfo<circt::firrtl::AnnoTarget> {
   using AnnoTarget = circt::firrtl::AnnoTarget;
   using AnnoTargetImpl = circt::firrtl::detail::AnnoTargetImpl;
+  static AnnoTarget getEmptyKey() {
+    auto *o = DenseMapInfo<mlir::Operation *>::getEmptyKey();
+    auto i = DenseMapInfo<unsigned>::getEmptyKey();
+    return AnnoTarget(AnnoTargetImpl(o, i));
+  }
+  static AnnoTarget getTombstoneKey() {
+    auto *o = DenseMapInfo<mlir::Operation *>::getTombstoneKey();
+    auto i = DenseMapInfo<unsigned>::getTombstoneKey();
+    return AnnoTarget(AnnoTargetImpl(o, i));
+  }
   static unsigned getHashValue(AnnoTarget val) {
     auto impl = val.getImpl();
     return hash_combine(impl.getOp(), impl.getPortNo());

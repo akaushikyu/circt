@@ -6,10 +6,13 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// Public C++ interface for the cosim RPC client. The on-the-wire protocol is
-// WebSocket + JSON; see cosim-protocol.md for the spec. This header exposes
-// no transport-specific types, so the implementation (RpcClient.cpp) is free
-// to evolve independently.
+// This file contains the gRPC client implementation for ESI cosimulation.
+// It wraps all gRPC/protobuf dependencies so they don't leak into other
+// headers.
+//
+// DO NOT EDIT!
+// This file is distributed as part of an ESI package. The source for this file
+// should always be modified within CIRCT (lib/dialect/ESI/runtime/cpp).
 //
 //===----------------------------------------------------------------------===//
 
@@ -25,15 +28,14 @@
 #include <vector>
 
 namespace esi {
-class Logger;
 namespace backends {
 namespace cosim {
 
-/// A client for the cosim RPC server. Hides the WebSocket + JSON transport
-/// behind a small C++ API; see cosim-protocol.md for the wire format.
+/// A gRPC client for communicating with the cosimulation server.
+/// This class wraps all gRPC/protobuf dependencies.
 class RpcClient {
 public:
-  RpcClient(Logger &logger, const std::string &hostname, uint16_t port);
+  RpcClient(const std::string &hostname, uint16_t port);
   ~RpcClient();
 
   // Non-copyable.
@@ -67,10 +69,8 @@ public:
   void writeToServer(const std::string &channelName, const MessageData &data);
 
   /// Callback type for receiving messages from a client-bound channel.
-  /// Return true if the message was consumed, false to retry the same owning
-  /// message object.
-  using ReadCallback =
-      std::function<bool(std::unique_ptr<SegmentedMessageData> &)>;
+  /// Return true if the message was consumed, false to retry.
+  using ReadCallback = std::function<bool(const MessageData &)>;
 
   /// Abstract handle for a read channel connection.
   /// Destructor disconnects from the channel.
@@ -85,10 +85,8 @@ public:
   std::unique_ptr<ReadChannelConnection>
   connectClientReceiver(const std::string &channelName, ReadCallback callback);
 
-  /// Hide the implementation details from this header file.
-  class Impl;
-
 private:
+  class Impl;
   std::unique_ptr<Impl> impl;
 };
 

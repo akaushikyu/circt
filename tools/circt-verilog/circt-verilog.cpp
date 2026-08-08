@@ -26,7 +26,6 @@
 #include "circt/Dialect/Verif/VerifDialect.h"
 #include "circt/Support/Passes.h"
 #include "circt/Support/Version.h"
-#include "mlir/Bytecode/BytecodeWriter.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
 #include "mlir/Dialect/Func/Extensions/InlinerExtension.h"
@@ -86,13 +85,6 @@ struct CLOptions {
   cl::opt<std::string> outputFilename{
       "o", cl::desc("Output filename (`-` for stdout)"),
       cl::value_desc("filename"), cl::init("-"), cl::cat(cat)};
-
-  cl::opt<bool> emitBytecode{
-      "emit-bytecode", cl::desc("Emit bytecode when generating MLIR output"),
-      cl::init(false), cl::cat(cat)};
-
-  cl::opt<bool> force{"f", cl::desc("Enable binary output on terminals"),
-                      cl::init(false), cl::cat(cat)};
 
   cl::opt<bool> verifyDiagnostics{
       "verify-diagnostics",
@@ -286,27 +278,10 @@ struct CLOptions {
           "One or more command files, which are independent compilation units "
           "where modules are automatically instantiated."),
       cl::value_desc("filename"), cl::Prefix, cl::cat(cat)};
-
-  cl::list<std::string> slangArgs{"Xslang",
-                                  cl::desc("Pass <arg> to the Slang CLI"),
-                                  cl::value_desc("arg"), cl::cat(cat)};
 };
 } // namespace
 
 static CLOptions opts;
-
-/// Check output stream before writing bytecode to it.
-/// Warn and return true if output is known to be displayed.
-static bool checkBytecodeOutputToConsole(raw_ostream &os) {
-  if (os.is_displayed()) {
-    llvm::errs() << "WARNING: You're attempting to print out a bytecode file.\n"
-                    "This is inadvisable as it may cause display problems. If\n"
-                    "you REALLY want to taste MLIR bytecode first-hand, you\n"
-                    "can force output with the `-f' option.\n\n";
-    return true;
-  }
-  return false;
-}
 
 /// Populate the given pass manager with transformations as configured by the
 /// command line options.
@@ -371,7 +346,6 @@ static LogicalResult executeWithSources(MLIRContext *context,
   options.singleUnit = opts.singleUnit;
   options.libraryFiles = opts.libraryFiles;
   options.commandFiles = opts.commandFiles;
-  options.slangArgs = opts.slangArgs;
 
   // Open the output file.
   std::string errorMessage;
@@ -433,15 +407,7 @@ static LogicalResult executeWithSources(MLIRContext *context,
 
   // Print the final MLIR.
   auto outputTimer = ts.nest("MLIR Printer");
-  if (opts.emitBytecode &&
-      (opts.force || !checkBytecodeOutputToConsole(outputFile->os()))) {
-    if (failed(
-            writeBytecodeToFile(module.get(), outputFile->os(),
-                                mlir::BytecodeWriterConfig(getCirctVersion()))))
-      return failure();
-  } else {
-    module->print(outputFile->os());
-  }
+  module->print(outputFile->os());
   outputFile->keep();
   return success();
 }

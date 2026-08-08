@@ -52,18 +52,8 @@ namespace {
 
 /// Cache for identified structs and field GEP paths keyed by class symbol.
 struct ClassTypeCache {
-  struct TypeInfoInfo {
-    LLVM::GlobalOp global;
-  };
-
   struct ClassStructInfo {
     LLVM::LLVMStructType classBody;
-    LLVM::LLVMStructType headerTy;
-    TypeInfoInfo typeInfo;
-
-    unsigned headerFieldIndex = 0;
-    unsigned typeInfoFieldIndex = 0;
-    unsigned vtableFieldIndex = 1;
 
     // field name -> GEP path inside ident (excluding the leading pointer index)
     DenseMap<StringRef, SmallVector<unsigned, 2>> propertyPath;
@@ -99,66 +89,30 @@ struct ClassTypeCache {
     return std::nullopt;
   }
 
-  std::optional<TypeInfoInfo> getTypeInfo(SymbolRefAttr classSym) const {
-    if (auto it = classToTypeInfoMap.find(classSym);
-        it != classToTypeInfoMap.end())
-      return it->second;
-    return std::nullopt;
-  }
-
-  void setTypeInfo(SymbolRefAttr classSym, const TypeInfoInfo &info) {
-    classToTypeInfoMap[classSym] = info;
-  }
-
 private:
   // Keyed by the SymbolRefAttr of the class.
   // Kept private so all accesses are done with helpers which preserve
   // invariants
   DenseMap<Attribute, ClassStructInfo> classToStructMap;
-  DenseMap<Attribute, TypeInfoInfo> classToTypeInfoMap;
 };
 
-/// Cache for external function declarations. Avoids redundant symbol table
-/// lookups and ensures each function is declared at most once.
-struct FunctionCache {
-  FunctionCache(SymbolTable &symbolTable) : symbolTable(symbolTable) {}
+/// Ensure we have `declare i8* @malloc(i64)` (opaque ptr prints as !llvm.ptr).
+static LLVM::LLVMFuncOp getOrCreateMalloc(ModuleOp mod, OpBuilder &b) {
+  if (auto f = mod.lookupSymbol<LLVM::LLVMFuncOp>("malloc"))
+    return f;
 
-  /// Look up a function by name. If it doesn't exist, invoke the callback to
-  /// create it. The builder is repositioned to the start of the module body
-  /// before the callback is invoked. The result is inserted into the symbol
-  /// table and cache.
-  func::FuncOp getOrCreate(OpBuilder &builder, StringRef name,
-                           function_ref<func::FuncOp()> createFn) {
-    auto &slot = map[name];
-    if (slot)
-      return slot;
-    if (auto fn = symbolTable.lookup<func::FuncOp>(name))
-      return slot = fn;
-    auto mod = cast<ModuleOp>(symbolTable.getOp());
-    OpBuilder::InsertionGuard g(builder);
-    builder.setInsertionPointToStart(mod.getBody());
-    slot = createFn();
-    symbolTable.insert(slot);
-    return slot;
-  }
+  OpBuilder::InsertionGuard g(b);
+  b.setInsertionPointToStart(mod.getBody());
 
-  /// Convenience wrapper that creates a private external function declaration
-  /// with the given argument and result types.
-  func::FuncOp getOrCreate(OpBuilder &builder, StringRef name,
-                           TypeRange argTypes, TypeRange resultTypes) {
-    return getOrCreate(builder, name, [&] {
-      auto mod = cast<ModuleOp>(symbolTable.getOp());
-      auto fnTy = builder.getFunctionType(argTypes, resultTypes);
-      auto fn = func::FuncOp::create(builder, mod.getLoc(), name, fnTy);
-      fn.setPrivate();
-      return fn;
-    });
-  }
+  auto i64Ty = IntegerType::get(mod.getContext(), 64);
+  auto ptrTy = LLVM::LLVMPointerType::get(mod.getContext()); // opaque pointer
+  auto fnTy = LLVM::LLVMFunctionType::get(ptrTy, {i64Ty}, false);
 
-private:
-  SymbolTable &symbolTable;
-  llvm::StringMap<func::FuncOp> map;
-};
+  auto fn = LLVM::LLVMFuncOp::create(b, mod.getLoc(), "malloc", fnTy);
+  // Link this in from somewhere else.
+  fn.setLinkage(LLVM::Linkage::External);
+  return fn;
+}
 
 /// Helper function to create an opaque LLVM Struct Type which corresponds
 /// to the sym
@@ -167,73 +121,6 @@ static LLVM::LLVMStructType getOrCreateOpaqueStruct(MLIRContext *ctx,
   return LLVM::LLVMStructType::getIdentified(ctx, className.getRootReference());
 }
 
-/// Create the canonical object header for lowered Moore class objects.
-static LLVM::LLVMStructType getClassObjectHeaderType(MLIRContext *ctx) {
-  return LLVM::LLVMStructType::getLiteral(
-      ctx, SmallVector<Type>{LLVM::LLVMPointerType::get(ctx),
-                             LLVM::LLVMPointerType::get(ctx)});
-}
-
-static std::string getTypeInfoName(SymbolRefAttr className) {
-  return className.getRootReference().str() + "::typeinfo";
-}
-
-static FailureOr<ClassTypeCache::TypeInfoInfo>
-getOrCreateTypeInfo(ModuleOp mod, SymbolRefAttr classSym,
-                    ClassTypeCache &cache) {
-  if (auto info = cache.getTypeInfo(classSym))
-    return *info;
-
-  MLIRContext *ctx = mod.getContext();
-  auto ptrTy = LLVM::LLVMPointerType::get(ctx);
-  auto typeInfoTy = LLVM::LLVMStructType::getLiteral(ctx, {ptrTy});
-
-  auto globalName = getTypeInfoName(classSym);
-  auto global = mod.lookupSymbol<LLVM::GlobalOp>(globalName);
-  if (!global) {
-    OpBuilder builder = OpBuilder::atBlockBegin(mod.getBody());
-    global = LLVM::GlobalOp::create(
-        builder, mod.getLoc(), typeInfoTy,
-        /*isConstant=*/true, LLVM::Linkage::Internal, globalName, Attribute());
-
-    Block *block = new Block();
-    global.getInitializerRegion().push_back(block);
-    builder.setInsertionPointToStart(block);
-
-    if (auto *classOp = mod.lookupSymbol(classSym)) {
-      auto classDecl = dyn_cast<ClassDeclOp>(classOp);
-      if (classDecl && classDecl.getBaseAttr()) {
-        auto baseInfo =
-            getOrCreateTypeInfo(mod, classDecl.getBaseAttr(), cache);
-        if (failed(baseInfo))
-          return failure();
-        auto baseAddr =
-            LLVM::AddressOfOp::create(builder, mod.getLoc(), baseInfo->global);
-        auto undef = LLVM::UndefOp::create(builder, mod.getLoc(), typeInfoTy)
-                         .getResult();
-        auto init = LLVM::InsertValueOp::create(builder, mod.getLoc(), undef,
-                                                baseAddr.getResult(),
-                                                ArrayRef<int64_t>{0});
-        LLVM::ReturnOp::create(builder, mod.getLoc(), init);
-        ClassTypeCache::TypeInfoInfo info{global};
-        cache.setTypeInfo(classSym, info);
-        return info;
-      }
-    }
-
-    auto undef =
-        LLVM::UndefOp::create(builder, mod.getLoc(), typeInfoTy).getResult();
-    auto nullPtr =
-        LLVM::ZeroOp::create(builder, mod.getLoc(), ptrTy).getResult();
-    auto init = LLVM::InsertValueOp::create(builder, mod.getLoc(), undef,
-                                            nullPtr, ArrayRef<int64_t>{0});
-    LLVM::ReturnOp::create(builder, mod.getLoc(), init);
-  }
-
-  ClassTypeCache::TypeInfoInfo info{global};
-  cache.setTypeInfo(classSym, info);
-  return info;
-}
 static LogicalResult resolveClassStructBody(ClassDeclOp op,
                                             TypeConverter const &typeConverter,
                                             ClassTypeCache &cache) {
@@ -244,19 +131,12 @@ static LogicalResult resolveClassStructBody(ClassDeclOp op,
     // We already have a resolved class struct body.
     return success();
 
-  if (failed(getOrCreateTypeInfo(op->getParentOfType<ModuleOp>(), classSym,
-                                 cache)))
-    return op.emitOpError() << "Failed to create RTTI for class";
-
   // Otherwise we need to resolve.
   ClassTypeCache::ClassStructInfo structBody;
   SmallVector<Type> structBodyMembers;
-  structBody.headerTy = getClassObjectHeaderType(op.getContext());
-  structBody.typeInfo = *cache.getTypeInfo(classSym);
-  structBodyMembers.push_back(structBody.headerTy);
 
   // Base-first (prefix) layout for single inheritance.
-  unsigned derivedStartIdx = 1;
+  unsigned derivedStartIdx = 0;
 
   if (auto baseClass = op.getBaseAttr()) {
 
@@ -270,13 +150,12 @@ static LogicalResult resolveClassStructBody(ClassDeclOp op,
     // Process base class' struct layout first
     auto baseClassStruct = cache.getStructInfo(baseClass);
     structBodyMembers.push_back(baseClassStruct->classBody);
-    derivedStartIdx = 2;
+    derivedStartIdx = 1;
 
-    // Inherit base field paths with a leading 1 to index into the base
-    // subobject after the object header.
+    // Inherit base field paths with a leading 0.
     for (auto &kv : baseClassStruct->propertyPath) {
       SmallVector<unsigned, 2> path;
-      path.push_back(1); // into base subobject
+      path.push_back(0); // into base subobject
       path.append(kv.second.begin(), kv.second.end());
       structBody.setFieldPath(kv.first, path);
     }
@@ -637,68 +516,6 @@ struct ProcedureOpConversion : public OpConversionPattern<ProcedureOp> {
   }
 };
 
-//===----------------------------------------------------------------------===//
-// Coroutine Conversion
-//===----------------------------------------------------------------------===//
-
-struct CoroutineOpConversion : public OpConversionPattern<CoroutineOp> {
-  using OpConversionPattern::OpConversionPattern;
-
-  LogicalResult
-  matchAndRewrite(CoroutineOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    auto funcType = op.getFunctionType();
-    TypeConverter::SignatureConversion sigConversion(funcType.getNumInputs());
-    for (auto [i, type] : llvm::enumerate(funcType.getInputs())) {
-      auto converted = typeConverter->convertType(type);
-      if (!converted)
-        return failure();
-      sigConversion.addInputs(i, converted);
-    }
-    SmallVector<Type> resultTypes;
-    if (failed(typeConverter->convertTypes(funcType.getResults(), resultTypes)))
-      return failure();
-
-    auto newFuncType = FunctionType::get(
-        rewriter.getContext(), sigConversion.getConvertedTypes(), resultTypes);
-    auto newOp = llhd::CoroutineOp::create(rewriter, op.getLoc(),
-                                           op.getSymName(), newFuncType);
-    newOp.setSymVisibilityAttr(op.getSymVisibilityAttr());
-    if (auto dpiExport = op->getAttr("circt.dpi.export"))
-      newOp->setAttr("circt.dpi.export", dpiExport);
-    rewriter.inlineRegionBefore(op.getBody(), newOp.getBody(),
-                                newOp.getBody().end());
-    if (failed(rewriter.convertRegionTypes(&newOp.getBody(), *typeConverter,
-                                           &sigConversion)))
-      return failure();
-
-    // Replace moore.return with llhd.return inside the coroutine body.
-    for (auto returnOp :
-         llvm::make_early_inc_range(newOp.getBody().getOps<ReturnOp>())) {
-      rewriter.setInsertionPoint(returnOp);
-      rewriter.replaceOpWithNewOp<llhd::ReturnOp>(returnOp, ValueRange{});
-    }
-
-    rewriter.eraseOp(op);
-    return success();
-  }
-};
-
-struct CallCoroutineOpConversion : public OpConversionPattern<CallCoroutineOp> {
-  using OpConversionPattern::OpConversionPattern;
-
-  LogicalResult
-  matchAndRewrite(CallCoroutineOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    SmallVector<Type> convResTypes;
-    if (failed(typeConverter->convertTypes(op.getResultTypes(), convResTypes)))
-      return failure();
-    rewriter.replaceOpWithNewOp<llhd::CallCoroutineOp>(
-        op, convResTypes, adaptor.getCallee(), adaptor.getOperands());
-    return success();
-  }
-};
-
 struct WaitEventOpConversion : public OpConversionPattern<WaitEventOp> {
   using OpConversionPattern::OpConversionPattern;
 
@@ -1054,9 +871,8 @@ struct ClassUpcastOpConversion : public OpConversionPattern<ClassUpcastOp> {
 /// moore.class.new lowering: heap-allocate storage for the class object.
 struct ClassNewOpConversion : public OpConversionPattern<ClassNewOp> {
   ClassNewOpConversion(TypeConverter &tc, MLIRContext *ctx,
-                       ClassTypeCache &cache, FunctionCache &funcCache)
-      : OpConversionPattern<ClassNewOp>(tc, ctx), cache(cache),
-        funcCache(funcCache) {}
+                       ClassTypeCache &cache)
+      : OpConversionPattern<ClassNewOp>(tc, ctx), cache(cache) {}
 
   LogicalResult
   matchAndRewrite(ClassNewOp op, OpAdaptor adaptor,
@@ -1073,18 +889,6 @@ struct ClassNewOpConversion : public OpConversionPattern<ClassNewOp> {
       return op.emitError() << "Could not resolve class struct for " << sym;
 
     auto structTy = cache.getStructInfo(sym)->classBody;
-    auto typeInfo = cache.getStructInfo(sym)->typeInfo;
-
-    // Check that all struct members have data layout support. Types like
-    // !sim.dstring or !sim.queue don't have a known size, which would cause
-    // a fatal error in DataLayout::getTypeSize below.
-    for (auto memberTy : structTy.getBody()) {
-      if (!LLVM::isCompatibleType(memberTy) &&
-          !memberTy.hasTrait<DataLayoutTypeInterface::Trait>()) {
-        return op.emitError()
-               << "class struct has member types with no data layout";
-      }
-    }
 
     DataLayout dl(mod);
     // DataLayout::getTypeSize gives a byte count for LLVM types.
@@ -1094,35 +898,20 @@ struct ClassNewOpConversion : public OpConversionPattern<ClassNewOp> {
                                           rewriter.getI64IntegerAttr(byteSize));
 
     // Get or declare malloc and call it.
+    auto mallocFn = getOrCreateMalloc(mod, rewriter);
     auto ptrTy = LLVM::LLVMPointerType::get(ctx); // opaque pointer result
-    auto mallocFn = funcCache.getOrCreate(rewriter, "malloc", {i64Ty}, {ptrTy});
     auto call =
-        func::CallOp::create(rewriter, loc, mallocFn, ValueRange{cSize});
-
-    auto typeInfoAddr =
-        LLVM::AddressOfOp::create(rewriter, loc, typeInfo.global);
-    auto i32Ty = IntegerType::get(ctx, 32);
-    auto headerIdx = LLVM::ConstantOp::create(
-        rewriter, loc, i32Ty,
-        rewriter.getI32IntegerAttr(cache.getStructInfo(sym)->headerFieldIndex));
-    auto typeInfoIdx = LLVM::ConstantOp::create(
-        rewriter, loc, i32Ty,
-        rewriter.getI32IntegerAttr(
-            cache.getStructInfo(sym)->typeInfoFieldIndex));
-    auto headerPtr =
-        LLVM::GEPOp::create(rewriter, loc, ptrTy, structTy, call.getResult(0),
-                            ValueRange{headerIdx, typeInfoIdx});
-    LLVM::StoreOp::create(rewriter, loc, typeInfoAddr, headerPtr);
+        LLVM::CallOp::create(rewriter, loc, TypeRange{ptrTy},
+                             SymbolRefAttr::get(mallocFn), ValueRange{cSize});
 
     // Replace the new op with the malloc pointer (no cast needed with opaque
     // ptrs).
-    rewriter.replaceOp(op, call.getResult(0));
+    rewriter.replaceOp(op, call.getResult());
     return success();
   }
 
 private:
   ClassTypeCache &cache; // shared, owned by the pass
-  FunctionCache &funcCache;
 };
 
 struct ClassDeclOpConversion : public OpConversionPattern<ClassDeclOp> {
@@ -1159,11 +948,8 @@ struct VariableOpConversion : public OpConversionPattern<VariableOp> {
     // Determine the initial value of the signal.
     Value init = adaptor.getInitial();
     if (!init) {
-      auto refType = dyn_cast<llhd::RefType>(resultType);
-      if (!refType)
-        return rewriter.notifyMatchFailure(
-            op.getLoc(), "variable type did not convert to llhd::RefType");
-      init = createZeroValue(refType.getNestedType(), loc, rewriter);
+      auto elementType = cast<llhd::RefType>(resultType).getNestedType();
+      init = createZeroValue(elementType, loc, rewriter);
       if (!init)
         return failure();
     }
@@ -1747,13 +1533,6 @@ struct BoolCastOpConversion : public OpConversionPattern<BoolCastOp> {
                                                 adaptor.getInput(), zero);
       return success();
     }
-    if (isa_and_nonnull<FloatType>(resultType)) {
-      Value zero = arith::ConstantOp::create(
-          rewriter, op->getLoc(), rewriter.getFloatAttr(resultType, 0.0));
-      rewriter.replaceOpWithNewOp<arith::CmpFOp>(op, arith::CmpFPredicate::ONE,
-                                                 adaptor.getInput(), zero);
-      return success();
-    }
     return failure();
   }
 };
@@ -2072,21 +1851,6 @@ struct RealToIntOpConversion : public OpConversionPattern<RealToIntOp> {
   }
 };
 
-struct ConvertRealOpConversion : public OpConversionPattern<ConvertRealOp> {
-  using OpConversionPattern::OpConversionPattern;
-
-  LogicalResult
-  matchAndRewrite(ConvertRealOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    op.getInput().getType().getWidth() < op.getResult().getType().getWidth()
-        ? rewriter.replaceOpWithNewOp<arith::ExtFOp>(
-              op, typeConverter->convertType(op.getType()), adaptor.getInput())
-        : rewriter.replaceOpWithNewOp<arith::TruncFOp>(
-              op, typeConverter->convertType(op.getType()), adaptor.getInput());
-    return success();
-  }
-};
-
 //===----------------------------------------------------------------------===//
 // Statement Conversion
 //===----------------------------------------------------------------------===//
@@ -2133,74 +1897,6 @@ struct CallOpConversion : public OpConversionPattern<func::CallOp> {
       return failure();
     rewriter.replaceOpWithNewOp<func::CallOp>(
         op, adaptor.getCallee(), convResTypes, adaptor.getOperands());
-    return success();
-  }
-};
-
-struct FuncDPICallOpConversion
-    : public OpConversionPattern<moore::FuncDPICallOp> {
-  using OpConversionPattern::OpConversionPattern;
-
-  LogicalResult
-  matchAndRewrite(moore::FuncDPICallOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    SmallVector<Type> convResTypes;
-    if (typeConverter->convertTypes(op.getResultTypes(), convResTypes).failed())
-      return failure();
-    rewriter.replaceOpWithNewOp<sim::DPICallOp>(
-        op, convResTypes, op.getCalleeAttr(), /*clock=*/Value(),
-        /*enable=*/Value(), adaptor.getInputs());
-    return success();
-  }
-};
-
-struct DPIFuncOpConversion : public OpConversionPattern<moore::DPIFuncOp> {
-  using OpConversionPattern::OpConversionPattern;
-
-  LogicalResult
-  matchAndRewrite(moore::DPIFuncOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    // Map Moore DPIArgDirection to sim::DPIDirection.
-    auto toDPIDir = [](moore::DPIArgDirection dir) -> sim::DPIDirection {
-      switch (dir) {
-      case moore::DPIArgDirection::In:
-        return sim::DPIDirection::Input;
-      case moore::DPIArgDirection::Out:
-        return sim::DPIDirection::Output;
-      case moore::DPIArgDirection::InOut:
-        return sim::DPIDirection::InOut;
-      case moore::DPIArgDirection::Return:
-        return sim::DPIDirection::Return;
-      }
-      llvm_unreachable("unknown DPIArgDirection");
-    };
-
-    // Reconstruct sim::DPIFunctionType from Moore's argument arrays.
-    auto dirs = op.getDpiArgDirs();
-    auto names = op.getDpiArgNames();
-    SmallVector<Type> argTypes;
-    op.getDPIArgTypes(argTypes);
-
-    SmallVector<sim::DPIArgument> dpiArguments;
-    for (auto [dirAttr, nameAttr, mooreType] :
-         llvm::zip(dirs, names, argTypes)) {
-      auto dir = toDPIDir(cast<moore::DPIArgDirectionAttr>(dirAttr).getValue());
-      auto name = cast<StringAttr>(nameAttr);
-      Type coreType = typeConverter->convertType(mooreType);
-      if (!coreType)
-        return op.emitOpError("argument '")
-               << name << "' has unsupported type " << mooreType;
-      dpiArguments.push_back({name, coreType, dir});
-    }
-
-    auto coreDPIFuncType =
-        sim::DPIFunctionType::get(rewriter.getContext(), dpiArguments);
-    auto simFunc = sim::DPIFuncOp::create(
-        rewriter, op.getLoc(), op.getSymNameAttr(), coreDPIFuncType,
-        op.getArgumentLocsAttr(), op.getVerilogNameAttr());
-    SymbolTable::setSymbolVisibility(simFunc,
-                                     SymbolTable::getSymbolVisibility(op));
-    rewriter.eraseOp(op);
     return success();
   }
 };
@@ -2449,15 +2145,10 @@ struct YieldOpConversion : public OpConversionPattern<YieldOp> {
   LogicalResult
   matchAndRewrite(YieldOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    Operation *parent = op->getParentOp();
-    if (isa<llhd::GlobalSignalOp>(parent))
+    if (isa<llhd::GlobalSignalOp>(op->getParentOp()))
       rewriter.replaceOpWithNewOp<llhd::YieldOp>(op, adaptor.getResult());
-    else if (isa<scf::ExecuteRegionOp, scf::ForOp, scf::IfOp,
-                 scf::IndexSwitchOp, scf::WhileOp>(parent))
-      rewriter.replaceOpWithNewOp<scf::YieldOp>(op, adaptor.getResult());
     else
-      return rewriter.notifyMatchFailure(
-          op, "yield parent has not been converted to a legal region op yet");
+      rewriter.replaceOpWithNewOp<scf::YieldOp>(op, adaptor.getResult());
     return success();
   }
 };
@@ -2505,28 +2196,6 @@ struct FormatLiteralOpConversion : public OpConversionPattern<FormatLiteralOp> {
   matchAndRewrite(FormatLiteralOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     rewriter.replaceOpWithNewOp<sim::FormatLiteralOp>(op, adaptor.getLiteral());
-    return success();
-  }
-};
-
-struct FormatStringOpConversion : public OpConversionPattern<FormatStringOp> {
-  using OpConversionPattern::OpConversionPattern;
-
-  LogicalResult
-  matchAndRewrite(FormatStringOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    char padChar =
-        op.getPadding().value_or(IntPadding::Space) == IntPadding::Space ? 32
-                                                                         : 48;
-    IntegerAttr padCharAttr = rewriter.getI8IntegerAttr(padChar);
-    auto widthAttr = adaptor.getWidthAttr();
-
-    bool isLeftAligned =
-        op.getAlignment().value_or(IntAlign::Right) == IntAlign::Left;
-    BoolAttr isLeftAlignedAttr = rewriter.getBoolAttr(isLeftAligned);
-
-    rewriter.replaceOpWithNewOp<sim::FormatStringOp>(
-        op, adaptor.getString(), isLeftAlignedAttr, padCharAttr, widthAttr);
     return success();
   }
 };
@@ -2628,17 +2297,6 @@ struct FormatRealOpConversion : public OpConversionPattern<FormatRealOp> {
           fracDigitsAttr);
       return success();
     }
-  }
-};
-
-struct FormatCharOpConversion
-    : public OpConversionPattern<moore::FormatCharOp> {
-  using OpConversionPattern::OpConversionPattern;
-  LogicalResult
-  matchAndRewrite(moore::FormatCharOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    rewriter.replaceOpWithNewOp<sim::FormatCharOp>(op, adaptor.getValue());
-    return success();
   }
 };
 
@@ -2772,15 +2430,15 @@ struct QueuePopBackOpConversion : public OpConversionPattern<QueuePopBackOp> {
   LogicalResult
   matchAndRewrite(QueuePopBackOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    Value popped;
     probeRefAndDriveWithResult(
         rewriter, op.getLoc(), adaptor.getQueue(), [&](Value queue) {
           auto popBack =
               sim::QueuePopBackOp::create(rewriter, op->getLoc(), queue);
-          popped = popBack.getPopped();
+
+          op.replaceAllUsesWith(popBack.getPopped());
           return popBack.getOutQueue();
         });
-    rewriter.replaceOp(op, popped);
+    rewriter.eraseOp(op);
 
     return success();
   }
@@ -2792,15 +2450,15 @@ struct QueuePopFrontOpConversion : public OpConversionPattern<QueuePopFrontOp> {
   LogicalResult
   matchAndRewrite(QueuePopFrontOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    Value popped;
     probeRefAndDriveWithResult(
         rewriter, op.getLoc(), adaptor.getQueue(), [&](Value queue) {
           auto popFront =
               sim::QueuePopFrontOp::create(rewriter, op->getLoc(), queue);
-          popped = popFront.getPopped();
+
+          op.replaceAllUsesWith(popFront.getPopped());
           return popFront.getOutQueue();
         });
-    rewriter.replaceOp(op, popped);
+    rewriter.eraseOp(op);
 
     return success();
   }
@@ -2922,6 +2580,9 @@ struct QueueCmpOpConversion : public OpConversionPattern<QueueCmpOp> {
     case circt::moore::UArrayCmpPredicate::ne:
       queuePred = sim::QueueCmpPredicate::ne;
       break;
+    default:
+      llvm_unreachable(
+          "All unpacked array comparison predicates should be handled");
     }
 
     auto cmpPred = sim::QueueCmpPredicateAttr::get(getContext(), queuePred);
@@ -2967,107 +2628,6 @@ struct DisplayBIOpConversion : public OpConversionPattern<DisplayBIOp> {
                   ConversionPatternRewriter &rewriter) const override {
     rewriter.replaceOpWithNewOp<sim::PrintFormattedProcOp>(
         op, adaptor.getMessage());
-    return success();
-  }
-};
-
-struct FDisplayBIOpConversion : public OpConversionPattern<FDisplayBIOp> {
-  using OpConversionPattern::OpConversionPattern;
-  LogicalResult
-  matchAndRewrite(FDisplayBIOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    auto stream = sim::SVChannelToOutputStreamOp::create(rewriter, op.getLoc(),
-                                                         adaptor.getFd());
-    rewriter.replaceOpWithNewOp<sim::PrintFormattedProcOp>(
-        op, adaptor.getMessage(), stream.getStream());
-    return success();
-  }
-};
-
-struct FOpenBIOpConversion : public OpConversionPattern<FOpenBIOp> {
-  using OpConversionPattern::OpConversionPattern;
-  LogicalResult
-  matchAndRewrite(FOpenBIOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    sim::SVFOpenModeAttr simMode;
-    if (auto modeAttr = op.getModeAttr()) {
-      auto mapMode = [](moore::FOpenMode m) -> sim::SVFOpenMode {
-        switch (m) {
-        case moore::FOpenMode::Read:
-          return sim::SVFOpenMode::Read;
-        case moore::FOpenMode::Write:
-          return sim::SVFOpenMode::Write;
-        case moore::FOpenMode::Append:
-          return sim::SVFOpenMode::Append;
-        case moore::FOpenMode::ReadUpdate:
-          return sim::SVFOpenMode::ReadUpdate;
-        case moore::FOpenMode::WriteUpdate:
-          return sim::SVFOpenMode::WriteUpdate;
-        case moore::FOpenMode::AppendUpdate:
-          return sim::SVFOpenMode::AppendUpdate;
-        }
-        llvm_unreachable("unknown FOpenMode");
-      };
-      simMode = sim::SVFOpenModeAttr::get(op.getContext(),
-                                          mapMode(modeAttr.getValue()));
-    }
-    rewriter.replaceOpWithNewOp<sim::SVFOpenOp>(op, adaptor.getFilename(),
-                                                simMode);
-    return success();
-  }
-};
-
-struct PlusArgsTestBIOpConversion
-    : public OpConversionPattern<PlusArgsTestBIOp> {
-  using OpConversionPattern::OpConversionPattern;
-  LogicalResult
-  matchAndRewrite(PlusArgsTestBIOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    rewriter.replaceOpWithNewOp<sim::PlusArgsTestOp>(op, rewriter.getI1Type(),
-                                                     op.getFormatStringAttr());
-    return success();
-  }
-};
-
-struct PlusArgsValueBIOpConversion
-    : public OpConversionPattern<PlusArgsValueBIOp> {
-  using OpConversionPattern::OpConversionPattern;
-  LogicalResult
-  matchAndRewrite(PlusArgsValueBIOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    auto resultType = typeConverter->convertType(op.getResult().getType());
-    if (!resultType)
-      return rewriter.notifyMatchFailure(op, "unsupported result type");
-    rewriter.replaceOpWithNewOp<sim::PlusArgsValueOp>(
-        op, rewriter.getI1Type(), resultType, op.getFormatStringAttr());
-    return success();
-  }
-};
-
-struct FCloseBIOpConversion : public OpConversionPattern<FCloseBIOp> {
-  using OpConversionPattern::OpConversionPattern;
-
-  LogicalResult
-  matchAndRewrite(FCloseBIOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    rewriter.replaceOpWithNewOp<sim::SVFCloseOp>(op, adaptor.getFd());
-    return success();
-  }
-};
-
-struct FFlushBIOpConversion : public OpConversionPattern<FFlushBIOp> {
-  using OpConversionPattern::OpConversionPattern;
-
-  LogicalResult
-  matchAndRewrite(FFlushBIOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    if (!adaptor.getFd()) {
-      rewriter.replaceOpWithNewOp<sim::SVFFlushAllOp>(op);
-    } else {
-      auto stream = sim::SVChannelToOutputStreamOp::create(
-          rewriter, op.getLoc(), adaptor.getFd());
-      rewriter.replaceOpWithNewOp<sim::FlushOp>(op, stream);
-    }
     return success();
   }
 };
@@ -3119,54 +2679,6 @@ static LogicalResult convert(SeverityBIOp op, SeverityBIOp::Adaptor adaptor,
   auto message = sim::FormatStringConcatOp::create(
       rewriter, op.getLoc(), ValueRange{prefix, adaptor.getMessage()});
   rewriter.replaceOpWithNewOp<sim::PrintFormattedProcOp>(op, message);
-  return success();
-}
-
-//===----------------------------------------------------------------------===//
-// Random Builtin Conversion
-//===----------------------------------------------------------------------===//
-
-/// moore.builtin.urandom_range -> call @__circt_urandom_range(i32, i32, ptr)
-///
-/// The seed pointer is null when no seed is provided. When a seed ref is
-/// present, we probe the current value into an alloca before the call, and
-/// drive the (potentially mutated) value back after.
-static LogicalResult convert(UrandomRangeBIOp op,
-                             UrandomRangeBIOp::Adaptor adaptor,
-                             ConversionPatternRewriter &rewriter,
-                             FunctionCache &funcCache) {
-  auto loc = op.getLoc();
-  auto i32Ty = rewriter.getI32Type();
-  auto ptrTy = LLVM::LLVMPointerType::get(rewriter.getContext());
-  auto fn = funcCache.getOrCreate(rewriter, "__circt_urandom_range",
-                                  {i32Ty, i32Ty, ptrTy}, {i32Ty});
-
-  Value seedPtr;
-  if (auto seedRef = adaptor.getSeed()) {
-    // Allocate a temporary, probe the current seed value into it.
-    auto one = hw::ConstantOp::create(rewriter, loc, i32Ty, 1);
-    seedPtr = LLVM::AllocaOp::create(rewriter, loc, ptrTy, i32Ty, one);
-    auto seedVal = llhd::ProbeOp::create(rewriter, loc, seedRef);
-    LLVM::StoreOp::create(rewriter, loc, seedVal, seedPtr);
-  } else {
-    seedPtr = LLVM::ZeroOp::create(rewriter, loc, ptrTy);
-  }
-
-  auto call = func::CallOp::create(
-      rewriter, loc, fn,
-      ValueRange{adaptor.getMinval(), adaptor.getMaxval(), seedPtr});
-
-  // Drive the potentially mutated seed back with an epsilon time delta.
-  if (adaptor.getSeed()) {
-    auto newSeed = LLVM::LoadOp::create(rewriter, loc, i32Ty, seedPtr);
-    auto epsilon = llhd::ConstantTimeOp::create(
-        rewriter, loc,
-        llhd::TimeAttr::get(rewriter.getContext(), 0, "ns", 0, 1));
-    llhd::DriveOp::create(rewriter, loc, adaptor.getSeed(), newSeed, epsilon,
-                          Value{});
-  }
-
-  rewriter.replaceOp(op, call.getResult(0));
   return success();
 }
 
@@ -3228,7 +2740,7 @@ static void populateLegality(ConversionTarget &target,
   target.addDynamicallyLegalOp<scf::YieldOp, func::CallOp, func::ReturnOp,
                                UnrealizedConversionCastOp, hw::OutputOp,
                                hw::InstanceOp, debug::ArrayOp, debug::StructOp,
-                               debug::VariableOp, arith::SelectOp>(
+                               debug::VariableOp>(
       [&](Operation *op) { return converter.isLegal(op); });
 
   target.addDynamicallyLegalOp<scf::IfOp, scf::ForOp, scf::ExecuteRegionOp,
@@ -3460,13 +2972,12 @@ static void populateTypeConversion(TypeConverter &typeConverter) {
 
 static void populateOpConversion(ConversionPatternSet &patterns,
                                  TypeConverter &typeConverter,
-                                 ClassTypeCache &classCache,
-                                 FunctionCache &funcCache) {
+                                 ClassTypeCache &classCache) {
 
   patterns.add<ClassDeclOpConversion>(typeConverter, patterns.getContext(),
                                       classCache);
   patterns.add<ClassNewOpConversion>(typeConverter, patterns.getContext(),
-                                     classCache, funcCache);
+                                     classCache);
   patterns.add<ClassPropertyRefOpConversion>(typeConverter,
                                              patterns.getContext(), classCache);
 
@@ -3492,7 +3003,6 @@ static void populateOpConversion(ConversionPatternSet &patterns,
     UIntToRealOpConversion,
     IntToStringOpConversion,
     RealToIntOpConversion,
-    ConvertRealOpConversion,
 
     // Patterns of miscellaneous operations.
     ConstantOpConv,
@@ -3578,8 +3088,6 @@ static void populateOpConversion(ConversionPatternSet &patterns,
     SVModuleOpConversion,
     InstanceOpConversion,
     ProcedureOpConversion,
-    CoroutineOpConversion,
-    CallCoroutineOpConversion,
     WaitEventOpConversion,
 
     // Patterns of shifting operations.
@@ -3599,8 +3107,6 @@ static void populateOpConversion(ConversionPatternSet &patterns,
     HWInstanceOpConversion,
     ReturnOpConversion,
     CallOpConversion,
-    DPIFuncOpConversion,
-    FuncDPICallOpConversion,
     UnrealizedConversionCastConversion,
     InPlaceOpConversion<debug::ArrayOp>,
     InPlaceOpConversion<debug::StructOp>,
@@ -3613,23 +3119,11 @@ static void populateOpConversion(ConversionPatternSet &patterns,
 
     // Format strings.
     FormatLiteralOpConversion,
-    FormatStringOpConversion,
     FormatConcatOpConversion,
     FormatHierPathOpConversion,
     FormatIntOpConversion,
     FormatRealOpConversion,
-    FormatCharOpConversion,
     DisplayBIOpConversion,
-    FDisplayBIOpConversion,
-
-    // File I/O operations
-    FOpenBIOpConversion,
-    FCloseBIOpConversion,
-    FFlushBIOpConversion,
-
-    // Command line input operations
-    PlusArgsTestBIOpConversion,
-    PlusArgsValueBIOpConversion,
 
     // Dynamic string operations
     StringLenOpConversion,
@@ -3666,9 +3160,6 @@ static void populateOpConversion(ConversionPatternSet &patterns,
   patterns.add<FinishBIOp>(convert);
   patterns.add<FinishMessageBIOp>(convert);
 
-  // Random builtins
-  patterns.add<UrandomRangeBIOp>(convert, funcCache);
-
   // Timing control
   patterns.add<TimeBIOp>(convert);
   patterns.add<LogicToTimeOp>(convert);
@@ -3703,8 +3194,6 @@ void MooreToCorePass::runOnOperation() {
   MLIRContext &context = getContext();
   ModuleOp module = getOperation();
   ClassTypeCache classCache;
-  auto &symbolTable = getAnalysis<SymbolTable>();
-  FunctionCache funcCache(symbolTable);
 
   IRRewriter rewriter(module);
   (void)mlir::eraseUnreachableBlocks(rewriter, module->getRegions());
@@ -3716,7 +3205,7 @@ void MooreToCorePass::runOnOperation() {
   populateLegality(target, typeConverter);
 
   ConversionPatternSet patterns(&context, typeConverter);
-  populateOpConversion(patterns, typeConverter, classCache, funcCache);
+  populateOpConversion(patterns, typeConverter, classCache);
   mlir::cf::populateCFStructuralTypeConversionsAndLegality(typeConverter,
                                                            patterns, target);
 

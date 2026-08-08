@@ -15,49 +15,11 @@
 #include "slang/ast/SemanticFacts.h"
 #include "slang/ast/Statement.h"
 #include "slang/ast/SystemSubroutine.h"
-#include "slang/ast/expressions/MiscExpressions.h"
-#include "slang/ast/symbols/CompilationUnitSymbols.h"
-#include "slang/ast/symbols/InstanceSymbols.h"
 #include "llvm/ADT/ScopeExit.h"
-#include "llvm/Support/raw_ostream.h"
 
 using namespace mlir;
 using namespace circt;
 using namespace ImportVerilog;
-
-/// Build the message printed by the `$printtimescale` system task. If a module
-/// instance or `$unit` is passed as argument, report that scope's time scale;
-/// otherwise report the time scale of the current scope.
-static std::string buildPrintTimeScaleMessage(
-    Context &context, std::span<const slang::ast::Expression *const> args) {
-  auto timeScale = context.timeScale;
-  std::string target;
-
-  if (!args.empty()) {
-    if (auto *expr = args[0]->as_if<slang::ast::ArbitrarySymbolExpression>()) {
-      const auto *symbol = expr->symbol.get();
-      if (auto *instance = symbol->as_if<slang::ast::InstanceSymbol>()) {
-        timeScale = instance->body.getTimeScale().value_or(timeScale);
-        target = instance->getHierarchicalPath();
-      } else if (auto *unit =
-                     symbol->as_if<slang::ast::CompilationUnitSymbol>()) {
-        timeScale = unit->getTimeScale().value_or(timeScale);
-        target = "$unit";
-      } else if (symbol->kind == slang::ast::SymbolKind::Root) {
-        target = "$root";
-      }
-    }
-  }
-
-  std::string out;
-  llvm::raw_string_ostream os(out);
-  os << "Time scale";
-  if (!target.empty())
-    os << " of " << target;
-  os << " is " << timeScale.base.toString() << " / "
-     << timeScale.precision.toString() << "\n";
-  return out;
-}
 
 // NOLINTBEGIN(misc-no-recursion)
 namespace {
@@ -260,6 +222,47 @@ struct StmtVisitor {
         if (handled == true)
           return success();
       }
+
+      // According to IEEE 1800-2023 Section 21.3.3 "Formatting data to a
+      // string" the first argument of $sformat/$swrite is its output; the
+      // other arguments work like a FormatString.
+      // In Moore we only support writing to a location if it is a reference;
+      // However, Section 21.3.3 explains that the output of $sformat/$swrite
+      // is assigned as if it were cast from a string literal (Section 5.9),
+      // so this implementation casts the string to the target value.
+      if (!call->getSubroutineName().compare("$sformat") ||
+          !call->getSubroutineName().compare("$swrite")) {
+
+        // Use the first argument as the output location
+        auto *lhsExpr = call->arguments().front();
+        // Format the second and all later arguments as a string
+        auto fmtValue =
+            context.convertFormatString(call->arguments().subspan(1), loc,
+                                        moore::IntFormat::Decimal, false);
+        if (failed(fmtValue))
+          return failure();
+        // Convert the FormatString to a StringType
+        auto strValue = moore::FormatStringToStringOp::create(builder, loc,
+                                                              fmtValue.value());
+        // The Slang AST produces a `AssignmentExpression` for the first
+        // argument; the RHS of this expression is invalid though
+        // (`EmptyArgument`), so we only use the LHS of the
+        // `AssignmentExpression` and plug in the formatted string for the RHS.
+        if (auto assignExpr =
+                lhsExpr->as_if<slang::ast::AssignmentExpression>()) {
+          auto lhs = context.convertLvalueExpression(assignExpr->left());
+          if (!lhs)
+            return failure();
+
+          auto convertedValue = context.materializeConversion(
+              cast<moore::RefType>(lhs.getType()).getNestedType(), strValue,
+              false, loc);
+          moore::BlockingAssignOp::create(builder, loc, lhs, convertedValue);
+          return success();
+        } else {
+          return failure();
+        }
+      }
     }
 
     auto value = context.convertRvalueExpression(stmt.expr);
@@ -295,10 +298,6 @@ struct StmtVisitor {
         builder.getStringAttr(var.name), initial);
     context.valueSymbols.insertIntoScope(context.valueSymbols.getCurScope(),
                                          &var, varOp);
-    const auto &canonTy = var.getType().getCanonicalType();
-    if (const auto *vi = canonTy.as_if<slang::ast::VirtualInterfaceType>())
-      if (failed(context.registerVirtualInterfaceMembers(var, *vi, loc)))
-        return failure();
     return success();
   }
 
@@ -365,36 +364,6 @@ struct StmtVisitor {
   LogicalResult visit(const slang::ast::CaseStatement &caseStmt) {
     using slang::ast::AttributeSymbol;
     using slang::ast::CaseStatementCondition;
-    if (auto *caseType =
-            caseStmt.expr.as_if<slang::ast::TypeReferenceExpression>()) {
-      if (caseStmt.condition != CaseStatementCondition::Normal)
-        return mlir::emitError(loc,
-                               "unsupported type reference case condition");
-
-      const slang::ast::Statement *matchedStmt = nullptr;
-      for (const auto &item : caseStmt.items) {
-        for (const auto *expr : item.expressions) {
-          auto *itemType = expr->as_if<slang::ast::TypeReferenceExpression>();
-          if (!itemType)
-            return mlir::emitError(
-                context.convertLocation(expr->sourceRange),
-                "unsupported non-type item in type reference case statement");
-          if (itemType->targetType.isMatching(caseType->targetType)) {
-            matchedStmt = item.stmt;
-            break;
-          }
-        }
-        if (matchedStmt)
-          break;
-      }
-
-      if (matchedStmt)
-        return context.convertStatement(*matchedStmt);
-      if (caseStmt.defaultCase)
-        return context.convertStatement(*caseStmt.defaultCase);
-      return success();
-    }
-
     auto caseExpr = context.convertRvalueExpression(caseStmt.expr);
     if (!caseExpr)
       return failure();
@@ -416,47 +385,35 @@ struct StmtVisitor {
       // specified by the user, and for the evaluation to stop as soon as the
       // first matching expression is encountered.
       for (const auto *expr : item.expressions) {
+        auto value = context.convertRvalueExpression(*expr);
+        if (!value)
+          return failure();
+        auto itemLoc = value.getLoc();
+
+        // Take note if the expression is a constant.
+        auto maybeConst = value;
+        while (isa_and_nonnull<moore::ConversionOp, moore::IntToLogicOp,
+                               moore::LogicToIntOp>(maybeConst.getDefiningOp()))
+          maybeConst = maybeConst.getDefiningOp()->getOperand(0);
+        if (auto defOp = maybeConst.getDefiningOp<moore::ConstantOp>())
+          itemConsts.push_back(defOp.getValueAttr());
+
+        // Generate the appropriate equality operator.
         Value cond;
-        auto itemLoc = loc;
-
-        if (caseStmt.condition == CaseStatementCondition::Inside) {
-          // ConvertInsideCheck will check insideLhs whether it is empty or not.
-          cond = context.convertInsideCheck(
-              context.convertToSimpleBitVector(caseExpr), itemLoc, *expr);
-          if (!cond)
-            return failure();
-        } else {
-          auto value = context.convertRvalueExpression(*expr);
-          if (!value)
-            return failure();
-          itemLoc = value.getLoc();
-
-          // Take note if the expression is a constant.
-          auto maybeConst = value;
-          while (
-              isa_and_nonnull<moore::ConversionOp, moore::IntToLogicOp,
-                              moore::LogicToIntOp>(maybeConst.getDefiningOp()))
-            maybeConst = maybeConst.getDefiningOp()->getOperand(0);
-          if (auto defOp = maybeConst.getDefiningOp<moore::ConstantOp>())
-            itemConsts.push_back(defOp.getValueAttr());
-
-          // Generate the appropriate equality operator.
-          switch (caseStmt.condition) {
-          case CaseStatementCondition::Normal:
-            cond = moore::CaseEqOp::create(builder, itemLoc, caseExpr, value);
-            break;
-          case CaseStatementCondition::WildcardXOrZ:
-            cond = moore::CaseXZEqOp::create(builder, itemLoc, caseExpr, value);
-            break;
-          case CaseStatementCondition::WildcardJustZ:
-            cond = moore::CaseZEqOp::create(builder, itemLoc, caseExpr, value);
-            break;
-          case CaseStatementCondition::Inside:
-            llvm_unreachable("Inside condition has been handled already");
-            break;
-          }
+        switch (caseStmt.condition) {
+        case CaseStatementCondition::Normal:
+          cond = moore::CaseEqOp::create(builder, itemLoc, caseExpr, value);
+          break;
+        case CaseStatementCondition::WildcardXOrZ:
+          cond = moore::CaseXZEqOp::create(builder, itemLoc, caseExpr, value);
+          break;
+        case CaseStatementCondition::WildcardJustZ:
+          cond = moore::CaseZEqOp::create(builder, itemLoc, caseExpr, value);
+          break;
+        case CaseStatementCondition::Inside:
+          mlir::emitError(loc, "unsupported set membership case statement");
+          return failure();
         }
-
         if (auto ty = dyn_cast<moore::IntType>(cond.getType());
             ty && ty.getDomain() == Domain::FourValued) {
           cond = moore::LogicToIntOp::create(builder, loc, cond);
@@ -623,8 +580,7 @@ struct StmtVisitor {
 
   // Handle `repeat` loops.
   LogicalResult visit(const slang::ast::RepeatLoopStatement &stmt) {
-    auto intType = moore::IntType::getInt(context.getContext(), 32);
-    auto count = context.convertRvalueExpression(stmt.count, intType);
+    auto count = context.convertRvalueExpression(stmt.count);
     if (!count)
       return failure();
 
@@ -767,24 +723,6 @@ struct StmtVisitor {
 
   // Handle return statements.
   LogicalResult visit(const slang::ast::ReturnStatement &stmt) {
-    Operation *parentOp = builder.getInsertionBlock()
-                              ? builder.getInsertionBlock()->getParentOp()
-                              : nullptr;
-    if (!parentOp)
-      return mlir::emitError(loc) << "return statement is not within an op";
-
-    if (isa<moore::CoroutineOp, moore::ProcedureOp>(parentOp)) {
-      if (stmt.expr)
-        return mlir::emitError(loc)
-               << "unsupported `return <expr>` in a procedure or task";
-      moore::ReturnOp::create(builder, loc);
-      setTerminated();
-      return success();
-    }
-
-    if (!isa<mlir::func::FuncOp>(parentOp))
-      return mlir::emitError(loc) << "unsupported return statement context";
-
     if (stmt.expr) {
       auto expr = context.convertRvalueExpression(*stmt.expr);
       if (!expr)
@@ -936,7 +874,7 @@ struct StmtVisitor {
       return failure();
 
     // Handle assertion statements that don't have an action block.
-    if (!stmt.ifTrue || stmt.ifTrue->as_if<slang::ast::EmptyStatement>()) {
+    if (stmt.ifTrue && stmt.ifTrue->as_if<slang::ast::EmptyStatement>()) {
       switch (stmt.assertionKind) {
       case slang::ast::AssertionKind::Assert:
         verif::AssertOp::create(builder, loc, property, enable, StringAttr{});
@@ -1002,13 +940,6 @@ struct StmtVisitor {
     auto nameId = subroutine.knownNameId;
     auto args = expr.arguments();
 
-    // The `$cast` system call is handled by `Context::convertSystemCall` in the
-    // `Expressions.cpp` file. Skip it is order to avoid visiting the
-    // `EmptyArgument` node.
-    if (nameId == ksn::Cast) {
-      return false;
-    }
-
     // Simulation Control Tasks
 
     if (nameId == ksn::Stop) {
@@ -1032,23 +963,10 @@ struct StmtVisitor {
       return true;
     }
 
-    // Timescale tasks (`$printtimescale`)
-
-    if (nameId == ksn::PrintTimeScale) {
-      auto message = moore::FormatLiteralOp::create(
-          builder, loc, buildPrintTimeScaleMessage(context, args));
-      moore::DisplayBIOp::create(builder, loc, message);
-      return true;
-    }
-
-    // Display and Write Tasks (`$display[boh]?` or `$write[boh]?` or
-    // `$fdisplay[boh]?` or `$fwrite[boh]?` or `$swrite[boh]` or `$sformat`)
+    // Display and Write Tasks (`$display[boh]?` or `$write[boh]?`)
 
     using moore::IntFormat;
     bool isDisplay = false;
-    bool isFDisplay = false;
-    bool isSWrite = false;
-    bool isSFormat = false;
     bool appendNewline = false;
     IntFormat defaultFormat = IntFormat::Decimal;
     switch (nameId) {
@@ -1086,58 +1004,6 @@ struct StmtVisitor {
       isDisplay = true;
       defaultFormat = IntFormat::HexLower;
       break;
-    case ksn::FDisplay:
-      isFDisplay = true;
-      appendNewline = true;
-      break;
-    case ksn::FDisplayB:
-      isFDisplay = true;
-      appendNewline = true;
-      defaultFormat = IntFormat::Binary;
-      break;
-    case ksn::FDisplayO:
-      isFDisplay = true;
-      appendNewline = true;
-      defaultFormat = IntFormat::Octal;
-      break;
-    case ksn::FDisplayH:
-      isFDisplay = true;
-      appendNewline = true;
-      defaultFormat = IntFormat::HexLower;
-      break;
-    case ksn::FWrite:
-      isFDisplay = true;
-      break;
-    case ksn::FWriteB:
-      isFDisplay = true;
-      defaultFormat = IntFormat::Binary;
-      break;
-    case ksn::FWriteO:
-      isFDisplay = true;
-      defaultFormat = IntFormat::Octal;
-      break;
-    case ksn::FWriteH:
-      isFDisplay = true;
-      defaultFormat = IntFormat::HexLower;
-      break;
-    case ksn::SFormat:
-      isSFormat = true;
-      break;
-    case ksn::SWrite:
-      isSWrite = true;
-      break;
-    case ksn::SWriteB:
-      isSWrite = true;
-      defaultFormat = IntFormat::Binary;
-      break;
-    case ksn::SWriteO:
-      isSWrite = true;
-      defaultFormat = IntFormat::Octal;
-      break;
-    case ksn::SWriteH:
-      isSWrite = true;
-      defaultFormat = IntFormat::HexLower;
-      break;
     default:
       break;
     }
@@ -1151,62 +1017,6 @@ struct StmtVisitor {
         return true;
       moore::DisplayBIOp::create(builder, loc, *message);
       return true;
-    }
-
-    if (isFDisplay) {
-      assert(!args.empty() && "$fdisplay/$fwrite takes at least 1 argument");
-
-      auto fd = context.convertRvalueExpression(
-          *args[0], moore::IntType::getInt(builder.getContext(), 32));
-      if (!fd)
-        return failure();
-      args = args.subspan(1);
-
-      auto message =
-          context.convertFormatString(args, loc, defaultFormat, appendNewline);
-      if (failed(message))
-        return failure();
-      if (*message == Value{})
-        return true;
-      moore::FDisplayBIOp::create(builder, loc, fd, *message);
-      return true;
-    }
-
-    // According to IEEE 1800-2023 Section 21.3.3 "Formatting data to a
-    // string" the first argument of $sformat/$swrite is its output; the
-    // other arguments work like a FormatString.
-    // In Moore we only support writing to a location if it is a reference;
-    // However, Section 21.3.3 explains that the output of $sformat/$swrite
-    // is assigned as if it were cast from a string literal (Section 5.9),
-    // so this implementation casts the string to the target value.
-    if (isSWrite || isSFormat) {
-      if (isSFormat && args.size() < 2)
-        return emitError(loc) << "$sformat requires at least 2 arguments";
-      if (isSWrite && args.size() < 1)
-        return emitError(loc) << "$swrite requires at least 1 argument";
-
-      auto fmtValue =
-          context.convertFormatString(args.subspan(1), loc, defaultFormat,
-                                      /*appendNewline=*/false);
-      if (failed(fmtValue))
-        return failure();
-      if (*fmtValue == Value{})
-        return true;
-      auto strValue =
-          moore::FormatStringToStringOp::create(builder, loc, *fmtValue);
-      auto *lhsExpr = args[0];
-      if (auto *assignExpr =
-              lhsExpr->as_if<slang::ast::AssignmentExpression>()) {
-        auto lhs = context.convertLvalueExpression(assignExpr->left());
-        if (!lhs)
-          return failure();
-        auto convertedValue = context.materializeConversion(
-            cast<moore::RefType>(lhs.getType()).getNestedType(), strValue,
-            false, loc);
-        moore::BlockingAssignOp::create(builder, loc, lhs, convertedValue);
-        return true;
-      }
-      return failure();
     }
 
     // Severity Tasks
@@ -1248,84 +1058,8 @@ struct StmtVisitor {
       return true;
     }
 
-    // File I/O Tasks
-
-    if (nameId == ksn::FClose) {
-      assert(args.size() == 1 && "$fclose takes 1 argument");
-      auto fd = context.convertRvalueExpression(
-          *args[0], moore::IntType::getInt(builder.getContext(), 32));
-      if (!fd)
-        return failure();
-      moore::FCloseBIOp::create(builder, loc, fd);
-      return true;
-    }
-
-    if (nameId == ksn::FFlush) {
-      assert(args.size() <= 1 && "$fflush takes at most 1 argument");
-      Value fd;
-      if (args.size() == 1) {
-        fd = context.convertRvalueExpression(
-            *args[0], moore::IntType::getInt(builder.getContext(), 32));
-        if (!fd)
-          return failure();
-      }
-      moore::FFlushBIOp::create(builder, loc, fd);
-      return true;
-    }
-
-    // String Tasks
-    if (args.size() >= 1 && args[0]->type->isString()) {
-      auto str = context.convertLvalueExpression(*args[0]);
-
-      if (nameId == ksn::Putc) {
-        // Slang already checks the arity of string tasks.
-        assert(args.size() == 3 && "`putc` takes 3 arguments");
-        auto index = context.convertRvalueExpression(*args[1]);
-        auto character = context.convertRvalueExpression(*args[2]);
-        moore::StringPutOp::create(builder, loc, str, index, character);
-        return true;
-      }
-
-      if (nameId == ksn::IToA || nameId == ksn::HexToA ||
-          nameId == ksn::OctToA || nameId == ksn::BinToA) {
-        // Slang already checks the arity of string tasks.
-        assert(args.size() == 2 && "`itoa/hex/oct/bin` takes 2 arguments");
-        auto integerType = moore::IntType::getLogic(builder.getContext(), 32);
-        auto input = context.convertRvalueExpression(*args[1], integerType);
-
-        switch (nameId) {
-        case ksn::IToA:
-          moore::StringItoaOp::create(builder, loc, str, input);
-          break;
-        case ksn::HexToA:
-          moore::StringHextoaOp::create(builder, loc, str, input);
-          break;
-        case ksn::OctToA:
-          moore::StringOcttoaOp::create(builder, loc, str, input);
-          break;
-        case ksn::BinToA:
-          moore::StringBintoaOp::create(builder, loc, str, input);
-          break;
-        default:
-          llvm_unreachable("unexpected ASCII integer to string conversion");
-          return false;
-        }
-        return true;
-      }
-
-      if (nameId == ksn::RealToA) {
-        // Slang already checks the arity of string tasks.
-        assert(args.size() == 2 && "`realtoa` takes 2 arguments");
-        auto realType =
-            moore::RealType::get(context.getContext(), moore::RealWidth::f64);
-        auto input = context.convertRvalueExpression(*args[1], realType);
-        moore::StringRealtoaOp::create(builder, loc, str, input);
-        return true;
-      }
-      return false;
-    }
-
     // Queue Tasks
+
     if (args.size() >= 1 && args[0]->type->isQueue()) {
       auto queue = context.convertLvalueExpression(*args[0]);
 
@@ -1378,40 +1112,6 @@ struct StmtVisitor {
           return true;
         }
       }
-    }
-
-    // Monitor enable/disable tasks (`$monitoron`, `$monitoroff`)
-    if (nameId == ksn::MonitorOn || nameId == ksn::MonitorOff) {
-      context.ensureMonitorGlobals();
-      bool enable = (nameId == ksn::MonitorOn);
-      auto enabledRef = moore::GetGlobalVariableOp::create(
-          context.builder, loc, context.monitorEnabledGlobal);
-      auto value = moore::ConstantOp::create(context.builder, loc,
-                                             moore::Domain::TwoValued, enable);
-      moore::BlockingAssignOp::create(context.builder, loc, enabledRef, value);
-      return true;
-    }
-
-    // Monitor tasks (`$monitor[boh]?`)
-    if (nameId == ksn::Monitor || nameId == ksn::MonitorB ||
-        nameId == ksn::MonitorO || nameId == ksn::MonitorH) {
-      context.ensureMonitorGlobals();
-
-      // Allocate a unique ID for this monitor.
-      unsigned myId = context.nextMonitorId++;
-
-      // Emit code to activate this monitor by setting the active_id global.
-      auto i32Type = moore::IntType::getInt(context.getContext(), 32);
-      auto idConst =
-          moore::ConstantOp::create(context.builder, loc, i32Type, myId);
-      auto activeRef = moore::GetGlobalVariableOp::create(
-          context.builder, loc, context.monitorActiveIdGlobal);
-      moore::BlockingAssignOp::create(context.builder, loc, activeRef, idConst);
-
-      // Queue this monitor for processing at module level.
-      context.pendingMonitors.push_back({myId, loc, &expr});
-
-      return true;
     }
 
     // Give up on any other system tasks. These will be tried again as an
@@ -1504,124 +1204,3 @@ LogicalResult Context::convertStatement(const slang::ast::Statement &stmt) {
   return stmt.visit(StmtVisitor(*this, loc));
 }
 // NOLINTEND(misc-no-recursion)
-
-//===----------------------------------------------------------------------===//
-// Monitor support
-//===----------------------------------------------------------------------===//
-
-void Context::ensureMonitorGlobals() {
-  // If globals already exist, nothing to do.
-  if (monitorActiveIdGlobal && monitorEnabledGlobal)
-    return;
-
-  // Save current builder position and insert at the start of the module.
-  OpBuilder::InsertionGuard guard(builder);
-  builder.setInsertionPointToStart(intoModuleOp.getBody());
-
-  auto loc = intoModuleOp.getLoc();
-  auto i32Type = moore::IntType::getInt(getContext(), 32);
-  auto i1Type = moore::IntType::getInt(getContext(), 1);
-
-  // Create "active_id" global variable. Index 0 indicates no monitor
-  // is active.
-  monitorActiveIdGlobal = moore::GlobalVariableOp::create(
-      builder, loc, "__monitor_active_id", i32Type);
-  {
-    OpBuilder::InsertionGuard initGuard(builder);
-    builder.setInsertionPointToStart(
-        &monitorActiveIdGlobal.getInitRegion().emplaceBlock());
-    auto zero = moore::ConstantOp::create(builder, loc, i32Type, 0);
-    moore::YieldOp::create(builder, loc, zero);
-  }
-  symbolTable.insert(monitorActiveIdGlobal);
-
-  // Create "enabled" global variable.
-  monitorEnabledGlobal = moore::GlobalVariableOp::create(
-      builder, loc, "__monitor_enabled", i1Type);
-  {
-    OpBuilder::InsertionGuard initGuard(builder);
-    builder.setInsertionPointToStart(
-        &monitorEnabledGlobal.getInitRegion().emplaceBlock());
-    auto trueVal =
-        moore::ConstantOp::create(builder, loc, moore::Domain::TwoValued, true);
-    moore::YieldOp::create(builder, loc, trueVal);
-  }
-  symbolTable.insert(monitorEnabledGlobal);
-}
-
-LogicalResult Context::flushPendingMonitors() {
-  using ksn = slang::parsing::KnownSystemName;
-  for (auto &pending : pendingMonitors) {
-    auto &call = *pending.call;
-    auto loc = pending.loc;
-
-    // Extract the SystemCallInfo from the call's subroutine variant.
-    auto &info =
-        std::get<slang::ast::CallExpression::SystemCallInfo>(call.subroutine);
-    auto nameId = info.subroutine->knownNameId;
-
-    // Determine the default format based on the system call name.
-    auto defaultFormat = moore::IntFormat::Decimal;
-    switch (nameId) {
-    case ksn::MonitorB:
-      defaultFormat = moore::IntFormat::Binary;
-      break;
-    case ksn::MonitorO:
-      defaultFormat = moore::IntFormat::Octal;
-      break;
-    case ksn::MonitorH:
-      defaultFormat = moore::IntFormat::HexLower;
-      break;
-    default:
-      break;
-    }
-
-    // Create an always_comb procedure for this monitor. This will implement the
-    // semantics of printing an updated message whenever one of the input
-    // signals changes.
-    auto alwaysProc = moore::ProcedureOp::create(
-        builder, loc, moore::ProcedureKind::AlwaysComb);
-    OpBuilder::InsertionGuard guard(builder);
-    builder.setInsertionPointToStart(&alwaysProc.getBody().emplaceBlock());
-
-    // Convert the format string and arguments.
-    auto message = convertFormatString(call.arguments(), loc, defaultFormat,
-                                       /*appendNewline=*/true);
-    if (failed(message))
-      return failure();
-
-    // Check if this monitor is active and enabled.
-    auto i32Type = moore::IntType::getInt(getContext(), 32);
-    auto myId = moore::ConstantOp::create(builder, loc, i32Type, pending.id);
-    Value isActive =
-        moore::GetGlobalVariableOp::create(builder, loc, monitorActiveIdGlobal);
-    isActive = moore::ReadOp::create(builder, loc, isActive);
-    isActive = moore::EqOp::create(builder, loc, isActive, myId);
-
-    Value enabled =
-        moore::GetGlobalVariableOp::create(builder, loc, monitorEnabledGlobal);
-    enabled = moore::ReadOp::create(builder, loc, enabled);
-    enabled = moore::AndOp::create(builder, loc, isActive, enabled);
-    enabled = moore::ToBuiltinIntOp::create(builder, loc, enabled);
-
-    // Branch to a print or skip block based on whether the monitor is enabled
-    // or not.
-    auto &printBlock = alwaysProc.getBody().emplaceBlock();
-    auto &skipBlock = alwaysProc.getBody().emplaceBlock();
-    cf::CondBranchOp::create(builder, loc, enabled, &printBlock, &skipBlock);
-
-    // Display the formatted message if one was created, and the monitor is
-    // enabled.
-    builder.setInsertionPointToStart(&printBlock);
-    if (*message)
-      moore::DisplayBIOp::create(builder, loc, *message);
-    moore::ReturnOp::create(builder, loc);
-
-    // Otherwise just return.
-    builder.setInsertionPointToStart(&skipBlock);
-    moore::ReturnOp::create(builder, loc);
-  }
-
-  pendingMonitors.clear();
-  return success();
-}

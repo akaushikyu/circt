@@ -116,8 +116,6 @@ bool foldMuxChainWithComparison(
 // signBit = comb.extract(baseValue, width-1, 1)
 // ext = comb.replicate(signBit, width-baseWidth)
 // sext = comb.concat(ext, baseValue)
-// Also matches the single bit case:
-// sext = comb.concat(signBit, baseValue)
 template <typename SubType>
 struct SextMatcher {
   SubType lhs;
@@ -139,11 +137,10 @@ struct SextMatcher {
 
     // Check if signBits is a replicate operation
     auto replicateOp = dyn_cast_or_null<ReplicateOp>(signBits.getDefiningOp());
-    Value signBit = replicateOp ? replicateOp.getInput() : signBits;
-
-    // For the single bit case, check the bitwidth of signBit == 1
-    if (signBit.getType().getIntOrFloatBitWidth() != 1)
+    if (!replicateOp)
       return false;
+
+    Value signBit = replicateOp.getInput();
 
     // Check if signBit is the msb of baseValue
     auto extractOp = dyn_cast_or_null<ExtractOp>(signBit.getDefiningOp());
@@ -151,7 +148,8 @@ struct SextMatcher {
       return false;
 
     if ((extractOp.getInput() != baseValue) ||
-        (extractOp.getLowBit() != baseWidth - 1))
+        (extractOp.getLowBit() != baseWidth - 1) ||
+        (extractOp.getType().getIntOrFloatBitWidth() != 1))
       return false;
 
     // Match the base unextended value against the sub-matcher

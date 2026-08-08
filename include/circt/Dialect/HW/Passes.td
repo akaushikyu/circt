@@ -27,27 +27,6 @@ def PrintHWModuleGraph : Pass<"hw-print-module-graph", "mlir::ModuleOp"> {
   ];
 }
 
-def IMDeadCodeElim : Pass<"hw-imdce", "mlir::ModuleOp"> {
-  let summary = "Intermodule dead code elimination";
-  let description = [{
-    This pass performs inter-module liveness analysis and deletes dead code
-    aggressively. A value is considered as alive if it is connected to a port
-    of public modules or a value with a symbol. We first populate alive values
-    into a set, and then propagate the liveness by looking at their dataflow.
-  }];
-  let statistics = [Statistic<"numErasedOps", "num-erased-ops",
-                              "Number of operations erased">,
-                    Statistic<"numErasedModules", "num-erased-modules",
-                              "Number of modules erased">,
-                    Statistic<"numRemovedPorts", "num-removed-ports",
-                              "Number of ports erased">,
-  ];
-  let options = [Option<
-                     "printLiveness", "print-liveness", "bool", "false",
-                     "Print liveness analysis results before transformations.">,
-  ];
-}
-
 def FlattenIO : Pass<"hw-flatten-io", "mlir::ModuleOp"> {
   let summary = "Flattens hw::Structure typed in- and output ports.";
   let options = [
@@ -107,6 +86,17 @@ def HWSpecialize : Pass<"hw-specialize", "mlir::ModuleOp"> {
 
 def VerifyInnerRefNamespace : Pass<"hw-verify-irn"> {
   let summary = "Verify InnerRefNamespaceLike operations, if not self-verifying.";
+}
+
+/**
+ * Tutorial Pass, doesn't do anything interesting
+ */
+def FooWires : Pass<"hw-foo-wires", "hw::HWModuleOp"> {
+  let summary = "Change all wires' name to foo_<n>.";
+  let description = [{
+    Very basic pass that numbers all of the wires in a given module.
+    The wires' names are then all converte to foo_<that number>.
+  }];
 }
 
 def HWAggregateToComb : Pass<"hw-aggregate-to-comb", "hw::HWModuleOp"> {

@@ -16,7 +16,6 @@
 #include "circt/Dialect/HW/HWDialect.h"
 #include "circt/Dialect/LTL/LTLDialect.h"
 #include "circt/Dialect/OM/OMDialect.h"
-#include "circt/Dialect/OM/OMOps.h"
 #include "circt/Dialect/OM/OMPasses.h"
 #include "circt/Dialect/SV/SVDialect.h"
 #include "circt/Dialect/Verif/VerifDialect.h"
@@ -55,11 +54,6 @@ static cl::opt<bool>
     emitBytecode("emit-bytecode",
                  cl::desc("Emit bytecode when generating MLIR output"),
                  cl::init(false), cl::cat(mainCategory));
-
-static cl::opt<bool> disableElaboration(
-    "disable-elaboration",
-    cl::desc("Disable elaboration of all public OM classes after linking"),
-    cl::init(false), cl::cat(mainCategory));
 
 /// Check output stream before writing bytecode to it.
 /// Warn and return true if output is known to be displayed.
@@ -163,13 +157,7 @@ static LogicalResult executeOMLinker(MLIRContext &context) {
     builder.insert(in.mod.get());
 
   // Construct a linker pipeline.
-  pm.addPass(om::createLinkModules());
-  if (!disableElaboration) {
-    om::ElaborateObjectOptions options;
-    options.allPublicClasses = true;
-    options.allowUnevaluated = true;
-    pm.addPass(om::createElaborateObject(options));
-  }
+  pm.addPass(om::createOMLinkModulesPass());
   if (failed(pm.run(module.get())))
     return failure();
 

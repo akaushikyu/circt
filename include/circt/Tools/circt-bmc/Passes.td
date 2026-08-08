@@ -38,8 +38,7 @@ def LowerToBMC : Pass<"lower-to-bmc", "::mlir::ModuleOp"> {
 
   let dependentDialects = [
     "mlir::func::FuncDialect", "mlir::LLVM::LLVMDialect",
-    "circt::verif::VerifDialect", "circt::comb::CombDialect",
-    "circt::debug::DebugDialect"
+    "circt::verif::VerifDialect", "circt::comb::CombDialect"
   ];
 }
 
@@ -51,17 +50,5 @@ def ExternalizeRegisters : Pass<"externalize-registers", "::mlir::ModuleOp"> {
   ];
 }
 
-def MaterializeDebugVariables : Pass<"materialize-debug-variables", "::mlir::ModuleOp"> {
-  let summary = "Materializes debug anchors for module inputs and registers";
-  let description = [{
-    Creates `dbg.variable` anchors for module inputs and register
-    results that do not yet have one.
-  }];
-
-  let dependentDialects = [
-    "circt::debug::DebugDialect", "circt::seq::SeqDialect",
-    "circt::hw::HWDialect"
-  ];
-}
-
 #endif // CIRCT_TOOLS_CIRCT_BMC_PASSES_TD
+

@@ -10,7 +10,14 @@ import executing
 # PyCDE-internal modules where auto-naming from variable names IS desired.
 # Code in any other pycde.* module is considered "internal plumbing" and will
 # be skipped when skip_pycde is True.
-_PYCDE_AUTONAME_MODULES = frozenset(("pycde.constructs",))
+_PYCDE_AUTONAME_MODULES = frozenset((
+    "pycde.constructs",
+    "pycde.bsp",
+    "pycde.bsp.common",
+    "pycde.bsp.cosim",
+    "pycde.bsp.dma",
+    "pycde.bsp.xrt",
+))
 
 
 def _is_pycde_internal(module_name: str) -> bool:
@@ -49,7 +56,8 @@ def get_var_name(depth=1, skip_pycde=False):
   node and inspects the enclosing statement for an assignment target.
 
   If skip_pycde is True, returns None when the target frame belongs to pycde
-  internal code (but NOT for modules on the allowlist like pycde.constructs).
+  internal code (but NOT for modules on the allowlist like pycde.constructs
+  and pycde.bsp.*).
 
   Silently returns None on any failure."""
   try:

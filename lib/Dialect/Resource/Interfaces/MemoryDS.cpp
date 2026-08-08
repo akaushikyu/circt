@@ -11,6 +11,8 @@ llvm::DenseMap<StringRef, PartitionSpec>
 getPartitionSpecs(Operation* op) {
   
   llvm::DenseMap<StringRef, PartitionSpec> specs;
+
+  
   if (!op)
     return specs;
 

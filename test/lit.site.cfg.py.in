@@ -12,7 +12,7 @@ config.llvm_shlib_dir = "@SHLIBDIR@"
 config.llvm_shlib_ext = "@SHLIBEXT@"
 config.llvm_exe_ext = "@EXEEXT@"
 config.lit_tools_dir = "@LLVM_LIT_TOOLS_DIR@"
-config.python_executable = "@Python3_EXECUTABLE@"
+config.python_executable = "@PYTHON_EXECUTABLE@"
 config.gold_executable = "@GOLD_EXECUTABLE@"
 config.ld64_executable = "@LD64_EXECUTABLE@"
 config.enable_shared = @ENABLE_SHARED@
@@ -39,7 +39,6 @@ config.verilator_path = "@VERILATOR_PATH@"
 config.zlib = "@HAVE_ZLIB@"
 config.scheduling_or_tools = "@SCHEDULING_OR_TOOLS@"
 config.slang_frontend_enabled = @CIRCT_SLANG_FRONTEND_ENABLED@
-config.libfst_enabled = @CIRCT_LIBFST_ENABLED@
 
 # Support substitution of the tools_dir with user parameters. This is
 # used when we can't determine the tool dir at configuration time.

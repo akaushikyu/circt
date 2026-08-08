@@ -11,29 +11,23 @@
 using namespace circt;
 using namespace ImportVerilog;
 
-/// Traverse the instance body.
 namespace {
-struct InstBodyVisitor
-    : public slang::ast::ASTVisitor<InstBodyVisitor,
-                                    /*VisitStatements=*/true,
-                                    /*VisitExpressions=*/true> {
-  InstBodyVisitor(
-      Context &context, const slang::ast::Symbol &outermostModule,
-      DenseSet<const slang::ast::InstanceBodySymbol *> &visitedBodies)
-      : context(context), outermostModule(outermostModule),
-        visitedBodies(visitedBodies) {}
+struct HierPathValueExprVisitor {
+  Context &context;
+  Location loc;
+  OpBuilder &builder;
 
-  void handle(const slang::ast::InstanceSymbol &instNode) {
-    traverseInstanceBody(context, instNode, visitedBodies);
-    // Also visit port connection expressions to find hier refs used as
-    // port arguments (e.g., .in_val(b_inst.local_val)).
-    for (auto *conn : instNode.getPortConnections())
-      if (auto *connExpr = conn->getExpression())
-        connExpr->visit(*this);
-  }
+  // Such as `sub.a`, the `sub` is the outermost module for the hierarchical
+  // variable `a`.
+  const slang::ast::Symbol &outermostModule;
 
-  void handle(const slang::ast::HierarchicalValueExpression &expr) {
-    auto builder = context.builder;
+  HierPathValueExprVisitor(Context &context, Location loc,
+                           const slang::ast::Symbol &outermostModule)
+      : context(context), loc(loc), builder(context.builder),
+        outermostModule(outermostModule) {}
+
+  // Handle hierarchical values
+  LogicalResult visit(const slang::ast::HierarchicalValueExpression &expr) {
     auto *currentInstBody =
         expr.symbol.getParentScope()->getContainingInstance();
     auto *outermostInstBody =
@@ -42,15 +36,7 @@ struct InstBodyVisitor
     // Like module Foo; int a; Foo.a; endmodule.
     // Ignore "Foo.a" invoked by this module itself.
     if (currentInstBody == outermostInstBody)
-      return;
-
-    // References resolved via an interface port (e.g. `bus.member` where `bus`
-    // is an `Iface.modport` port) are not cross-instance hierarchical accesses;
-    // they are handled by the interface port lowering machinery in
-    // Structure.cpp. Recording them here would add a spurious hierPath input
-    // to the module signature that nothing fills in at the instance site.
-    if (expr.ref.isViaIfacePort())
-      return;
+      return success();
 
     auto hierName = builder.getStringAttr(expr.symbol.name);
     const slang::ast::InstanceBodySymbol *parentInstBody = nullptr;
@@ -58,29 +44,17 @@ struct InstBodyVisitor
     // Collect hierarchical names that are added to the port list.
     std::function<void(const slang::ast::InstanceBodySymbol *, bool)>
         collectHierarchicalPaths = [&](auto sym, bool isUpward) {
-          // Check if this path already exists globally for this module
-          HierPathInfo *existing = nullptr;
-          if (context.hierPaths.contains(sym)) {
-            for (auto &path : context.hierPaths[sym]) {
-              if (path.hierName == hierName) {
-                existing = &path;
-                break;
-              }
-            }
-          }
-
-          if (!existing) {
+          // Here we use "sameHierPaths" to avoid collecting the repeat
+          // hierarchical names on the same path.
+          if (!context.sameHierPaths.contains(hierName) ||
+              !context.hierPaths.contains(sym)) {
             context.hierPaths[sym].push_back(
                 HierPathInfo{hierName,
                              {},
                              isUpward ? slang::ast::ArgumentDirection::Out
                                       : slang::ast::ArgumentDirection::In,
-                             {&expr.symbol}});
-          } else {
-            // The path already exists, but this may be a different instance
-            // resolving to a different symbol object. Add as an alias.
-            if (!llvm::is_contained(existing->valueSyms, &expr.symbol))
-              existing->valueSyms.push_back(&expr.symbol);
+                             &expr.symbol});
+            context.sameHierPaths.insert(hierName);
           }
 
           // Iterate up from the current instance body symbol until meeting the
@@ -111,38 +85,107 @@ struct InstBodyVisitor
                          ->getContainingInstance();
       if (tempInstBody == outermostInstBody) {
         collectHierarchicalPaths(currentInstBody, true);
-        return;
+        return success();
       }
     }
 
     hierName = builder.getStringAttr(currentInstBody->parentInstance->name +
                                      llvm::Twine(".") + hierName.getValue());
     collectHierarchicalPaths(outermostInstBody, false);
+    return success();
   }
 
-  Context &context;
-  const slang::ast::Symbol &outermostModule;
-  DenseSet<const slang::ast::InstanceBodySymbol *> &visitedBodies;
+  /// TODO:Skip all others.
+  /// But we should output a warning to display which symbol had been skipped.
+  /// However, to ensure we can test smoothly, we didn't do that.
+  template <typename T>
+  LogicalResult visit(T &&node) {
+    return success();
+  }
 
-  static void traverseInstanceBody(
-      Context &context, const slang::ast::InstanceSymbol &symbol,
-      DenseSet<const slang::ast::InstanceBodySymbol *> &visitedBodies) {
-    const slang::ast::InstanceBodySymbol *body = getCanonicalBody(symbol);
-    if (visitedBodies.insert(body).second) {
-      for (auto &member : body->members()) {
-        auto &outermostModule = member.getParentScope()->asSymbol();
-        InstBodyVisitor visitor(context, outermostModule, visitedBodies);
-        member.visit(visitor);
-      }
-    }
+  LogicalResult visitInvalid(const slang::ast::Expression &expr) {
+    mlir::emitError(loc, "invalid expression");
+    return failure();
   }
 };
-
 } // namespace
 
-void Context::traverseInstanceBody(const slang::ast::InstanceSymbol &symbol) {
-  // Top-level entry point: create a fresh visitedBodies set to prevent
-  // infinite recursion and to skip identical module bodies.
-  DenseSet<const slang::ast::InstanceBodySymbol *> visitedBodies;
-  InstBodyVisitor::traverseInstanceBody(*this, symbol, visitedBodies);
+LogicalResult
+Context::collectHierarchicalValues(const slang::ast::Expression &expr,
+                                   const slang::ast::Symbol &outermostModule) {
+  auto loc = convertLocation(expr.sourceRange);
+  return expr.visit(HierPathValueExprVisitor(*this, loc, outermostModule));
+}
+
+/// Traverse the instance body.
+namespace {
+struct InstBodyVisitor {
+  Context &context;
+  Location loc;
+
+  InstBodyVisitor(Context &context, Location loc)
+      : context(context), loc(loc) {}
+
+  // Handle instances.
+  LogicalResult visit(const slang::ast::InstanceSymbol &instNode) {
+    return context.traverseInstanceBody(instNode.body);
+  }
+
+  // Handle variables.
+  LogicalResult visit(const slang::ast::VariableSymbol &varNode) {
+    auto &outermostModule = varNode.getParentScope()->asSymbol();
+    if (const auto *init = varNode.getInitializer())
+      if (failed(context.collectHierarchicalValues(*init, outermostModule)))
+        return failure();
+    return success();
+  }
+
+  // Handle nets.
+  LogicalResult visit(const slang::ast::NetSymbol &netNode) {
+    auto &outermostModule = netNode.getParentScope()->asSymbol();
+    if (const auto *init = netNode.getInitializer())
+      if (failed(context.collectHierarchicalValues(*init, outermostModule)))
+        return failure();
+    return success();
+  }
+
+  // Handle continuous assignments.
+  LogicalResult visit(const slang::ast::ContinuousAssignSymbol &assignNode) {
+    const auto &expr =
+        assignNode.getAssignment().as<slang::ast::AssignmentExpression>();
+
+    // Such as `sub.a`, the `sub` is the outermost module for the hierarchical
+    // variable `a`.
+    auto &outermostModule = assignNode.getParentScope()->asSymbol();
+    if (expr.left().hasHierarchicalReference())
+      if (failed(
+              context.collectHierarchicalValues(expr.left(), outermostModule)))
+        return failure();
+
+    if (expr.right().hasHierarchicalReference())
+      if (failed(
+              context.collectHierarchicalValues(expr.right(), outermostModule)))
+        return failure();
+
+    return success();
+  }
+
+  /// TODO:Skip all others.
+  /// But we should output a warning to display which symbol had been skipped.
+  /// However, to ensure we can test smoothly, we didn't do that.
+  template <typename T>
+  LogicalResult visit(T &&node) {
+    return success();
+  }
+};
+} // namespace
+
+LogicalResult Context::traverseInstanceBody(const slang::ast::Symbol &symbol) {
+  if (auto *instBodySymbol = symbol.as_if<slang::ast::InstanceBodySymbol>())
+    for (auto &member : instBodySymbol->members()) {
+      auto loc = convertLocation(member.location);
+      if (failed(member.visit(InstBodyVisitor(*this, loc))))
+        return failure();
+    }
+  return success();
 }

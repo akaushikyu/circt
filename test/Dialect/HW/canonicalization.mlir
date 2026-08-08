@@ -1142,25 +1142,6 @@ hw.module @struct_create1(in %in: !hw.struct<a: i2, b: i2, c: i2>, in %in1: i2, 
   hw.output %1, %2, %3 : !hw.struct<a: i2, b: i2, c: i2>, !hw.struct<a: i2, b: i2, d: i2>, !hw.struct<a: i2, b: i2, c: i2>
 }
 
-// CHECK-LABEL: hw.module @struct_create_extract_fold
-hw.module @struct_create_extract_fold(in %in_a: !hw.struct<a: i2, b: i2, c: i2>, in %in_b: !hw.struct<a: i2, b: i2, c: i2>, out out_a: !hw.struct<a: i2, b: i2, c: i2>, out out_b: !hw.struct<a: i2, b: i2, c: i2>, out out_c: !hw.struct<a: i2, b: i2, c: i2>) {
-  // One of the three StructCreateOps should be folded
-  // CHECK-COUNT-2: hw.struct_create
-  // CHECK-NOT:     hw.struct_create
-  %a = hw.struct_extract %in_a["a"] : !hw.struct<a: i2, b: i2, c: i2>
-  %b = hw.struct_extract %in_a["b"] : !hw.struct<a: i2, b: i2, c: i2>
-  %c = hw.struct_extract %in_a["c"] : !hw.struct<a: i2, b: i2, c: i2>
-  // Fold
-  %folded = hw.struct_create (%a, %b, %c) : !hw.struct<a: i2, b: i2, c: i2>
-  // Don't fold: Different field order
-  %nofold0 = hw.struct_create (%a, %c, %b) : !hw.struct<a: i2, b: i2, c: i2>
-  // Don't fold: Different inputs
-  %c_other = hw.struct_extract %in_b["c"] : !hw.struct<a: i2, b: i2, c: i2>
-  %nofold1 = hw.struct_create (%a, %b, %c_other) : !hw.struct<a: i2, b: i2, c: i2>
-  // CHECK: hw.output %in_a
-  hw.output %folded, %nofold0, %nofold1 : !hw.struct<a: i2, b: i2, c: i2>, !hw.struct<a: i2, b: i2, c: i2>, !hw.struct<a: i2, b: i2, c: i2>
-}
-
 // CHECK-LABEL: hw.module @struct_extract1
 // CHECK-NEXT:    hw.output %a0 : i3
 hw.module @struct_extract1(in %a0: i3, in %a1: i5, out r0: i3) {
@@ -1916,60 +1897,4 @@ hw.module @parameter<in: i8> (in %a: i8, out o1: !hw.array<1xi8>, out o2: !hw.st
   %0 = hw.array_create %param : i8
   %1 = hw.struct_create (%param) : !hw.struct<foo: i8>
   hw.output %0, %1 : !hw.array<1xi8>, !hw.struct<foo: i8>
-}
-
-// Fold union_extract when it undoes a union_create for the same field;
-// do NOT fold when the fields have different types (different bit widths).
-// CHECK-LABEL: hw.module @union_extract_create
-// CHECK-NEXT:    %[[U:.+]] = hw.union_create "a", %in
-// CHECK-NEXT:    %[[R1:.+]] = hw.union_extract %[[U]]["b"]
-// CHECK-NEXT:    hw.output %in, %[[R1]] : i8, i4
-hw.module @union_extract_create(in %in: i8, out r0: i8, out r1: i4) {
-  %u = hw.union_create "a", %in : !hw.union<a: i8, b: i4>
-  %r0 = hw.union_extract %u["a"] : !hw.union<a: i8, b: i4>
-  %r1 = hw.union_extract %u["b"] : !hw.union<a: i8, b: i4>
-  hw.output %r0, %r1 : i8, i4
-}
-
-// Fold union_extract("F1", union_create("F2", a)) across different fields when
-// both fields map to the same bits (same type, same offset in the union).
-// CHECK-LABEL: hw.module @union_extract_create_cross_field
-// CHECK-NEXT:    hw.output %in, %in : i8, i8
-hw.module @union_extract_create_cross_field(in %in: i8, out r0: i8, out r1: i8) {
-  %u = hw.union_create "a", %in : !hw.union<a: i8, b: i8>
-  %r0 = hw.union_extract %u["a"] : !hw.union<a: i8, b: i8>
-  %r1 = hw.union_extract %u["b"] : !hw.union<a: i8, b: i8>
-  hw.output %r0, %r1 : i8, i8
-}
-
-// Do NOT fold when the fields have the same type but sit at different offsets
-// within the union.
-// CHECK-LABEL: hw.module @union_extract_create_same_type_diff_offset
-// CHECK-NEXT:    %[[U:.+]] = hw.union_create "a", %in
-// CHECK-NEXT:    %[[R:.+]] = hw.union_extract %[[U]]["b"]
-// CHECK-NEXT:    hw.output %[[R]] : i8
-hw.module @union_extract_create_same_type_diff_offset(in %in: i8, out r: i8) {
-  %u = hw.union_create "a", %in : !hw.union<a: i8, b: i8 offset 8>
-  %r = hw.union_extract %u["b"] : !hw.union<a: i8, b: i8 offset 8>
-  hw.output %r : i8
-}
-
-// Fold union_extract of a bitcast into a direct bitcast when the field covers
-// the full union width; do NOT fold when the field is narrower.
-// CHECK-LABEL: hw.module @union_extract_bitcast
-// CHECK-NEXT:    %[[U:.+]] = hw.bitcast %in
-// CHECK-NEXT:    %[[R1:.+]] = hw.union_extract %[[U]]["b"]
-// CHECK-NEXT:    hw.output %in, %[[R1]] : i8, i4
-hw.module @union_extract_bitcast(in %in: i8, out r0: i8, out r1: i4) {
-  %u = hw.bitcast %in : (i8) -> !hw.union<a: i8, b: i4>
-  %r0 = hw.union_extract %u["a"] : !hw.union<a: i8, b: i4>
-  %r1 = hw.union_extract %u["b"] : !hw.union<a: i8, b: i4>
-  hw.output %r0, %r1 : i8, i4
-}
-
-// A self-referential wire must not crash during canonicalization.
-// CHECK-LABEL: @SelfRefWire
-hw.module @SelfRefWire() {
-  // CHECK: hw.wire
-  %w = hw.wire %w : i1
 }

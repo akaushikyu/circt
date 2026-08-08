@@ -242,7 +242,7 @@ def ConcatOp : CombOp<"concat",
                                           std::optional<Location> loc,
                                           ValueRange operands,
                                           DictionaryAttr attrs,
-                                          mlir::PropertyRef properties,
+                                          mlir::OpaqueProperties properties,
                                           mlir::RegionRange regions,
                                           SmallVectorImpl<Type> &results);
   }];

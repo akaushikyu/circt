@@ -150,6 +150,11 @@ def InsertRuntime : Pass<"arc-insert-runtime", "mlir::ModuleOp"> {
   ];
 }
 
+def IsolateClocks : Pass<"arc-isolate-clocks", "mlir::ModuleOp"> {
+  let summary = "Group clocked operations into clock domains";
+  let dependentDialects = ["arc::ArcDialect"];
+}
+
 def LatencyRetiming : Pass<"arc-latency-retiming", "mlir::ModuleOp"> {
   let summary = "Push latencies through the design";
   let dependentDialects = ["arc::ArcDialect"];
@@ -170,33 +175,6 @@ def LowerArcsToFuncs : Pass<"arc-lower-arcs-to-funcs", "mlir::ModuleOp"> {
 def LowerClocksToFuncs : Pass<"arc-lower-clocks-to-funcs", "mlir::ModuleOp"> {
   let summary = "Lower clock trees into functions";
   let dependentDialects = ["mlir::func::FuncDialect", "mlir::scf::SCFDialect"];
-}
-
-def LowerCoroutinesPass : Pass<"arc-lower-coroutines", "mlir::ModuleOp"> {
-  let summary = "Lower coroutines to state machine functions";
-  let description = [{
-    Convert each `arc.coroutine.define` into a regular function that takes an
-    explicit state and program counter as its leading arguments, and that
-    dispatches to its entry block or one of its resume blocks accordingly.
-    Values that are live across suspension points are persisted in the
-    explicit state, which is a union with one struct variant per resume block.
-    Calls to coroutines become regular function calls, and all uses of the
-    opaque `!arc.coroutine_state` and `!arc.coroutine_pc` types anywhere in
-    the IR are replaced with the concrete union and integer types computed for
-    each coroutine.
-  }];
-  let dependentDialects = [
-    "comb::CombDialect",
-    "hw::HWDialect",
-    "mlir::cf::ControlFlowDialect",
-    "mlir::func::FuncDialect",
-    "mlir::ub::UBDialect",
-  ];
-}
-
-def LowerArrays : Pass<"arc-lower-arrays", "mlir::ModuleOp"> {
-  let summary = "Lower arrays to use bufferized arrayrefs";
-  let dependentDialects = ["arc::ArcDialect"];
 }
 
 def LowerLUT : Pass<"arc-lower-lut", "arc::DefineOp"> {
@@ -385,34 +363,6 @@ def StripSV : Pass<"arc-strip-sv", "mlir::ModuleOp"> {
   let options = [
     Option<"asyncResetsAsSync", "async-resets-as-sync", "bool", "false",
       "Treat asynchronous resets as synchronous.">
-  ];
-}
-
-def RemoveI0Types : Pass<"arc-remove-i0-types", "mlir::ModuleOp"> {
-  let summary = "Remove i0 types completely";
-  let description = [{
-    i0 types are tautologous and usually exist due to array<1xT> types. i0 is
-    not valid in LLVM-IR, so we transform array<1xT> -> T and ban i0 types.
-  }];
-  let dependentDialects = ["arc::ArcDialect", "hw::HWDialect"];
-}
-
-def ResolveXMRRef : Pass<"arc-resolve-xmr", "mlir::ModuleOp"> {
-  let summary = "Resolve sv.xmr.ref into direct signal references";
-  let description = [{
-    This pass traverses hw.hierpath metadata to replace sv.xmr.ref operations
-    with direct SSA value references, preserving observability before flattening.
-  }];
-
-  let options = [
-    Option<"lowerBlackBoxInternalToZero", "lower-blackbox-internal-to-zero",
-           "bool", "false",
-           "Lower unresolved references to internal blackbox symbols to constant zero.">
-  ];
-
-  let dependentDialects = [
-    "circt::sv::SVDialect",
-    "circt::hw::HWDialect"
   ];
 }
 

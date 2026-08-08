@@ -8,8 +8,9 @@ an individual pytest item.
 The binary is located by (in order):
   1. The ``ESI_RUNTIME_TESTS_BIN`` environment variable (explicit override).
   2. ``tests/cpp/ESIRuntimeCppTests`` relative to the ESI runtime root, which
-     is derived from the ``esiaccel`` package location using the shared
-     resolver from ``tests.conftest``.
+     is derived from the ``esiaccel`` package location — the same convention
+     used by the integration tests (three ``parent`` levels up from
+     ``esiaccel.__file__``).
 
 The entire module is skipped when the binary cannot be found.
 """
@@ -40,16 +41,14 @@ def _find_binary() -> Path | None:
     if p.is_file():
       return p
 
-  # 2. Relative to the ESI runtime root derived from the shared resolver used
-  #    by the integration tests.
+  # 2. Relative to the ESI runtime root derived from the esiaccel package —
+  #    the same convention used by the integration tests.  Works when the
+  #    standalone runtime build's esiaccel is the active one on PYTHONPATH.
   try:
     candidate = get_runtime_root() / "tests" / "cpp" / _BIN_NAME
     if candidate.is_file():
       return candidate
-    candidate = get_runtime_root() / "bin" / _BIN_NAME
-    if candidate.is_file():
-      return candidate
-  except (ImportError, FileNotFoundError):
+  except ImportError:
     pass
 
   return None

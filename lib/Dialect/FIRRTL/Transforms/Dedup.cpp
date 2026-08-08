@@ -428,6 +428,14 @@ struct ModuleInfoRef {
 /// `ModuleInfo` the ref points to.
 template <>
 struct llvm::DenseMapInfo<ModuleInfoRef> {
+  static inline ModuleInfoRef getEmptyKey() {
+    return DenseMapInfo<ModuleInfo *>::getEmptyKey();
+  }
+
+  static inline ModuleInfoRef getTombstoneKey() {
+    return DenseMapInfo<ModuleInfo *>::getTombstoneKey();
+  }
+
   static unsigned getHashValue(const ModuleInfoRef &ref) {
     // We assume SHA256 is already a good hash and just truncate down to the
     // number of bytes we need for DenseMap.
@@ -441,7 +449,10 @@ struct llvm::DenseMapInfo<ModuleInfoRef> {
   }
 
   static bool isEqual(const ModuleInfoRef &lhs, const ModuleInfoRef &rhs) {
-    if (!lhs.info || !rhs.info)
+    auto *empty = getEmptyKey().info;
+    auto *tombstone = getTombstoneKey().info;
+    if (lhs.info == empty || rhs.info == empty || lhs.info == tombstone ||
+        rhs.info == tombstone)
       return lhs.info == rhs.info;
     return *lhs.info == *rhs.info;
   }
@@ -761,8 +772,8 @@ struct Equivalence {
   }
 
   // NOLINTNEXTLINE(misc-no-recursion)
-  LogicalResult check(InFlightDiagnostic &diag, igraph::InstanceOpInterface a,
-                      igraph::InstanceOpInterface b) {
+  LogicalResult check(InFlightDiagnostic &diag, FInstanceLike a,
+                      FInstanceLike b) {
     // Get the list of module names from the list (for InstanceOp/ObjectOp,
     // there's only one)
     auto aNames = a.getReferencedModuleNamesAttr();
@@ -808,15 +819,13 @@ struct Equivalence {
       return failure();
     }
 
-    // If it's a firrtl operation that implements InstanceOpInterface
-    // (InstanceOp/InstanceChoiceOp/ObjectOp) perform some checking and possibly
+    // If its an instance operaiton, perform some checking and possibly
     // recurse.
-    if (auto aInst = dyn_cast<igraph::InstanceOpInterface>(a))
-      if (auto bInst = dyn_cast<igraph::InstanceOpInterface>(b))
-        if (isa_and_nonnull<firrtl::FIRRTLDialect>(a->getDialect()) &&
-            isa_and_nonnull<firrtl::FIRRTLDialect>(b->getDialect()) &&
-            failed(check(diag, aInst, bInst)))
-          return failure();
+    if (auto aInst = dyn_cast<FInstanceLike>(a)) {
+      auto bInst = cast<FInstanceLike>(b);
+      if (failed(check(diag, aInst, bInst)))
+        return failure();
+    }
 
     // Operation results.
     if (a->getNumResults() != b->getNumResults()) {

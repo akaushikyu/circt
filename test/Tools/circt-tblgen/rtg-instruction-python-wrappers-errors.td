@@ -19,25 +19,16 @@ def UnsupportedI32Op : TestOp<"unsupported_i32"> {
 
 #ifdef TEST_EMPTY_NAME
 // RUN: not circt-tblgen -gen-rtg-instruction-python-wrappers --return-val-func=test_func -I %S/../../../include -I %S/../../../llvm/mlir/include %s -DTEST_EMPTY_NAME 2>&1 | FileCheck %s --check-prefix=EMPTY-NAME
-def EmptyNameOp : TestOp<"">, ISAInstructionFormat {
-  let isaMnemonic = "";
+def EmptyNameOp : TestOp<""> {
 }
-// EMPTY-NAME: error: isaMnemonic field must be set for instruction operations
+// EMPTY-NAME: error: Empty string is not a valid Python identifier
 #endif
 
 #ifdef TEST_ALL_UNDERSCORES
 // RUN: not circt-tblgen -gen-rtg-instruction-python-wrappers --return-val-func=test_func -I %S/../../../include -I %S/../../../llvm/mlir/include %s -DTEST_ALL_UNDERSCORES 2>&1 | FileCheck %s --check-prefix=ALL-UNDERSCORES
-def AllUnderscoresOp : TestOp<"___">, ISAInstructionFormat {
-  let isaMnemonic = "___";
+def AllUnderscoresOp : TestOp<"___"> {
 }
 // ALL-UNDERSCORES: error: String contains no valid characters for Python identifier
-#endif
-
-#ifdef TEST_MISSING_ISA_MNEMONIC
-// RUN: not circt-tblgen -gen-rtg-instruction-python-wrappers --return-val-func=test_func -I %S/../../../include -I %S/../../../llvm/mlir/include %s -DTEST_MISSING_ISA_MNEMONIC 2>&1 | FileCheck %s --check-prefix=MISSING-ISA-MNEMONIC
-def MissingIsaMnemonicOp : TestOp<"missing_isa_mnemonic"> {
-}
-// MISSING-ISA-MNEMONIC: error: isaMnemonic field must be set for instruction operations
 #endif
 
 // Test: Missing --return-val-func CLI argument

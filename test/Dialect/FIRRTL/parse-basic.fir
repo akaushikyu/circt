@@ -1,6 +1,6 @@
 ; RUN: circt-translate -import-firrtl -verify-diagnostics -split-input-file %s | circt-opt | FileCheck %s
 
-FIRRTL version 7.0.0
+FIRRTL version 5.1.0
 circuit MyModule :     ; CHECK: firrtl.circuit "MyModule"
 
   ; CHECK-LABEL: firrtl.module @MyModule(in %in: !firrtl.uint<8>, out %out: !firrtl.uint<8>) {
@@ -1092,13 +1092,6 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule"
    ; CHECK-NEXT: firrtl.ref.define %inst_rw2, %[[RWPROBE_RC2_IN_BOUNCE_2]]
     define inst_rw2 = rwprobe(rc2.in)
 
-   ; CHECK-NEXT: firrtl.wire sym [<@[[RCOA_RWPROBE_SYM:.+]],1,public>] interesting_name : !firrtl.openbundle<a: uint<1>, rw flip: rwprobe<uint<1>>>
-   ; CHECK: firrtl.instance rcoa
-   inst rcoa of RefsChildOpenAgg
-   ; CHECK: firrtl.ref.rwprobe <@Refs::@[[RCOA_RWPROBE_SYM]]>
-   wire inst_rcoa_a : RWProbe<UInt<1>>
-   define inst_rcoa_a = rwprobe(rcoa.in.a)
-
   ; CHECK-LABEL: module private @ForceRelease(
   module ForceRelease :
     input in : UInt<1>
@@ -1488,7 +1481,7 @@ circuit Layers:
 
 ;// -----
 ; CHECK-LABEL: firrtl.circuit "BasicProps"
-FIRRTL version 6.0.0
+FIRRTL version 5.1.0
 circuit BasicProps :
   public module BasicProps :
   ; CHECK-LABEL: module private @Integer
@@ -1511,15 +1504,6 @@ circuit BasicProps :
     ; CHECK-NEXT: firrtl.propassign %false, %1 : !firrtl.bool
     propassign true, Bool(true)
     propassign false, Bool(false)
-
-  ; CHECK-LABEL: module private @PropAssert
-  module PropAssert :
-    input cond : Bool
-    ; CHECK: %[[TRUE:.+]] = firrtl.bool true
-    ; CHECK-NEXT: firrtl.property_assert %[[TRUE]], "always true" : !firrtl.bool
-    propassert Bool(true), "always true"
-    ; CHECK-NEXT: firrtl.property_assert %cond, "holds" : !firrtl.bool
-    propassert cond, "holds"
 
   ; CHECK-LABEL: module private @Double
   module Double :
@@ -1672,70 +1656,6 @@ circuit PropertyListOps :
     propassign c, list_concat(a, b)
 
 ;// -----
-FIRRTL version 6.0.0
-
-; CHECK-LABEL: firrtl.circuit "StringOps"
-circuit StringOps :
-  public module StringOps :
-    input a : String
-    input b : String
-    output c : String
-
-    ; CHECK: [[C:%.+]] = firrtl.string.concat %a, %b : !firrtl.string
-    ; CHECK: firrtl.propassign %c, [[C]]
-    propassign c, string_concat(a, b)
-
-;// -----
-FIRRTL version 6.0.0
-
-; CHECK-LABEL: firrtl.circuit "PropEq"
-circuit PropEq :
-  public module PropEq :
-    input a : String
-    input b : String
-    output eq : Bool
-
-    ; CHECK: [[EQ:%.+]] = firrtl.prop.eq %a, %b : !firrtl.string
-    ; CHECK: firrtl.propassign %eq, [[EQ]]
-    propassign eq, prop_eq(a, b)
-
-;// -----
-FIRRTL version 5.0.0
-
-circuit PropEqVersionError :
-  public module PropEqVersionError :
-    input a : String
-    input b : String
-    output c : String
-
-    ; expected-error @+1 {{property equality are a FIRRTL 6.0.0+ feature, but the specified FIRRTL version was 5.0.0}}
-    propassign c, prop_eq(a, b)
-
-;// -----
-FIRRTL version 7.0.0
-
-; CHECK-LABEL: firrtl.circuit "BoolBinaryOps"
-circuit BoolBinaryOps :
-  public module BoolBinaryOps :
-    input a : Bool
-    input b : Bool
-    output andOut : Bool
-    output orOut : Bool
-    output xorOut : Bool
-
-    ; CHECK: [[AND:%.+]] = firrtl.bool.and %a, %b
-    ; CHECK: firrtl.propassign %andOut, [[AND]]
-    propassign andOut, bool_and(a, b)
-
-    ; CHECK: [[OR:%.+]] = firrtl.bool.or %a, %b
-    ; CHECK: firrtl.propassign %orOut, [[OR]]
-    propassign orOut, bool_or(a, b)
-
-    ; CHECK: [[XOR:%.+]] = firrtl.bool.xor %a, %b
-    ; CHECK: firrtl.propassign %xorOut, [[XOR]]
-    propassign xorOut, bool_xor(a, b)
-
-;// -----
 FIRRTL version 3.1.0
 
 ; CHECK-LABEL: circuit "BundleOfProps"
@@ -1767,7 +1687,7 @@ circuit WireOfProbesAndNames:
     wire probe : Probe<UInt<1>>
 
 ;// -----
-FIRRTL version 6.0.0
+FIRRTL version 5.1.0
 
 ; CHECK-LABEL: circuit "AnyRef"
 circuit AnyRef:
@@ -1828,7 +1748,7 @@ circuit LayerEnabledModule:
 
 ;// -----
 
-FIRRTL version 6.0.0
+FIRRTL version 5.2.0
 
 ; CHECK-LABEL: firrtl.circuit "KnownLayers"
 circuit KnownLayers:
@@ -2051,7 +1971,7 @@ circuit Foo:
     d_map = {a = 42, b = "hello", c = [9001], d = {foo = 1337}}
 
 ;// -----
-FIRRTL version 7.0.0
+FIRRTL version 5.1.0
 ; CHECK-LABEL: circuit "Foo"
 circuit Foo:
 
@@ -2163,7 +2083,7 @@ circuit Foo:
     b <= a
 
 ;// -----
-FIRRTL version 7.0.0
+FIRRTL version 5.1.0
 ; CHECK-LABEL: firrtl.circuit "Contracts"
 circuit Contracts:
   ; CHECK-LABEL: firrtl.module @Contracts(
@@ -2228,7 +2148,7 @@ circuit Foo:
     printf(clock, UInt<1>(1), "[{{SimulationTime}}]: hello from {{HierarchicalModuleName}}")
 
 ;// -----
-FIRRTL version 6.0.0
+FIRRTL version 5.1.0
 circuit Foo:
   public module Foo:
     input clock: Clock
@@ -2246,11 +2166,11 @@ FIRRTL version 5.0.0
 circuit Foo:
   public module Foo:
     input clock: Clock
-    ; expected-error @+1 {{fprintf are a FIRRTL 6.0.0+ feature, but the specified FIRRTL version was 5.0.0}}
+    ; expected-error @+1 {{fprintf are a FIRRTL 5.1.0+ feature, but the specified FIRRTL version was 5.0.0}}
     fprintf(clock, UInt<1>(1), "test.txt", "[{{SimulationTime}}]: hello from {{HierarchicalModuleName}}")
 
 ;// -----
-FIRRTL version 6.0.0
+FIRRTL version 5.1.0
 circuit Foo:
   public module Foo:
     input clock: Clock
@@ -2265,7 +2185,7 @@ FIRRTL version 5.0.0
 circuit Foo:
   public module Foo:
     input clock: Clock
-    ; expected-error @+1 {{fflush are a FIRRTL 6.0.0+ feature, but the specified FIRRTL version was 5.0.0}}
+    ; expected-error @+1 {{fflush are a FIRRTL 5.1.0+ feature, but the specified FIRRTL version was 5.0.0}}
     fflush(clock, UInt<1>(1))
 
 ;// -----
@@ -2273,11 +2193,11 @@ FIRRTL version 5.0.0
 circuit Foo:
   public module Foo:
     input a: UInt<1>
-    ; expected-error @+1 {{variadic cat are a FIRRTL 6.0.0+ feature, but the specified FIRRTL version was 5.0.0}}
+    ; expected-error @+1 {{variadic cat are a FIRRTL 5.1.0+ feature, but the specified FIRRTL version was 5.0.0}}
     node b = cat(a, a, a)
 
 ;// -----
-FIRRTL version 6.0.0
+FIRRTL version 5.1.0
 ; CHECK-LABEL: firrtl.circuit "NullaryCat"
 circuit NullaryCat:
   public module NullaryCat:
@@ -2286,7 +2206,7 @@ circuit NullaryCat:
     node b = cat()
 
 ;// -----
-FIRRTL version 7.0.0
+FIRRTL version 5.1.0
 circuit Domains:
   ; CHECK-LABEL: firrtl.domain @ClockDomain
   domain ClockDomain:
@@ -2350,7 +2270,7 @@ circuit Domains:
     domain_define F = E
 
 ;// -----
-FIRRTL version 7.0.0
+FIRRTL version 5.1.0
 circuit DomainCreate:
   domain ClockDomain:
 
@@ -2369,7 +2289,7 @@ circuit DomainCreate:
     domain_define child.A = my_clock
 
 ;// -----
-FIRRTL version 7.0.0
+FIRRTL version 5.1.0
 circuit DomainCreateWithFields:
   domain PowerDomain:
     name: String
@@ -2386,7 +2306,7 @@ circuit DomainCreateWithFields:
     domain powerDomain of PowerDomain(String("FastClock"), Integer(1000), alwaysOn)
 
 ;// -----
-FIRRTL version 7.0.0
+FIRRTL version 6.0.0
 circuit UnknownProperties:
   class Foo:
     skip
@@ -2434,29 +2354,3 @@ circuit KeywordIdentifiers :
     wire Unknown : UInt<1>
     ; CHECK: firrtl.constant 0
     connect Unknown, UInt<1>(0)
-
-;// -----
-FIRRTL version 7.0.0
-; Test wire domain associations
-circuit WireDomains:
-  domain ClockDomain:
-  domain PowerDomain:
-    name : String
-    voltage : Integer
-
-  ; CHECK-LABEL: firrtl.module @WireDomains
-  public module WireDomains:
-    input A : Domain of ClockDomain
-    input B : Domain of PowerDomain
-
-    ; Wire with no domains
-    ; CHECK: %w_no_domain = firrtl.wire interesting_name : !firrtl.uint<1>
-    wire w_no_domain : UInt<1>
-
-    ; Wire with single domain
-    ; CHECK: %w_single = firrtl.wire interesting_name domains[%A] : !firrtl.uint<8> domains[!firrtl.domain<@ClockDomain()>]
-    wire w_single : UInt<8> domains [A]
-
-    ; Wire with multiple domains
-    ; CHECK: %w_multi = firrtl.wire interesting_name domains[%A, %B] : !firrtl.uint<16> domains[!firrtl.domain<@ClockDomain()>, !firrtl.domain<@PowerDomain(name: !firrtl.string, voltage: !firrtl.integer)>]
-    wire w_multi : UInt<16> domains [A, B]

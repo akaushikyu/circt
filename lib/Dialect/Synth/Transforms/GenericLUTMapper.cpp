@@ -136,10 +136,5 @@ struct GenericLUTMapperPass
     // Apply the rewriting
     if (failed(rewriter.run(module)))
       return signalPassFailure();
-
-    const auto &stats = rewriter.getStats();
-    numCutsCreated += stats.numCutsCreated;
-    numCutSetsCreated += stats.numCutSetsCreated;
-    numCutsRewritten += stats.numCutsRewritten;
   }
 };

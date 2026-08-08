@@ -6,8 +6,9 @@
 firrtl.circuit "ModuleWithInstances" {
   // CHECK-LABEL: firrtl.module @ModuleWithInstances
   firrtl.module @ModuleWithInstances() {
-    // CHECK: %sub_b, %sub_c = firrtl.instance sub @Sub
+    // CHECK: %sub_b = firrtl.instance sub @Sub
     // CHECK-NOT: %sub_a
+    // CHECK-NOT: %sub_c
     %sub_a, %sub_b, %sub_c = firrtl.instance sub @Sub(in a: !firrtl.uint<1>, out b: !firrtl.uint<1>, out c: !firrtl.uint<1>)
     %w = firrtl.wire : !firrtl.uint<1>
     firrtl.connect %w, %sub_b : !firrtl.uint<1>, !firrtl.uint<1>
@@ -16,7 +17,7 @@ firrtl.circuit "ModuleWithInstances" {
   // CHECK-LABEL: firrtl.module private @Sub
   // CHECK-NOT: in %a
   // CHECK-SAME: out %b
-  // CHECK-SAME: out %c
+  // CHECK-NOT: out %c
   firrtl.module private @Sub(in %a: !firrtl.uint<1>, out %b: !firrtl.uint<1>, out %c: !firrtl.uint<1>) {
     %invalid = firrtl.invalidvalue : !firrtl.uint<1>
     firrtl.connect %b, %invalid : !firrtl.uint<1>, !firrtl.uint<1>

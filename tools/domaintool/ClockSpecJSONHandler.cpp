@@ -11,7 +11,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "llvm/ADT/EquivalenceClasses.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/JSON.h"
 #include "llvm/Support/raw_ostream.h"
@@ -43,33 +42,22 @@ cl::list<std::string> sifiveClockDomainStatic{
 namespace circt {
 namespace handlers {
 
-/// The kind of relationship between two clock domains.
-enum class RelationshipKind {
-  /// A synchronous relationship (integer frequency ratio, same source).
-  Synchronous,
-  /// A rational relationship (non-integer rational frequency ratio, same
-  /// source).
-  Rational,
-  /// An asynchronous relationship (no deterministic phase relationship).
-  Async,
-  /// Relationship is not yet determined.
-  Inferred
-};
+enum class RelationshipKind { Sync, Async, Inferred };
 
 struct Relationship {
-  StringAttr namePattern;
+  StringRef namePattern;
   RelationshipKind relationship;
 };
 
 struct Clock {
-  StringAttr namePattern;
+  StringRef namePattern;
   SmallVector<Relationship> relationships;
 };
 
 struct SynchronousData {
-  StringAttr namePattern;
-  SmallVector<StringAttr> portPatterns;
-  std::optional<StringAttr> comment;
+  StringRef namePattern;
+  SmallVector<StringRef> portPatterns;
+  std::optional<StringRef> comment;
 };
 
 /// A handler that generates Clock Spec JSON output from Clock Domain
@@ -93,42 +81,12 @@ public:
     for (auto &[objectValue, associations] : objectMap) {
       auto name = cast<StringAttr>(cast<om::evaluator::AttributeValue>(
                                        objectValue->getField("name_out")->get())
-                                       ->getAttr());
-
-      // Insert this domain into its own equivalence class.  Then, if this
-      // domain specifies a "source" relationship (either synchronous or
-      // rational), merge it into the same equivalence class as its source.
-      syncEquivalenceClasses.insert(name);
-
-      auto source =
-          cast<StringAttr>(cast<om::evaluator::AttributeValue>(
-                               objectValue->getField("source_out")->get())
-                               ->getAttr());
-      auto relationship =
-          cast<StringAttr>(cast<om::evaluator::AttributeValue>(
-                               objectValue->getField("relationship_out")->get())
-                               ->getAttr());
-
-      // Track the relationship kind for this domain.
-      RelationshipKind kind = RelationshipKind::Inferred;
-      if (relationship.getValue() == "synchronous")
-        kind = RelationshipKind::Synchronous;
-      else if (relationship.getValue() == "rational")
-        kind = RelationshipKind::Rational;
-
-      // If this domain specifies a source, merge it into that source's
-      // equivalence class and record the relationship.
-      if (!source.getValue().empty()) {
-        syncEquivalenceClasses.insert(source);
-        syncEquivalenceClasses.unionSets(source, name);
-        domainRelationships[name] = {source, kind};
-      }
-
+                                       ->getAttr())
+                      .getValue();
       // Add to async ports if the name matches a provided option.
       bool isAsync =
-          llvm::any_of(options::sifiveClockDomainAsync, [&](auto asyncName) {
-            return asyncName == name.getValue();
-          });
+          llvm::any_of(options::sifiveClockDomainAsync,
+                       [&](auto asyncName) { return asyncName == name; });
       if (isAsync) {
         for (auto &association : associations) {
           if (auto *p = dyn_cast<om::evaluator::PathValue>(association.get())) {
@@ -146,9 +104,8 @@ public:
 
       // Add to static ports if the name matches a provided option.
       bool isStatic =
-          llvm::any_of(options::sifiveClockDomainStatic, [&](auto staticName) {
-            return staticName == name.getValue();
-          });
+          llvm::any_of(options::sifiveClockDomainStatic,
+                       [&](auto staticName) { return staticName == name; });
       if (isStatic) {
         for (auto &association : associations) {
           if (auto *p = dyn_cast<om::evaluator::PathValue>(association.get())) {
@@ -186,9 +143,6 @@ public:
     if (failed)
       return failure();
 
-    // Populate clock relationships based on equivalence class leaders
-    populateClockRelationships();
-
     return success();
   }
 
@@ -196,44 +150,36 @@ public:
     json::OStream json(os, /*indentSize=*/2);
     json.object([&] {
       json.attributeArray("clocks", [&] {
-        for (auto &clock : clocks) {
+        for (auto clock : clocks) {
           json.object([&] {
-            auto name = clock.namePattern.getValue();
+            auto &name = clock.namePattern;
             json.attribute("name_pattern", name);
             json.attribute("define_period",
                            (Twine(name.upper()) + "_PERIOD").str());
             json.attributeArray("clock_relationships", [&] {
-              for (auto &rel : clock.relationships) {
-                json.object([&] {
-                  json.attribute("name_pattern", rel.namePattern.getValue());
-                  // Both synchronous and rational are treated as "sync" in the
-                  // output JSON.  They both imply a deterministic, bounded
-                  // frequency relationship derived from a common source.
-                  json.attribute("relationship", "sync");
-                });
-              }
+              // TODO: Implement this.
             });
           });
         }
       });
       json.attributeArray("static_ports", [&] {
         for (auto port : staticPorts)
-          json.value(port.getValue());
+          json.value(port);
       });
       json.attributeArray("asynchronous_ports", [&] {
         for (auto port : asyncPorts)
-          json.value(port.getValue());
+          json.value(port);
       });
       json.attributeArray("synchronous_ports", [&] {
         for (auto &[_, syncPort] : syncPorts) {
-          auto name = syncPort.namePattern.getValue();
+          auto &name = syncPort.namePattern;
           auto &ports = syncPort.portPatterns;
           auto &comment = syncPort.comment;
           json.object([&] {
             json.attribute("name_pattern", name);
             json.attributeArray("port_patterns", [&] {
               for (auto port : ports)
-                json.value(port.getValue());
+                json.value(port);
             });
             json.attribute("comment", comment);
           });
@@ -249,53 +195,13 @@ public:
     asyncPorts.clear();
     staticPorts.clear();
     syncPorts.clear();
-    domainRelationships.clear();
-    syncEquivalenceClasses = EquivalenceClasses<StringAttr>();
   };
 
 private:
-  /// Populate clock relationships based on equivalence class leaders.  If a
-  /// domain's leader is not itself, it has a sync (or rational, treated the
-  /// same in output) relationship to the leader.
-  void populateClockRelationships() {
-    for (auto &clock : clocks) {
-      auto &name = clock.namePattern;
-
-      // Find the leader of this domain's equivalence class
-      auto leaderIter = syncEquivalenceClasses.findLeader(name);
-      if (leaderIter == syncEquivalenceClasses.member_end())
-        continue;
-
-      StringAttr leader = *leaderIter;
-
-      // If this domain is not the leader, add a relationship to the leader.
-      // Look up the recorded relationship kind for this domain and fall back to
-      // Synchronous if no explicit entry exists.
-      if (name != leader) {
-        RelationshipKind kind = RelationshipKind::Synchronous;
-        auto it = domainRelationships.find(name);
-        if (it != domainRelationships.end())
-          kind = it->second.relationship;
-        clock.relationships.push_back({leader, kind});
-      }
-    }
-  }
-
   SmallVector<Clock> clocks;
-  SmallVector<StringAttr> asyncPorts;
-  SmallVector<StringAttr> staticPorts;
-  MapVector<StringAttr, SynchronousData> syncPorts;
-
-  /// Map from a domain name to its recorded source relationship (source name +
-  /// kind).  Populated during handle() when a domain declares a non-empty
-  /// source.
-  DenseMap<StringAttr, Relationship> domainRelationships;
-
-  // Equivalence classes tracking all domains that are related to each other
-  // (synchronous or rational) through the transitive closure of source
-  // relationships.  The leader of each equivalence class represents the root
-  // domain.
-  EquivalenceClasses<StringAttr> syncEquivalenceClasses;
+  SmallVector<StringRef> asyncPorts;
+  SmallVector<StringRef> staticPorts;
+  MapVector<StringRef, SynchronousData> syncPorts;
 };
 
 static bool registeredClockSpecJSONHandler = [] {

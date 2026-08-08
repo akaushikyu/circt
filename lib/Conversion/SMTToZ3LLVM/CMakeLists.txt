@@ -8,7 +8,6 @@ add_circt_conversion_library(CIRCTSMTToZ3LLVM
   Core
 
   LINK_LIBS PUBLIC
-  CIRCTDebug
   CIRCTSupport
   MLIRLLVMCommonConversion
   MLIRSCFToControlFlow

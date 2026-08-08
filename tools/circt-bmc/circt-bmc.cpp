@@ -16,7 +16,6 @@
 #include "circt/Conversion/SMTToZ3LLVM.h"
 #include "circt/Conversion/VerifToSMT.h"
 #include "circt/Dialect/Comb/CombDialect.h"
-#include "circt/Dialect/Debug/DebugDialect.h"
 #include "circt/Dialect/Emit/EmitDialect.h"
 #include "circt/Dialect/Emit/EmitPasses.h"
 #include "circt/Dialect/HW/HWDialect.h"
@@ -213,7 +212,6 @@ static LogicalResult executeBMC(MLIRContext &context) {
   }
   pm.addNestedPass<hw::HWModuleOp>(createLowerLTLToCorePass());
   pm.addNestedPass<hw::HWModuleOp>(verif::createCombineAssertLikePass());
-  pm.addPass(createMaterializeDebugVariables());
   pm.addPass(createExternalizeRegisters());
   LowerToBMCOptions lowerToBMCOptions;
   lowerToBMCOptions.bound = clockBound;
@@ -362,7 +360,6 @@ int main(int argc, char **argv) {
   // clang-format off
   registry.insert<
     circt::comb::CombDialect,
-    circt::debug::DebugDialect,
     circt::emit::EmitDialect,
     circt::hw::HWDialect,
     circt::om::OMDialect,

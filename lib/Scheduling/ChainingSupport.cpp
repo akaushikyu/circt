@@ -73,21 +73,17 @@ LogicalResult scheduling::computeChainBreakingDependences(
 
     // All chains/accumulated delays incoming at `op` are now known.
     auto opr = *prob.getLinkedOperatorType(op);
-    // Collect the chains that need to be broken.
-    SmallVector<Operation *, 4> chainsToBreak;
     for (auto incomingChain : chains[op]) {
       Operation *origin = incomingChain.first;
       float delay = incomingChain.second;
       // Check whether `op` could be appended to the incoming chain without
       // violating the cycle time constraint.
       if (delay + *prob.getIncomingDelay(opr) > cycleTime) {
-        chainsToBreak.push_back(origin);
+        // If not, add a chain-breaking auxiliary dep ...
+        result.emplace_back(origin, op);
+        // ... and end the chain here.
+        chains[op].erase(origin);
       }
-    }
-    // Break the chains and add the auxiliary dependences.
-    for (Operation *origin : chainsToBreak) {
-      result.emplace_back(origin, op);
-      chains[op].erase(origin);
     }
 
     return success();

@@ -15,7 +15,6 @@ include "circt/Dialect/Seq/SeqTypes.td"
 include "circt/Dialect/Sim/SimDialect.td"
 include "circt/Dialect/Sim/SimOpInterfaces.td"
 include "circt/Dialect/Sim/SimTypes.td"
-include "circt/Support/ProceduralRegionTrait.td"
 include "mlir/Interfaces/FunctionInterfaces.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
@@ -24,26 +23,6 @@ include "mlir/IR/EnumAttr.td"
 
 class SimOp<string mnemonic, list<Trait> traits = []> :
     Op<SimDialect, mnemonic, traits>;
-
-//===----------------------------------------------------------------------===//
-// DPI Direction Enum
-//===----------------------------------------------------------------------===//
-
-def DPIDir_Input  : I32EnumAttrCase<"Input",  0, "in">;
-def DPIDir_Output : I32EnumAttrCase<"Output", 1, "out">;
-def DPIDir_InOut  : I32EnumAttrCase<"InOut",  2, "inout">;
-def DPIDir_Return : I32EnumAttrCase<"Return", 3, "return">;
-def DPIDir_Ref    : I32EnumAttrCase<"Ref",    4, "ref">;
-
-def DPIDirection : I32EnumAttr<"DPIDirection",
-    "DPI port direction",
-    [DPIDir_Input, DPIDir_Output, DPIDir_InOut, DPIDir_Return, DPIDir_Ref]> {
-  let cppNamespace = "circt::sim";
-}
-
-//===----------------------------------------------------------------------===//
-// Simulation Operations
-//===----------------------------------------------------------------------===//
 
 def PlusArgsTestOp : SimOp<"plusargs.test", [Pure]> {
   let summary = "SystemVerilog `$test$plusargs` call";
@@ -63,73 +42,43 @@ def PlusArgsValueOp : SimOp<"plusargs.value", [Pure]> {
 
 def DPIFuncOp : SimOp<"func.dpi",
      [IsolatedFromAbove, Symbol, OpAsmOpInterface,
-      DeclareOpInterfaceMethods<FunctionOpInterface,
-        ["getFunctionType", "setFunctionTypeAttr", "cloneTypeWith"]>]> {
-  let summary = "A DPI-C imported function declaration";
+      FunctionOpInterface]> {
+  let summary = "A System Verilog function";
   let description = [{
-    `sim.func.dpi` models a DPI-C imported function with first-class argument
-    direction keywords: `in`, `out`, `inout`, `return`, and `ref`.
-
-    Argument directions map to call and ABI semantics as follows:
-    - `in`     — call operand, passed by value.
-    - `out`    — call result, passed by pointer in the C ABI.
-    - `inout`  — call operand and result, passed by pointer in the C ABI.
-    - `return` — call result (last), the actual C return value.
-    - `ref`    — call operand (pass-through pointer, e.g. open-array ABI).
+    `sim.func.dpi` models an external function in a core dialect.
   }];
 
   let arguments = (ins
     SymbolNameAttr:$sym_name,
-    TypeAttrOf<DPIFunctionType>:$dpi_function_type,
+    TypeAttrOf<ModuleType>:$module_type,
+    OptionalAttr<DictArrayAttr>:$per_argument_attrs,
     OptionalAttr<LocationArrayAttr>:$argument_locs,
     OptionalAttr<StrAttr>:$verilogName
   );
   let regions = (region AnyRegion:$body);
 
   let hasCustomAssemblyFormat = 1;
-  let hasVerifier = 1;
-
-  let builders = [
-    OpBuilder<(ins
-      "StringAttr":$sym_name,
-      "ArrayRef<StringAttr>":$argNames,
-      "ArrayRef<Type>":$argTypes,
-      "ArrayRef<DPIDirection>":$argDirections,
-      "ArrayAttr":$argLocs,
-      "StringAttr":$verilogName
-    )>,
-    OpBuilder<(ins
-      "StringAttr":$sym_name,
-      "DPIFunctionType":$dpiFunctionType,
-      "ArrayAttr":$argLocs,
-      "StringAttr":$verilogName
-    )>
-  ];
 
   let extraClassDeclaration = [{
-    /// Returns the argument types of this function.
-    ArrayRef<Type> getArgumentTypes() {
-      return ::llvm::cast<::mlir::FunctionType>(getFunctionType()).getInputs();
+    mlir::FunctionType getFunctionType() {
+      return getModuleType().getFuncType();
     }
 
-    /// Returns the result types of this function.
-    ArrayRef<Type> getResultTypes() {
-      return ::llvm::cast<::mlir::FunctionType>(getFunctionType()).getResults();
+    void setFunctionTypeAttr(mlir::TypeAttr mlirType) {
+      setModuleType(cast<hw::ModuleType>(mlirType.getValue()));
     }
+
+    /// Returns the argument types of this function.
+    ArrayRef<Type> getArgumentTypes() { return getFunctionType().getInputs(); }
+
+    /// Returns the result types of this function.
+    ArrayRef<Type> getResultTypes() { return getFunctionType().getResults(); }
 
     ::mlir::Region *getCallableRegion() { return nullptr; }
 
-    /// Provide a getFunctionTypeAttrName for FunctionOpInterface trait
-    /// (buildWithEntryBlock).  DPIFuncOp does not store function_type as a
-    /// separate attribute; it is derived from dpi_function_type.
-    static ::mlir::StringAttr getFunctionTypeAttrName(::mlir::OperationName name) {
-      return getDpiFunctionTypeAttrName(name);
-    }
-    ::mlir::StringAttr getFunctionTypeAttrName() {
-      return getDpiFunctionTypeAttrName();
-    }
-
-    /// Stub implementations for ArgumentAttributesMethods.
+    /// Stub implementations for ArgumentAttributesMethods. If desired,
+    /// implement these by defining arg_attrs and res_attrs as arguments to the
+    /// operation as OptionalAttr<DictArrayAttr>.
     mlir::ArrayAttr getArgAttrsAttr() { return nullptr; }
     mlir::ArrayAttr getResAttrsAttr() { return nullptr; }
     void setArgAttrsAttr(mlir::ArrayAttr args) {}
@@ -220,33 +169,6 @@ def FormatLiteralOp : SimOp<"fmt.literal", [Pure, ConstantLike]> {
   let results = (outs FormatStringType:$result);
 
   let hasFolder = true;
-}
-
-def FormatStringOp : SimOp<"fmt.string",
-  [Pure, DeclareOpInterfaceMethods<SimValueFormatter>]
-> {
-  let summary = "Dynamic string format specifier";
-  let description = [{
-    Format the given dynamic string value.
-
-    If `specifierWidth` is present and larger than the string length, the
-    result is padded to that width using `paddingChar`. By default, strings are
-    right-aligned and padded with spaces.
-  }];
-
-  let arguments = (ins DynamicStringType:$value,
-    DefaultValuedAttr<BoolAttr,"false">:$isLeftAligned,
-    DefaultValuedAttr<I8Attr,"32">:$paddingChar,
-    OptionalAttr<I32Attr>:$specifierWidth);
-  let results = (outs FormatStringType:$result);
-
-  let assemblyFormat = [{
-    $value
-    (`isLeftAligned` $isLeftAligned^)?
-    (`paddingChar` $paddingChar^)?
-    (`specifierWidth` $specifierWidth^)?
-    attr-dict `:` qualified(type($value))
-  }];
 }
 
 def FormatHexOp : SimOp<"fmt.hex",
@@ -512,16 +434,6 @@ def FormatCharOp : SimOp<"fmt.char",
   let assemblyFormat = "$value attr-dict `:` qualified(type($value))";
 }
 
-def FormatCurrentTimeOp : SimOp<"fmt.current_time", [Pure]> {
-  let summary = "Simulation time format specifier";
-  let description = [{
-    Format string fragment that resolves to the current simulation time when
-    printed. The textual representation is implementation defined.
-  }];
-  let results = (outs FormatStringType:$result);
-  let assemblyFormat = "attr-dict";
-}
-
 def FormatHierPathOp : SimOp<"fmt.hier_path", [Pure]> {
   let summary = "Hierarchical path format specifier";
   let description = [{
@@ -584,7 +496,7 @@ def FormatStringConcatOp : SimOp<"fmt.concat", [Pure]> {
   }];
 }
 
-def PrintFormattedOp : SimOp<"print", [NonProceduralOp]> {
+def PrintFormattedOp : SimOp<"print"> {
   let summary = "Print a formatted string on a given clock and condition";
   let description = [{
     Evaluate a format string and print it to the simulation console on the
@@ -599,85 +511,23 @@ def PrintFormattedOp : SimOp<"print", [NonProceduralOp]> {
   let arguments = (ins
     FormatStringType:$input,
     ClockType:$clock,
-    I1:$condition,
-    Optional<OutputStreamType>:$stream
+    I1:$condition
   );
-  let builders = [
-    OpBuilder<(ins
-      "Value":$input,
-      "Value":$clock,
-      "Value":$condition
-    ), [{
-      build($_builder, $_state, input, clock, condition, mlir::Value());
-    }]>
-  ];
   let hasCanonicalizeMethod = true;
-  let assemblyFormat = "$input `on` $clock `if` $condition (`to` $stream^)? attr-dict";
+  let assemblyFormat = "$input `on` $clock `if` $condition attr-dict";
 }
 
-def PrintFormattedProcOp : SimOp<"proc.print", [ProceduralOp]> {
+def PrintFormattedProcOp : SimOp<"proc.print"> {
   let summary = "Print a formatted string within a procedural region";
   let description = [{
     Evaluate a format string and print it to the simulation console.
 
     This operation must be within a procedural region.
   }];
-  let arguments = (ins
-    FormatStringType:$input,
-    Optional<OutputStreamType>:$stream
-  );
-  let builders = [
-    OpBuilder<(ins
-      "Value":$input
-    ), [{
-      build($_builder, $_state, input, mlir::Value());
-    }]>
-  ];
+  let arguments = (ins FormatStringType:$input);
+  let hasVerifier = true;
   let hasCanonicalizeMethod = true;
-  let assemblyFormat = "$input (`to` $stream^)? attr-dict";
-}
-
-def GetFileOp : SimOp<"get_file", [ProceduralOp]> {
-  let summary = "Get an output stream for a formatted file name";
-  let description = [{
-    Resolves a file name from a `!sim.fstring` value, immediately creates the
-    corresponding file, and returns an output stream resource that can be
-    consumed by `sim.proc.print`. The file-name format string should be
-    constructed using `sim.fmt.*` operations, just like any other Sim
-    format-string value.
-
-    This operation has an immediate side effect: executing it creates the file,
-    even if the returned stream is never subsequently consumed.
-
-    The concrete runtime representation and lifetime management of the returned
-    stream are backend-defined.
-  }];
-
-  let arguments = (ins FormatStringType:$fileName);
-  let results = (outs OutputStreamType:$result);
-  let assemblyFormat = "$fileName attr-dict";
-}
-
-def StdoutStreamOp : SimOp<"stdout_stream", [Pure]> {
-  let summary = "The standard output stream";
-  let description = [{
-    Returns a reference to the standard output stream, which can be consumed
-    by `sim.print` or `sim.proc.print`.
-  }];
-
-  let results = (outs OutputStreamType:$result);
-  let assemblyFormat = "attr-dict";
-}
-
-def StderrStreamOp : SimOp<"stderr_stream", [Pure]> {
-  let summary = "The standard error stream";
-  let description = [{
-    Returns a reference to the standard error stream, which can be consumed
-    by `sim.print` or `sim.proc.print`.
-  }];
-
-  let results = (outs OutputStreamType:$result);
-  let assemblyFormat = "attr-dict";
+  let assemblyFormat = "$input attr-dict";
 }
 
 //===----------------------------------------------------------------------===//
@@ -747,13 +597,13 @@ def IntToStringOp: SimOp<"string.int_to_string", [Pure]> {
   let description = [{
     Converts an integer value to a string following Verilog semantics, where
     string literals are represented as right-aligned bitvectors.
-
+    
     The operation reads the integer byte-by-byte, interpreting each non-zero
     byte as an ASCII character. Zero-valued bytes are skipped and
     not included in the output string. See Sec 6.16 of the standard saying
-    "A string variable shall not contain the special character "\0".
+    "A string variable shall not contain the special character "\0". 
     Assigning the value 0 to a string character shall be ignored"
-
+    
     Example:
       Consider the hex value 0x00_00_00_48_00_00_6C_6F
       Reading from MSB to LSB and filtering out null bytes:
@@ -871,7 +721,7 @@ TypesMatchWith<"queue and element types must match",
 AllTypesMatch<["queue", "outQueue"]>]> {
   let summary = "Push an element to the front of a queue";
   let description = [{
-    Adds an element to the front of the queue. If the queue is a bounded
+    Adds an element to the front of the queue. If the queue is a bounded 
     queue which is full, then this will erase the final element of the queue,
     as to keep the queue within-bounds.
   }];
@@ -909,7 +759,7 @@ AllTypesMatch<["queue", "outQueue"]>]> {
   let summary = "Removes the first element of a queue";
   let description = [{
     Removes an element from the front of a queue.
-
+    
     If the queue is empty, this has no effect, and the value of `popped`
     will be the same as obtained by reading a non-existent array element
     from an array with the same element type,
@@ -1029,7 +879,7 @@ def QueueResizeOp : SimOp<"queue.resize", [Pure]> {
   let description = [{
     Converts between two queues with different bounds, but the same element
     type.
-
+    
     If $result has a smaller bound than the size of $input, elements at the end
     of the queue will be discarded to ensure it fits within the space provided.
   }];
@@ -1088,7 +938,7 @@ def QueueConcatOp : SimOp<"queue.concat", [Pure]> {
 // Simulation Control
 //===----------------------------------------------------------------------===//
 
-def ClockedTerminateOp : SimOp<"clocked_terminate", [NonProceduralOp]> {
+def ClockedTerminateOp : SimOp<"clocked_terminate"> {
   let summary = "Terminate the simulation";
   let description = [{
     Implements the semantics of `sim.terminate` if the given condition is true
@@ -1107,7 +957,7 @@ def ClockedTerminateOp : SimOp<"clocked_terminate", [NonProceduralOp]> {
   }];
 }
 
-def ClockedPauseOp : SimOp<"clocked_pause", [NonProceduralOp]> {
+def ClockedPauseOp : SimOp<"clocked_pause"> {
   let summary = "Pause the simulation";
   let description = [{
     Implements the semantics of `sim.pause` if the given condition is true on
@@ -1124,7 +974,7 @@ def ClockedPauseOp : SimOp<"clocked_pause", [NonProceduralOp]> {
   }];
 }
 
-def TerminateOp : SimOp<"terminate", [ProceduralOp]> {
+def TerminateOp : SimOp<"terminate"> {
   let summary = "Terminate the simulation";
   let description = [{
     Terminate the simulation with a success or failure exit code. Depending on
@@ -1154,7 +1004,7 @@ def TerminateOp : SimOp<"terminate", [ProceduralOp]> {
   }];
 }
 
-def PauseOp : SimOp<"pause", [ProceduralOp]> {
+def PauseOp : SimOp<"pause"> {
   let summary = "Pause the simulation";
   let description = [{
     Interrupt the simulation and give control back to the user in case of an
@@ -1174,122 +1024,6 @@ def PauseOp : SimOp<"pause", [ProceduralOp]> {
   let assemblyFormat = [{
     custom<KeywordBool>($verbose, "\"verbose\"" , "\"quiet\"") attr-dict
   }];
-}
-
-def TriggeredOp : SimOp<"triggered", [
-    SingleBlock, NoTerminator, NonProceduralOp, ProceduralRegion]> {
-  let summary = "A procedural region triggered on a clock edge";
-  let description = [{
-    A procedural region that executes on the rising edge of the given clock.
-    An optional 1-bit condition can be provided to guard execution of the
-    region on that clock edge.
-  }];
-
-  let arguments = (ins ClockType:$clock, Optional<I1>:$condition);
-  let regions = (region SizedRegion<1>:$body);
-  let assemblyFormat = [{
-    $clock (`if` $condition^)? $body attr-dict
-  }];
-
-  let extraClassDeclaration = [{
-    Block *getBodyBlock() { return &getBody().front(); }
-  }];
-
-  let skipDefaultBuilders = 1;
-  let builders = [
-    OpBuilder<(ins
-      "Value":$clock,
-      CArg<"Value", "mlir::Value()">:$condition)>,
-    OpBuilder<(ins
-      "Value":$clock,
-      "Value":$condition,
-      "llvm::function_ref<void()>":$bodyCtor)>,
-    OpBuilder<(ins
-      "Value":$clock,
-      "llvm::function_ref<void()>":$bodyCtor), [{
-      return build($_builder, $_state, clock, mlir::Value(), bodyCtor);
-    }]>
-  ];
-}
-
-//===----------------------------------------------------------------------===//
-// File I/O
-//===----------------------------------------------------------------------===//
-
-def SVFOpenModeRead : I32EnumAttrCase<"Read", 0, "r">;
-def SVFOpenModeWrite : I32EnumAttrCase<"Write", 1, "w">;
-def SVFOpenModeAppend : I32EnumAttrCase<"Append", 2, "a">;
-def SVFOpenModeReadUpdate : I32EnumAttrCase<"ReadUpdate", 3, "r_update">;
-def SVFOpenModeWriteUpdate : I32EnumAttrCase<"WriteUpdate", 4, "w_update">;
-def SVFOpenModeAppendUpdate : I32EnumAttrCase<"AppendUpdate", 5, "a_update">;
-
-def SVFOpenModeAttr : I32EnumAttr<"SVFOpenMode", "SV file open mode",
-    [SVFOpenModeRead, SVFOpenModeWrite, SVFOpenModeAppend,
-     SVFOpenModeReadUpdate, SVFOpenModeWriteUpdate, SVFOpenModeAppendUpdate]> {
-  let cppNamespace = "circt::sim";
-}
-
-def SVFOpenOp : SimOp<"sv.fopen", [ProceduralOp]> {
-  let summary = "Open a file and return a file descriptor";
-  let description = [{
-    Implements the SystemVerilog `$fopen` system function.
-    See IEEE 1800-2017 § 21.3.1 "Opening and closing files".
-  }];
-
-  let arguments = (ins DynamicStringType:$fileName, OptionalAttr<SVFOpenModeAttr>:$mode);
-  let results = (outs I32:$fd);
-  let assemblyFormat = "$fileName (`mode` `=` $mode^)? attr-dict";
-}
-
-def SVFCloseOp : SimOp<"sv.fclose", [ProceduralOp]> {
-  let summary = "Close a file descriptor";
-  let description = [{
-    Implements the SystemVerilog `$fclose` system function.
-    See IEEE 1800-2017 § 21.3.1 "Opening and closing files".
-  }];
-
-  let arguments = (ins I32:$fd);
-  let assemblyFormat = "$fd attr-dict";
-}
-
-def SVChannelToOutputStreamOp : SimOp<"sv.channel_to_output_stream", [ProceduralOp]> {
-  let summary = "Cast a SV file descriptor or multichannel descriptor to an output stream";
-  let description = [{
-    Casts a SystemVerilog output channel (an integer returned by `sv.fopen`,
-    or a predefined channel such as stdout (`32'h8000_0001`) or stderr
-    (`32'h8000_0002`)) to an `!sim.output_stream`.
-    The input must represent a valid SystemVerilog file descriptor or
-    multichannel descriptor, which can be used for writing. Otherwise,
-    this operation causes undefined behavior.
-
-    See IEEE 1800-2017 § 21.3.1 "Opening and closing files".
-  }];
-  let arguments = (ins I32:$channel);
-  let results = (outs OutputStreamType:$stream);
-  let assemblyFormat = "$channel attr-dict";
-}
-
-def SVFFlushAllOp : SimOp<"sv.fflush_all", [ProceduralOp]> {
-  let summary = "Flush all open files";
-  let description = [{
-    Implements the SystemVerilog `$fflush` system tasks when called with no
-    arguments, which flushes all files opened by `sim.sv.fopen`.
-
-    See IEEE 1800-2017 § 21.3.6 "Flushing output".
-  }];
-
-  let assemblyFormat = "attr-dict";
-}
-
-def FlushOp : SimOp<"flush", [ProceduralOp]> {
-  let summary = "Flush a output stream";
-  let description = [{
-    Flushes the output buffer of an output stream.
-    This ensures that any buffered data is written to the file immediately.
-  }];
-
-  let arguments = (ins OutputStreamType:$stream);
-  let assemblyFormat = "$stream attr-dict";
 }
 
 #endif // CIRCT_DIALECT_SIM_SIMOPS_TD

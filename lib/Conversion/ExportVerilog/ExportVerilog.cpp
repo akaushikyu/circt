@@ -29,7 +29,6 @@
 #include "circt/Dialect/OM/OMOps.h"
 #include "circt/Dialect/SV/SVAttributes.h"
 #include "circt/Dialect/SV/SVOps.h"
-#include "circt/Dialect/SV/SVTypes.h"
 #include "circt/Dialect/SV/SVVisitors.h"
 #include "circt/Dialect/Verif/VerifVisitors.h"
 #include "circt/Support/LLVM.h"
@@ -37,7 +36,6 @@
 #include "circt/Support/Path.h"
 #include "circt/Support/PrettyPrinter.h"
 #include "circt/Support/PrettyPrinterHelpers.h"
-#include "circt/Support/ProceduralRegionTrait.h"
 #include "circt/Support/Version.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
@@ -269,9 +267,8 @@ bool ExportVerilog::isVerilogExpression(Operation *op) {
 
 // NOLINTBEGIN(misc-no-recursion)
 /// Push this type's dimension into a vector.
-static void getTypeDims(
-    SmallVectorImpl<Attribute> &dims, Type type, Location loc,
-    llvm::function_ref<mlir::InFlightDiagnostic(Location)> errorHandler) {
+static void getTypeDims(SmallVectorImpl<Attribute> &dims, Type type,
+                        Location loc) {
   if (auto integer = hw::type_dyn_cast<IntegerType>(type)) {
     if (integer.getWidth() != 1)
       dims.push_back(getInt32Attr(type.getContext(), integer.getWidth()));
@@ -279,7 +276,7 @@ static void getTypeDims(
   }
   if (auto array = hw::type_dyn_cast<ArrayType>(type)) {
     dims.push_back(getInt32Attr(type.getContext(), array.getNumElements()));
-    getTypeDims(dims, array.getElementType(), loc, errorHandler);
+    getTypeDims(dims, array.getElementType(), loc);
 
     return;
   }
@@ -289,27 +286,26 @@ static void getTypeDims(
   }
 
   if (auto inout = hw::type_dyn_cast<InOutType>(type))
-    return getTypeDims(dims, inout.getElementType(), loc, errorHandler);
+    return getTypeDims(dims, inout.getElementType(), loc);
   if (auto uarray = hw::type_dyn_cast<hw::UnpackedArrayType>(type))
-    return getTypeDims(dims, uarray.getElementType(), loc, errorHandler);
+    return getTypeDims(dims, uarray.getElementType(), loc);
   if (auto uarray = hw::type_dyn_cast<sv::UnpackedOpenArrayType>(type))
-    return getTypeDims(dims, uarray.getElementType(), loc, errorHandler);
+    return getTypeDims(dims, uarray.getElementType(), loc);
+
   if (hw::type_isa<InterfaceType, StructType, EnumType, UnionType>(type))
     return;
 
-  errorHandler(loc) << "value has an unsupported verilog type " << type;
+  mlir::emitError(loc, "value has an unsupported verilog type ") << type;
 }
 // NOLINTEND(misc-no-recursion)
 
 /// True iff 'a' and 'b' have the same wire dims.
-static bool haveMatchingDims(
-    Type a, Type b, Location loc,
-    llvm::function_ref<mlir::InFlightDiagnostic(Location)> errorHandler) {
+static bool haveMatchingDims(Type a, Type b, Location loc) {
   SmallVector<Attribute, 4> aDims;
-  getTypeDims(aDims, a, loc, errorHandler);
+  getTypeDims(aDims, a, loc);
 
   SmallVector<Attribute, 4> bDims;
-  getTypeDims(bDims, b, loc, errorHandler);
+  getTypeDims(bDims, b, loc);
 
   return aDims == bDims;
 }
@@ -739,8 +735,7 @@ static bool isExpressionUnableToInline(Operation *op,
                                        const LoweringOptions &options) {
   if (auto cast = dyn_cast<BitcastOp>(op))
     if (!haveMatchingDims(cast.getInput().getType(), cast.getResult().getType(),
-                          op->getLoc(),
-                          [&](Location loc) { return emitError(loc); })) {
+                          op->getLoc())) {
       // Even if dimentions don't match, we can inline when its user doesn't
       // rely on the type.
       if (op->hasOneUse() &&
@@ -779,8 +774,7 @@ static bool isExpressionUnableToInline(Operation *op,
     //
     // To handle these, we push the subexpression into a temporary.
     if (isa<ExtractOp, ArraySliceOp, ArrayGetOp, ArrayInjectOp, StructExtractOp,
-            StructInjectOp, StructExplodeOp, UnionExtractOp,
-            IndexedPartSelectOp>(user))
+            UnionExtractOp, IndexedPartSelectOp>(user))
       if (use.getOperandNumber() == 0 && // ignore index operands.
           !isOkToBitSelectFrom(use.get()))
         return true;
@@ -990,9 +984,8 @@ StringRef getVerilogValueName(Value val) {
 
   if (auto port = dyn_cast<BlockArgument>(val)) {
     // If the value is defined by for op, use its associated verilog name.
-    auto parent = port.getParentBlock()->getParentOp();
-    if (isa<ForOp, GenerateForOp>(parent))
-      return parent->getAttrOfType<StringAttr>("hw.verilogName");
+    if (auto forOp = dyn_cast<ForOp>(port.getParentBlock()->getParentOp()))
+      return forOp->getAttrOfType<StringAttr>("hw.verilogName");
     return getInputPortVerilogName(port.getParentBlock()->getParentOp(),
                                    port.getArgNumber());
   }
@@ -1118,11 +1111,6 @@ public:
   InFlightDiagnostic emitOpError(Operation *op, const Twine &message) {
     state.encounteredError = true;
     return op->emitOpError(message);
-  }
-
-  InFlightDiagnostic emitError(Location loc, const Twine &message = "") {
-    state.encounteredError = true;
-    return mlir::emitError(loc, message);
   }
 
   void emitLocationImpl(llvm::StringRef location) {
@@ -1557,14 +1545,20 @@ static StringRef getVerilogDeclWord(Operation *op,
     // should be left off.
     auto elementType =
         cast<InOutType>(op->getResult(0).getType()).getElementType();
-    // Unwrap arrays. Since packed arrays cannot contain unpacked arrays, we can
-    // unpack unpacked arrays first.
-    while (auto arrayType = hw::type_dyn_cast<UnpackedArrayType>(elementType))
-      elementType = arrayType.getElementType();
-    while (auto arrayType = hw::type_dyn_cast<ArrayType>(elementType))
-      elementType = arrayType.getElementType();
-
-    if (isa<StructType, UnionType, EnumType, TypeAliasType>(elementType))
+    if (isa<StructType>(elementType))
+      return "";
+    if (isa<UnionType>(elementType))
+      return "";
+    if (isa<EnumType>(elementType))
+      return "";
+    if (auto innerType = dyn_cast<ArrayType>(elementType)) {
+      while (isa<ArrayType>(innerType.getElementType()))
+        innerType = cast<ArrayType>(innerType.getElementType());
+      if (isa<StructType>(innerType.getElementType()) ||
+          isa<TypeAliasType>(innerType.getElementType()))
+        return "";
+    }
+    if (isa<TypeAliasType>(elementType))
       return "";
 
     return "reg";
@@ -1642,7 +1636,7 @@ static void emitDim(Attribute width, raw_ostream &os, Location loc,
   // attribute so it gets printed in canonical form.
   auto typedAttr = dyn_cast<TypedAttr>(width);
   if (!typedAttr) {
-    emitter.emitError(loc, "untyped dimension attribute ") << width;
+    mlir::emitError(loc, "untyped dimension attribute ") << width;
     return;
   }
   auto negOne =
@@ -1652,8 +1646,8 @@ static void emitDim(Attribute width, raw_ostream &os, Location loc,
   os << '[';
   if (!downTo)
     os << "0:";
-  emitter.printParamValue(width, os, [loc, &emitter]() {
-    return emitter.emitError(loc, "invalid parameter in type");
+  emitter.printParamValue(width, os, [loc]() {
+    return mlir::emitError(loc, "invalid parameter in type");
   });
   if (downTo)
     os << ":0";
@@ -1671,8 +1665,7 @@ static void emitDims(ArrayRef<Attribute> dims, raw_ostream &os, Location loc,
 /// Emit a type's packed dimensions.
 void ModuleEmitter::emitTypeDims(Type type, Location loc, raw_ostream &os) {
   SmallVector<Attribute, 4> dims;
-  getTypeDims(dims, type, loc,
-              [&](Location loc) { return this->emitError(loc); });
+  getTypeDims(dims, type, loc);
   emitDims(dims, os, loc, *this);
 }
 
@@ -1709,7 +1702,7 @@ static bool printPackedTypeImpl(Type type, raw_ostream &os, Location loc,
                                 Type optionalAliasType = {},
                                 bool emitAsTwoStateType = false) {
   return TypeSwitch<Type, bool>(type)
-      .Case<IntegerType>([&](IntegerType integerType) -> bool {
+      .Case<IntegerType>([&](IntegerType integerType) {
         if (emitAsTwoStateType && dims.empty()) {
           auto typeName = getTwoStateIntegerAtomType(integerType.getWidth());
           if (!typeName.empty()) {
@@ -1845,26 +1838,20 @@ static bool printPackedTypeImpl(Type type, raw_ostream &os, Location loc,
       })
 
       .Case<InterfaceType>([](InterfaceType ifaceType) { return false; })
-      .Case<ModportType>([&](ModportType modportType) {
-        auto modportAttr = modportType.getModport();
-        os << modportAttr.getRootReference().getValue() << "."
-           << modportAttr.getNestedReferences().front().getValue();
-        return true;
-      })
       .Case<UnpackedArrayType>([&](UnpackedArrayType arrayType) {
         os << "<<unexpected unpacked array>>";
-        emitter.emitError(loc, "Unexpected unpacked array in packed type ")
+        mlir::emitError(loc, "Unexpected unpacked array in packed type ")
             << arrayType;
         return true;
       })
       .Case<TypeAliasType>([&](TypeAliasType typeRef) {
         auto typedecl = typeRef.getTypeDecl(emitter.state.symbolCache);
         if (!typedecl) {
-          emitter.emitError(loc, "unresolvable type reference");
+          mlir::emitError(loc, "unresolvable type reference");
           return false;
         }
         if (typedecl.getType() != typeRef.getInnerType()) {
-          emitter.emitError(loc, "declared type did not match aliased type");
+          mlir::emitError(loc, "declared type did not match aliased type");
           return false;
         }
 
@@ -1874,8 +1861,7 @@ static bool printPackedTypeImpl(Type type, raw_ostream &os, Location loc,
       })
       .Default([&](Type type) {
         os << "<<invalid type '" << type << "'>>";
-        emitter.emitError(loc, "value has an unsupported verilog type ")
-            << type;
+        mlir::emitError(loc, "value has an unsupported verilog type ") << type;
         return true;
       });
 }
@@ -2749,9 +2735,7 @@ SubExprInfo ExprEmitter::visitTypeOp(BitcastOp op) {
   // their dimensions don't match. SystemVerilog uses the wire declaration to
   // know what type this value is being casted to.
   Type toType = op.getType();
-  if (!haveMatchingDims(
-          toType, op.getInput().getType(), op.getLoc(),
-          [&](Location loc) { return emitter.emitError(loc, ""); })) {
+  if (!haveMatchingDims(toType, op.getInput().getType(), op.getLoc())) {
     ps << "/*cast(bit";
     ps.invokeWithStringOS(
         [&](auto &os) { emitter.emitTypeDims(toType, op.getLoc(), os); });
@@ -3599,7 +3583,6 @@ private:
   EmittedProperty visitLTL(ltl::OrOp op);
   EmittedProperty visitLTL(ltl::IntersectOp op);
   EmittedProperty visitLTL(ltl::DelayOp op);
-  EmittedProperty visitLTL(ltl::ClockedDelayOp op);
   EmittedProperty visitLTL(ltl::ConcatOp op);
   EmittedProperty visitLTL(ltl::RepeatOp op);
   EmittedProperty visitLTL(ltl::GoToRepeatOp op);
@@ -3610,8 +3593,6 @@ private:
   EmittedProperty visitLTL(ltl::EventuallyOp op);
   EmittedProperty visitLTL(ltl::ClockOp op);
 
-  void emitLTLDelay(int64_t delay, std::optional<int64_t> length);
-  void emitLTLClockingEvent(ltl::ClockEdge edge, Value clock);
   void emitLTLConcat(ValueRange inputs);
 
 public:
@@ -3770,55 +3751,32 @@ EmittedProperty PropertyEmitter::visitLTL(ltl::IntersectOp op) {
   return {PropertyPrecedence::Intersect};
 }
 
-void PropertyEmitter::emitLTLDelay(int64_t delay,
-                                   std::optional<int64_t> length) {
+EmittedProperty PropertyEmitter::visitLTL(ltl::DelayOp op) {
   ps << "##";
-  if (length) {
+  if (auto length = op.getLength()) {
     if (*length == 0) {
-      ps.addAsString(delay);
+      ps.addAsString(op.getDelay());
     } else {
       ps << "[";
-      ps.addAsString(delay);
+      ps.addAsString(op.getDelay());
       ps << ":";
-      ps.addAsString(delay + *length);
+      ps.addAsString(op.getDelay() + *length);
       ps << "]";
     }
   } else {
-    if (delay == 0) {
+    if (op.getDelay() == 0) {
       ps << "[*]";
-    } else if (delay == 1) {
+    } else if (op.getDelay() == 1) {
       ps << "[+]";
     } else {
       ps << "[";
-      ps.addAsString(delay);
+      ps.addAsString(op.getDelay());
       ps << ":$]";
     }
   }
-}
-
-void PropertyEmitter::emitLTLClockingEvent(ltl::ClockEdge edge, Value clock) {
-  ps << "@(";
-  ps.scopedBox(PP::ibox2, [&] {
-    ps << PPExtString(stringifyClockEdge(edge)) << PP::space;
-    emitNestedProperty(clock, PropertyPrecedence::Lowest);
-    ps << ")";
-  });
-}
-
-EmittedProperty PropertyEmitter::visitLTL(ltl::DelayOp op) {
-  emitLTLDelay(op.getDelay(), op.getLength());
   ps << PP::space;
   emitNestedProperty(op.getInput(), PropertyPrecedence::Concat);
   return {PropertyPrecedence::Concat};
-}
-
-EmittedProperty PropertyEmitter::visitLTL(ltl::ClockedDelayOp op) {
-  emitLTLClockingEvent(op.getEdge(), op.getClock());
-  ps << PP::space;
-  emitLTLDelay(op.getDelay(), op.getLength());
-  ps << PP::space;
-  emitNestedProperty(op.getInput(), PropertyPrecedence::Concat);
-  return {PropertyPrecedence::Clocking};
 }
 
 void PropertyEmitter::emitLTLConcat(ValueRange inputs) {
@@ -3942,7 +3900,12 @@ EmittedProperty PropertyEmitter::visitLTL(ltl::EventuallyOp op) {
 }
 
 EmittedProperty PropertyEmitter::visitLTL(ltl::ClockOp op) {
-  emitLTLClockingEvent(op.getEdge(), op.getClock());
+  ps << "@(";
+  ps.scopedBox(PP::ibox2, [&] {
+    ps << PPExtString(stringifyClockEdge(op.getEdge())) << PP::space;
+    emitNestedProperty(op.getClock(), PropertyPrecedence::Lowest);
+    ps << ")";
+  });
   ps << PP::space;
   emitNestedProperty(op.getInput(), PropertyPrecedence::Clocking);
   return {PropertyPrecedence::Clocking};
@@ -4109,11 +4072,6 @@ private:
   LogicalResult visitSV(AlwaysFFOp op);
   LogicalResult visitSV(InitialOp op);
   LogicalResult visitSV(CaseOp op);
-  template <typename OpTy, typename EmitPrefixFn>
-  LogicalResult
-  emitFormattedWriteLikeOp(OpTy op, StringRef callee, StringRef formatString,
-                           ValueRange substitutions, EmitPrefixFn emitPrefix);
-  LogicalResult visitSV(WriteOp op);
   LogicalResult visitSV(FWriteOp op);
   LogicalResult visitSV(FFlushOp op);
   LogicalResult visitSV(VerbatimOp op);
@@ -4157,7 +4115,6 @@ private:
 
   LogicalResult visitSV(GenerateOp op);
   LogicalResult visitSV(GenerateCaseOp op);
-  LogicalResult visitSV(GenerateForOp op);
 
   LogicalResult visitSV(ForOp op);
 
@@ -4643,11 +4600,7 @@ LogicalResult StmtEmitter::visitSV(FFlushOp op) {
   return success();
 }
 
-template <typename OpTy, typename EmitPrefixFn>
-LogicalResult StmtEmitter::emitFormattedWriteLikeOp(OpTy op, StringRef callee,
-                                                    StringRef formatString,
-                                                    ValueRange substitutions,
-                                                    EmitPrefixFn emitPrefix) {
+LogicalResult StmtEmitter::visitSV(FWriteOp op) {
   if (hasSVAttributes(op))
     emitError(op, "SV attributes emission is unimplemented for the op");
 
@@ -4656,17 +4609,20 @@ LogicalResult StmtEmitter::emitFormattedWriteLikeOp(OpTy op, StringRef callee,
   ops.insert(op);
 
   ps.addCallback({op, true});
-  ps << callee;
+  ps << "$fwrite(";
   ps.scopedBox(PP::ibox0, [&]() {
-    emitPrefix(ops);
-    ps.writeQuotedEscaped(formatString);
+    emitExpression(op.getFd(), ops);
+
+    ps << "," << PP::space;
+    ps.writeQuotedEscaped(op.getFormatString());
+
     // TODO: if any of these breaks, it'd be "nice" to break
     // after the comma, instead of:
     // $fwrite(5, "...", a + b,
     //         longexpr_goes
     //         + here, c);
     // (without forcing breaking between all elements, like braced list)
-    for (auto operand : substitutions) {
+    for (auto operand : op.getSubstitutions()) {
       ps << "," << PP::space;
       emitExpression(operand, ops);
     }
@@ -4675,21 +4631,6 @@ LogicalResult StmtEmitter::emitFormattedWriteLikeOp(OpTy op, StringRef callee,
   ps.addCallback({op, false});
   emitLocationInfoAndNewLine(ops);
   return success();
-}
-
-LogicalResult StmtEmitter::visitSV(WriteOp op) {
-  return emitFormattedWriteLikeOp(op, "$write(", op.getFormatString(),
-                                  op.getSubstitutions(),
-                                  [&](SmallPtrSetImpl<Operation *> &) {});
-}
-
-LogicalResult StmtEmitter::visitSV(FWriteOp op) {
-  return emitFormattedWriteLikeOp(op, "$fwrite(", op.getFormatString(),
-                                  op.getSubstitutions(),
-                                  [&](SmallPtrSetImpl<Operation *> &ops) {
-                                    emitExpression(op.getFd(), ops);
-                                    ps << "," << PP::space;
-                                  });
 }
 
 LogicalResult StmtEmitter::visitSV(VerbatimOp op) {
@@ -4984,64 +4925,6 @@ LogicalResult StmtEmitter::visitSV(GenerateCaseOp op) {
   return success();
 }
 
-LogicalResult StmtEmitter::visitSV(GenerateForOp op) {
-  emitSVAttributes(op);
-  llvm::SmallPtrSet<Operation *, 8> ops;
-  ps.addCallback({op, true});
-  startStatement();
-
-  StringRef inductionVarName = op->getAttrOfType<StringAttr>("hw.verilogName");
-
-  ps << "for (";
-  ps.scopedBox(PP::cbox0, [&]() {
-    emitAssignLike(
-        [&]() { ps << "genvar" << PP::nbsp << PPExtString(inductionVarName); },
-        [&]() {
-          ps.invokeWithStringOS([&](auto &os) {
-            emitter.printParamValue(
-                op.getLowerBound(), os, VerilogPrecedence::LowestPrecedence,
-                [&]() { return op->emitOpError("invalid lower bound"); });
-          });
-        },
-        PPExtString("="));
-    ps << PP::space;
-
-    emitAssignLike(
-        [&]() { ps << PPExtString(inductionVarName); },
-        [&]() {
-          ps.invokeWithStringOS([&](auto &os) {
-            emitter.printParamValue(
-                op.getUpperBound(), os, VerilogPrecedence::LowestPrecedence,
-                [&]() { return op->emitOpError("invalid upper bound"); });
-          });
-        },
-        PPExtString("<"));
-    ps << PP::space;
-
-    ps << PPExtString(inductionVarName) << PP::nbsp << "+=" << PP::nbsp;
-    ps.invokeWithStringOS([&](auto &os) {
-      emitter.printParamValue(
-          op.getStep(), os, VerilogPrecedence::LowestPrecedence,
-          [&]() { return op->emitOpError("invalid step"); });
-    });
-    ps << ") begin";
-    StringRef blockName = op.getGenBlockName();
-    if (!blockName.empty())
-      ps << " : " << PPExtString(blockName);
-  });
-
-  ps << PP::neverbreak;
-  setPendingNewline();
-  emitStatementBlock(op.getBody().getBlocks().front());
-  startStatement();
-  ps << "end";
-  if (StringRef blockName = op.getGenBlockName(); !blockName.empty())
-    ps << " // " << PPExtString(blockName);
-  ps.addCallback({op, false});
-  setPendingNewline();
-  return success();
-}
-
 LogicalResult StmtEmitter::visitSV(ForOp op) {
   emitSVAttributes(op);
   llvm::SmallPtrSet<Operation *, 8> ops;
@@ -5321,8 +5204,7 @@ void StmtEmitter::emitBlockAsStatement(
 
   // Determine if we need begin/end by scanning the block.
   auto count = countStatements(*block);
-  auto needsBeginEnd =
-      count != BlockStatementCount::One || state.options.alwaysEmitBeginEnd;
+  auto needsBeginEnd = count != BlockStatementCount::One;
   if (needsBeginEnd)
     ps << " begin";
   emitLocationInfoAndNewLine(locationOps);
@@ -6565,37 +6447,31 @@ void ModuleEmitter::emitPortList(Operation *module,
         ps << (isZeroWidth ? "// " : "   ");
       }
 
-      // Emit the port direction and optional wire keyword.
+      // Emit the port direction.
       auto thisPortDirection = portInfo.at(portIdx).dir;
-      size_t startOfNamePos = (hasOutputs ? 7 : 6) +
-                              (state.options.emitWireInPorts ? 5 : 0) +
-                              maxTypeWidth;
-      // Modport-typed ports (e.g., MyBundle.sink) already encode their
-      // direction in the interface modport definition, so we suppress the
-      // direction and wire keywords for them.
-      if (!isa<ModportType>(portType)) {
-        switch (thisPortDirection) {
-        case ModulePort::Direction::Output:
-          ps << "output ";
-          break;
-        case ModulePort::Direction::Input:
-          ps << (hasOutputs ? "input  " : "input ");
-          break;
-        case ModulePort::Direction::InOut:
-          ps << (hasOutputs ? "inout  " : "inout ");
-          break;
-        }
-        if (state.options.emitWireInPorts)
-          ps << "wire ";
-        if (!portTypeStrings[portIdx].empty())
-          ps << portTypeStrings[portIdx];
-        if (portTypeStrings[portIdx].size() < maxTypeWidth)
-          ps.nbsp(maxTypeWidth - portTypeStrings[portIdx].size());
-      } else {
-        ps << portTypeStrings[portIdx];
-        if (portTypeStrings[portIdx].size() < startOfNamePos)
-          ps.nbsp(startOfNamePos - portTypeStrings[portIdx].size());
+      switch (thisPortDirection) {
+      case ModulePort::Direction::Output:
+        ps << "output ";
+        break;
+      case ModulePort::Direction::Input:
+        ps << (hasOutputs ? "input  " : "input ");
+        break;
+      case ModulePort::Direction::InOut:
+        ps << (hasOutputs ? "inout  " : "inout ");
+        break;
       }
+      bool emitWireInPorts = state.options.emitWireInPorts;
+      if (emitWireInPorts)
+        ps << "wire ";
+
+      // Emit the type.
+      if (!portTypeStrings[portIdx].empty())
+        ps << portTypeStrings[portIdx];
+      if (portTypeStrings[portIdx].size() < maxTypeWidth)
+        ps.nbsp(maxTypeWidth - portTypeStrings[portIdx].size());
+
+      size_t startOfNamePos =
+          (hasOutputs ? 7 : 6) + (emitWireInPorts ? 5 : 0) + maxTypeWidth;
 
       // Emit the name.
       ps << PPExtString(portInfo.at(portIdx).getVerilogName());
@@ -7217,8 +7093,6 @@ void SharedEmitterState::emitOps(EmissionList &thingsToEmit,
                               stringOrOp.verilogLocs);
     emitOperation(state, op);
     stringOrOp.setString(buffer);
-    if (state.encounteredError)
-      encounteredError = true;
   });
 
   // Finally emit each entry now that we know it is a string.
@@ -7243,10 +7117,6 @@ void SharedEmitterState::emitOps(EmissionList &thingsToEmit,
                               entry.verilogLocs);
     emitOperation(state, op);
     state.addVerilogLocToOps(0, fileName);
-    if (state.encounteredError) {
-      encounteredError = true;
-      return;
-    }
   }
 }
 

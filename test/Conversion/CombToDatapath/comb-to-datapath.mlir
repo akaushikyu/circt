@@ -38,11 +38,3 @@ hw.module @sub(in %arg0: i4, in %arg1: i4, out out: i4) {
   hw.output %0 : i4
 }
 
-// CHECK-LABEL: func.func @test_no_module
-func.func @test_no_module(%arg0: i4, %arg1: i4) -> i4 {
-  // CHECK: datapath.partial_product
-  // CHECK: datapath.compress
-  %0 = comb.mul %arg0, %arg1 : i4
-  return %0 :i4
-}
-

@@ -12,11 +12,9 @@ set(LLVM_LINK_COMPONENTS Support ${CIRCT_BMC_JIT_LLVM_COMPONENTS})
 add_circt_tool(circt-bmc circt-bmc.cpp)
 target_link_libraries(circt-bmc
   PRIVATE
-  CIRCTBMCRuntime
   CIRCTBMCTransforms
   CIRCTComb
   CIRCTCombToSMT
-  CIRCTDebug
   CIRCTEmitTransforms
   CIRCTHW
   CIRCTHWToSMT

@@ -5,7 +5,6 @@ add_circt_dialect_library(CIRCTSVTransforms
   HWLegalizeModules.cpp
   PrettifyVerilog.cpp
   HWExportModuleHierarchy.cpp
-  SVMaskNonSynthesizable.cpp
   SVTraceIVerilog.cpp
   HWEliminateInOutPorts.cpp
 

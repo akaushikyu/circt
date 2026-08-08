@@ -17,11 +17,6 @@ They are cleaner from a data-flow perspective, as they package the wires
 and if-statements involved into compact operations that can be trivially
 handled by analyses.
 
-### DPI-C
-
-The current and proposed DPI-C semantics are documented separately in
-[Simulation Dialect DPI Proposal](SimDPI.md).
-
 ## Types
 
 [include "Dialects/SimTypes.md"]

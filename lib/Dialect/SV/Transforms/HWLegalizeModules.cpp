@@ -20,7 +20,6 @@
 #include "circt/Dialect/SV/SVOps.h"
 #include "circt/Dialect/SV/SVPasses.h"
 #include "circt/Support/LoweringOptions.h"
-#include "circt/Support/ProceduralRegionTrait.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/Pass/Pass.h"
 
@@ -289,7 +288,7 @@ Value HWLegalizeModulesPass::lowerLookupToCasez(Operation &op, Value input,
   // A casez is a procedural operation, so if we're in a
   // non-procedural region we need to inject an always_comb
   // block.
-  if (!op.getParentOp()->hasTrait<ProceduralRegion>()) {
+  if (!op.getParentOp()->hasTrait<sv::ProceduralRegion>()) {
     auto alwaysComb = sv::AlwaysCombOp::create(builder, loc);
     builder.setInsertionPointToEnd(alwaysComb.getBodyBlock());
   }

@@ -56,8 +56,8 @@ public:
             LTLRepeatIntrinsicOp, LTLGoToRepeatIntrinsicOp,
             LTLNonConsecutiveRepeatIntrinsicOp, LTLNotIntrinsicOp,
             LTLImplicationIntrinsicOp, LTLUntilIntrinsicOp,
-            LTLEventuallyIntrinsicOp, LTLPastIntrinsicOp, LTLClockIntrinsicOp,
-            Mux2CellIntrinsicOp, Mux4CellIntrinsicOp, HasBeenResetIntrinsicOp,
+            LTLEventuallyIntrinsicOp, LTLClockIntrinsicOp, Mux2CellIntrinsicOp,
+            Mux4CellIntrinsicOp, HasBeenResetIntrinsicOp,
             // Miscellaneous.
             BitsPrimOp, HeadPrimOp, MuxPrimOp, PadPrimOp, ShlPrimOp, ShrPrimOp,
             TailPrimOp, VerbatimExprOp, HWStructCastOp, BitCastOp, RefSendOp,
@@ -68,8 +68,7 @@ public:
             // Property expressions.
             StringConstantOp, FIntegerConstantOp, BoolConstantOp,
             DoubleConstantOp, ListCreateOp, ListConcatOp, UnresolvedPathOp,
-            PathOp, IntegerAddOp, IntegerMulOp, IntegerShrOp, StringConcatOp,
-            PropEqOp, BoolAndOp, BoolOrOp, BoolXorOp, UnknownValueOp,
+            PathOp, IntegerAddOp, IntegerMulOp, IntegerShrOp, UnknownValueOp,
             // Format String expressions
             TimeOp, HierarchicalModuleNameOp>([&](auto expr) -> ResultType {
           return thisCast->visitExpr(expr, args...);
@@ -190,7 +189,6 @@ public:
   HANDLE(LTLImplicationIntrinsicOp, Unhandled);
   HANDLE(LTLUntilIntrinsicOp, Unhandled);
   HANDLE(LTLEventuallyIntrinsicOp, Unhandled);
-  HANDLE(LTLPastIntrinsicOp, Unhandled);
   HANDLE(LTLClockIntrinsicOp, Unhandled);
   HANDLE(Mux4CellIntrinsicOp, Unhandled);
   HANDLE(Mux2CellIntrinsicOp, Unhandled);
@@ -233,11 +231,6 @@ public:
   HANDLE(IntegerAddOp, Unhandled);
   HANDLE(IntegerMulOp, Unhandled);
   HANDLE(IntegerShrOp, Unhandled);
-  HANDLE(StringConcatOp, Unhandled);
-  HANDLE(PropEqOp, Unhandled);
-  HANDLE(BoolAndOp, Unhandled);
-  HANDLE(BoolOrOp, Unhandled);
-  HANDLE(BoolXorOp, Unhandled);
   HANDLE(UnknownValueOp, Unhandled);
 
   // Format string expressions

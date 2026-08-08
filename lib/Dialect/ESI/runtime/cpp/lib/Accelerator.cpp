@@ -40,23 +40,6 @@ AcceleratorConnection::AcceleratorConnection(Context &ctxt)
     : ctxt(ctxt), serviceThread(nullptr) {}
 AcceleratorConnection::~AcceleratorConnection() { disconnect(); }
 
-// Request a design reset by writing the reset magic number to a particular
-// MMIO offset.
-bool AcceleratorConnection::reset() {
-  services::MMIO *mmio = getService<services::MMIO>();
-  if (!mmio)
-    return false;
-  // The MMIO write is a virtual backend interface which may throw.
-  try {
-    mmio->write(ResetRequestOffset, ResetMagicNumber);
-  } catch (const std::exception &e) {
-    getLogger().error("reset",
-                      std::string("failed to request reset: ") + e.what());
-    return false;
-  }
-  return true;
-}
-
 AcceleratorServiceThread *AcceleratorConnection::getServiceThread() {
   if (!serviceThread)
     serviceThread = std::make_unique<AcceleratorServiceThread>();
@@ -118,13 +101,6 @@ AcceleratorConnection::takeOwnership(std::unique_ptr<Accelerator> acc) {
         "AcceleratorConnection already owns an accelerator");
   ownedAccelerator = std::move(acc);
   return ownedAccelerator.get();
-}
-
-void AcceleratorConnection::clearOwnedObjects() {
-  ownedAccelerator.reset();
-  serviceCache.clear();
-  clientEngines.clear();
-  ownedEngines.clear();
 }
 
 /// Get the path to the currently running executable.

@@ -142,46 +142,6 @@ firrtl.module @PropertyArithmetic() {
   %5 = firrtl.integer.shl %0, %1 : (!firrtl.integer, !firrtl.integer) -> !firrtl.integer
 }
 
-// CHECK-LABEL: firrtl.module @PropertyStringOps
-firrtl.module @PropertyStringOps() {
-  %0 = firrtl.string "Hello, "
-  %1 = firrtl.string "World"
-  %2 = firrtl.string "!"
-
-  // CHECK: firrtl.string.concat %0, %1, %2 : !firrtl.string
-  %3 = firrtl.string.concat %0, %1, %2 : !firrtl.string
-}
-
-// CHECK-LABEL: firrtl.module @PropertyPropEq
-firrtl.module @PropertyPropEq() {
-  %0 = firrtl.string "hello"
-  %1 = firrtl.string "world"
-
-  // CHECK: firrtl.prop.eq %0, %1 : !firrtl.string
-  %2 = firrtl.prop.eq %0, %1 : !firrtl.string
-
-  %3 = firrtl.bool true
-  %4 = firrtl.bool false
-
-  // CHECK: firrtl.prop.eq %3, %4 : !firrtl.bool
-  %5 = firrtl.prop.eq %3, %4 : !firrtl.bool
-
-  %6 = firrtl.integer 42
-  %7 = firrtl.integer 0
-
-  // CHECK: firrtl.prop.eq %6, %7 : !firrtl.integer
-  %8 = firrtl.prop.eq %6, %7 : !firrtl.integer
-
-  // CHECK: firrtl.bool.and %3, %4
-  %9 = firrtl.bool.and %3, %4
-
-  // CHECK: firrtl.bool.or %3, %4
-  %10 = firrtl.bool.or %3, %4
-
-  // CHECK: firrtl.bool.xor %3, %4
-  %11 = firrtl.bool.xor %3, %4
-}
-
 // CHECK-LABEL: firrtl.module @PropertyListOps
 firrtl.module @PropertyListOps() {
   %0 = firrtl.integer 0
@@ -410,35 +370,6 @@ firrtl.module @DomainSubfield() {
 
   // CHECK-NEXT: firrtl.domain.subfield{{.*}}[voltage] : !firrtl.domain<@PowerDomain(name: !firrtl.string, voltage: !firrtl.integer, alwaysOn: !firrtl.bool)>
   %extracted_voltage = firrtl.domain.subfield %domain[voltage] : !firrtl.domain<@PowerDomain(name: !firrtl.string, voltage: !firrtl.integer, alwaysOn: !firrtl.bool)>
-}
-
-// CHECK-LABEL: firrtl.module @WireDomainOperands
-firrtl.module @WireDomainOperands(
-  in %A: !firrtl.domain<@ClockDomain()>,
-  in %B: !firrtl.domain<@PowerDomain(name: !firrtl.string, voltage: !firrtl.integer, alwaysOn: !firrtl.bool)>
-) {
-  // CHECK: %w_no_domain = firrtl.wire : !firrtl.uint<1>
-  %w_no_domain = firrtl.wire : !firrtl.uint<1>
-
-  // CHECK: %w_single = firrtl.wire domains[%A] : !firrtl.uint<8> domains[!firrtl.domain<@ClockDomain()>]
-  %w_single = firrtl.wire domains[%A] : !firrtl.uint<8> domains[!firrtl.domain<@ClockDomain()>]
-
-  // CHECK: %w_multi = firrtl.wire domains[%A, %B] : !firrtl.uint<16> domains[!firrtl.domain<@ClockDomain()>, !firrtl.domain<@PowerDomain(name: !firrtl.string, voltage: !firrtl.integer, alwaysOn: !firrtl.bool)>]
-  %w_multi = firrtl.wire domains[%A, %B] : !firrtl.uint<16> domains[!firrtl.domain<@ClockDomain()>, !firrtl.domain<@PowerDomain(name: !firrtl.string, voltage: !firrtl.integer, alwaysOn: !firrtl.bool)>]
-}
-
-// In a class body.
-// CHECK-LABEL: firrtl.class @AssertInClass
-firrtl.class @AssertInClass(in %cond : !firrtl.bool) {
-  // CHECK: firrtl.property_assert %cond, "must be true" : !firrtl.bool
-  firrtl.property_assert %cond, "must be true" : !firrtl.bool
-}
-
-// In a module body.
-// CHECK-LABEL: firrtl.module @AssertInModule
-firrtl.module @AssertInModule(in %cond : !firrtl.bool) {
-  // CHECK: firrtl.property_assert %cond, "module invariant" : !firrtl.bool
-  firrtl.property_assert %cond, "module invariant" : !firrtl.bool
 }
 
 }

@@ -21,7 +21,6 @@ include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 include "mlir/Interfaces/MemorySlotInterfaces.td"
 include "mlir/Interfaces/CallInterfaces.td"
-include "mlir/Interfaces/FunctionInterfaces.td"
 
 // Base class for the operations in this dialect.
 class MooreOp<string mnemonic, list<Trait> traits = []> :
@@ -195,9 +194,9 @@ def ProcedureOp : MooreOp<"procedure", [
 }
 
 def ReturnOp : MooreOp<"return", [
-  Pure, Terminator, ParentOneOf<["ProcedureOp", "CoroutineOp"]>
+  Pure, Terminator, HasParent<"ProcedureOp">
 ]> {
-  let summary = "Return from a procedure or coroutine";
+  let summary = "Return from a procedure";
   let assemblyFormat = [{ attr-dict }];
 }
 
@@ -211,154 +210,6 @@ def UnreachableOp : MooreOp<"unreachable", [Terminator]> {
     probably crash the process with a useful error message.
   }];
   let assemblyFormat = "attr-dict";
-}
-
-//===----------------------------------------------------------------------===//
-// Coroutines
-//===----------------------------------------------------------------------===//
-
-def CoroutineOp : MooreOp<"coroutine", [
-  IsolatedFromAbove,
-  FunctionOpInterface,
-  Symbol,
-  RegionKindInterface,
-  RecursiveMemoryEffects,
-]> {
-  let summary = "Define a coroutine";
-  let description = [{
-    The `moore.coroutine` op represents a SystemVerilog task. Tasks differ from
-    functions in that they can suspend execution via timing controls such as
-    `@(posedge clk)` or `#10`. This makes them coroutine-like: a call to a
-    coroutine suspends the calling process until the coroutine returns.
-
-    See IEEE 1800-2017 § 13.3 "Tasks".
-
-    Coroutines are `IsolatedFromAbove` and capture any external variables
-    explicitly as additional arguments, just like `func.func`. Any signals or
-    variables from the enclosing module are passed as reference arguments.
-
-    Example:
-    ```mlir
-    moore.coroutine private @waitForClk(%clk: !moore.ref<l1>) {
-      moore.wait_event {
-        %0 = moore.read %clk : <l1>
-        moore.detect_event posedge %0 : l1
-      }
-      moore.return
-    }
-    ```
-  }];
-
-  let arguments = (ins
-    SymbolNameAttr:$sym_name,
-    TypeAttrOf<FunctionType>:$function_type,
-    OptionalAttr<StrAttr>:$sym_visibility,
-    OptionalAttr<DictArrayAttr>:$arg_attrs,
-    OptionalAttr<DictArrayAttr>:$res_attrs
-  );
-  let results = (outs);
-  let regions = (region MinSizedRegion<1>:$body);
-
-  let hasCustomAssemblyFormat = 1;
-
-  let builders = [
-    OpBuilder<(ins "mlir::StringAttr":$sym_name,
-                   "mlir::TypeAttr":$function_type), [{
-      build($_builder, $_state, sym_name, function_type,
-            /*sym_visibility=*/mlir::StringAttr(),
-            /*arg_attrs=*/nullptr, /*res_attrs=*/nullptr);
-    }]>,
-    OpBuilder<(ins "mlir::StringRef":$sym_name,
-                   "mlir::FunctionType":$function_type), [{
-      build($_builder, $_state,
-            $_builder.getStringAttr(sym_name),
-            mlir::TypeAttr::get(function_type),
-            /*sym_visibility=*/mlir::StringAttr(),
-            /*arg_attrs=*/nullptr, /*res_attrs=*/nullptr);
-    }]>,
-  ];
-
-  let extraClassDeclaration = [{
-    static mlir::RegionKind getRegionKind(unsigned index) {
-      return mlir::RegionKind::SSACFG;
-    }
-
-    /// Returns the argument types of this coroutine.
-    mlir::ArrayRef<mlir::Type> getArgumentTypes() {
-      return getFunctionType().getInputs();
-    }
-
-    /// Returns the result types of this coroutine.
-    mlir::ArrayRef<mlir::Type> getResultTypes() {
-      return getFunctionType().getResults();
-    }
-
-    //===------------------------------------------------------------------===//
-    // CallableOpInterface
-    //===------------------------------------------------------------------===//
-
-    mlir::Region *getCallableRegion() { return &getBody(); }
-  }];
-}
-
-def CallCoroutineOp : MooreOp<"call_coroutine", [
-  CallOpInterface,
-  DeclareOpInterfaceMethods<SymbolUserOpInterface>,
-]> {
-  let summary = "Call a coroutine";
-  let description = [{
-    The `moore.call_coroutine` op calls a `moore.coroutine`, which represents a
-    SystemVerilog task call. The calling process suspends until the coroutine
-    returns. This is only valid inside a procedure or another coroutine.
-
-    Example:
-    ```mlir
-    moore.call_coroutine @waitForClk(%clk) : (!moore.ref<l1>) -> ()
-    ```
-  }];
-
-  let arguments = (ins FlatSymbolRefAttr:$callee, Variadic<AnyType>:$operands);
-  let results = (outs Variadic<AnyType>);
-
-  let assemblyFormat = [{
-    $callee `(` $operands `)` attr-dict `:` functional-type(operands, results)
-  }];
-
-  let builders = [
-    OpBuilder<(ins "CoroutineOp":$coroutine,
-                   CArg<"mlir::ValueRange", "{}">:$operands), [{
-      build($_builder, $_state, coroutine.getFunctionType().getResults(),
-            mlir::SymbolRefAttr::get(coroutine), operands);
-    }]>,
-  ];
-
-  let extraClassDeclaration = [{
-    operand_range getArgOperands() {
-      return getOperands();
-    }
-    MutableOperandRange getArgOperandsMutable() {
-      return getOperandsMutable();
-    }
-
-    mlir::CallInterfaceCallable getCallableForCallee() {
-      return (*this)->getAttrOfType<mlir::SymbolRefAttr>("callee");
-    }
-
-    void setCalleeFromCallable(mlir::CallInterfaceCallable callee) {
-      (*this)->setAttr(getCalleeAttrName(),
-                       llvm::cast<mlir::SymbolRefAttr>(callee));
-    }
-
-    /// CallOpInterface requires ArgAndResultAttrsOpInterface, which needs
-    /// methods to get/set per-argument and per-result attributes. Call sites
-    /// don't carry these attributes, so we stub them out as no-ops.
-    mlir::ArrayAttr getArgAttrsAttr() { return nullptr; }
-    mlir::ArrayAttr getResAttrsAttr() { return nullptr; }
-    void setArgAttrsAttr(mlir::ArrayAttr args) {}
-    void setResAttrsAttr(mlir::ArrayAttr args) {}
-    mlir::Attribute removeArgAttrsAttr() { return nullptr; }
-    mlir::Attribute removeResAttrsAttr() { return nullptr; }
-  }];
 }
 
 //===----------------------------------------------------------------------===//
@@ -778,7 +629,6 @@ def ConstantOp : MooreOp<"constant", [Pure, ConstantLike]> {
     OpBuilder<(ins "IntType":$type, "const APInt &":$value)>,
     OpBuilder<(
       ins "IntType":$type, "int64_t":$value, CArg<"bool", "true">:$isSigned)>,
-    OpBuilder<(ins "Domain":$domain, "bool":$value)>,
   ];
 }
 
@@ -2839,20 +2689,6 @@ def FormatHierPathOp : MooreOp<"fmt.hier_path", [Pure]> {
   let assemblyFormat = "(`escaped` $useEscapes^)? attr-dict";
 }
 
-def FormatCharOp : MooreOp<"fmt.char", [Pure]> {
-  let summary = "Display in ASCII character format";
-  let description = [{
-    Format string fragment that formats the given integer value as a single
-    ASCII character. This corresponds to the `%c` (or `%C`) format specifier
-    in SystemVerilog.
-
-    See IEEE 1800-2017 § 21.2.1.2 "Format specifications".
-  }];
-  let arguments = (ins IntType:$value);
-  let results = (outs FormatStringType:$result);
-  let assemblyFormat = "$value `:` type($value) attr-dict";
-}
-
 //===----------------------------------------------------------------------===//
 // Builtin System Tasks and Functions
 //===----------------------------------------------------------------------===//
@@ -2933,32 +2769,58 @@ def BitstoshortrealBIOp : Builtin<"bitstoshortreal"> {
 // True-Random and Pseudo-Random Generators
 //===----------------------------------------------------------------------===//
 
-def UrandomRangeBIOp : Builtin<"urandom_range"> {
-  let summary = "Generate a pseudo-random integer within a range";
+def RandomBIOp : Builtin<"random"> {
+  let summary = "Generate a true random signed integer (optionally seeded)";
   let description = [{
-    Returns a pseudo-random 32-bit integer in the range [minval, maxval]. This
-    is the unified primitive for all SystemVerilog random number generation:
+    Corresponds to the `$random` system function. Returns a 32-bit
+    true random integer. The seed is optional; when provided, it initializes
+    the generator. If not provided, treat it as 0 in semantics/lowering.
 
-    - `$random` maps to `urandom_range(0, 2^31-1)` (signedness is a
-      reinterpretation of the result, not a property of the random value)
-    - `$urandom` maps to `urandom_range(0, 2^32-1)`
-    - `$urandom_range(max)` maps to `urandom_range(0, max)`
-    - `$urandom_range(max, min)` maps to `urandom_range(min, max)`
+    `$random` is largely considered to be deprecated since it leads to
+    non-reproducible simulation results. Consider using `$urandom` instead.
 
-    The optional `seed` is an inout reference to a 32-bit integer that the
-    random number generator reads and mutates. When not provided, the generator
-    uses an internal seed.
+    See IEEE 1800-2023 § 20.14 "Probablistic distribution functions".
+  }];
 
-    See IEEE 1800-2017 § 18.13 "Random number system functions and methods".
+  // Optional positional attribute for the seed
+  let arguments = (ins Optional<TwoValuedI32>:$seed);
+  let results = (outs TwoValuedI32:$result);
+  let assemblyFormat = "($seed^)? attr-dict";
+}
+
+def UrandomBIOp : Builtin<"urandom"> {
+  let summary = "Generate a pseudo-random unsigned integer (optionally seeded)";
+  let description = [{
+    Corresponds to the `$urandom` system function. Returns a 32-bit
+    pseudo-random integer. The seed is optional; when provided, it initializes
+    the generator. If not provided, treat it as 0 in semantics/lowering.
+
+    See IEEE 1800-2023 § 18.13 "Random number system functions and methods".
+  }];
+
+  // Optional positional attribute for the seed
+  let arguments = (ins Optional<TwoValuedI32>:$seed);
+  let results = (outs TwoValuedI32:$result);
+  let assemblyFormat = "($seed^)? attr-dict";
+}
+
+def UrandomrangeBIOp : Builtin<"urandom_range"> {
+  let summary = "Generate a pseudo-random unsigned integer within provided range";
+  let description = [{
+    Corresponds to the `urandom_range()` system function. Returns a 32-bit 
+    pseudo-random integer. The minimum value is optional; when not provided, it 
+    is treated as 0. If the minimum value is provided and larger than the maximum 
+    value, the minimum value is treated as the maximum, aand vice versa.
+
+    See IEEE 1800-2023 $ 18.13.2 "$urandom_range()".
   }];
 
   let arguments = (ins
-    TwoValuedI32:$minval,
     TwoValuedI32:$maxval,
-    Optional<TwoValuedI32RefType>:$seed
+    Optional<TwoValuedI32>:$minval
   );
   let results = (outs TwoValuedI32:$result);
-  let assemblyFormat = "$minval `,` $maxval (`,` $seed^)? attr-dict";
+  let assemblyFormat = "$maxval ($minval^)? attr-dict";
 }
 
 //===----------------------------------------------------------------------===//
@@ -3080,117 +2942,6 @@ def SeverityBIOp : Builtin<"severity"> {
     FormatStringType:$message
   );
   let assemblyFormat = "$severity $message attr-dict";
-}
-
-//===----------------------------------------------------------------------===//
-// Files Builtins
-//===----------------------------------------------------------------------===//
-
-// File open modes corresponding to the mode string argument of the `$fopen`
-
-def FOpenModeRead : I32EnumAttrCase<"Read", 0, "r">;
-def FOpenModeWrite : I32EnumAttrCase<"Write", 1, "w">;
-def FOpenModeAppend : I32EnumAttrCase<"Append", 2, "a">;
-def FOpenModeReadUpdate : I32EnumAttrCase<"ReadUpdate", 3, "r_update">;
-def FOpenModeWriteUpdate : I32EnumAttrCase<"WriteUpdate", 4, "w_update">;
-def FOpenModeAppendUpdate : I32EnumAttrCase<"AppendUpdate", 5, "a_update">;
-
-def FOpenModeAttr : I32EnumAttr<"FOpenMode",
-    "File open mode",
-    [FOpenModeRead, FOpenModeWrite, FOpenModeAppend,
-     FOpenModeReadUpdate, FOpenModeWriteUpdate, FOpenModeAppendUpdate]> {
-  let cppNamespace = "circt::moore";
-}
-
-def FOpenBIOp : Builtin<"fopen"> {
-  let summary = "Open a file";
-  let description = [{
-    Open a file and returns a file descriptor. If only the filename is provided,
-    opens the file and returns a multi-channel descriptor (MCD).
-    If the optional mode argument is also provided (e.g., "r", "w", "a"),
-    opens the file in the specified mode and returns a file descriptor (fd).
-    This corresponds to the `$fopen` system function.
-
-    See IEEE 1800-2017 § 21.3.1 "Opening and closing files".
-  }];
-  let arguments = (ins StringType:$filename, OptionalAttr<FOpenModeAttr>:$mode);
-  let results = (outs TwoValuedI32:$fd);
-  let assemblyFormat = "$filename (`mode` `=` $mode^)? attr-dict";
-}
-
-def FCloseBIOp : Builtin<"fclose"> {
-  let summary = "Close a file";
-  let description = [{
-    Closes a file given its descriptor. This corresponds to the `$fclose`
-    system task.
-
-    See IEEE 1800-2017 § 21.3.1 "Opening and closing files".
-  }];
-  let arguments = (ins TwoValuedI32:$fd);
-  let results = (outs);
-  let assemblyFormat = "$fd attr-dict";
-}
-
-def FFlushBIOp : Builtin<"fflush"> {
-  let summary = "Flush a descriptor's output buffer";
-  let description = [{
-    Flushes the output buffer of the specified file(s).
-    This corresponds to the `$fflush` system task. If a file descriptor is provided,
-    writes any buffered output to the file associated with that descriptor.
-    If the descriptor is a multi-channel descriptor, all associated files are flushed.
-    If invoked with no arguments, flushes all open files.
-
-    See IEEE 1800-2017 § 21.3.6 "Flushing output".
-  }];
-  let arguments = (ins Optional<TwoValuedI32>:$fd);
-  let results = (outs);
-  let assemblyFormat = "($fd^)? attr-dict";
-}
-
-def FDisplayBIOp : Builtin<"fdisplay"> {
-  let summary = "Print a text message to a file";
-  let description = [{
-    Prints the given format string to the file corresponding to the given
-    descriptor. This corresponds to the `$fdisplay` and `$fwrite` system tasks.
-    Message formatting is handled by `moore.fmt.*` ops.
-
-    See IEEE 1800-2017 § 21.3.2 "File output system tasks".
-  }];
-  let arguments = (ins TwoValuedI32:$fd, FormatStringType:$message);
-  let assemblyFormat = "$fd `,` $message attr-dict";
-}
-
-//===----------------------------------------------------------------------===//
-// Command Line Input System Functions
-//===----------------------------------------------------------------------===//
-
-def PlusArgsTestBIOp : Builtin<"plusargs_test"> {
-  let summary = "Test for the presence of a command-line plusarg";
-  let description = [{
-    Returns true if a command-line plus-argument matching the given format
-    string was supplied to the simulation. This corresponds to the
-    `$test$plusargs` system function.
-
-    See IEEE 1800-2017 § 21.6 "Command line input".
-  }];
-  let arguments = (ins StrAttr:$formatString);
-  let results = (outs BitType:$found);
-  let assemblyFormat = "$formatString attr-dict `:` type($found)";
-}
-
-def PlusArgsValueBIOp : Builtin<"plusargs_value"> {
-  let summary = "Read the value of a command-line plusarg";
-  let description = [{
-    Returns true if a command-line plus-argument matching the given format
-    string was supplied to the simulation, and parses the argument's value into
-    `result`. This corresponds to the `$value$plusargs` system function.
-
-    See IEEE 1800-2017 § 21.6 "Command line input".
-  }];
-  let arguments = (ins StrAttr:$formatString);
-  let results = (outs BitType:$found, UnpackedType:$result);
-  let assemblyFormat =
-      "$formatString attr-dict `:` type($found) `,` type($result)";
 }
 
 //===----------------------------------------------------------------------===//
@@ -3484,130 +3235,6 @@ def VTableEntryOp : MooreOp<"vtable_entry", [
   }];
 }
 
-// DPI argument direction enum — models the first-class direction keywords
-// used in DPI-imported function declarations (in, out, inout, return).
-def DPIArgDir_In     : I32EnumAttrCase<"In",     0, "in">;
-def DPIArgDir_Out    : I32EnumAttrCase<"Out",    1, "out">;
-def DPIArgDir_InOut  : I32EnumAttrCase<"InOut",  2, "inout">;
-def DPIArgDir_Return : I32EnumAttrCase<"Return", 3, "return">;
-
-def DPIArgDirection : I32EnumAttr<"DPIArgDirection",
-    "DPI argument direction",
-    [DPIArgDir_In, DPIArgDir_Out, DPIArgDir_InOut, DPIArgDir_Return]> {
-  let cppNamespace = "circt::moore";
-}
-
-def DPIFuncOp : MooreOp<"func.dpi",
-  [IsolatedFromAbove, Symbol, OpAsmOpInterface,
-   DeclareOpInterfaceMethods<FunctionOpInterface,
-     ["cloneTypeWith"]>]> {
-  let summary = "A DPI-imported SystemVerilog function declaration";
-  let description = [{
-    `moore.func.dpi` models a DPI-imported function declaration in Moore IR.
-    Each argument has a direction (`in`, `out`, `inout`, `return`), name, and
-    type. MooreToCore reconstructs a `sim::DPIFunctionType` for lowering to
-    `sim.func.dpi`.
-  }];
-
-  let arguments = (ins
-    SymbolNameAttr:$sym_name,
-    TypeAttrOf<FunctionType>:$function_type,
-    ArrayAttr:$dpi_arg_dirs,
-    ArrayAttr:$dpi_arg_names,
-    OptionalAttr<LocationArrayAttr>:$argument_locs,
-    OptionalAttr<StrAttr>:$verilogName,
-    OptionalAttr<StrAttr>:$sym_visibility
-  );
-  let regions = (region AnyRegion:$body);
-
-  let hasCustomAssemblyFormat = 1;
-  let hasVerifier = 1;
-
-  let builders = [
-    OpBuilder<(ins
-      "StringAttr":$sym_name,
-      "ArrayRef<DPIArgInfo>":$dpiArgs,
-      "ArrayAttr":$argumentLocs,
-      "StringAttr":$verilogName
-    )>
-  ];
-
-  let extraClassDeclaration = [{
-    /// Whether a direction is a call operand (input-side).
-    static bool isCallOperandDir(DPIArgDirection dir) {
-      return dir == DPIArgDirection::In || dir == DPIArgDirection::InOut;
-    }
-
-    /// Reconstruct the absolute argument types from the FunctionType and
-    /// stored directions.
-    void getDPIArgTypes(SmallVectorImpl<Type> &argTypes);
-
-    ArrayRef<Type> getArgumentTypes() {
-      return cast<mlir::FunctionType>(getFunctionType()).getInputs();
-    }
-    ArrayRef<Type> getResultTypes() {
-      return cast<mlir::FunctionType>(getFunctionType()).getResults();
-    }
-
-    ::mlir::Region *getCallableRegion() { return nullptr; }
-
-    mlir::ArrayAttr getArgAttrsAttr() { return nullptr; }
-    mlir::ArrayAttr getResAttrsAttr() { return nullptr; }
-    void setArgAttrsAttr(mlir::ArrayAttr args) {}
-    void setResAttrsAttr(mlir::ArrayAttr args) {}
-    mlir::Attribute removeArgAttrsAttr() { return nullptr; }
-    mlir::Attribute removeResAttrsAttr() { return nullptr; }
-  }];
-}
-
-//===----------------------------------------------------------------------===//
-// DPI Call
-//===----------------------------------------------------------------------===//
-
-def FuncDPICallOp : MooreOp<"func.dpi.call", [
-  CallOpInterface,
-  DeclareOpInterfaceMethods<SymbolUserOpInterface>
-]> {
-  let summary = "Call a DPI-imported function";
-  let description = [{
-    `moore.func.dpi.call` represents a call to a DPI-C imported function,
-    preserving the DPI intent from ImportVerilog so that downstream
-    MooreToCore lowering emits `sim.func.dpi.call` instead of a plain
-    `func.call`.
-  }];
-
-  let arguments = (ins FlatSymbolRefAttr:$callee,
-                       Variadic<AnyType>:$inputs);
-  let results = (outs Variadic<AnyType>);
-
-  let assemblyFormat = [{
-    $callee `(` $inputs `)` attr-dict `:` functional-type($inputs, results)
-  }];
-
-  let extraClassDeclaration = [{
-    operand_range getArgOperands() {
-      return getInputs();
-    }
-    MutableOperandRange getArgOperandsMutable() {
-      return getInputsMutable();
-    }
-    mlir::CallInterfaceCallable getCallableForCallee() {
-      return (*this)->getAttrOfType<mlir::SymbolRefAttr>("callee");
-    }
-    void setCalleeFromCallable(mlir::CallInterfaceCallable callee) {
-      (*this)->setAttr(getCalleeAttrName(),
-                       llvm::cast<mlir::SymbolRefAttr>(callee));
-    }
-    mlir::ArrayAttr getArgAttrsAttr() { return nullptr; }
-    mlir::ArrayAttr getResAttrsAttr() { return nullptr; }
-    void setArgAttrsAttr(mlir::ArrayAttr args) {}
-    void setResAttrsAttr(mlir::ArrayAttr args) {}
-    mlir::Attribute removeArgAttrsAttr() { return nullptr; }
-    mlir::Attribute removeResAttrsAttr() { return nullptr; }
-  }];
-
-}
-
 
 //===----------------------------------------------------------------------===//
 // String Builtins
@@ -3624,32 +3251,6 @@ def StringLenOp : StringBuiltin<"len"> {
   let arguments = (ins StringType:$str);
   let results = (outs TwoValuedI32:$result);
   let assemblyFormat = "$str attr-dict";
-}
-
-def StringPutOp : StringBuiltin<"put"> {
-  let summary = "Replace a character in a string";
-  let description = [{
-    Replaces the character at the specified index with the character
-    represented by the integer value.
-  }];
-  let arguments = (ins
-    StringRefType:$str,
-    TwoValuedI32:$index,
-    TwoValuedI8:$character
-  );
-  let assemblyFormat = [{
-    $str `[` $index `]` `,` $character attr-dict `:` type($str)
-  }];
-}
-
-def StringGetOp : StringBuiltin<"get"> {
-  let summary = "Get a character from a string";
-  let description = [{
-    Returns the character at the specified index in the given string.
-  }];
-  let arguments = (ins StringType:$str, TwoValuedI32:$index);
-  let results = (outs TwoValuedI8:$result);
-  let assemblyFormat = "$str `[` $index `]` attr-dict";
 }
 
 def StringToUpperOp : StringBuiltin<"toupper"> {
@@ -3672,89 +3273,14 @@ def StringToLowerOp : StringBuiltin<"tolower"> {
   let assemblyFormat = "$str attr-dict";
 }
 
-class StringCompareOpBase<string mnemonic> : StringBuiltin<mnemonic> {
-  let summary = "Lexicographically compare two strings";
+def StringGetOp : StringBuiltin<"get"> {
+  let summary = "Get a character from a string";
   let description = [{
-    As in the ANSI C `strcmp` function with regard to lexical ordering
-    and return value.
+    Returns the character at the specified index in the given string.
   }];
-  let arguments = (ins StringType:$lhs, StringType:$rhs);
-  let results = (outs TwoValuedI32:$result);
-  let assemblyFormat = "$lhs `,` $rhs attr-dict";
-}
-
-def StringCompareOp : StringCompareOpBase<"compare">;
-def StringICompareOp : StringCompareOpBase<"icompare"> {
-  let summary = "Case-insensitive compare";
-}
-
-def StringSubstrOp : StringBuiltin<"substr"> {
-  let summary = "Extract a substring";
-  let description = [{
-    Returns the characters from the start through end indices inclusive, or
-    the empty string if the range is invalid.
-  }];
-  let arguments = (ins
-    StringType:$str,
-    TwoValuedI32:$start,
-    TwoValuedI32:$end
-  );
-  let results = (outs StringType:$result);
-  let assemblyFormat = [{
-    $str `[` $start `:` $end `]` attr-dict
-  }];
-}
-
-class StringAToIOpBase<string mnemonic> : StringBuiltin<mnemonic> {
-  let summary = "Convert a string to an integer";
-  let description = [{
-    Converts the ASCII representation in the given string into a 32-bit
-    integer value, or returns zero if no digits were encountered.
-  }];
-  let arguments = (ins StringType:$str);
-  let results = (outs FourValuedI32:$result);
-  let assemblyFormat = [{
-    $str attr-dict `:` type($result)
-  }];
-}
-
-def StringAtoiOp : StringAToIOpBase<"atoi">;
-def StringAtohexOp : StringAToIOpBase<"atohex">;
-def StringAtooctOp : StringAToIOpBase<"atooct">;
-def StringAtobinOp : StringAToIOpBase<"atobin">;
-
-def StringAtorealOp : StringBuiltin<"atoreal"> {
-  let summary = "Convert a string to a real number";
-  let description = [{
-    Converts the ASCII decimal representation in the given string into a
-    real number, or returns zero if no digits were encountered.
-  }];
-  let arguments = (ins StringType:$str);
-  let results = (outs RealType:$result);
-  let assemblyFormat = [{
-    $str attr-dict `:` type($result)
-  }];
-}
-
-class StringIToAOpBase<string mnemonic> : StringBuiltin<mnemonic> {
-  let summary = "inverse of StringAToIOpBase";
-  let arguments = (ins StringRefType:$str, FourValuedI32:$input);
-  let assemblyFormat = [{
-    $str `,` $input attr-dict `:` type($str) `,` type($input)
-  }];
-}
-
-def StringItoaOp : StringIToAOpBase<"itoa">;
-def StringHextoaOp : StringIToAOpBase<"hextoa">;
-def StringOcttoaOp : StringIToAOpBase<"octtoa">;
-def StringBintoaOp : StringIToAOpBase<"bintoa">;
-
-def StringRealtoaOp : StringBuiltin<"realtoa"> {
-  let summary = "inverse of atoreal";
-  let arguments = (ins StringRefType:$str, RealType:$input);
-  let assemblyFormat = [{
-    $str `,` $input attr-dict `:` type($str) `,` type($input)
-  }];
+  let arguments = (ins StringType:$str, TwoValuedI32:$index);
+  let results = (outs TwoValuedI8:$result);
+  let assemblyFormat = "$str `[` $index `]` attr-dict";
 }
 
 def StringConcatOp : StringBuiltin<"concat"> {

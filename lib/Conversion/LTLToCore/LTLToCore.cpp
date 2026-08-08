@@ -167,13 +167,39 @@ struct LTLOrOpConversion : public OpConversionPattern<ltl::OrOp> {
 };
 
 struct LTLPastOpConversion : public OpConversionPattern<ltl::PastOp> {
-  using OpConversionPattern<ltl::PastOp>::OpConversionPattern;
+  LTLPastOpConversion(MLIRContext *context, bool assumeFirstClock)
+      : OpConversionPattern<ltl::PastOp>(context),
+        assumeFirstClock(assumeFirstClock) {}
 
   LogicalResult
   matchAndRewrite(ltl::PastOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    Value clock =
-        seq::ToClockOp::create(rewriter, op.getLoc(), adaptor.getClk());
+    Value clock;
+    if (!adaptor.getClk()) {
+      if (!assumeFirstClock)
+        return failure();
+      // Find the first clock, looking at inputs then at to_clock operations
+      auto module = op->getParentOfType<HWModuleOp>();
+      std::optional<size_t> clockArgNum;
+      for (auto &port : module.getPortList()) {
+        if (port.isInput() && isa<seq::ClockType>(port.type)) {
+          clockArgNum = port.argNum;
+          break;
+        }
+      }
+      if (clockArgNum) {
+        clock = module.getArgumentForInput(*clockArgNum);
+      } else {
+        // If there are no clock ports, we try to_clock operations
+        auto toClockOps = module.getOps<seq::ToClockOp>();
+        if (toClockOps.empty())
+          return failure();
+        clock = (*toClockOps.begin()).getResult();
+      }
+    } else {
+      clock = seq::ToClockOp::create(rewriter, op.getLoc(), adaptor.getClk());
+    }
+
     Value cur = adaptor.getInput();
     Value ce =
         hw::ConstantOp::create(rewriter, op.getLoc(), rewriter.getI1Type(), 1);
@@ -183,6 +209,8 @@ struct LTLPastOpConversion : public OpConversionPattern<ltl::PastOp> {
     rewriter.replaceOp(op, shiftreg);
     return success();
   }
+
+  bool assumeFirstClock;
 };
 
 } // namespace
@@ -201,6 +229,21 @@ struct LowerLTLToCorePass
 
 // Simply applies the conversion patterns defined above
 void LowerLTLToCorePass::runOnOperation() {
+  // Emit an explicit error for unsupported past ops, rather than a confusing
+  // 'failed to legalize' error
+  if (!assumeFirstClock) {
+    auto res = getOperation().walk([&](ltl::PastOp op) {
+      if (!op.getClk()) {
+        op.emitError(
+            "ltl.past operations without a clock operand are not supported.");
+        return WalkResult::interrupt();
+      }
+      return WalkResult::advance();
+    });
+    if (res.wasInterrupted())
+      return signalPassFailure();
+  }
+
   // Set target dialects: We don't want to see any ltl or verif that might
   // come from an AssertProperty left in the result
   ConversionTarget target(getContext());
@@ -271,10 +314,10 @@ void LowerLTLToCorePass::runOnOperation() {
 
   // Create the operation rewrite patters
   RewritePatternSet patterns(&getContext());
-  patterns
-      .add<HasBeenResetOpConversion, LTLImplicationConversion, LTLNotConversion,
-           LTLAndOpConversion, LTLOrOpConversion, LTLPastOpConversion>(
-          converter, patterns.getContext());
+  patterns.add<HasBeenResetOpConversion, LTLImplicationConversion,
+               LTLNotConversion, LTLAndOpConversion, LTLOrOpConversion>(
+      converter, patterns.getContext());
+  patterns.add<LTLPastOpConversion>(patterns.getContext(), assumeFirstClock);
   // Apply the conversions
   if (failed(
           applyPartialConversion(getOperation(), target, std::move(patterns))))

@@ -56,6 +56,7 @@ add_circt_dialect_library(CIRCTFIRRTLTransforms
   ProbesToSignals.cpp
   RandomizeRegisterInit.cpp
   RegisterOptimizer.cpp
+  RemoveUnusedPorts.cpp
   ResolvePaths.cpp
   ResolveTraces.cpp
   SFCCompat.cpp

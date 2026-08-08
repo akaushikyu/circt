@@ -133,7 +133,7 @@ def SnoopValidReadyOp : ESI_Physical_Op<"snoop.vr", [InferTypeOpInterface]> {
                                           std::optional<Location> loc,
                                           ValueRange operands,
                                           DictionaryAttr attrs,
-                                          mlir::PropertyRef properties,
+                                          mlir::OpaqueProperties properties,
                                           mlir::RegionRange regions,
                                           SmallVectorImpl<Type> &results);
   }];
@@ -163,7 +163,7 @@ def SnoopTransactionOp : ESI_Physical_Op<"snoop.xact", [InferTypeOpInterface]> {
                                           std::optional<Location> loc,
                                           ValueRange operands,
                                           DictionaryAttr attrs,
-                                          mlir::PropertyRef properties,
+                                          mlir::OpaqueProperties properties,
                                           mlir::RegionRange regions,
                                           SmallVectorImpl<Type> &results);
   }];
@@ -540,11 +540,6 @@ def WindowFieldType : ESI_Type<"WindowField"> {
       the last transfer, the header should set the count to zero. This method
       allows for efficient transfers over serial links (no 'last' or '_size'
       fields) without requiring knowledge of the total list size up front.
-
-    Note: list types with zero bitwidth are supported merely so one does not
-    have to special case elsewhere. It is not recommended to actually use them
-    as there is no special casing here either: in the serial encoding, N data
-    frames will still be transmitted!
   }];
   let mnemonic = "window.field";
 

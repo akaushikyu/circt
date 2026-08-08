@@ -295,9 +295,7 @@ static llvm::cl::opt<LayerSpecializationOpt> defaultLayerSpecialization{
 /// firtool does not support partially specified instance choice.
 static cl::list<std::string> selectInstanceChoice(
     "select-instance-choice",
-    cl::desc("Options to specialize instance choice, in option=case format. "
-             "Use option?=case to allow non-existent options, or "
-             "option=<default> to select the default case"),
+    cl::desc("Options to specialize instance choice, in option=case format"),
     cl::MiscFlags::CommaSeparated, cl::cat(mainCategory));
 
 static cl::opt<unsigned>

@@ -389,10 +389,6 @@ LogicalResult WireOp::canonicalize(WireOp wire, PatternRewriter &rewriter) {
   if (wire.getInnerSymAttr())
     return failure();
 
-  // If the wire is self-referential (its input is itself), we can't remove it.
-  if (wire.getInput() == wire.getResult())
-    return failure();
-
   // If the wire has a name or an `sv.namehint` attribute, propagate it as an
   // `sv.namehint` to the expression.
   if (auto *inputOp = wire.getInput().getDefiningOp())
@@ -1090,12 +1086,6 @@ void HWModuleOp::print(OpAsmPrinter &p) {
 static LogicalResult verifyModuleCommon(HWModuleLike module) {
   assert(isa<HWModuleLike>(module) &&
          "verifier hook should only be called on modules");
-
-  if (auto portLocs = module->getAttrOfType<ArrayAttr>("port_locs"))
-    if (!portLocs.empty() && portLocs.size() != module.getNumPorts())
-      return module->emitOpError("requires ")
-             << module.getNumPorts() << " port locations but got "
-             << portLocs.size();
 
   SmallPtrSet<Attribute, 4> paramNames;
 
@@ -2265,32 +2255,6 @@ OpFoldResult StructCreateOp::fold(FoldAdaptor adaptor) {
   return ArrayAttr::get(getContext(), inputs);
 }
 
-LogicalResult StructCreateOp::canonicalize(StructCreateOp op,
-                                           PatternRewriter &rewriter) {
-  // Fold away a struct_create whose inputs are struct_extract ops that
-  // reconstruct the same struct in field order from a single source value.
-  Value foldVal;
-  for (auto [i, operand] : llvm::enumerate(op.getInput())) {
-    auto extractOp = operand.getDefiningOp<StructExtractOp>();
-    if (!extractOp || extractOp.getFieldIndex() != i ||
-        extractOp.getInput().getType() != op.getType()) {
-      foldVal = {};
-      break;
-    }
-    if (i == 0) {
-      foldVal = extractOp.getInput();
-    } else if (extractOp.getInput() != foldVal) {
-      foldVal = {};
-      break;
-    }
-  }
-  if (foldVal && foldVal != op.getResult()) {
-    rewriter.replaceOp(op, foldVal);
-    return success();
-  }
-  return failure();
-}
-
 //===----------------------------------------------------------------------===//
 // StructExplodeOp
 //===----------------------------------------------------------------------===//
@@ -2709,7 +2673,7 @@ void UnionExtractOp::print(OpAsmPrinter &printer) {
 
 LogicalResult UnionExtractOp::inferReturnTypes(
     MLIRContext *context, std::optional<Location> loc, ValueRange operands,
-    DictionaryAttr attrs, mlir::PropertyRef properties,
+    DictionaryAttr attrs, mlir::OpaqueProperties properties,
     mlir::RegionRange regions, SmallVectorImpl<Type> &results) {
   Adaptor adaptor(operands, attrs, properties, regions);
   auto unionElements =
@@ -2732,41 +2696,6 @@ void UnionExtractOp::build(OpBuilder &odsBuilder, OperationState &odsState,
   assert(fieldIndex.has_value() && "field name not found in aggregate type");
   auto resultType = unionType.getElements()[*fieldIndex].type;
   build(odsBuilder, odsState, resultType, input, *fieldIndex);
-}
-
-LogicalResult UnionExtractOp::canonicalize(UnionExtractOp extractOp,
-                                           PatternRewriter &rewriter) {
-  // hw.union_extract("F1", hw.union_create("F2", a)) -> a, if F1 and F2 map to
-  // the same bits
-  if (auto createOp = extractOp.getInput().getDefiningOp<UnionCreateOp>()) {
-    if (createOp.getInput().getType() == extractOp.getType() &&
-        createOp.getInput() != extractOp.getResult()) {
-      auto unionTypeElts =
-          cast<UnionType>(extractOp.getInput().getType()).getElements();
-      if (unionTypeElts[createOp.getFieldIndex()].offset ==
-          unionTypeElts[extractOp.getFieldIndex()].offset) {
-        rewriter.replaceOp(extractOp, createOp.getInput());
-        return success();
-      }
-    }
-  }
-  // Forward bitcasts if the extract covers the entire union
-  if (auto bitcastOp = extractOp.getInput().getDefiningOp<BitcastOp>()) {
-    auto inputWidth = getBitWidth(bitcastOp.getInput().getType());
-    assert(inputWidth >= 0 &&
-           inputWidth == getBitWidth(extractOp.getInput().getType()) &&
-           "bitcast does not cover entire union");
-    if (inputWidth == getBitWidth(extractOp.getType())) {
-      auto loc = FusedLoc::get(rewriter.getContext(),
-                               {bitcastOp.getLoc(), extractOp.getLoc()});
-      auto newBitcast = rewriter.createOrFold<BitcastOp>(
-          loc, extractOp.getType(), bitcastOp.getInput());
-      rewriter.replaceOp(extractOp, newBitcast);
-      return success();
-    }
-  }
-
-  return failure();
 }
 
 //===----------------------------------------------------------------------===//

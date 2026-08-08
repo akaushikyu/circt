@@ -16,7 +16,6 @@
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLInstanceImplementation.h"
-#include "circt/Dialect/FIRRTL/FIRRTLOpInterfaces.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/FIRRTLVisitors.h"
@@ -51,6 +50,47 @@ using namespace chirrtl;
 //===----------------------------------------------------------------------===//
 // Utilities
 //===----------------------------------------------------------------------===//
+
+/// Remove elements from the input array corresponding to set bits in
+/// `indicesToDrop`, returning the elements not mentioned.
+template <typename T>
+static SmallVector<T>
+removeElementsAtIndices(ArrayRef<T> input,
+                        const llvm::BitVector &indicesToDrop) {
+#ifndef NDEBUG
+  if (!input.empty()) {
+    int lastIndex = indicesToDrop.find_last();
+    if (lastIndex >= 0)
+      assert((size_t)lastIndex < input.size() && "index out of range");
+  }
+#endif
+
+  // If the input is empty (which is an optimization we do for certain array
+  // attributes), simply return an empty vector.
+  if (input.empty())
+    return {};
+
+  // Copy over the live chunks.
+  size_t lastCopied = 0;
+  SmallVector<T> result;
+  result.reserve(input.size() - indicesToDrop.count());
+
+  for (unsigned indexToDrop : indicesToDrop.set_bits()) {
+    // If we skipped over some valid elements, copy them over.
+    if (indexToDrop > lastCopied) {
+      result.append(input.begin() + lastCopied, input.begin() + indexToDrop);
+      lastCopied = indexToDrop;
+    }
+    // Ignore this value so we don't copy it in the next iteration.
+    ++lastCopied;
+  }
+
+  // If there are live elements at the end, copy them over.
+  if (lastCopied < input.size())
+    result.append(input.begin() + lastCopied, input.end());
+
+  return result;
+}
 
 /// Emit an error if optional location is non-null, return null of return type.
 template <typename RetTy = FIRRTLType, typename... Args>
@@ -927,7 +967,6 @@ static void erasePorts(FModuleLike op, const llvm::BitVector &portIndices) {
   ArrayRef<Attribute> portSyms = op.getPortSymbols();
   ArrayRef<Attribute> portLocs = op.getPortLocations();
   ArrayRef<Attribute> portDomains = op.getDomainInfo();
-  (void)portDomains;
   auto numPorts = op.getNumPorts();
   (void)numPorts;
   assert(portDirections.size() == numPorts);
@@ -2296,7 +2335,7 @@ void ExtClassOp::build(OpBuilder &builder, OperationState &result,
       llvm::all_of(ports,
                    [](const auto &port) { return port.annotations.empty(); }) &&
       "class ports may not have annotations");
-  buildClass<ExtClassOp>(builder, result, name, ports);
+  buildClass<ClassOp>(builder, result, name, ports);
 }
 
 void ExtClassOp::print(OpAsmPrinter &p) {
@@ -2567,8 +2606,7 @@ static void replaceUsesRespectingErasedPorts(Operation *op1, Operation *op2,
   }
 }
 
-FInstanceLike
-InstanceOp::cloneWithErasedPorts(const llvm::BitVector &erasures) {
+InstanceOp InstanceOp::cloneWithErasedPorts(const llvm::BitVector &erasures) {
   assert(erasures.size() >= getNumResults() &&
          "erasures is not at least as large as getNumResults()");
 
@@ -2597,7 +2635,7 @@ InstanceOp::cloneWithErasedPorts(const llvm::BitVector &erasures) {
   return clone;
 }
 
-FInstanceLike InstanceOp::cloneWithErasedPortsAndReplaceUses(
+InstanceOp InstanceOp::cloneWithErasedPortsAndReplaceUses(
     const llvm::BitVector &erasures) {
   auto clone = cloneWithErasedPorts(erasures);
   replaceUsesRespectingErasedPorts(getOperation(), clone, erasures);
@@ -2617,7 +2655,13 @@ void InstanceOp::setAllPortAnnotations(ArrayRef<Attribute> annotations) {
                    ArrayAttr::get(getContext(), annotations));
 }
 
-FInstanceLike InstanceOp::cloneWithInsertedPorts(
+Attribute InstanceOp::getPortDomain(unsigned portIdx) {
+  assert(portIdx < getNumResults() &&
+         "index should be smaller than result number");
+  return getDomainInfo()[portIdx];
+}
+
+InstanceOp InstanceOp::cloneWithInsertedPorts(
     ArrayRef<std::pair<unsigned, PortInfo>> insertions) {
   auto *context = getContext();
   auto empty = ArrayAttr::get(context, {});
@@ -2702,7 +2746,7 @@ FInstanceLike InstanceOp::cloneWithInsertedPorts(
   return clone;
 }
 
-FInstanceLike InstanceOp::cloneWithInsertedPortsAndReplaceUses(
+InstanceOp InstanceOp::cloneWithInsertedPortsAndReplaceUses(
     ArrayRef<std::pair<unsigned, PortInfo>> insertions) {
   auto clone = cloneWithInsertedPorts(insertions);
   replaceUsesRespectingInsertedPorts(getOperation(), clone, insertions);
@@ -3188,7 +3232,7 @@ InstanceChoiceOp::getTargetChoices() {
   return choices;
 }
 
-FInstanceLike InstanceChoiceOp::cloneWithInsertedPorts(
+InstanceChoiceOp InstanceChoiceOp::cloneWithInsertedPorts(
     ArrayRef<std::pair<unsigned, PortInfo>> insertions) {
   auto *context = getContext();
   auto empty = ArrayAttr::get(context, {});
@@ -3276,14 +3320,14 @@ FInstanceLike InstanceChoiceOp::cloneWithInsertedPorts(
   return clone;
 }
 
-FInstanceLike InstanceChoiceOp::cloneWithInsertedPortsAndReplaceUses(
+InstanceChoiceOp InstanceChoiceOp::cloneWithInsertedPortsAndReplaceUses(
     ArrayRef<std::pair<unsigned, PortInfo>> insertions) {
   auto clone = cloneWithInsertedPorts(insertions);
   replaceUsesRespectingInsertedPorts(getOperation(), clone, insertions);
   return clone;
 }
 
-FInstanceLike
+InstanceChoiceOp
 InstanceChoiceOp::cloneWithErasedPorts(const llvm::BitVector &erasures) {
   assert(erasures.size() >= getNumResults() &&
          "erasures is not at least as large as getNumResults()");
@@ -3315,7 +3359,7 @@ InstanceChoiceOp::cloneWithErasedPorts(const llvm::BitVector &erasures) {
   return clone;
 }
 
-FInstanceLike InstanceChoiceOp::cloneWithErasedPortsAndReplaceUses(
+InstanceChoiceOp InstanceChoiceOp::cloneWithErasedPortsAndReplaceUses(
     const llvm::BitVector &erasures) {
   auto clone = cloneWithErasedPorts(erasures);
   replaceUsesRespectingErasedPorts(getOperation(), clone, erasures);
@@ -3774,7 +3818,7 @@ void NodeOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 LogicalResult NodeOp::inferReturnTypes(
     mlir::MLIRContext *context, std::optional<mlir::Location> location,
     ::mlir::ValueRange operands, ::mlir::DictionaryAttr attributes,
-    ::mlir::PropertyRef properties, ::mlir::RegionRange regions,
+    ::mlir::OpaqueProperties properties, ::mlir::RegionRange regions,
     ::llvm::SmallVectorImpl<::mlir::Type> &inferredReturnTypes) {
   if (operands.empty())
     return failure();
@@ -3938,75 +3982,6 @@ RegResetOp::computeDataFlow() {
 }
 
 std::optional<size_t> WireOp::getTargetResultIndex() { return 0; }
-
-LogicalResult WireOp::verify() {
-  // A wire of domain type must not have domain associations.
-  if (type_isa<DomainType>(getResult().getType()) && !getDomains().empty())
-    return emitOpError("of domain type must not have domain associations");
-
-  // Early exist if no domains.
-  auto domains = getDomains();
-  if (!domains.size())
-    return success();
-
-  // Check if any associated domains have the same kind.  If they do, emit an
-  // error on the op and a note on each of the values that have the same kind.
-  //
-  // Use a two-phase approach where when a new domain is found, record it in
-  // `domainInfo`.  Then, if a collision is found, report an error, add a note
-  // for the original value, and a note for the colliding value.  For each
-  // subsequent collision, add a note.
-  //
-  // Note: choose a different `N` for the `SmallMapVector` if we add more
-  // domains than clock and power.
-  using oldValueAndDiag = std::pair<Value, std::unique_ptr<InFlightDiagnostic>>;
-  llvm::SmallMapVector<SymbolRefAttr, oldValueAndDiag, 2> domainInfo;
-  bool hasErrors = false;
-  for (auto domain : domains) {
-    auto domainType = cast<DomainType>(domain.getType());
-    auto domainName = domainType.getName();
-
-    // Record a domain kind and the association value.
-    auto [it, inserted] =
-        domainInfo.try_emplace(domainName, std::make_pair(domain, nullptr));
-
-    // We haven't seen this domain kind before.  No error (yet).
-    if (inserted)
-      continue;
-
-    // We have seen this domain kind before.
-    auto &[value, diag] = it->second;
-
-    // We haven't generated an error yet.  Generate an error and a note for the
-    // first value.  Extend the lifetime of the diagnostic so that we can keep
-    // adding notes to it.
-    if (!diag) {
-      diag = std::make_unique<InFlightDiagnostic>(
-          emitOpError() << "associated with multiple operands of '"
-                        << domainName.getValue() << "' kind");
-      diag->attachNote(value.getLoc()) << "first domain operand here";
-      hasErrors = true;
-    }
-
-    // Add a note for the current colliding value.
-    diag->attachNote(domain.getLoc())
-        << "additional colliding domain operand here";
-  }
-
-  // No errors, we're done.
-  if (!hasErrors)
-    return success();
-
-  // Diagnostics are emitted when the diagnostic is destroyed.  Early delete the
-  // diagnostics in insertion order to prevent these being deleted in
-  // determinstic reverse order when the `SmallVector` that backs the
-  // `MapVector` is destroyed.  This improves the error quality by keeping
-  // things aligned with how a user would read the MLIR.
-  for (auto &[_, diag] : domainInfo.values())
-    diag.reset();
-
-  return failure();
-}
 
 LogicalResult WireOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   if (auto refType = type_dyn_cast<RefType>(getType(0)))
@@ -4407,17 +4382,6 @@ LogicalResult PropAssignOp::verify() {
   if (failed(checkSingleConnect(*this)))
     return failure();
 
-  return success();
-}
-
-LogicalResult PropertyAssertOp::verify() {
-  // Static evaluation: if the condition is a known constant false, the
-  // assertion is trivially violated and we can report an error immediately.
-  if (auto *defOp = getCondition().getDefiningOp())
-    if (auto boolConst = dyn_cast<BoolConstantOp>(defOp))
-      if (!boolConst.getValue())
-        return emitOpError("property assertion is statically false: ")
-               << getMessage();
   return success();
 }
 
@@ -5152,7 +5116,7 @@ ParseResult IsTagOp::parse(OpAsmParser &parser, OperationState &result) {
 }
 
 FIRRTLType IsTagOp::inferReturnType(ValueRange operands, DictionaryAttr attrs,
-                                    PropertyRef properties,
+                                    OpaqueProperties properties,
                                     mlir::RegionRange regions,
                                     std::optional<Location> loc) {
   Adaptor adaptor(operands, attrs, properties, regions);
@@ -5406,7 +5370,7 @@ FIRRTLType OpenSubindexOp::inferReturnType(Type type, uint32_t fieldIndex,
 }
 
 FIRRTLType SubtagOp::inferReturnType(ValueRange operands, DictionaryAttr attrs,
-                                     PropertyRef properties,
+                                     OpaqueProperties properties,
                                      mlir::RegionRange regions,
                                      std::optional<Location> loc) {
   Adaptor adaptor(operands, attrs, properties, regions);
@@ -5475,7 +5439,7 @@ void MultibitMuxOp::print(OpAsmPrinter &p) {
 
 FIRRTLType MultibitMuxOp::inferReturnType(ValueRange operands,
                                           DictionaryAttr attrs,
-                                          PropertyRef properties,
+                                          OpaqueProperties properties,
                                           mlir::RegionRange regions,
                                           std::optional<Location> loc) {
   if (operands.size() < 2)
@@ -5496,7 +5460,7 @@ FIRRTLType MultibitMuxOp::inferReturnType(ValueRange operands,
 
 LogicalResult ObjectSubfieldOp::inferReturnTypes(
     MLIRContext *context, std::optional<mlir::Location> location,
-    ValueRange operands, DictionaryAttr attributes, PropertyRef properties,
+    ValueRange operands, DictionaryAttr attributes, OpaqueProperties properties,
     RegionRange regions, llvm::SmallVectorImpl<Type> &inferredReturnTypes) {
   auto type =
       inferReturnType(operands, attributes, properties, regions, location);
@@ -5714,7 +5678,7 @@ FIRRTLType impl::inferComparisonResult(FIRRTLType lhs, FIRRTLType rhs,
 }
 
 FIRRTLType CatPrimOp::inferReturnType(ValueRange operands, DictionaryAttr attrs,
-                                      PropertyRef properties,
+                                      OpaqueProperties properties,
                                       mlir::RegionRange regions,
                                       std::optional<Location> loc) {
   // If no operands, return a 0-bit UInt
@@ -6084,7 +6048,7 @@ FIRRTLType MuxPrimOp::inferReturnType(FIRRTLType sel, FIRRTLType high,
 
 FIRRTLType Mux2CellIntrinsicOp::inferReturnType(ValueRange operands,
                                                 DictionaryAttr attrs,
-                                                PropertyRef properties,
+                                                OpaqueProperties properties,
                                                 mlir::RegionRange regions,
                                                 std::optional<Location> loc) {
   auto highType = type_dyn_cast<FIRRTLBaseType>(operands[1].getType());
@@ -6097,7 +6061,7 @@ FIRRTLType Mux2CellIntrinsicOp::inferReturnType(ValueRange operands,
 
 FIRRTLType Mux4CellIntrinsicOp::inferReturnType(ValueRange operands,
                                                 DictionaryAttr attrs,
-                                                PropertyRef properties,
+                                                OpaqueProperties properties,
                                                 mlir::RegionRange regions,
                                                 std::optional<Location> loc) {
   SmallVector<FIRRTLBaseType> types;
@@ -6690,15 +6654,6 @@ void IntegerShrOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 void IntegerShlOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
-void BoolAndOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
-  genericAsmResultNames(*this, setNameFn);
-}
-void BoolOrOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
-  genericAsmResultNames(*this, setNameFn);
-}
-void BoolXorOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
-  genericAsmResultNames(*this, setNameFn);
-}
 void IsTagOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
@@ -6851,7 +6806,7 @@ void RWProbeOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 
 FIRRTLType RefResolveOp::inferReturnType(ValueRange operands,
                                          DictionaryAttr attrs,
-                                         PropertyRef properties,
+                                         OpaqueProperties properties,
                                          mlir::RegionRange regions,
                                          std::optional<Location> loc) {
   Type inType = operands[0].getType();
@@ -6863,7 +6818,7 @@ FIRRTLType RefResolveOp::inferReturnType(ValueRange operands,
 }
 
 FIRRTLType RefSendOp::inferReturnType(ValueRange operands, DictionaryAttr attrs,
-                                      PropertyRef properties,
+                                      OpaqueProperties properties,
                                       mlir::RegionRange regions,
                                       std::optional<Location> loc) {
   Type inType = operands[0].getType();
@@ -7414,7 +7369,7 @@ Type DomainSubfieldOp::inferReturnType(Type inType, uint32_t fieldIndex,
 
 Type DomainSubfieldOp::inferReturnType(ValueRange operands,
                                        mlir::DictionaryAttr attrs,
-                                       mlir::PropertyRef properties,
+                                       mlir::OpaqueProperties properties,
                                        mlir::RegionRange regions,
                                        std::optional<Location> loc) {
   Adaptor adaptor(operands, attrs, properties, regions);
@@ -7434,7 +7389,7 @@ DomainSubfieldOp DomainSubfieldOp::create(OpBuilder &builder, Type resultType,
 
 LogicalResult DomainSubfieldOp::inferReturnTypes(
     MLIRContext *context, std::optional<Location> location, ValueRange operands,
-    DictionaryAttr attributes, PropertyRef properties, RegionRange regions,
+    DictionaryAttr attributes, OpaqueProperties properties, RegionRange regions,
     SmallVectorImpl<Type> &inferredReturnTypes) {
   Adaptor adaptor(operands, attributes, properties, regions);
   auto resultType = inferReturnType(adaptor.getInput().getType(),

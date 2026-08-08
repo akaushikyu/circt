@@ -89,6 +89,24 @@ arc.define @dummyCallee2() {
   arc.output
 }
 
+// CHECK-LABEL: hw.module @clockDomainTest
+hw.module @clockDomainTest(in %clk: !seq.clock, in %in0: i32, in %in1: i16) {
+  // CHECK-NEXT: %{{.+}} = arc.clock_domain (%in0, %in1) clock %clk {someattr} : (i32, i16) -> i32 {
+  %0 = arc.clock_domain (%in0, %in1) clock %clk {someattr} : (i32, i16) -> i32 {
+  // CHECK-NEXT: ^bb0(%arg0: i32, %arg1: i16):
+  ^bb0(%arg0: i32, %arg1: i16):
+    // CHECK-NEXT: [[AND:%.+]] = comb.and %arg0, [[AND]] : i32
+    // COM: check that it is a graph region
+    %1 = comb.and %arg0, %1 : i32
+    // CHECK-NEXT: arc.output [[AND]] : i32
+    arc.output %1 : i32
+  // CHECK-NEXT: }
+  }
+
+  // CHECK-NEXT: arc.clock_domain () clock %clk : () -> () {
+  arc.clock_domain () clock %clk : () -> () {}
+}
+
 // CHECK-LABEL: hw.module @memoryOps
 hw.module @memoryOps(in %clk: !seq.clock, in %en: i1, in %mask: i32, in %arg: i1) {
   %c0_i32 = hw.constant 0 : i32
@@ -106,8 +124,24 @@ hw.module @memoryOps(in %clk: !seq.clock, in %en: i1, in %mask: i32, in %arg: i1
   // CHECK-NEXT: arc.memory_write_port [[MEM]], @identity(%c0_i32, %c0_i32) clock %clk latency 4 : <4 x i32, i32>, i32, i32
   arc.memory_write_port %mem, @identity(%c0_i32, %c0_i32) clock %clk latency 4 : <4 x i32, i32>, i32, i32
 
+  // CHECK-NEXT: arc.clock_domain
+  arc.clock_domain (%arg) clock %clk : (i1) -> () {
+  ^bb0(%arg0: i1):
+    %c1_i32 = hw.constant 1 : i32
+    // CHECK: [[MEM2:%.+]] = arc.memory <4 x i32, i32>
+    %mem2 = arc.memory <4 x i32, i32>
+    // CHECK-NEXT: %{{.+}} = arc.memory_read_port [[MEM2]][%c1_i32] : <4 x i32, i32>
+    %2 = arc.memory_read_port %mem2[%c1_i32] : <4 x i32, i32>
+    // CHECK-NEXT: arc.memory_write_port [[MEM2]], @identity1(%c1_i32, %c1_i32, %arg0) enable latency 1 : <4 x i32, i32>, i32, i32, i1
+    arc.memory_write_port %mem2, @identity1(%c1_i32, %c1_i32, %arg0) enable latency 1 : <4 x i32, i32>, i32, i32, i1
+    // CHECK-NEXT: arc.memory_write_port [[MEM2]], @identity(%c1_i32, %c1_i32) latency 1 : <4 x i32, i32>, i32, i32
+    arc.memory_write_port %mem2, @identity(%c1_i32, %c1_i32) latency 1 : <4 x i32, i32>, i32, i32
+  }
+
   // CHECK: %{{.+}} = arc.memory_read [[MEM]][%c0_i32] : <4 x i32, i32>
   %2 = arc.memory_read %mem[%c0_i32] : <4 x i32, i32>
+  // CHECK-NEXT: arc.memory_write [[MEM]][%c0_i32], %c0_i32 if %en : <4 x i32, i32>
+  arc.memory_write %mem[%c0_i32], %c0_i32 if %en : <4 x i32, i32>
 
   // CHECK-NEXT: arc.memory_write [[MEM]][%c0_i32], %c0_i32 : <4 x i32, i32>
   arc.memory_write %mem[%c0_i32], %c0_i32 : <4 x i32, i32>
@@ -124,6 +158,32 @@ arc.define @identity2(%arg0: i32, %arg1: i32, %arg2: i1, %arg3: i32) -> (i32, i3
 arc.define @identity3(%arg0: i32, %arg1: i32, %arg2: i32) -> (i32, i32, i32) {
   arc.output %arg0, %arg1, %arg2 : i32, i32, i32
 }
+
+hw.module @vectorize_in_clock_domain(in %in0: i2, in %in1: i2, in %in2: i1, in %in3: i1, in %clk: !seq.clock, out out0: i1, out out1: i1) {
+  %0:2 = arc.clock_domain (%in0, %in1, %in2, %in3) clock %clk : (i2, i2, i1, i1) -> (i1, i1) {
+    ^bb0(%arg0: i2, %arg1: i2, %arg2: i1, %arg3: i1):
+    %1:2 = arc.vectorize (%arg0, %arg1), (%arg2, %arg3) : (i2, i2, i1, i1) -> (i1, i1) {
+    ^bb0(%arg4: i2, %arg5: i1):
+      %2 = arc.state @vectorizable(%arg4, %arg5) latency 1 : (i2, i1) -> i1
+      arc.vectorize.return %2 : i1
+    }
+    arc.output %1#0, %1#1 : i1, i1
+  }
+  hw.output %0#0, %0#1 : i1, i1
+}
+arc.define @vectorizable(%arg0: i2, %arg1: i1) -> i1 {
+  %0 = comb.extract %arg0 from 0 : (i2) -> i1
+  %1 = comb.and %0, %arg1 : i1
+  arc.output %0 : i1
+}
+
+// CHECK-LABEL: hw.module @vectorize_in_clock_domain
+//       CHECK: arc.clock_domain
+//       CHECK: %{{.+}}:2 = arc.vectorize ({{.*}}, {{.*}}), ({{.*}}, {{.*}}) : (i2, i2, i1, i1) -> (i1, i1) {
+//       CHECK: ^bb0([[A:%.+]]: i2, [[B:%.+]]: i1):
+//       CHECK:   [[V1:%.+]] = arc.state @vectorizable([[A]], [[B]]) latency 1 : (i2, i1) -> i1
+//       CHECK:   arc.vectorize.return [[V1]] : i1
+//       CHECK: }
 
 hw.module @vectorize(in %in0: i1, in %in1: i1, in %in2: i1, in %in3: i1, out out0: i1, out out1: i1, out out2: i1) {
   %0:2 = arc.vectorize (%in0, %in1), (%in2, %in3) : (i1, i1, i1, i1) -> (i1, i1) {
@@ -321,6 +381,8 @@ func.func @ReadsWrites(%arg0: !arc.state<i42>, %arg1: i42, %arg2: i1) {
   arc.state_read %arg0 : <i42>
   // CHECK: arc.state_write %arg0 = %arg1 : <i42>
   arc.state_write %arg0 = %arg1 : <i42>
+  // CHECK: arc.state_write %arg0 = %arg1 if %arg2 : <i42>
+  arc.state_write %arg0 = %arg1 if %arg2 : <i42>
   return
 }
 
@@ -354,15 +416,6 @@ func.func @CurrentTime(%arg0: !arc.storage<100>) {
   return
 }
 
-// CHECK-LABEL: func.func @NextWakeup
-func.func @NextWakeup(%arg0: !arc.storage<100>, %arg1: i64) {
-  // CHECK-NEXT: arc.get_next_wakeup %arg0 : !arc.storage<100>
-  %0 = arc.get_next_wakeup %arg0 : !arc.storage<100>
-  // CHECK-NEXT: arc.set_next_wakeup %arg0, %arg1 : !arc.storage<100>
-  arc.set_next_wakeup %arg0, %arg1 : !arc.storage<100>
-  return
-}
-
 // CHECK-LABEL: func.func @SimGetSetTime
 func.func @SimGetSetTime() {
   arc.sim.instantiate @TimeTestModule as %model {
@@ -370,8 +423,6 @@ func.func @SimGetSetTime() {
     %0 = arc.sim.get_time %model : !arc.sim.instance<@TimeTestModule>
     // CHECK: arc.sim.set_time %{{.*}}, %{{.*}} : !arc.sim.instance<@TimeTestModule>
     arc.sim.set_time %model, %0 : !arc.sim.instance<@TimeTestModule>
-    // CHECK: arc.sim.get_next_wakeup %{{.*}} : !arc.sim.instance<@TimeTestModule>
-    %1 = arc.sim.get_next_wakeup %model : !arc.sim.instance<@TimeTestModule>
     // CHECK: arc.sim.step %{{.*}} by %{{.*}} : !arc.sim.instance<@TimeTestModule>
     %tstep = arith.constant 123 : i64
     arc.sim.step %model by %tstep : !arc.sim.instance<@TimeTestModule>
@@ -379,76 +430,3 @@ func.func @SimGetSetTime() {
   return
 }
 hw.module @TimeTestModule() {}
-
-
-// CHECK-LABEL: arc.coroutine.define @CoroutineEmpty
-arc.coroutine.define @CoroutineEmpty() {
-  arc.coroutine.return
-}
-
-// CHECK-LABEL: arc.coroutine.define @CoroutineNoResults
-arc.coroutine.define @CoroutineNoResults(%arg0: i42) {
-  // CHECK: arc.coroutine.yield ^bb1
-  arc.coroutine.yield ^bb1
-^bb1(%arg1: i42):
-  // CHECK: arc.coroutine.yield ^bb2(%arg0 : i42)
-  arc.coroutine.yield ^bb2(%arg0 : i42)
-^bb2(%arg2: i42, %arg3: i42):
-  // CHECK: arc.coroutine.return
-  arc.coroutine.return
-^bb3:
-  // CHECK: arc.coroutine.halt
-  arc.coroutine.halt
-}
-
-// CHECK-LABEL: arc.coroutine.define @CoroutineWithResults
-arc.coroutine.define @CoroutineWithResults(%arg0: i42, %arg1: i9001) -> (i42, i9001) {
-  // CHECK: arc.coroutine.yield (%arg0, %arg1 : i42, i9001), ^bb1
-  arc.coroutine.yield (%arg0, %arg1 : i42, i9001), ^bb1
-^bb1(%arg2: i42, %arg3: i9001):
-  // CHECK: arc.coroutine.return %arg0, %arg1 : i42, i9001
-  arc.coroutine.return %arg0, %arg1 : i42, i9001
-^bb3:
-  // CHECK: arc.coroutine.halt %arg0, %arg1 : i42, i9001
-  arc.coroutine.halt %arg0, %arg1 : i42, i9001
-}
-
-// CHECK-LABEL: func.func @CoroutineCallEmpty
-func.func @CoroutineCallEmpty(%arg0: !arc.coroutine_state<@CoroutineEmpty>, %arg1: !arc.coroutine_pc<@CoroutineEmpty>) {
-  // CHECK: arc.coroutine.call @CoroutineEmpty(%arg0, %arg1)
-  // CHECK-SAME: : (!arc.coroutine_state<@CoroutineEmpty>, !arc.coroutine_pc<@CoroutineEmpty>)
-  // CHECK-SAME: -> (!arc.coroutine_state<@CoroutineEmpty>, !arc.coroutine_pc<@CoroutineEmpty>)
-  %0, %1 = arc.coroutine.call @CoroutineEmpty(%arg0, %arg1) : (!arc.coroutine_state<@CoroutineEmpty>, !arc.coroutine_pc<@CoroutineEmpty>) -> (!arc.coroutine_state<@CoroutineEmpty>, !arc.coroutine_pc<@CoroutineEmpty>)
-  return
-}
-
-// CHECK-LABEL: func.func @CoroutineCallWithResults
-func.func @CoroutineCallWithResults(
-  %arg0: !arc.coroutine_state<@CoroutineWithResults>,
-  %arg1: !arc.coroutine_pc<@CoroutineWithResults>,
-  %arg2: i42,
-  %arg3: i9001
-) {
-  // CHECK: arc.coroutine.call @CoroutineWithResults(%arg0, %arg1, %arg2, %arg3)
-  // CHECK-SAME: : (!arc.coroutine_state<@CoroutineWithResults>, !arc.coroutine_pc<@CoroutineWithResults>, i42, i9001)
-  // CHECK-SAME: -> (!arc.coroutine_state<@CoroutineWithResults>, !arc.coroutine_pc<@CoroutineWithResults>, i42, i9001)
-  %0, %1, %2:2 = arc.coroutine.call @CoroutineWithResults(%arg0, %arg1, %arg2, %arg3) : (!arc.coroutine_state<@CoroutineWithResults>, !arc.coroutine_pc<@CoroutineWithResults>, i42, i9001) -> (!arc.coroutine_state<@CoroutineWithResults>, !arc.coroutine_pc<@CoroutineWithResults>, i42, i9001)
-  return
-}
-
-// CHECK: arc.coroutine.undefined_state : <@CoroutineEmpty>
-arc.coroutine.undefined_state : !arc.coroutine_state<@CoroutineEmpty>
-// CHECK: arc.coroutine.start_pc : <@CoroutineEmpty>
-arc.coroutine.start_pc : !arc.coroutine_pc<@CoroutineEmpty>
-
-// CHECK-LABEL: hw.module @CoroutineInstanceA
-hw.module @CoroutineInstanceA(in %a: i42, out z: i9001) {
-  // CHECK: arc.coroutine.instance @CoroutineInstanceB(%a) : (i42) -> i9001
-  %0 = arc.coroutine.instance @CoroutineInstanceB(%a) : (i42) -> i9001
-  hw.output %0 : i9001
-}
-arc.coroutine.define @CoroutineInstanceB(%arg0: i42) -> (i9001, i64) {
-  %c0_i9001 = hw.constant 0 : i9001
-  %c0_i64 = hw.constant 0 : i64
-  arc.coroutine.halt %c0_i9001, %c0_i64 : i9001, i64
-}

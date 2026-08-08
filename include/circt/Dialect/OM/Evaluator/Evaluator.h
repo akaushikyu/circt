@@ -23,7 +23,6 @@
 #include "mlir/Support/LogicalResult.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/SmallString.h"
-#include "llvm/Support/Debug.h"
 
 #include <queue>
 #include <utility>
@@ -61,14 +60,6 @@ public:
   void markFullyEvaluated() {
     assert(!fullyEvaluated && "should not mark twice");
     fullyEvaluated = true;
-    // Increment the counter if one is set.
-    if (fullyEvaluatedCounter)
-      ++(*fullyEvaluatedCounter);
-  }
-
-  /// Set a counter to increment when this value becomes fully evaluated.
-  void setFullyEvaluatedCounter(uint64_t *counter) {
-    fullyEvaluatedCounter = counter;
   }
 
   /// Return true if the value is unknown (has unknown in its fan-in).
@@ -112,7 +103,6 @@ private:
   bool fullyEvaluated = false;
   bool finalized = false;
   bool unknown = false;
-  uint64_t *fullyEvaluatedCounter = nullptr;
 };
 
 /// Values which can be used as pointers to different values.
@@ -402,9 +392,6 @@ public:
 
   using ObjectKey = std::pair<Value, ActualParameters>;
 
-  /// Get the number of fully evaluated nodes tracked by this evaluator.
-  uint64_t getFullyEvaluatedCount() const { return fullyEvaluatedCount; }
-
 private:
   bool isFullyEvaluated(Value value, ActualParameters key) {
     return isFullyEvaluated({value, key});
@@ -414,16 +401,6 @@ private:
     auto val = objects.lookup(key);
     return val && val->isFullyEvaluated();
   }
-
-  /// Attach the evaluation counter to a newly created value.
-  void attachCounter(evaluator::EvaluatorValuePtr &value) {
-    if (value && !value->isFullyEvaluated())
-      value->setFullyEvaluatedCounter(&fullyEvaluatedCount);
-  }
-
-  FailureOr<evaluator::EvaluatorValuePtr>
-  instantiateImpl(StringAttr className,
-                  ArrayRef<EvaluatorValuePtr> actualParams);
 
   FailureOr<EvaluatorValuePtr>
   getOrCreateValue(Value value, ActualParameters actualParams, Location loc);
@@ -444,15 +421,16 @@ private:
   FailureOr<EvaluatorValuePtr>
   evaluateConstant(ConstantOp op, ActualParameters actualParams, Location loc);
 
+  FailureOr<EvaluatorValuePtr>
+  evaluateIntegerBinaryArithmetic(IntegerBinaryArithmeticOp op,
+                                  ActualParameters actualParams, Location loc);
+
   /// Instantiate an Object with its class name and actual parameters.
   FailureOr<EvaluatorValuePtr>
   evaluateObjectInstance(StringAttr className, ActualParameters actualParams,
                          Location loc, ObjectKey instanceKey = {});
   FailureOr<EvaluatorValuePtr>
   evaluateObjectInstance(ObjectOp op, ActualParameters actualParams);
-  FailureOr<EvaluatorValuePtr>
-  evaluateElaboratedObject(ElaboratedObjectOp op, ActualParameters actualParams,
-                           Location loc);
   FailureOr<EvaluatorValuePtr>
   evaluateObjectField(ObjectFieldOp op, ActualParameters actualParams,
                       Location loc);
@@ -462,15 +440,6 @@ private:
   FailureOr<EvaluatorValuePtr> evaluateListConcat(ListConcatOp op,
                                                   ActualParameters actualParams,
                                                   Location loc);
-  FailureOr<EvaluatorValuePtr>
-  evaluateIntegerBinary(IntegerBinaryOp op, ActualParameters actualParams,
-                        Location loc);
-  FailureOr<EvaluatorValuePtr>
-  evaluateStringConcat(StringConcatOp op, ActualParameters actualParams,
-                       Location loc);
-  FailureOr<EvaluatorValuePtr>
-  evaluateBinaryEquality(BinaryEqualityOp op, ActualParameters actualParams,
-                         Location loc);
   FailureOr<evaluator::EvaluatorValuePtr>
   evaluateBasePathCreate(FrozenBasePathCreateOp op,
                          ActualParameters actualParams, Location loc);
@@ -482,12 +451,6 @@ private:
                     Location loc);
   FailureOr<evaluator::EvaluatorValuePtr>
   evaluateUnknownValue(UnknownValueOp op, Location loc);
-
-  LogicalResult evaluatePropertyAssert(PropertyAssertOp op,
-                                       ActualParameters actualParams);
-
-  FailureOr<evaluator::EvaluatorValuePtr> createUnknownValue(Type type,
-                                                             Location loc);
 
   FailureOr<ActualParameters>
   createParametersFromOperands(ValueRange range, ActualParameters actualParams,
@@ -502,45 +465,12 @@ private:
       std::unique_ptr<SmallVector<std::shared_ptr<evaluator::EvaluatorValue>>>>
       actualParametersBuffers;
 
-  /// Worklists that track values which need to be fully evaluated.
-  /// We use two worklists to detect cycles: process all items from one,
-  /// and if any become fully evaluated, swap and continue.
-  std::vector<ObjectKey> worklist;
-  std::vector<ObjectKey> nextWorklist;
-
-  /// A queue of pending property assertions to be evaluated after the worklist
-  /// is fully drained. Each entry is a (PropertyAssertOp, ActualParameters)
-  /// pair. Property assertions are deferred because their operands may be
-  /// ReferenceValues that are not yet resolved when the class body is first
-  /// processed.
-  std::queue<std::pair<PropertyAssertOp, ActualParameters>> pendingAsserts;
+  /// A worklist that tracks values which needs to be fully evaluated.
+  std::queue<ObjectKey> worklist;
 
   /// Evaluator value storage. Return an evaluator value for the given
   /// instantiation context (a pair of Value and parameters).
   DenseMap<ObjectKey, std::shared_ptr<evaluator::EvaluatorValue>> objects;
-
-  /// Counter for fully evaluated nodes.
-  uint64_t fullyEvaluatedCount = 0;
-
-#ifndef NDEBUG
-  /// Current nesting depth for debug output indentation.
-  unsigned debugNesting = 0;
-
-  /// RAII helper to increment/decrement debugNesting.
-  struct DebugNesting {
-    unsigned &depth;
-    DebugNesting(unsigned &depth) : depth(depth) { ++depth; }
-    ~DebugNesting() { --depth; }
-  };
-
-  raw_ostream &dbgs(unsigned extra = 0) {
-    return llvm::dbgs().indent(debugNesting * 2 + extra * 2);
-  }
-
-  llvm::indent indent(unsigned extra = 0) {
-    return llvm::indent(debugNesting, 2) + extra;
-  }
-#endif
 };
 
 /// Helper to enable printing objects in Diagnostics.
@@ -554,9 +484,6 @@ operator<<(mlir::Diagnostic &diag,
     diag << "Object(" << object->getType() << ")";
   else if (auto *list = llvm::dyn_cast<evaluator::ListValue>(&evaluatorValue))
     diag << "List(" << list->getType() << ")";
-  else if (auto *ref =
-               llvm::dyn_cast<evaluator::ReferenceValue>(&evaluatorValue))
-    diag << "Reference(" << ref->getValueType() << ")";
   else if (llvm::isa<evaluator::BasePathValue>(&evaluatorValue))
     diag << "BasePath()";
   else if (llvm::isa<evaluator::PathValue>(&evaluatorValue))
@@ -575,29 +502,6 @@ static inline mlir::Diagnostic &
 operator<<(mlir::Diagnostic &diag, const EvaluatorValuePtr &evaluatorValue) {
   return diag << *evaluatorValue.get();
 }
-
-#ifndef NDEBUG
-/// Helper to enable printing objects to raw_ostream (e.g., llvm::dbgs()).
-/// Delegates to the Diagnostic overload via an intermediate string.
-static inline llvm::raw_ostream &
-operator<<(llvm::raw_ostream &os,
-           const evaluator::EvaluatorValue &evaluatorValue) {
-  std::string buf;
-  llvm::raw_string_ostream ss(buf);
-  mlir::Diagnostic diag(UnknownLoc::get(evaluatorValue.getContext()),
-                        mlir::DiagnosticSeverity::Note);
-  diag << evaluatorValue;
-  ss << diag;
-  return os << ss.str();
-}
-
-static inline llvm::raw_ostream &
-operator<<(llvm::raw_ostream &os, const EvaluatorValuePtr &evaluatorValue) {
-  if (evaluatorValue)
-    return os << *evaluatorValue.get();
-  return os << "<null>";
-}
-#endif // NDEBUG
 
 } // namespace om
 } // namespace circt

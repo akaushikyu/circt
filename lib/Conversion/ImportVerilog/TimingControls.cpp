@@ -9,7 +9,6 @@
 #include "ImportVerilogInternals.h"
 #include "slang/ast/TimingControl.h"
 #include "llvm/ADT/ScopeExit.h"
-#include "llvm/Support/SaveAndRestore.h"
 
 using namespace circt;
 using namespace ImportVerilog;
@@ -219,11 +218,15 @@ Context::convertTimingControl(const slang::ast::TimingControl &ctrl,
                               const slang::ast::Statement &stmt) {
   // Convert the timing control. Implicit event control will create a new empty
   // `WaitEventOp` and assign it to `implicitWaitOp`. This op will be populated
-  // further down. Mark that we are inside a timing control so the implicit
-  // event callback can skip reads that are part of the event expression itself.
+  // further down.
   moore::WaitEventOp implicitWaitOp;
   {
-    llvm::SaveAndRestore flagGuard(isInsideTimingControl, true);
+    auto previousCallback = rvalueReadCallback;
+    llvm::scope_exit done([&] { rvalueReadCallback = previousCallback; });
+    // Reads happening as part of the event control should not be added to a
+    // surrounding implicit event control's list of implicitly observed
+    // variables.
+    rvalueReadCallback = nullptr;
     if (failed(handleRoot(*this, ctrl, &implicitWaitOp)))
       return failure();
   }
@@ -238,8 +241,7 @@ Context::convertTimingControl(const slang::ast::TimingControl &ctrl,
     llvm::scope_exit done([&] { rvalueReadCallback = previousCallback; });
     if (implicitWaitOp) {
       rvalueReadCallback = [&](moore::ReadOp readOp) {
-        if (!isInsideTimingControl)
-          readValues.insert(readOp.getInput());
+        readValues.insert(readOp.getInput());
         if (previousCallback)
           previousCallback(readOp);
       };

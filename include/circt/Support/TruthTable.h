@@ -18,8 +18,6 @@
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/Support/raw_ostream.h"
-#include <array>
-#include <cstdint>
 
 namespace circt {
 
@@ -164,30 +162,6 @@ struct NPNClass {
   void dump(llvm::raw_ostream &os = llvm::errs()) const;
 };
 
-/// Precomputed NPN canonicalization table for 4-input single-output functions.
-class NPNTable {
-public:
-  NPNTable();
-
-  /// Returns false if the given truth table shape is unsupported.
-  bool lookup(const BinaryTruthTable &tt, NPNClass &result) const;
-
-private:
-  struct Entry4 {
-    uint16_t representative = 0;
-    std::array<uint8_t, 4> inputPermutation = {};
-    uint8_t inputNegation = 0;
-    bool outputNegation = false;
-  };
-
-  std::array<Entry4, 1u << 16> entries4;
-};
-
-/// Collect all canonical 4-input single-output NPN representatives in
-/// ascending truth-table order.
-void collectCanonicalNPN4Representatives(
-    llvm::SmallVectorImpl<uint16_t> &representatives);
-
 //===----------------------------------------------------------------------===//
 // Truth Table Utilities
 //===----------------------------------------------------------------------===//
@@ -212,15 +186,6 @@ void collectCanonicalNPN4Representatives(
 ///
 /// Returns: APInt mask with numBits = 2^numVars
 llvm::APInt createVarMask(unsigned numVars, unsigned varIndex, bool positive);
-
-namespace detail {
-/// Expand a truth table to a larger input space using the given input mapping.
-/// `inputMapping[i]` gives the destination input position for original input
-/// `i`.
-llvm::APInt expandTruthTableToInputSpace(const llvm::APInt &tt,
-                                         ArrayRef<unsigned> inputMapping,
-                                         unsigned numExpandedInputs);
-} // namespace detail
 
 /// Compute cofactor of a Boolean function for a given variable.
 ///

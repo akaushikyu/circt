@@ -45,12 +45,12 @@ endmodule
 // CHECK-LABEL: moore.module @Bar(in %a : !moore.l1, in %b : !moore.l1, out c : !moore.l1)
 module Bar(input a, b,
            output c);
-  // CHECK-DAG: %u = moore.variable {{.*}} : <i32>
   // CHECK: %subC1.c, %subC1.subD.z = moore.instance "subC1" @SubC(a: %0: !moore.l1, b: %1: !moore.l1) -> (c: !moore.l1, subD.z: !moore.ref<i32>)
   SubC subC1(a, b, c);
   // CHECK: %subC2.c, %subC2.subD.z = moore.instance "subC2" @SubC(a: %2: !moore.l1, b: %3: !moore.l1) -> (c: !moore.l1, subD.z: !moore.ref<i32>)
   SubC subC2(a, b, c);
-  // CHECK-DAG: [[RD_SC1_SD_Z:%.+]] = moore.read %subC1.subD.z : <i32>
+  // CHECK: [[RD_SC1_SD_Z:%.+]] = moore.read %subC1.subD.z : <i32>
+  // CHECK: moore.variable [[RD_SC1_SD_Z]] : <i32>
   int u = subC1.subD.z;
 endmodule
 
@@ -68,51 +68,4 @@ module SubD;
   // CHECK: [[RD_Z:%.+]] = moore.read %z : <i32>
   // CHECK: moore.assign %w, [[RD_Z]] : i32
   assign SubD.w = SubD.z;
-endmodule
-
-// -----
-
-// Check we descend into procedural blocks
-// CHECK-LABEL: moore.module @HasInitial()
-// CHECK: [[INSTRES:%.+]] = moore.instance "subE1" @SubE() -> (a: !moore.ref<l1>)
-// CHECK: moore.procedure initial {
-// CHECK: [[C1:%.+]] = moore.constant 1 : l1
-// CHECK: moore.nonblocking_assign [[INSTRES]], [[C1]] : l1
-// CHECK: moore.return
-module HasInitial;
-   SubE subE1();
-   initial
-      begin
-        subE1.a  <= 1'b1;
-      end
-endmodule
-
-// CHECK-LABEL: moore.module private @SubE(out a : !moore.ref<l1>)
-// CHECK: [[VAR:%.+]] = moore.variable : <l1>
-// CHECK: moore.output [[VAR]] : !moore.ref<l1>
-module SubE;
-   reg    a;
-endmodule
-
-// -----
-
-// Make sure we recurse through expressions
-// CHECK-LABEL: moore.module @SubExpr()
-// CHECK: [[INSTRES:%.+]] = moore.instance "subF" @SubF() -> (x: !moore.ref<l8>)
-// CHECK: [[READ:%.+]] = moore.read [[INSTRES]] : <l8>
-// CHECK: [[C1:%.+]] = moore.constant 1 : l8
-// CHECK: [[ADD:%.+]] = moore.add [[READ]], [[C1]] : l8
-// CHECK: moore.assign %a, [[ADD]] : l8
-
-module SubExpr;
-  SubF subF();
-  logic [7:0] a;
-  assign a = subF.x + 8'd1;
-endmodule
-
-// CHECK-LABEL: moore.module private @SubF(out x : !moore.ref<l8>)
-// CHECK: [[VAR:%.+]] = moore.variable : <l8>
-// CHECK: moore.output [[VAR]] : !moore.ref<l8>
-module SubF;
-  logic [7:0] x;
 endmodule

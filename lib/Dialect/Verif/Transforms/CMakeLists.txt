@@ -1,6 +1,5 @@
 add_circt_dialect_library(CIRCTVerifTransforms
   CombineAssertLike.cpp
-  FoldAssume.cpp
   LowerContracts.cpp
   LowerSymbolicValues.cpp
   LowerTests.cpp

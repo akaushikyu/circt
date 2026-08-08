@@ -2117,23 +2117,6 @@ hw.module @notSext(in %a : i3, out negsext : i8) {
   hw.output %3 : i8
 }
 
-// CHECK-LABEL: @notSextSingleBit
-// ~sext(a) -> sext(~a)
-hw.module @notSextSingleBit(in %a : i3, out negsext : i4) {
-  // CHECK-NEXT: %c-1_i3 = hw.constant -1 : i3
-  // CHECK-NEXT: %[[NOTA:.+]] = comb.xor bin %a, %c-1_i3 : i3
-  // CHECK-NEXT: %[[NOTASIGN:.+]] = comb.extract %[[NOTA]] from 2 : (i3) -> i1
-  // CHECK-NEXT: %[[NEGSEXT:.+]] = comb.concat %[[NOTASIGN]], %[[NOTA]] : i1, i3
-  // CHECK-NEXT: hw.output %[[NEGSEXT]] : i4
-  %c-1_i4 = hw.constant -1 : i4
-  // sext(a) with single sign bit
-  %0 = comb.extract %a from 2 : (i3) -> i1
-  %1 = comb.concat %0, %a : i1, i3
-  // ~sext(a)
-  %2 = comb.xor %1, %c-1_i4 : i4
-  hw.output %2 : i4
-}
-
 // CHECK-LABEL: hw.module private @SextMatcherBlockArguments
 // Test that SextMatcher doesn't crash on block arguments (module ports)
 hw.module private @SextMatcherBlockArguments(in %a : i6, in %b : i2, in %c : i27) {
@@ -2144,23 +2127,4 @@ hw.module private @SextMatcherBlockArguments(in %a : i6, in %b : i2, in %c : i27
   %2 = comb.extract %1 from 34 : (i35) -> i1
   %3 = comb.extract %1 from 26 : (i35) -> i1
   hw.output
-}
-
-// CHECK-LABEL: hw.module @AndOfReplicate
-// CHECK: %c0_i4 = hw.constant 0 : i4
-// CHECK: %[[X:.*]] = comb.mux bin %p, %x, %c0_i4
-// CHECK: hw.output %[[X]]
-hw.module @AndOfReplicate(in %p: i1, in %x: i4, out y: i4) {
-  %r = comb.replicate %p : (i1) -> i4
-  %and = comb.and bin %x, %r : i4
-  hw.output %and : i4
-}
-
-// CHECK-LABEL: hw.module @AndOfReplicateNot2State
-// CHECK: comb.replicate
-// CHECK: comb.and
-hw.module @AndOfReplicateNot2State(in %p: i1, in %x: i4, out y: i4) {
-  %r = comb.replicate %p : (i1) -> i4
-  %and = comb.and %x, %r : i4
-  hw.output %and : i4
 }

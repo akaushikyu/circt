@@ -13,11 +13,9 @@
 ##
 ## We require Python development package and nanobind to compile the Python API.
 ##
-## ESI cosimulation uses a WebSocket + JSON RPC protocol (see
-## cosim-protocol.md). The IXWebSocket dependency is found via
-## find_package(ixwebsocket CONFIG) if available, otherwise it is fetched
-## automatically. Cosimulation is optional and can be disabled with
-## -DESI_COSIM=OFF.
+## ESI cosimulation requires Cap'nProto as we use it for our RPC with the
+## simulator. It must be fetched separately, but is optional if you don't want
+## cosimulation.
 ##
 ## DO NOT EDIT!
 ## This file is distributed as part of an ESI package. The source for this file
@@ -113,7 +111,7 @@ endif()
 ##===----------------------------------------------------------------------===//
 ## Overall target to build everything.
 ##===----------------------------------------------------------------------===//
-add_custom_target(ESIRuntime ALL)
+add_custom_target(ESIRuntime)
 
 ##===----------------------------------------------------------------------===//
 ## Core ESI runtime.
@@ -137,7 +135,6 @@ set(ESICppRuntimeSources
 set(ESICppRuntimeHeaders
   ${CMAKE_CURRENT_SOURCE_DIR}/cpp/include/esi/Utils.h
   ${CMAKE_CURRENT_SOURCE_DIR}/cpp/include/esi/Accelerator.h
-  ${CMAKE_CURRENT_SOURCE_DIR}/cpp/include/esi/BitAccess.h
   ${CMAKE_CURRENT_SOURCE_DIR}/cpp/include/esi/CLI.h
   ${CMAKE_CURRENT_SOURCE_DIR}/cpp/include/esi/Common.h
   ${CMAKE_CURRENT_SOURCE_DIR}/cpp/include/esi/Context.h
@@ -162,20 +159,6 @@ IF(MSVC)
 
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /EHa")
     set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS 1)
-
-    # If we're building a wheel in Debug mode, the DLLs need to be as small as
-    # possible. Set some linker flags to achieve that.
-    if (WHEEL_BUILD AND CMAKE_BUILD_TYPE STREQUAL "Debug")
-      message(STATUS "Setting additional linker flags for Debug wheel build.")
-      foreach(config_type
-        CMAKE_EXE_LINKER_FLAGS_DEBUG
-        CMAKE_SHARED_LINKER_FLAGS_DEBUG
-        CMAKE_MODULE_LINKER_FLAGS_DEBUG)
-        string(REPLACE "/INCREMENTAL" "/INCREMENTAL:NO" ${config_type} "${${config_type}}")
-        set(${config_type} "${${config_type}} /DEBUG /OPT:REF /OPT:ICF")
-      endforeach()
-    endif()
-
 ENDIF(MSVC)
 
 if(ESI_STATIC_RUNTIME)
@@ -312,11 +295,6 @@ target_link_libraries(esitester PRIVATE
   ESICppRuntime
   CLI11::CLI11
 )
-add_dependencies(ESIRuntime esitester)
-install(TARGETS esitester
-  DESTINATION ${ESIRT_INSTALL_BINDIR}
-  COMPONENT ESIRuntime
-)
 # Install PDB files for Windows Debug builds
 if(WIN32 AND MSVC)
   install(FILES $<TARGET_PDB_FILE:esitester>
@@ -327,12 +305,8 @@ if(WIN32 AND MSVC)
 endif()
 
 
-# Add the Python bindings. The `python` subdirectory is not shipped with the
-# source tree distributed inside the wheel (which is only used for on-demand
-# Debug builds on Windows), so guard against its absence.
-if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/python/CMakeLists.txt)
-  add_subdirectory(python)
-endif()
+# Add the Python bindings.
+add_subdirectory(python)
 
 ##===----------------------------------------------------------------------===//
 ## Backends are loaded dynamically as plugins.
@@ -342,29 +316,23 @@ option(ESI_COSIM "Enable ESI cosimulation." ON)
 if(ESI_COSIM)
   message("-- ESI cosim enabled")
 
-  # IXWebSocket for cosimulation transport. Prefer a system / vcpkg install
-  # via CMake config; fall back to fetching the upstream source. The wire
-  # protocol is documented in cosim-protocol.md.
-  find_package(ixwebsocket QUIET CONFIG)
-  if (NOT ixwebsocket_FOUND)
-    message("-- IXWebSocket not found locally, fetching from upstream")
-    # v3 of the cosim protocol is plaintext on localhost only. Disable
-    # TLS/zlib to keep IXWebSocket dependency-free and statically linkable
-    # into CosimRpc.
-    set(USE_TLS OFF CACHE BOOL "" FORCE)
-    set(USE_ZLIB OFF CACHE BOOL "" FORCE)
-    FetchContent_Declare(ixwebsocket
-      GIT_REPOSITORY https://github.com/machinezone/IXWebSocket.git
-      GIT_TAG        173f442474c4d9db16184c5e15cc96e07605e0e0
-    )
-    FetchContent_MakeAvailable(ixwebsocket)
+  # gRPC for cosimulation. Local install required.
+  option(GRPC_PATH "Location of gRPC install.")
+  if (${GRPC_PATH})
+    find_package(Protobuf REQUIRED CONFIG HINTS ${GRPC_PATH})
+    find_package(gRPC REQUIRED CONFIG HINTS ${GRPC_PATH})
+  else()
+    find_package(Protobuf REQUIRED CONFIG)
+    find_package(gRPC REQUIRED CONFIG)
   endif()
 
-  # CosimRpc library - hides the IXWebSocket + JSON wire protocol from the
-  # rest of the runtime.
+  set(PROTO_BINARY_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated")
+
+  # CosimRpc library - wraps gRPC/protobuf dependencies
   add_library(CosimRpc SHARED
     ${CMAKE_CURRENT_SOURCE_DIR}/cpp/lib/backends/RpcClient.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/cpp/lib/backends/RpcServer.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/cosim.proto
   )
   set(ESICppRuntimeBackendHeaders
     ${ESICppRuntimeBackendHeaders}
@@ -379,11 +347,20 @@ if(ESI_COSIM)
 
   target_link_libraries(CosimRpc PUBLIC
     ESICppRuntime
+    protobuf::libprotobuf
+    gRPC::grpc++
   )
-  target_link_libraries(CosimRpc PRIVATE
-    ixwebsocket::ixwebsocket
-    nlohmann_json::nlohmann_json
-  )
+  target_include_directories(CosimRpc PUBLIC "$<BUILD_INTERFACE:${PROTO_BINARY_DIR}>")
+  protobuf_generate(
+      TARGET CosimRpc
+      PROTOC_OUT_DIR "${PROTO_BINARY_DIR}")
+  protobuf_generate(
+      TARGET CosimRpc
+      LANGUAGE grpc
+      GENERATE_EXTENSIONS .grpc.pb.h .grpc.pb.cc
+      PLUGIN "protoc-gen-grpc=\$<TARGET_FILE:gRPC::grpc_cpp_plugin>"
+      PROTOC_OUT_DIR "${PROTO_BINARY_DIR}")
+
 
   # CosimBackend library - the ESI backend plugin
   add_library(CosimBackend SHARED
@@ -403,24 +380,37 @@ if(ESI_COSIM)
     ESICppRuntime
     CosimRpc
   )
+  target_include_directories(CosimBackend PUBLIC "$<BUILD_INTERFACE:${PROTO_BINARY_DIR}>")
 
   add_dependencies(ESIRuntime CosimBackend)
 
-  install(TARGETS CosimRpc CosimBackend
-    DESTINATION ${ESIRT_INSTALL_LIBDIR}
-    COMPONENT ESIRuntime
-  )
-  if(WIN32 AND MSVC)
-    # Install PDB files for Windows Debug builds
-    install(FILES $<TARGET_PDB_FILE:CosimRpc>
+  if(WIN32)
+    # Windows cosim backend carries a lot of runtime dependencies, mainly
+    # transitively through gRPC. Make sure they're installed as well.
+    install(TARGETS CosimRpc CosimBackend
       DESTINATION ${ESIRT_INSTALL_LIBDIR}
+      RUNTIME_DEPENDENCIES
+        PRE_EXCLUDE_REGEXES "api-ms-" "ext-ms-"
+        POST_EXCLUDE_REGEXES ".*system32/.*\\.dll"
       COMPONENT ESIRuntime
-      OPTIONAL
     )
-    install(FILES $<TARGET_PDB_FILE:CosimBackend>
+    # Install PDB files for Windows Debug builds
+    if(MSVC)
+      install(FILES $<TARGET_PDB_FILE:CosimRpc>
+        DESTINATION ${ESIRT_INSTALL_LIBDIR}
+        COMPONENT ESIRuntime
+        OPTIONAL
+      )
+      install(FILES $<TARGET_PDB_FILE:CosimBackend>
+        DESTINATION ${ESIRT_INSTALL_LIBDIR}
+        COMPONENT ESIRuntime
+        OPTIONAL
+      )
+    endif()
+  else()
+    install(TARGETS CosimRpc CosimBackend
       DESTINATION ${ESIRT_INSTALL_LIBDIR}
       COMPONENT ESIRuntime
-      OPTIONAL
     )
   endif()
 

@@ -4,7 +4,6 @@ add_circt_translation_library(CIRCTImportLiberty
   LINK_LIBS PUBLIC
   CIRCTComb
   CIRCTHW
-  CIRCTSynth
   CIRCTSupport
   MLIRIR
   MLIRSupport

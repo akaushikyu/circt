@@ -12,7 +12,6 @@
 //===----------------------------------------------------------------------===//
 
 include "circt/Dialect/HW/HWOpInterfaces.td"
-include "circt/Support/ProceduralRegionTrait.td"
 include "circt/Types.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
 
@@ -197,7 +196,7 @@ def IndexedPartSelectInOutOp : SVOp<"indexed_part_select_inout",
                                           std::optional<Location> loc,
                                           ValueRange operands,
                                           DictionaryAttr attrs,
-                                          mlir::PropertyRef properties,
+                                          mlir::OpaqueProperties properties,
                                           mlir::RegionRange regions,
                                           SmallVectorImpl<Type> &results);
   }];
@@ -228,7 +227,7 @@ def StructFieldInOutOp : SVOp<"struct_field_inout",
                                           std::optional<Location> loc,
                                           ValueRange operands,
                                           DictionaryAttr attrs,
-                                          mlir::PropertyRef properties,
+                                          mlir::OpaqueProperties properties,
                                           mlir::RegionRange regions,
                                           SmallVectorImpl<Type> &results);
   }];

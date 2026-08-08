@@ -15,7 +15,6 @@ OPTIONS:
     -h                    Display available options
     -o                    OS to target: [linux, macos, windows]
     -t                    Run tests
-    -u                    Run integration tests
 EOF
 }
 
@@ -28,7 +27,6 @@ OPT_CMAKE_BUILD_TYPE=
 OPT_GITHUB_EVENT_NAME=
 OPT_OS=()
 OPT_RUN_TESTS=false
-OPT_RUN_INTEGRATION_TESTS=false
 while getopts "ab:e:ho:t" option; do
   case $option in
     a)
@@ -73,9 +71,6 @@ while getopts "ab:e:ho:t" option; do
       ;;
     t)
       OPT_RUN_TESTS=true
-      ;;
-    u)
-      OPT_RUN_INTEGRATION_TESTS=true
       ;;
     *)
       echo "uknown option"
@@ -159,8 +154,8 @@ configStatic=$(cat <<EOF
   {
     "cmake_build_type": "$OPT_CMAKE_BUILD_TYPE",
     "llvm_enable_assertions": "$OPT_ASSERTIONS",
+    "llvm_force_enable_stats": "ON",
     "run_tests": $OPT_RUN_TESTS,
-    "run_integration_tests": $OPT_RUN_INTEGRATION_TESTS,
     "install_target": "$binaryTargets",
     "package_name_prefix": "firrtl-bin"
   }
@@ -173,7 +168,8 @@ configLinuxRunner=$(cat <<EOF
 [
   {
     "runner": "ubuntu-24.04",
-    "cmake_c_compiler": "clang"
+    "cmake_c_compiler": "clang",
+    "cmake_cxx_compiler": "clang++"
   }
 ]
 EOF
@@ -182,11 +178,8 @@ configMacOsRunner=$(cat <<EOF
 [
   {
     "runner": "macos-15-intel",
-    "cmake_c_compiler": "clang"
-  },
-  {
-    "runner": "macos-15",
-    "cmake_c_compiler": "clang"
+    "cmake_c_compiler": "clang",
+    "cmake_cxx_compiler": "clang++"
   }
 ]
 EOF
@@ -195,7 +188,8 @@ configWindowsRunner=$(cat <<EOF
 [
   {
     "runner": "windows-2022",
-    "cmake_c_compiler": "cl"
+    "cmake_c_compiler": "cl",
+    "cmake_cxx_compiler": "cl"
   }
 ]
 EOF
@@ -205,13 +199,14 @@ EOF
 configNativeFullShared=$(cat <<EOF
 [
   {
+    "name":"CIRCT-full shared",
     "install_target":"install",
     "package_name_prefix":"circt-full-shared",
     "cmake_build_type":"$OPT_CMAKE_BUILD_TYPE",
     "llvm_enable_assertions":"$OPT_ASSERTIONS",
     "build_shared_libs":"ON",
-    "run_tests": $OPT_RUN_TESTS,
-    "run_integration_tests": $OPT_RUN_INTEGRATION_TESTS
+    "llvm_force_enable_stats":"ON",
+    "run_tests": $OPT_RUN_TESTS
   }
 ]
 EOF
@@ -219,13 +214,14 @@ EOF
 configNativeFullStatic=$(cat <<EOF
 [
   {
+    "name":"CIRCT-full static",
     "install_target":"install",
     "package_name_prefix":"circt-full-static",
     "cmake_build_type":"$OPT_CMAKE_BUILD_TYPE",
     "llvm_enable_assertions":"$OPT_ASSERTIONS",
     "build_shared_libs":"OFF",
-    "run_tests": $OPT_RUN_TESTS,
-    "run_integration_tests": $OPT_RUN_INTEGRATION_TESTS
+    "llvm_force_enable_stats":"ON",
+    "run_tests": $OPT_RUN_TESTS
   }
 ]
 EOF
@@ -233,13 +229,14 @@ EOF
 configNativeFirtool=$(cat <<EOF
 [
   {
+    "name": "firtool",
     "install_target": "$binaryTargets",
     "package_name_prefix": "firrtl-bin",
     "cmake_build_type":"$OPT_CMAKE_BUILD_TYPE",
     "llvm_enable_assertions":"$OPT_ASSERTIONS",
     "build_shared_libs":"OFF",
-    "run_tests": $OPT_RUN_TESTS,
-    "run_integration_tests": $OPT_RUN_INTEGRATION_TESTS
+    "llvm_force_enable_stats":"ON",
+    "run_tests": $OPT_RUN_TESTS
   }
 ]
 EOF
@@ -298,31 +295,6 @@ for os in "${OPT_OS[@]}"; do
       ;;
   esac
 done
-
-# Set a human-readable name for the native and static configurations.  This
-# produces the following for the native UBTI build:
-#
-#   <runner>/<compiler>/<build-type>/<shared-vs-static>/<asserts>(/test)?(/install-(full|<n>))?
-#
-# and the following for the static UBTI build:
-#
-#   <build-type>/<asserts>(/test)?(/install-(full|<n>))?
-#
-# This is intended to be used to set the matrix job name in order to make this
-# readable on GitHub when trying to see what is running or what failed.
-config=$(echo "$config" | jq '
-  def libs: if .build_shared_libs == "ON" then "shared" else "static" end;
-  def asserts: if .llvm_enable_assertions == "ON" then "on" else "off" end;
-  def tests: if .run_tests then "/test" else "" end;
-  def integrationTests: if .run_integration_tests then "/integration-test" else "" end;
-  def install:
-    if (.install_target // "") == "" then ""
-    elif .install_target == "install" then "/install-full"
-    else "/install-\(.install_target | split(" ") | map(select(. != "")) | length)"
-    end;
-  .native |= map(. + {name: "native/\(.runner)/\(.cmake_c_compiler)/\(.cmake_build_type)/\(libs)-libs/asserts-\(asserts)\(tests)\(integrationTests)\(install)"}) |
-  .static |= map(. + {name: "static/\(.cmake_build_type)/asserts-\(asserts)\(tests)\(integrationTests)\(install)"})
-')
 
 # Return the final `config` JSON.
 echo "$config"

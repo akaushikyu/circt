@@ -86,7 +86,7 @@ def SCModuleOp : SystemCOp<"module", [
 
     // Return the Ctor operation in this module's body or create one if none
     // exists yet.
-    systemc::CtorOp getOrCreateCtor(OpBuilder &builder);
+    systemc::CtorOp getOrCreateCtor();
 
     // Return the Destructor operation in this module's body or create one if
     // none exists yet.

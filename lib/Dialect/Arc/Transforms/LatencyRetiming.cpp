@@ -119,8 +119,12 @@ LatencyRetimingPattern::matchAndRewrite(ClockedOpInterface op,
     // We check that all clocks are the same if present. Here we remember that
     // clock. If none of the involved operations have a clock, they must have
     // latency 0 and thus `minPrevLatency = 0` leading to early failure below.
-    if (!clock && predOp.getClock())
-      clock = predOp.getClock();
+    if (!clock) {
+      if (predOp.getClock())
+        clock = predOp.getClock();
+      if (auto clockDomain = predOp->getParentOfType<ClockDomainOp>())
+        clock = clockDomain.getClock();
+    }
 
     predecessors.insert(predOp);
     minPrevLatency = std::min(minPrevLatency, predOp.getLatency());
@@ -131,6 +135,7 @@ LatencyRetimingPattern::matchAndRewrite(ClockedOpInterface op,
 
   auto setLatency = [&](Operation *op, uint64_t newLatency, Value clock) {
     assert((isa<StateOp, CallOp>(op)) && "must be a state or call op");
+    bool isInClockDomain = op->getParentOfType<ClockDomainOp>();
 
     if (auto stateOp = dyn_cast<StateOp>(op)) {
       if (newLatency == 0) {
@@ -149,7 +154,7 @@ LatencyRetimingPattern::matchAndRewrite(ClockedOpInterface op,
 
       rewriter.modifyOpInPlace(op, [&]() {
         stateOp.setLatency(newLatency);
-        if (!stateOp.getClock())
+        if (!stateOp.getClock() && !isInClockDomain)
           stateOp.getClockMutable().assign(clock);
       });
       return;
@@ -157,8 +162,9 @@ LatencyRetimingPattern::matchAndRewrite(ClockedOpInterface op,
 
     if (auto callOp = dyn_cast<CallOp>(op); callOp && newLatency > 0)
       rewriter.replaceOpWithNewOp<StateOp>(
-          op, callOp.getArcAttr(), callOp->getResultTypes(), clock, Value{},
-          newLatency, callOp.getInputs());
+          op, callOp.getArcAttr(), callOp->getResultTypes(),
+          isInClockDomain ? Value{} : clock, Value{}, newLatency,
+          callOp.getInputs());
   };
 
   setLatency(op, op.getLatency() + minPrevLatency, clock);

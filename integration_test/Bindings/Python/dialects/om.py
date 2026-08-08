@@ -88,10 +88,10 @@ with Context() as ctx, Location.unknown():
 
     om.class @IntegerBinaryArithmeticObjectsDelayed() -> (result: !om.integer) {
       %0 = om.object @Class1(%5) : (!om.integer) -> !om.class.type<@Class1>
-      %1 = om.object.field %0["value"] : (!om.class.type<@Class1>) -> !om.integer
+      %1 = om.object.field %0, [@value] : (!om.class.type<@Class1>) -> !om.integer
 
       %2 = om.object @Class2() : () -> !om.class.type<@Class2>
-      %3 = om.object.field %2["value"] : (!om.class.type<@Class2>) -> !om.integer
+      %3 = om.object.field %2, [@value] : (!om.class.type<@Class2>) -> !om.integer
 
       %5 = om.integer.add %1, %3 : !om.integer
       om.class.fields %5 : !om.integer
@@ -152,13 +152,13 @@ print("child.foo.loc", obj.child.get_field_loc("foo"))
 print(obj.reference)
 
 for (name, field) in obj:
-  # location from om.class.field "child"
+  # location from om.class.field @child, %0 : !om.class.type<@Child>
   # CHECK: name: child, field: <circt.dialects.om.Object object
-  # CHECK-SAME: loc: loc(fused
-  # location from om.class.field "field"
+  # CHECK-SAME: loc: loc("-":{{.*}}:{{.*}})
+  # location from om.class.field @field, %param : !om.integer
   # CHECK: name: field, field: 42
   # CHECK-SAME: loc: loc("-":{{.*}}:{{.*}})
-  # location from om.class.field "reference"
+  # location from om.class.field @reference, %sym : !om.ref
   # CHECK: name: reference, field: ('Root', 'x')
   # CHECK-SAME: loc: loc("-":{{.*}}:{{.*}})
   loc = obj.get_field_loc(name)
@@ -310,48 +310,3 @@ with Context() as ctx:
   print(f"out4 (constant bool): {obj.out4}")
   # CHECK: out5 (unknown bool): Unknown(i1)
   print(f"out5 (unknown bool): {obj.out5}")
-
-# Test om.property_assert evaluation.
-
-with Context() as ctx, Location.unknown():
-  circt.register_dialects(ctx)
-
-  module = Module.parse("""
-  module {
-    om.class @AssertTrue() -> () {
-      %true = om.constant true
-      om.property_assert %true, "should not fail" : i1
-      om.class.fields
-    }
-    om.class @AssertFalse() -> () {
-      %false = om.constant false
-      om.property_assert %false, "condition is false" : i1
-      om.class.fields
-    }
-    om.class @AssertUnknown(%cond: i1) -> () {
-      om.property_assert %cond, "unknown condition" : i1
-      om.class.fields
-    }
-  }
-  """)
-
-  evaluator = om.Evaluator(module)
-  i1_type = Type.parse("i1")
-
-  # Passing assertion should succeed silently.
-  obj = evaluator.instantiate("AssertTrue")
-  # CHECK: AssertTrue: passed
-  print("AssertTrue: passed")
-
-  # Failing assertion should raise ValueError.
-  try:
-    obj = evaluator.instantiate("AssertFalse")
-  except ValueError as e:
-    # CHECK: OM property assertion failed: condition is false
-    # CHECK: unable to instantiate object, see previous error(s)
-    print(e)
-
-  # Unknown condition should not raise an error (best-effort).
-  obj = evaluator.instantiate("AssertUnknown", om.Unknown(i1_type))
-  # CHECK: AssertUnknown(unknown): passed
-  print("AssertUnknown(unknown): passed")

@@ -13,7 +13,6 @@
 #ifndef CIRCT_DIALECT_FIRRTL_FIRRTLUTILS_H
 #define CIRCT_DIALECT_FIRRTL_FIRRTLUTILS_H
 
-#include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "mlir/IR/BuiltinOps.h"
 
@@ -63,6 +62,9 @@ Value getModuleScopedDriver(Value val, bool lookThroughWires,
 class TieOffCache {
 public:
   TieOffCache(ImplicitLocOpBuilder &builder) : builder(builder) {}
+
+  /// Get or create an InvalidValueOp for the given base type.
+  Value getInvalid(FIRRTLBaseType type);
 
   /// Get or create an UnknownValueOp for the given property type.
   Value getUnknown(PropertyType type);

@@ -44,8 +44,6 @@ arc.define @RandomI42AndI19Arc() -> (i42, i19) {
 
 // CHECK-LABEL: arc.model @Empty
 // CHECK-NEXT:  ^bb0(%arg0: !arc.storage):
-// CHECK-NEXT:    [[NWK:%.+]] = hw.constant -1 : i64
-// CHECK-NEXT:    arc.set_next_wakeup %arg0, [[NWK]] : !arc.storage
 // CHECK-NEXT:  }
 hw.module @Empty() {}
 
@@ -613,47 +611,6 @@ hw.module @OpsWithRegions(in %clock: !seq.clock, in %a: i42, in %b: i1, out c: i
   hw.output %0 : i42
 }
 
-// CHECK-LABEL: arc.model @Triggered
-hw.module @Triggered(in %clock: i1, in %a: i42) {
-  // CHECK: [[IN_CLOCK:%.+]] = arc.root_input "clock"
-  // CHECK: [[IN_A:%.+]] = arc.root_input "a"
-  // CHECK: [[A:%.+]] = arc.state_read [[IN_A]]
-  // CHECK: [[CLOCK:%.+]] = arc.state_read [[IN_CLOCK]]
-  // CHECK: [[OLD_CLOCK:%.+]] = arc.state_read
-  // CHECK: arc.state_write
-  // CHECK: [[EDGE:%.+]] = comb.xor [[OLD_CLOCK]], [[CLOCK]]
-  // CHECK: [[POSEDGE:%.+]] = comb.and [[EDGE]], [[CLOCK]]
-  // CHECK: scf.if [[POSEDGE]] {
-  // CHECK:   func.call @ConsumeI42([[A]])
-  // CHECK: }
-  hw.triggered posedge %clock(%a) : i42 {
-  ^bb0(%arg: i42):
-    func.call @ConsumeI42(%arg) : (i42) -> ()
-  }
-}
-
-// CHECK-LABEL: arc.model @TriggeredCurrentTime
-hw.module @TriggeredCurrentTime(in %clock: i1) {
-  // CHECK: [[IN_CLOCK:%.+]] = arc.root_input "clock"
-  // CHECK: [[CLOCK:%.+]] = arc.state_read [[IN_CLOCK]]
-  // CHECK: [[OLD_CLOCK:%.+]] = arc.state_read
-  // CHECK: arc.state_write
-  // CHECK: [[EDGE:%.+]] = comb.xor [[OLD_CLOCK]], [[CLOCK]]
-  // CHECK: [[POSEDGE:%.+]] = comb.and [[EDGE]], [[CLOCK]]
-  // CHECK: scf.if [[POSEDGE]] {
-  // CHECK:   [[TIME_INT:%.+]] = arc.current_time %arg0
-  // CHECK:   [[TIME:%.+]] = llhd.int_to_time [[TIME_INT]]
-  // CHECK:   [[TIME_AS_INT:%.+]] = llhd.time_to_int [[TIME]]
-  // CHECK:   func.call @ConsumeI64([[TIME_AS_INT]])
-  // CHECK: }
-  // CHECK-NOT: llhd.current_time
-  hw.triggered posedge %clock {
-    %0 = llhd.current_time
-    %1 = llhd.time_to_int %0
-    func.call @ConsumeI64(%1) : (i64) -> ()
-  }
-}
-
 // Regression check on worklist producing false positive comb loop errors.
 // CHECK-LABEL: @CombLoopRegression
 hw.module @CombLoopRegression(in %clk: !seq.clock) {
@@ -759,56 +716,4 @@ hw.module @LLHDTimeOps(in %clock: !seq.clock, out t: i64) {
   // CHECK: arc.state_write %out_t = [[TIME_OUT]]
 
   hw.output %1 : i64
-}
-
-// CHECK-LABEL: arc.model @TestSimToArcTerminateSuccess
-// CHECK-SAME: io !hw.modty<input clock : !seq.clock, input cond : i1>
-hw.module @TestSimToArcTerminateSuccess(in %clock: !seq.clock, in %cond: i1) {
-  // CHECK: %[[IN_CLK:.*]] = arc.root_input "clock"
-  // CHECK: %[[IN_COND:.*]] = arc.root_input "cond"
-  // CHECK: %[[LAST_CLK_PTR:.*]] = arc.alloc_state %arg0
-  
-  // CHECK: %[[CLK_VAL:.*]] = arc.state_read %[[IN_CLK]] : <!seq.clock>
-  // CHECK: %[[CURR_CLK:.*]] = seq.from_clock %[[CLK_VAL]]
-
-  // CHECK: %[[LAST_CLK_VAL:.*]] = arc.state_read %[[LAST_CLK_PTR]] : <i1>
-  // CHECK: arc.state_write %[[LAST_CLK_PTR]] = %[[CURR_CLK]] : <i1>
-
-  // CHECK: %[[EDGE_XOR:.*]] = comb.xor %[[LAST_CLK_VAL]], %[[CURR_CLK]] : i1
-  // CHECK: %[[POSEDGE:.*]] = comb.and %[[EDGE_XOR]], %[[CURR_CLK]] : i1
-
-  // CHECK: scf.if %[[POSEDGE]] {
-  // CHECK:   %[[COND_VAL:.*]] = arc.state_read %[[IN_COND]] : <i1>
-  // CHECK:   scf.if %[[COND_VAL]] {
-  // CHECK:     arc.terminate %arg0, true : !arc.storage
-  // CHECK:   }
-  // CHECK: }
-  
-  sim.clocked_terminate %clock, %cond, success, verbose
-}
-
-// CHECK-LABEL: arc.model @TestSimToArcTerminateFailure
-// CHECK-SAME: io !hw.modty<input clock : !seq.clock, input cond : i1>
-hw.module @TestSimToArcTerminateFailure(in %clock: !seq.clock, in %cond: i1) {
-  // CHECK: %[[IN_CLK:.*]] = arc.root_input "clock"
-  // CHECK: %[[IN_COND:.*]] = arc.root_input "cond"
-  // CHECK: %[[LAST_CLK_PTR:.*]] = arc.alloc_state %arg0
-  
-  // CHECK: %[[CLK_VAL:.*]] = arc.state_read %[[IN_CLK]] : <!seq.clock>
-  // CHECK: %[[CURR_CLK:.*]] = seq.from_clock %[[CLK_VAL]]
-
-  // CHECK: %[[LAST_CLK_VAL:.*]] = arc.state_read %[[LAST_CLK_PTR]] : <i1>
-  // CHECK: arc.state_write %[[LAST_CLK_PTR]] = %[[CURR_CLK]] : <i1>
-
-  // CHECK: %[[EDGE_XOR:.*]] = comb.xor %[[LAST_CLK_VAL]], %[[CURR_CLK]] : i1
-  // CHECK: %[[POSEDGE:.*]] = comb.and %[[EDGE_XOR]], %[[CURR_CLK]] : i1
-
-  // CHECK: scf.if %[[POSEDGE]] {
-  // CHECK:   %[[COND_VAL:.*]] = arc.state_read %[[IN_COND]] : <i1>
-  // CHECK:   scf.if %[[COND_VAL]] {
-  // CHECK:     arc.terminate %arg0, false : !arc.storage
-  // CHECK:   }
-  // CHECK: }
-  
-  sim.clocked_terminate %clock, %cond, failure, verbose
 }

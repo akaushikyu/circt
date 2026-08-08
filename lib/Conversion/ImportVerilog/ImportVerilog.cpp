@@ -67,33 +67,12 @@ static Location convertLocation(MLIRContext *context,
   return UnknownLoc::get(context);
 }
 
-/// Convert a slang `SourceRange` to an MLIR `Location`.
-static Location convertLocation(MLIRContext *context,
-                                const slang::SourceManager &sourceManager,
-                                slang::SourceRange range) {
-  auto start = range.start();
-  auto end = range.end();
-  if (start && start.buffer() != slang::SourceLocation::NoLocation.buffer()) {
-    auto fileName = sourceManager.getFileName(start);
-    auto startLine = sourceManager.getLineNumber(start);
-    auto startColumn = sourceManager.getColumnNumber(start);
-    if (end && end.buffer() == start.buffer()) {
-      auto endLine = sourceManager.getLineNumber(end);
-      auto endColumn = sourceManager.getColumnNumber(end);
-      return FileLineColRange::get(context, fileName, startLine, startColumn,
-                                   endLine, endColumn);
-    }
-    return FileLineColLoc::get(context, fileName, startLine, startColumn);
-  }
-  return UnknownLoc::get(context);
-}
-
 Location Context::convertLocation(slang::SourceLocation loc) {
   return ::convertLocation(getContext(), sourceManager, loc);
 }
 
 Location Context::convertLocation(slang::SourceRange range) {
-  return ::convertLocation(getContext(), sourceManager, range);
+  return convertLocation(range.start());
 }
 
 namespace {
@@ -106,10 +85,8 @@ public:
   void report(const slang::ReportedDiagnostic &diag) override {
     // Generate the primary MLIR diagnostic.
     auto &diagEngine = context->getDiagEngine();
-    Location loc = !diag.ranges.empty() ? convertLocation(diag.ranges[0])
-                                        : convertLocation(diag.location);
-
-    auto mlirDiag = diagEngine.emit(loc, getSeverity(diag.severity));
+    auto mlirDiag = diagEngine.emit(convertLocation(diag.location),
+                                    getSeverity(diag.severity));
     mlirDiag << diag.formattedMessage;
 
     // Append the name of the option that can be used to control this
@@ -141,11 +118,6 @@ public:
     return ::convertLocation(context, *sourceManager, loc);
   }
 
-  /// Convert a slang `SourceRange` to an MLIR `Location`.
-  Location convertLocation(slang::SourceRange range) const {
-    return ::convertLocation(context, *sourceManager, range);
-  }
-
   static DiagnosticSeverity getSeverity(slang::DiagnosticSeverity severity) {
     switch (severity) {
     case slang::DiagnosticSeverity::Fatal:
@@ -170,6 +142,11 @@ private:
 namespace llvm {
 template <>
 struct DenseMapInfo<slang::BufferID> {
+  static slang::BufferID getEmptyKey() { return slang::BufferID(); }
+  static slang::BufferID getTombstoneKey() {
+    return slang::BufferID(UINT32_MAX - 1, ""sv);
+    // UINT32_MAX is already used by `BufferID::getPlaceholder`.
+  }
   static unsigned getHashValue(slang::BufferID id) {
     return llvm::hash_value(id.getId());
   }
@@ -255,8 +232,6 @@ LogicalResult ImportDriver::prepareDriver(SourceMgr &sourceMgr) {
       return failure();
 
   // Populate the driver options.
-  driver.addStandardArgs();
-
   driver.options.excludeExts.insert(options.excludeExts.begin(),
                                     options.excludeExts.end());
   driver.options.ignoreDirectives = options.ignoreDirectives;
@@ -267,17 +242,17 @@ LogicalResult ImportDriver::prepareDriver(SourceMgr &sourceMgr) {
   driver.options.librariesInheritMacros = options.librariesInheritMacros;
 
   driver.options.timeScale = options.timeScale;
-  driver.options
-      .compilationFlags[slang::ast::CompilationFlags::AllowUseBeforeDeclare] =
-      options.allowUseBeforeDeclare;
-  driver.options
-      .compilationFlags[slang::ast::CompilationFlags::IgnoreUnknownModules] =
-      options.ignoreUnknownModules;
-  driver.options.compilationFlags[slang::ast::CompilationFlags::LintMode] =
-      options.mode == ImportVerilogOptions::Mode::OnlyLint;
-  driver.options
-      .compilationFlags[slang::ast::CompilationFlags::DisableInstanceCaching] =
-      false;
+  driver.options.compilationFlags.emplace(
+      slang::ast::CompilationFlags::AllowUseBeforeDeclare,
+      options.allowUseBeforeDeclare);
+  driver.options.compilationFlags.emplace(
+      slang::ast::CompilationFlags::IgnoreUnknownModules,
+      options.ignoreUnknownModules);
+  driver.options.compilationFlags.emplace(
+      slang::ast::CompilationFlags::LintMode,
+      options.mode == ImportVerilogOptions::Mode::OnlyLint);
+  driver.options.compilationFlags.emplace(
+      slang::ast::CompilationFlags::DisableInstanceCaching, false);
   driver.options.topModules = options.topModules;
   driver.options.paramOverrides = options.paramOverrides;
 
@@ -285,16 +260,6 @@ LogicalResult ImportDriver::prepareDriver(SourceMgr &sourceMgr) {
   driver.options.warningOptions = options.warningOptions;
 
   driver.options.singleUnit = options.singleUnit;
-
-  // Parse pass through options.
-  if (!options.slangArgs.empty()) {
-    SmallVector<const char *> slangArgs;
-    slangArgs.push_back("slang"); // dummy program name
-    for (const auto &arg : options.slangArgs)
-      slangArgs.push_back(arg.c_str());
-    if (!driver.parseCommandLine(slangArgs.size(), slangArgs.data()))
-      return failure();
-  }
 
   return success(driver.processOptions());
 }

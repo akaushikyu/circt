@@ -565,21 +565,26 @@ struct ConvertToArcsPass
 } // namespace
 
 void ConvertToArcsPass::runOnOperation() {
-  // Pass-through type converter; this pass does not change any types.
+  // Setup the type conversion.
   TypeConverter converter;
-  converter.addConversion([](Type type) { return type; });
+
+  // Define legal types.
+  converter.addConversion([](Type type) -> std::optional<Type> {
+    if (isa<llhd::LLHDDialect>(type.getDialect()))
+      return std::nullopt;
+    return type;
+  });
 
   // Gather the conversion patterns.
   ConversionPatternSet patterns(&getContext(), converter);
   patterns.add<llhd::CombinationalOp>(convert);
   patterns.add<llhd::YieldOp>(convert);
 
-  // `llhd.combinational` and `llhd.yield` are the only LLHD ops rewritten by
-  // this pass; all other ops are left untouched for subsequent lowering
-  // passes to handle.
+  // Setup the legal ops. (Sort alphabetically.)
   ConversionTarget target(getContext());
-  target.addIllegalOp<llhd::CombinationalOp, llhd::YieldOp>();
-  target.markUnknownOpDynamicallyLegal([](Operation *) { return true; });
+  target.addIllegalDialect<llhd::LLHDDialect>();
+  target.markUnknownOpDynamicallyLegal(
+      [](Operation *op) { return !isa<llhd::LLHDDialect>(op->getDialect()); });
 
   // Disable pattern rollback to use the faster one-shot dialect conversion.
   ConversionConfig config;

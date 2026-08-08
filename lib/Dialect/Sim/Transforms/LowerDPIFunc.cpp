@@ -34,7 +34,6 @@
 #include "mlir/Dialect/LLVMIR/LLVMTypes.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "llvm/Support/Debug.h"
-#include "llvm/Support/LogicalResult.h"
 
 #define DEBUG_TYPE "sim-lower-dpi-func"
 
@@ -74,52 +73,31 @@ LogicalResult LowerDPIFuncPass::lowerDPIFuncOp(sim::DPIFuncOp simFunc,
                                                LoweringState &loweringState,
                                                SymbolTable &symbolTable) {
   ImplicitLocOpBuilder builder(simFunc.getLoc(), simFunc);
-  auto dpiType = simFunc.getDpiFunctionType();
-  auto dpiArgs = dpiType.getArguments();
-  auto *returnArg = dpiType.getReturnArgument();
-  Type explicitReturnType = returnArg ? returnArg->type : Type{};
+  auto moduleType = simFunc.getModuleType();
 
   llvm::SmallVector<Type> dpiFunctionArgumentTypes;
-  for (auto &arg : dpiArgs) {
-    // TODO: Support additional non-integer types beyond the pointer-shaped
-    // open-array ABI path.
-    if (!arg.type.isInteger() && !(isa<LLVM::LLVMPointerType>(arg.type) &&
-                                   (arg.dir == sim::DPIDirection::Input ||
-                                    arg.dir == sim::DPIDirection::Ref)))
+  for (auto arg : moduleType.getPorts()) {
+    // TODO: Support a non-integer type.
+    if (!arg.type.isInteger())
       return simFunc->emitError()
              << "non-integer type argument is unsupported now";
 
-    switch (arg.dir) {
-    case sim::DPIDirection::Input:
+    if (arg.dir == hw::ModulePort::Input)
       dpiFunctionArgumentTypes.push_back(arg.type);
-      break;
-    case sim::DPIDirection::Output:
-    case sim::DPIDirection::InOut:
+    else
+      // Output must be passed by a reference.
       dpiFunctionArgumentTypes.push_back(
           LLVM::LLVMPointerType::get(arg.type.getContext()));
-      break;
-    case sim::DPIDirection::Return:
-      break;
-    case sim::DPIDirection::Ref:
-      dpiFunctionArgumentTypes.push_back(arg.type);
-      break;
-    }
   }
 
-  auto funcType = builder.getFunctionType(
-      dpiFunctionArgumentTypes,
-      explicitReturnType ? TypeRange{explicitReturnType} : TypeRange{});
+  auto funcType = builder.getFunctionType(dpiFunctionArgumentTypes, {});
   func::FuncOp func;
 
   // Look up func.func by verilog name since the function name is equal to the
   // symbol name in MLIR
   if (auto verilogName = simFunc.getVerilogName()) {
     func = symbolTable.lookup<func::FuncOp>(*verilogName);
-    if (func && func.getFunctionType() != funcType)
-      return simFunc.emitOpError()
-             << "references existing func.func @" << *verilogName
-             << " with incompatible type " << func.getFunctionType()
-             << "; expected " << funcType;
+    // TODO: Check if function type matches.
   }
 
   // If a referred function is not in the same module, create an external
@@ -135,66 +113,43 @@ LogicalResult LowerDPIFuncPass::lowerDPIFuncOp(sim::DPIFuncOp simFunc,
   }
 
   // Create a wrapper module that calls a DPI function.
-  auto wrapperFuncType = cast<FunctionType>(simFunc.getFunctionType());
   auto funcOp = func::FuncOp::create(
       builder,
       loweringState.nameSpace.newName(simFunc.getSymName() + "_wrapper"),
-      wrapperFuncType);
+      moduleType.getFuncType());
 
   // Map old symbol to a new func op.
   loweringState.dpiFuncDeclMapping[simFunc.getSymNameAttr()] = funcOp;
 
   builder.setInsertionPointToStart(funcOp.addEntryBlock());
   SmallVector<Value> functionInputs;
-  SmallVector<std::pair<Type, Value>> wrapperOutputAllocas;
-  Value explicitReturnValue;
+  SmallVector<LLVM::AllocaOp> functionOutputAllocas;
 
   size_t inputIndex = 0;
-  for (auto &arg : dpiArgs) {
-    switch (arg.dir) {
-    case sim::DPIDirection::Input:
+  for (auto arg : moduleType.getPorts()) {
+    if (arg.dir == hw::ModulePort::InOut)
+      return funcOp->emitError() << "inout is currently not supported";
+
+    if (arg.dir == hw::ModulePort::Input) {
       functionInputs.push_back(funcOp.getArgument(inputIndex));
       ++inputIndex;
-      break;
-    case sim::DPIDirection::Return:
-      break;
-    case sim::DPIDirection::Ref:
-      functionInputs.push_back(funcOp.getArgument(inputIndex));
-      ++inputIndex;
-      break;
-    case sim::DPIDirection::Output: {
+    } else {
+      // Allocate an output placeholder.
       auto one =
           LLVM::ConstantOp::create(builder, builder.getI64IntegerAttr(1));
       auto alloca = LLVM::AllocaOp::create(
           builder, builder.getType<LLVM::LLVMPointerType>(), arg.type, one);
       functionInputs.push_back(alloca);
-      wrapperOutputAllocas.push_back({arg.type, alloca});
-      break;
-    }
-    case sim::DPIDirection::InOut: {
-      auto one =
-          LLVM::ConstantOp::create(builder, builder.getI64IntegerAttr(1));
-      auto alloca = LLVM::AllocaOp::create(
-          builder, builder.getType<LLVM::LLVMPointerType>(), arg.type, one);
-      LLVM::StoreOp::create(builder, funcOp.getArgument(inputIndex), alloca);
-      ++inputIndex;
-      functionInputs.push_back(alloca);
-      wrapperOutputAllocas.push_back({arg.type, alloca});
-      break;
-    }
+      functionOutputAllocas.push_back(alloca);
     }
   }
 
-  auto call = func::CallOp::create(builder, func, functionInputs);
-  if (explicitReturnType)
-    explicitReturnValue = call.getResult(0);
+  func::CallOp::create(builder, func, functionInputs);
 
   SmallVector<Value> results;
-  results.reserve(wrapperOutputAllocas.size() + (explicitReturnValue ? 1 : 0));
-  for (auto [type, alloca] : wrapperOutputAllocas)
-    results.push_back(LLVM::LoadOp::create(builder, type, alloca));
-  if (explicitReturnValue)
-    results.push_back(explicitReturnValue);
+  for (auto functionOutputAlloca : functionOutputAllocas)
+    results.push_back(LLVM::LoadOp::create(
+        builder, functionOutputAlloca.getElemType(), functionOutputAlloca));
 
   func::ReturnOp::create(builder, results);
 
@@ -212,15 +167,10 @@ LogicalResult LowerDPIFuncPass::lowerDPI() {
     if (failed(lowerDPIFuncOp(simFunc, state, symbolTable)))
       return failure();
 
-  auto result = op.walk([&](sim::DPICallOp callOp) -> WalkResult {
-    auto callee =
-        state.dpiFuncDeclMapping.lookup(callOp.getCalleeAttr().getAttr());
-    if (callee)
-      callOp.setCallee(callee.getSymNameAttr());
-    return WalkResult::advance();
+  op.walk([&](sim::DPICallOp op) {
+    auto func = state.dpiFuncDeclMapping.at(op.getCalleeAttr().getAttr());
+    op.setCallee(func.getSymNameAttr());
   });
-  if (result.wasInterrupted())
-    return failure();
   return success();
 }
 

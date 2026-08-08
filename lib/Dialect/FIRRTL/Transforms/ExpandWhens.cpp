@@ -6,10 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This file defines the ExpandWhens pass.  This pass resolves last-connect
-// semantics and ensures that all values (except domain types) are connected
-// to exactly once.  Domain types are exempt from initialization checking and
-// are handled by the InferDomains pass.
+// This file defines the ExpandWhens pass.
 //
 //===----------------------------------------------------------------------===//
 
@@ -207,11 +204,6 @@ public:
     // Recurse through a bundle and declare each leaf sink node.
     std::function<void(Type, Flow, bool)> declare = [&](Type type, Flow flow,
                                                         bool local) {
-      // Domain types are exempt from initialization checking and will be
-      // handled by the InferDomains pass.
-      if (type_isa<DomainType>(type))
-        return;
-
       // If this is a class type, recurse to each of the fields.
       if (auto classType = type_dyn_cast<ClassType>(type)) {
         if (local) {
@@ -345,8 +337,7 @@ public:
     foreachSubelement(builder, op.getResult(), fn);
   }
 
-  template <typename OpTy>
-  void visitInstanceDecl(OpTy op) {
+  void visitDecl(InstanceOp op) {
     // Track any instance inputs which need to be connected to for init
     // coverage.
     for (const auto &result : llvm::enumerate(op.getResults()))
@@ -355,9 +346,6 @@ public:
       else
         declareSinks(result.value(), Flow::Sink);
   }
-
-  void visitDecl(InstanceOp op) { visitInstanceDecl(op); }
-  void visitDecl(InstanceChoiceOp op) { visitInstanceDecl(op); }
 
   void visitDecl(ObjectOp op) {
     declareSinks(op, Flow::Source, /*local=*/true);

@@ -31,7 +31,7 @@ def SignalReadOp : SystemCOp<"signal.read", [Pure,
                                           std::optional<Location> loc,
                                           ValueRange operands,
                                           DictionaryAttr attrs,
-                                          mlir::PropertyRef properties,
+                                          mlir::OpaqueProperties properties,
                                           mlir::RegionRange regions,
                                           SmallVectorImpl<Type> &results) {
       results.push_back(systemc::getSignalBaseType(operands[0].getType()));

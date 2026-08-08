@@ -150,8 +150,6 @@ struct FormatStringParser {
 
     case 's':
       return emitString(arg, options);
-    case 'c':
-      return emitChar(arg, options);
 
     default:
       return mlir::emitError(loc)
@@ -295,31 +293,9 @@ struct FormatStringParser {
            << "expression cannot be formatted as string";
   }
 
-  LogicalResult emitChar(const slang::ast::Expression &arg,
-                         const FormatOptions &options) {
-    if (options.width)
-      return mlir::emitError(loc)
-             << "character format specifier with width not supported";
-
-    auto value = context.convertRvalueExpression(arg);
-    if (!value)
-      return failure();
-
-    auto bitValue = context.convertToSimpleBitVector(value);
-    if (!bitValue)
-      return failure();
-
-    fragments.push_back(moore::FormatCharOp::create(builder, loc, bitValue));
-    return success();
-  }
-
   /// Emit an expression argument with the appropriate default formatting.
   LogicalResult emitDefault(const slang::ast::Expression &expr) {
     FormatOptions options;
-    // Without an explicit format string, default formatting is not limited to
-    // integers, the string-typed arguments also be concerned.
-    if (expr.type->isString())
-      return emitString(expr, options);
     return emitInteger(expr, options, defaultFormat);
   }
 };

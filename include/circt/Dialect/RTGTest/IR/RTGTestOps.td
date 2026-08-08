@@ -51,9 +51,7 @@ def ImplicitConstraintTestOp : RTGTestOp<"implicit_constraint_op", [
 //===- Instruction Formats -------------------------------------------------===//
 
 class InstrFormatOp<string mnemonic, list<Trait> traits = []> :
-  RTGTestOp<mnemonic, traits>, ISAInstructionFormat {
-  let isaMnemonic = mnemonic;
-}
+  RTGTestOp<mnemonic, traits>, ISAInstructionFormat;
 
 class InstFormatIOpBase<string mnemonic, string opcode7, string funct3>
   : InstrFormatOp<mnemonic, [InstructionOpAdaptor]> {

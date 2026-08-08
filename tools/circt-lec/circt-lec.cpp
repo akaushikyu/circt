@@ -19,7 +19,6 @@
 #include "circt/Conversion/SynthToComb.h"
 #include "circt/Conversion/VerifToSMT.h"
 #include "circt/Dialect/Comb/CombDialect.h"
-#include "circt/Dialect/Comb/CombPasses.h"
 #include "circt/Dialect/Datapath/DatapathDialect.h"
 #include "circt/Dialect/Emit/EmitDialect.h"
 #include "circt/Dialect/Emit/EmitPasses.h"
@@ -239,7 +238,6 @@ static LogicalResult executeLEC(MLIRContext &context) {
     pm.addPass(createConstructLEC(opts));
   }
   pm.addPass(createConvertSynthToComb());
-  pm.addPass(comb::createLowerComb());
   pm.addPass(createConvertHWToSMT());
   pm.addPass(createConvertDatapathToSMT());
   pm.addPass(createConvertCombToSMT());

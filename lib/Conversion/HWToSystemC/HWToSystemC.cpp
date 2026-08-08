@@ -83,7 +83,7 @@ struct ConvertHWModule : public OpConversionPattern<HWModuleOp> {
 
     // Register the systemc.func inside the systemc.ctor
     rewriter.setInsertionPointToStart(
-        scModule.getOrCreateCtor(rewriter).getBodyBlock());
+        scModule.getOrCreateCtor().getBodyBlock());
     MethodOp::create(rewriter, scModule.getLoc(), scFunc.getHandle());
 
     // Register the sensitivities of above SC_METHOD registration.
@@ -172,13 +172,10 @@ public:
       return rewriter.notifyMatchFailure(instanceOp,
                                          "parent was not an SCModuleOp");
 
-    // Track the insertion points for the different places we need to insert
-    // operations while continuing to use the active pattern rewriter.
-    auto ctor = scModule.getOrCreateCtor(rewriter);
-    OpBuilder::InsertPoint stateInsertPt(ctor->getBlock(),
-                                         Block::iterator(ctor.getOperation()));
-    OpBuilder::InsertPoint initInsertPt(ctor.getBodyBlock(),
-                                        ctor.getBodyBlock()->end());
+    // Get the builders for the different places to insert operations.
+    auto ctor = scModule.getOrCreateCtor();
+    OpBuilder stateBuilder(ctor);
+    OpBuilder initBuilder = OpBuilder::atBlockEnd(ctor.getBodyBlock());
 
     // Collect the port types and names of the instantiated module and convert
     // them to appropriate systemc types.
@@ -194,8 +191,7 @@ public:
     auto instModuleName = instanceOp.getModuleNameAttr();
 
     // Declare the instance.
-    rewriter.restoreInsertionPoint(stateInsertPt);
-    auto instDecl = InstanceDeclOp::create(rewriter, loc, instanceName,
+    auto instDecl = InstanceDeclOp::create(stateBuilder, loc, instanceName,
                                            instModuleName, portInfo);
 
     // Bind the input ports.
@@ -209,18 +205,15 @@ public:
       if (auto readOp = input.getDefiningOp<SignalReadOp>()) {
         // Use the read channel directly without adding an
         // intermediate signal.
-        rewriter.restoreInsertionPoint(initInsertPt);
-        BindPortOp::create(rewriter, loc, instDecl, portId, readOp.getInput());
+        BindPortOp::create(initBuilder, loc, instDecl, portId,
+                           readOp.getInput());
         continue;
       }
 
       // Otherwise, create an intermediate signal to bind the instance port to.
       Type sigType = SignalType::get(getSignalBaseType(portInfo[i].type));
-      rewriter.restoreInsertionPoint(stateInsertPt);
-      Value channel = SignalOp::create(rewriter, loc, sigType, signalName);
-      rewriter.restoreInsertionPoint(initInsertPt);
-      BindPortOp::create(rewriter, loc, instDecl, portId, channel);
-      rewriter.setInsertionPoint(instanceOp);
+      Value channel = SignalOp::create(stateBuilder, loc, sigType, signalName);
+      BindPortOp::create(initBuilder, loc, instDecl, portId, channel);
       SignalWriteOp::create(rewriter, loc, channel, input);
     }
 
@@ -242,8 +235,7 @@ public:
           // we cannot insert multiple bind statements for one submodule port.
           // It is also necessary to bind it to an intermediate signal when it
           // has no uses as every port has to be bound to a channel.
-          rewriter.restoreInsertionPoint(initInsertPt);
-          BindPortOp::create(rewriter, loc, instDecl, portId,
+          BindPortOp::create(initBuilder, loc, instDecl, portId,
                              writeOp.getDest());
           writeOp->erase();
           continue;
@@ -253,11 +245,8 @@ public:
       // Otherwise, create an intermediate signal.
       Type sigType =
           SignalType::get(getSignalBaseType(portInfo[i + numInputs].type));
-      rewriter.restoreInsertionPoint(stateInsertPt);
-      Value channel = SignalOp::create(rewriter, loc, sigType, signalName);
-      rewriter.restoreInsertionPoint(initInsertPt);
-      BindPortOp::create(rewriter, loc, instDecl, portId, channel);
-      rewriter.setInsertionPoint(instanceOp);
+      Value channel = SignalOp::create(stateBuilder, loc, sigType, signalName);
+      BindPortOp::create(initBuilder, loc, instDecl, portId, channel);
       auto instOut = SignalReadOp::create(rewriter, loc, channel);
       output.replaceAllUsesWith(instOut);
     }

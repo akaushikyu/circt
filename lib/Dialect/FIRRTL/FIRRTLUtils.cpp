@@ -11,7 +11,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
-#include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/InnerSymbolNamespace.h"
 #include "circt/Dialect/Seq/SeqTypes.h"
@@ -27,6 +26,13 @@ using namespace firrtl;
 //===----------------------------------------------------------------------===//
 // TieOffCache
 //===----------------------------------------------------------------------===//
+
+Value TieOffCache::getInvalid(FIRRTLBaseType type) {
+  Value &cached = cache[type];
+  if (!cached)
+    cached = InvalidValueOp::create(builder, type);
+  return cached;
+}
 
 Value TieOffCache::getUnknown(PropertyType type) {
   Value &cached = cache[type];
@@ -45,39 +51,6 @@ void circt::firrtl::emitConnect(OpBuilder &builder, Location loc, Value dst,
                                   builder.getInsertionPoint());
   emitConnect(locBuilder, dst, src);
   builder.restoreInsertionPoint(locBuilder.saveInsertionPoint());
-}
-
-template <typename ATy, typename IndexOp, bool isBundle /* check flip? */>
-static LogicalResult connectIfAggregates(ImplicitLocOpBuilder &builder,
-                                         Value dst, FIRRTLType dstFType,
-                                         Value src, FIRRTLType srcFType) {
-  auto dstAggTy = type_dyn_cast<ATy>(dstFType);
-  if (!dstAggTy)
-    return failure();
-  auto srcAggTy = type_dyn_cast<ATy>(srcFType);
-  if (!srcAggTy)
-    return failure();
-
-  auto numElements = dstAggTy.getNumElements();
-
-  // Check if we are trying to create an illegal connect - just create the
-  // connect and let the verifier catch it.
-  if (numElements != srcAggTy.getNumElements()) {
-    ConnectOp::create(builder, dst, src);
-    return success();
-  }
-
-  for (size_t i = 0; i < numElements; ++i) {
-    auto dstField = IndexOp::create(builder, dst, i);
-    auto srcField = IndexOp::create(builder, src, i);
-    if constexpr (isBundle) {
-      if (dstAggTy.getElement(i).isFlip)
-        std::swap(dstField, srcField);
-    }
-    emitConnect(builder, dstField, srcField);
-  }
-
-  return success();
 }
 
 /// Emit a connect between two values.
@@ -101,11 +74,7 @@ void circt::firrtl::emitConnect(ImplicitLocOpBuilder &builder, Value dst,
     } else if (type_isa<DomainType>(dstFType) &&
                type_isa<DomainType>(srcFType)) {
       DomainDefineOp::create(builder, dst, src);
-    } else if (failed(connectIfAggregates<OpenBundleType, OpenSubfieldOp, true>(
-                   builder, dst, dstFType, src, srcFType)) &&
-               failed(
-                   connectIfAggregates<OpenVectorType, OpenSubindexOp, false>(
-                       builder, dst, dstFType, src, srcFType))) {
+    } else {
       // Other types, give up and leave a connect
       ConnectOp::create(builder, dst, src);
     }
@@ -120,16 +89,48 @@ void circt::firrtl::emitConnect(ImplicitLocOpBuilder &builder, Value dst,
 
   // If the types are the exact same we can just connect them.
   if (dstType == srcType && dstType.isPassive() &&
-      !dstType.hasUninferredWidth() && !dstType.containsAnalog()) {
+      !dstType.hasUninferredWidth()) {
     MatchingConnectOp::create(builder, dst, src);
     return;
   }
 
-  if (succeeded(connectIfAggregates<BundleType, SubfieldOp, true>(
-          builder, dst, dstFType, src, srcFType)) ||
-      succeeded(connectIfAggregates<FVectorType, SubindexOp, false>(
-          builder, dst, dstFType, src, srcFType)))
+  if (auto dstBundle = type_dyn_cast<BundleType>(dstType)) {
+    // Connect all the bundle elements pairwise.
+    auto numElements = dstBundle.getNumElements();
+    // Check if we are trying to create an illegal connect - just create the
+    // connect and let the verifier catch it.
+    auto srcBundle = type_dyn_cast<BundleType>(srcType);
+    if (!srcBundle || numElements != srcBundle.getNumElements()) {
+      ConnectOp::create(builder, dst, src);
+      return;
+    }
+    for (size_t i = 0; i < numElements; ++i) {
+      auto dstField = SubfieldOp::create(builder, dst, i);
+      auto srcField = SubfieldOp::create(builder, src, i);
+      if (dstBundle.getElement(i).isFlip)
+        std::swap(dstField, srcField);
+      emitConnect(builder, dstField, srcField);
+    }
     return;
+  }
+
+  if (auto dstVector = type_dyn_cast<FVectorType>(dstType)) {
+    // Connect all the vector elements pairwise.
+    auto numElements = dstVector.getNumElements();
+    // Check if we are trying to create an illegal connect - just create the
+    // connect and let the verifier catch it.
+    auto srcVector = type_dyn_cast<FVectorType>(srcType);
+    if (!srcVector || numElements != srcVector.getNumElements()) {
+      ConnectOp::create(builder, dst, src);
+      return;
+    }
+    for (size_t i = 0; i < numElements; ++i) {
+      auto dstField = SubindexOp::create(builder, dst, i);
+      auto srcField = SubindexOp::create(builder, src, i);
+      emitConnect(builder, dstField, srcField);
+    }
+    return;
+  }
 
   if ((dstType.hasUninferredReset() || srcType.hasUninferredReset()) &&
       dstType != srcType) {
@@ -700,24 +701,14 @@ Value circt::firrtl::getValueByFieldID(ImplicitLocOpBuilder builder,
   // When the fieldID hits 0, we've found the target value.
   while (fieldID != 0) {
     FIRRTLTypeSwitch<Type, void>(value.getType())
-        .Case<BundleType>([&](auto bundle) {
+        .Case<BundleType, OpenBundleType>([&](auto bundle) {
           auto index = bundle.getIndexForFieldID(fieldID);
           value = SubfieldOp::create(builder, value, index);
           fieldID -= bundle.getFieldID(index);
         })
-        .Case<OpenBundleType>([&](auto bundle) {
-          auto index = bundle.getIndexForFieldID(fieldID);
-          value = OpenSubfieldOp::create(builder, value, index);
-          fieldID -= bundle.getFieldID(index);
-        })
-        .Case<FVectorType>([&](auto vector) {
+        .Case<FVectorType, OpenVectorType>([&](auto vector) {
           auto index = vector.getIndexForFieldID(fieldID);
           value = SubindexOp::create(builder, value, index);
-          fieldID -= vector.getFieldID(index);
-        })
-        .Case<OpenVectorType>([&](auto vector) {
-          auto index = vector.getIndexForFieldID(fieldID);
-          value = OpenSubindexOp::create(builder, value, index);
           fieldID -= vector.getFieldID(index);
         })
         .Case<RefType>([&](auto reftype) {
@@ -1166,9 +1157,6 @@ circt::firrtl::parseFormatString(mlir::OpBuilder &builder, mlir::Location loc,
       case 'x':
         if (!width.empty())
           validatedFormatString.append(width);
-        if (specOperands.size() <= opIdx)
-          return mlir::emitError(loc) << "not enough operands for format "
-                                         "string";
         operands.push_back(specOperands[opIdx++]);
         break;
       case '%':

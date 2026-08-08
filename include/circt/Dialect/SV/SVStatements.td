@@ -18,7 +18,6 @@ include "mlir/Interfaces/CallInterfaces.td"
 include "mlir/Interfaces/ControlFlowInterfaces.td"
 include "circt/Dialect/Emit/EmitOpInterfaces.td"
 include "circt/Dialect/HW/HWOpInterfaces.td"
-include "circt/Support/ProceduralRegionTrait.td"
 
 //===----------------------------------------------------------------------===//
 // Control flow like-operations
@@ -49,7 +48,6 @@ def OrderedOutputOp : SVOp<"ordered", [SingleBlock, NoTerminator, NoRegionArgume
 def IfDefOp : SVOp<"ifdef", [
     NoRegionArguments,
     NonProceduralOp,
-    NonProceduralRegion,
     GraphRegionNoTerminator,
     DeclareOpInterfaceMethods<SymbolUserOpInterface>
 ]> {
@@ -515,19 +513,6 @@ def AliasOp : SVOp<"alias"> {
   let hasVerifier = 1;
 }
 
-def WriteOp : SVOp<"write", [ProceduralOp]> {
-  let summary = "'$write' statement";
-
-  let arguments = (ins StrAttr:$format_string,
-                       Variadic<AnyType>:$substitutions);
-  let results = (outs);
-
-  let assemblyFormat = [{
-    $format_string attr-dict (`(` $substitutions^ `)` `:`
-    qualified(type($substitutions)))?
-  }];
-}
-
 def FWriteOp : SVOp<"fwrite", [ProceduralOp]> {
   let summary = "'$fwrite' statement";
 
@@ -561,8 +546,7 @@ def FFlushOp : SVOp<"fflush", [ProceduralOp]> {
 }
 
 def VerbatimOp : SVOp<"verbatim", [
-    DeclareOpInterfaceMethods<InnerRefUserOpInterface>,
-    DeclareOpInterfaceMethods<SymbolUserOpInterface>
+    DeclareOpInterfaceMethods<InnerRefUserOpInterface>
 ]> {
   let summary = "Verbatim opaque text emitted inline.";
   let description = [{

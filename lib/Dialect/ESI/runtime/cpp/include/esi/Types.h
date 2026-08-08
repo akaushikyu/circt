@@ -40,11 +40,7 @@ public:
   virtual ~Type() = default;
 
   ID getID() const { return id; }
-  virtual std::ptrdiff_t getBitWidth() const { return hwBitwidth; }
-
-  /// Set from manifest JSON hwBitwidth. Allows types without specialized
-  /// parsers (e.g. union types) to still report their width.
-  void setHWBitwidth(std::ptrdiff_t bw) { hwBitwidth = bw; }
+  virtual std::ptrdiff_t getBitWidth() const { return -1; }
 
   /// Serialize an object to a MutableBitVector (LSB-first stream). The object
   /// should be passed via std::any. Implementations append fields in the order
@@ -94,7 +90,6 @@ public:
 
 protected:
   ID id;
-  std::ptrdiff_t hwBitwidth = -1;
 };
 
 /// Bundles represent a collection of channels. Services exclusively expose
@@ -142,10 +137,8 @@ class VoidType : public Type {
 public:
   using Type::deserialize;
   VoidType(const ID &id) : Type(id) {}
-  // 'void' carries no data. Transports (e.g. DMA engines, cosim) that require
-  // every message to be at least one byte add a placeholder byte themselves;
-  // the logical type width is 0.
-  std::ptrdiff_t getBitWidth() const override { return 0; };
+  // 'void' is 1 bit by convention.
+  std::ptrdiff_t getBitWidth() const override { return 1; };
 
   void ensureValid(const std::any &obj) const override;
   MutableBitVector serialize(const std::any &obj) const override;
@@ -348,37 +341,6 @@ private:
   const Type *intoType;
   const Type *loweredType;
   std::vector<Frame> frames;
-};
-
-/// Unions are a tagged collection of fields where only one field is active
-/// at a time. All fields share the same bit range (the width is the max of
-/// all field widths, matching SystemVerilog packed-union semantics).
-class UnionType : public Type {
-public:
-  using FieldVector = std::vector<std::pair<std::string, const Type *>>;
-  using Type::deserialize;
-
-  UnionType(const ID &id, const FieldVector &fields)
-      : Type(id), fields(fields) {}
-
-  const FieldVector &getFields() const { return fields; }
-  std::ptrdiff_t getBitWidth() const override {
-    std::ptrdiff_t maxWidth = 0;
-    for (auto [name, ty] : getFields()) {
-      std::ptrdiff_t fieldWidth = ty->getBitWidth();
-      if (fieldWidth < 0)
-        return -1;
-      maxWidth = std::max(maxWidth, fieldWidth);
-    }
-    return maxWidth;
-  }
-
-  void ensureValid(const std::any &obj) const override;
-  MutableBitVector serialize(const std::any &obj) const override;
-  std::any deserialize(BitVector &data) const override;
-
-private:
-  FieldVector fields;
 };
 
 /// Lists represent variable-length sequences of elements of a single type.

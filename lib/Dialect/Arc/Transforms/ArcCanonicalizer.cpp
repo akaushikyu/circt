@@ -503,22 +503,12 @@ LogicalResult RemoveUnusedArcArgumentsPattern::matchAndRewrite(
   for (auto user : mutableUsers)
     for (int i = toDelete.size() - 1; i >= 0; --i)
       if (toDelete[i])
-        rewriter.modifyOpInPlace(
-            user, [&]() { user.getArgOperandsMutable().erase(i); });
+        user.getArgOperandsMutable().erase(i);
 
-  bool matchFailure = false;
-  rewriter.modifyOpInPlace(op, [&]() {
-    if (failed(op.eraseArguments(toDelete))) {
-      matchFailure = true;
-      return;
-    }
-
-    op.setFunctionType(
-        rewriter.getFunctionType(op.getArgumentTypes(), op.getResultTypes()));
-  });
-
-  if (matchFailure)
-    return rewriter.notifyMatchFailure(op, "failed to erase arguments");
+  if (failed(op.eraseArguments(toDelete)))
+    return failure();
+  op.setFunctionType(
+      rewriter.getFunctionType(op.getArgumentTypes(), op.getResultTypes()));
 
   statistics.removeUnusedArcArgumentsPatternNumArgsRemoved += toDelete.count();
   return success();
@@ -705,8 +695,7 @@ MergeVectorizeOps::matchAndRewrite(VectorizeOp vecOp,
     auto retOp = cast<VectorizeReturnOp>(otherBlock.getTerminator());
     rewriter.replaceAllUsesWith(currentBlock.getArgument(argNewPos),
                                 argMapping.lookupOrDefault(retOp.getValue()));
-    rewriter.modifyOpInPlace(vecOp,
-                             [&]() { currentBlock.eraseArgument(argNewPos); });
+    currentBlock.eraseArgument(argNewPos);
     vecOpsToRemove.push_back(otherVecOp);
     // We erased an arg so the padding decreased by 1
     paddedBy--;
@@ -735,6 +724,14 @@ static unsigned hashValue(const SmallVector<Value> &inputs) {
 
 template <>
 struct DenseMapInfo<SmallVector<Value>> {
+  static inline SmallVector<Value> getEmptyKey() {
+    return SmallVector<Value>();
+  }
+
+  static inline SmallVector<Value> getTombstoneKey() {
+    return SmallVector<Value>();
+  }
+
   static unsigned getHashValue(const SmallVector<Value> &inputs) {
     return hashValue(inputs);
   }
@@ -768,8 +765,7 @@ LogicalResult KeepOneVecOp::matchAndRewrite(VectorizeOp vecOp,
   if (argsToRemove.none())
     return failure();
 
-  rewriter.modifyOpInPlace(
-      vecOp, [&]() { currentBlock.eraseArguments(argsToRemove); });
+  currentBlock.eraseArguments(argsToRemove);
   return updateInputOperands(vecOp, newOperands);
 }
 

@@ -33,7 +33,6 @@ using namespace arc;
 
 void circt::populateArcPreprocessingPipeline(
     OpPassManager &pm, const ArcPreprocessingOptions &options) {
-  pm.addPass(arc::createResolveXMRRef());
   pm.addPass(om::createStripOMPass());
   pm.addPass(emit::createStripEmitPass());
   pm.addPass(createLowerFirMemPass());
@@ -59,11 +58,6 @@ void circt::populateArcPreprocessingPipeline(
 
 void circt::populateArcConversionPipeline(OpPassManager &pm,
                                           const ArcConversionOptions &options) {
-  {
-    sim::SquashSimTriggeredOptions opts;
-    opts.convertToHW = true;
-    pm.addNestedPass<hw::HWModuleOp>(sim::createSquashSimTriggered(opts));
-  }
   {
     ConvertToArcsPassOptions opts;
     opts.tapRegisters = options.observeRegisters;
@@ -131,7 +125,6 @@ void circt::populateArcStateLoweringPipeline(
 void circt::populateArcStateAllocationPipeline(
     OpPassManager &pm, const ArcStateAllocationOptions &options) {
   pm.addPass(arc::createLowerArcsToFuncs());
-  pm.addPass(arc::createRemoveI0Types());
   {
     AllocateStateOptions allocStateOpts;
     allocStateOpts.insertTraceTaps = options.insertTraceTaps;
@@ -159,9 +152,6 @@ void circt::populateArcToLLVMPipeline(OpPassManager &pm,
     opts.extraArgs = options.extraRuntimeArgs;
     opts.traceFileName = options.traceFileName;
     pm.addPass(createInsertRuntime(opts));
-  }
-  if (options.bufferizeArrays) {
-    pm.addPass(createLowerArrays());
   }
   pm.addPass(createLowerArcToLLVMPass());
   pm.addPass(createCSEPass());

@@ -32,18 +32,6 @@ using namespace comb;
 
 namespace {
 
-// Return a value that represents the inverted input if `inverted` is true,
-static Value materializeInvertedInput(Location loc, Value input, bool inverted,
-                                      ConversionPatternRewriter &rewriter,
-                                      hw::ConstantOp &allOnes) {
-  if (!inverted)
-    return input;
-  auto width = input.getType().getIntOrFloatBitWidth();
-  if (!allOnes)
-    allOnes = hw::ConstantOp::create(rewriter, loc, APInt::getAllOnes(width));
-  return rewriter.createOrFold<comb::XorOp>(loc, input, allOnes, true);
-}
-
 struct SynthChoiceOpConversion : OpConversionPattern<synth::ChoiceOp> {
   using OpConversionPattern<synth::ChoiceOp>::OpConversionPattern;
   LogicalResult
@@ -55,151 +43,75 @@ struct SynthChoiceOpConversion : OpConversionPattern<synth::ChoiceOp> {
   }
 };
 
-template <typename SynthOp>
-struct SynthInverterOpConversion : OpConversionPattern<SynthOp> {
-  using OpConversionPattern<SynthOp>::OpConversionPattern;
-  // Subclasses provide the target comb op after generic input inversion has
-  // been materialized.
-  virtual Value createOp(Location loc, ArrayRef<Value> inputs,
-                         ConversionPatternRewriter &rewriter) const = 0;
-
-  virtual LogicalResult
-  matchAndRewrite(SynthOp op, typename SynthOp::Adaptor adaptor,
+struct SynthAndInverterOpConversion
+    : OpConversionPattern<synth::aig::AndInverterOp> {
+  using OpConversionPattern<synth::aig::AndInverterOp>::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(synth::aig::AndInverterOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
+    // Convert to comb.and + comb.xor + hw.constant
+    auto width = op.getResult().getType().getIntOrFloatBitWidth();
+    auto allOnes =
+        hw::ConstantOp::create(rewriter, op.getLoc(), APInt::getAllOnes(width));
     SmallVector<Value> operands;
     operands.reserve(op.getNumOperands());
-    hw::ConstantOp allOnes;
-    for (auto [input, inverted] :
-         llvm::zip(adaptor.getOperands(), op.getInverted()))
-      operands.push_back(materializeInvertedInput(op.getLoc(), input, inverted,
-                                                  rewriter, allOnes));
-    // `createOp` now only needs to encode the core boolean operator.
-    rewriter.replaceOp(op, createOp(op.getLoc(), operands, rewriter));
+    for (auto [input, inverted] : llvm::zip(op.getOperands(), op.getInverted()))
+      operands.push_back(inverted ? rewriter.createOrFold<comb::XorOp>(
+                                        op.getLoc(), input, allOnes, true)
+                                  : input);
+    // NOTE: Use createOrFold to avoid creating a new operation if possible.
+    rewriter.replaceOp(
+        op, rewriter.createOrFold<comb::AndOp>(op.getLoc(), operands, true));
     return success();
   }
 };
 
-struct SynthAndInverterOpConversion
-    : SynthInverterOpConversion<synth::aig::AndInverterOp> {
-  using SynthInverterOpConversion<
-      synth::aig::AndInverterOp>::SynthInverterOpConversion;
-  Value createOp(Location loc, ArrayRef<Value> inputs,
-                 ConversionPatternRewriter &rewriter) const override {
-    return rewriter.createOrFold<comb::AndOp>(loc, inputs, true);
-  }
-};
+struct SynthMajorityInverterOpConversion
+    : OpConversionPattern<synth::mig::MajorityInverterOp> {
+  using OpConversionPattern<
+      synth::mig::MajorityInverterOp>::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(synth::mig::MajorityInverterOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    // Only handle 1 or 3-input majority inverter for now.
+    if (op.getNumOperands() > 3)
+      return failure();
 
-struct SynthXorInverterOpConversion
-    : SynthInverterOpConversion<synth::XorInverterOp> {
-  using SynthInverterOpConversion<
-      synth::XorInverterOp>::SynthInverterOpConversion;
-  Value createOp(Location loc, ArrayRef<Value> inputs,
-                 ConversionPatternRewriter &rewriter) const override {
-    return rewriter.createOrFold<comb::XorOp>(loc, inputs, true);
-  }
-};
+    auto getOperand = [&](unsigned idx) {
+      auto input = op.getInputs()[idx];
+      if (!op.getInverted()[idx])
+        return input;
+      auto width = input.getType().getIntOrFloatBitWidth();
+      auto allOnes = hw::ConstantOp::create(rewriter, op.getLoc(),
+                                            APInt::getAllOnes(width));
+      return rewriter.createOrFold<comb::XorOp>(op.getLoc(), input, allOnes,
+                                                true);
+    };
 
-struct SynthDotOpConversion : SynthInverterOpConversion<synth::DotOp> {
-  using SynthInverterOpConversion<synth::DotOp>::SynthInverterOpConversion;
-  Value createOp(Location loc, ArrayRef<Value> inputs,
-                 ConversionPatternRewriter &rewriter) const override {
-    assert(inputs.size() == 3 && "expected exactly three inputs");
-    auto xy =
-        rewriter.createOrFold<comb::AndOp>(loc, inputs[0], inputs[1], true);
-    auto zOrXy = rewriter.createOrFold<comb::OrOp>(loc, inputs[2], xy, true);
-    return rewriter.createOrFold<comb::XorOp>(loc, inputs[0], zOrXy, true);
-  }
-};
+    if (op.getNumOperands() == 1) {
+      rewriter.replaceOp(op, getOperand(0));
+      return success();
+    }
 
-struct SynthMajorityOpConversion
-    : SynthInverterOpConversion<synth::MajorityOp> {
-  using SynthInverterOpConversion<synth::MajorityOp>::SynthInverterOpConversion;
-  Value createOp(Location loc, ArrayRef<Value> inputs,
-                 ConversionPatternRewriter &rewriter) const override {
-    assert(inputs.size() == 3 && "expected exactly three inputs");
-    auto ab =
-        rewriter.createOrFold<comb::AndOp>(loc, inputs[0], inputs[1], true);
-    auto ac =
-        rewriter.createOrFold<comb::AndOp>(loc, inputs[0], inputs[2], true);
-    auto bc =
-        rewriter.createOrFold<comb::AndOp>(loc, inputs[1], inputs[2], true);
-    auto abOrAc = rewriter.createOrFold<comb::OrOp>(loc, ab, ac, true);
-    return rewriter.createOrFold<comb::OrOp>(loc, abOrAc, bc, true);
-  }
-};
+    assert(op.getNumOperands() == 3 && "Expected 3 operands for majority op");
+    SmallVector<Value, 3> inputs;
+    for (size_t i = 0; i < 3; ++i)
+      inputs.push_back(getOperand(i));
 
-struct SynthOneHotOpConversion : SynthInverterOpConversion<synth::OneHotOp> {
-  using SynthInverterOpConversion<synth::OneHotOp>::SynthInverterOpConversion;
-  Value createOp(Location loc, ArrayRef<Value> inputs,
-                 ConversionPatternRewriter &rewriter) const override {
-    assert(inputs.size() == 3 && "expected exactly three inputs");
-    auto width = inputs[0].getType().getIntOrFloatBitWidth();
-    auto allOnes =
-        hw::ConstantOp::create(rewriter, loc, APInt::getAllOnes(width));
+    // MAJ(x, y, z) = x & y | x & z | y & z
+    auto getProduct = [&](unsigned idx1, unsigned idx2) {
+      return rewriter.createOrFold<comb::AndOp>(
+          op.getLoc(), ValueRange{inputs[idx1], inputs[idx2]}, true);
+    };
 
-    // NOT each input
-    auto notA = rewriter.createOrFold<comb::XorOp>(loc, inputs[0],
-                                                   allOnes.getResult(), true);
-    auto notB = rewriter.createOrFold<comb::XorOp>(loc, inputs[1],
-                                                   allOnes.getResult(), true);
-    auto notC = rewriter.createOrFold<comb::XorOp>(loc, inputs[2],
-                                                   allOnes.getResult(), true);
+    SmallVector<Value, 3> operands;
+    operands.push_back(getProduct(0, 1));
+    operands.push_back(getProduct(0, 2));
+    operands.push_back(getProduct(1, 2));
 
-    auto aOnly = rewriter.createOrFold<comb::AndOp>(
-        loc, ValueRange{inputs[0], notB, notC}, true);
-    auto bOnly = rewriter.createOrFold<comb::AndOp>(
-        loc, ValueRange{notA, inputs[1], notC}, true);
-    auto cOnly = rewriter.createOrFold<comb::AndOp>(
-        loc, ValueRange{notA, notB, inputs[2]}, true);
-    return rewriter.createOrFold<comb::OrOp>(
-        loc, ValueRange{aOnly, bOnly, cOnly}, true);
-  }
-};
-
-struct SynthMuxInverterOpConversion
-    : SynthInverterOpConversion<synth::MuxInverterOp> {
-  using SynthInverterOpConversion<
-      synth::MuxInverterOp>::SynthInverterOpConversion;
-
-  Value createOp(Location loc, ArrayRef<Value> inputs,
-                 ConversionPatternRewriter &rewriter) const override {
-    assert(inputs.size() == 3 && "expected exactly three inputs");
-
-    auto width = inputs[0].getType().getIntOrFloatBitWidth();
-    auto allOnes =
-        hw::ConstantOp::create(rewriter, loc, APInt::getAllOnes(width));
-
-    auto notCond =
-        rewriter.createOrFold<comb::XorOp>(loc, inputs[0], allOnes, true);
-    auto trueValue =
-        rewriter.createOrFold<comb::AndOp>(loc, inputs[0], inputs[1], true);
-    auto falseValue =
-        rewriter.createOrFold<comb::AndOp>(loc, notCond, inputs[2], true);
-
-    return rewriter.createOrFold<comb::OrOp>(loc, trueValue, falseValue, true);
-  }
-};
-
-struct SynthGambleOpConversion : SynthInverterOpConversion<synth::GambleOp> {
-  using SynthInverterOpConversion<synth::GambleOp>::SynthInverterOpConversion;
-  Value createOp(Location loc, ArrayRef<Value> inputs,
-                 ConversionPatternRewriter &rewriter) const override {
-    assert(inputs.size() == 3 && "expected exactly three inputs");
-    auto width = inputs[0].getType().getIntOrFloatBitWidth();
-    auto allOnes =
-        hw::ConstantOp::create(rewriter, loc, APInt::getAllOnes(width));
-
-    auto allSet = rewriter.createOrFold<comb::AndOp>(
-        loc, ValueRange{inputs[0], inputs[1], inputs[2]}, true);
-
-    auto orVar = rewriter.createOrFold<comb::OrOp>(
-        loc, ValueRange{inputs[0], inputs[1], inputs[2]}, true);
-
-    auto noneSet = rewriter.createOrFold<comb::XorOp>(
-        loc, orVar, allOnes.getResult(), true);
-
-    return rewriter.createOrFold<comb::OrOp>(loc, ValueRange{allSet, noneSet},
-                                             true);
+    rewriter.replaceOp(
+        op, rewriter.createOrFold<comb::OrOp>(op.getLoc(), operands, true));
+    return success();
   }
 };
 
@@ -220,10 +132,7 @@ struct ConvertSynthToCombPass
 
 static void populateSynthToCombConversionPatterns(RewritePatternSet &patterns) {
   patterns.add<SynthChoiceOpConversion, SynthAndInverterOpConversion,
-               SynthXorInverterOpConversion, SynthMuxInverterOpConversion,
-               SynthDotOpConversion, SynthMajorityOpConversion,
-               SynthOneHotOpConversion, SynthGambleOpConversion>(
-      patterns.getContext());
+               SynthMajorityInverterOpConversion>(patterns.getContext());
 }
 
 void ConvertSynthToCombPass::runOnOperation() {

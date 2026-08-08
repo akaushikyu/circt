@@ -438,9 +438,6 @@ def LowerFIRRTLToHW : Pass<"lower-firrtl-to-hw", "mlir::ModuleOp"> {
     Option<"enableAnnotationWarning", "warn-on-unprocessed-annotations",
            "bool", "false",
     "Emit warnings on unprocessed annotations during lower-to-hw pass">,
-    Option<"lowerToCore", "lower-to-core", "bool", "false",
-           "Prefer core dialects over direct SV lowering for FIRRTL "
-           "verification and printf operations">,
     Option<"verificationFlavor", "verification-flavor",
            "circt::firrtl::VerificationFlavor",
            "circt::firrtl::VerificationFlavor::None",
@@ -453,7 +450,8 @@ def LowerFIRRTLToHW : Pass<"lower-firrtl-to-hw", "mlir::ModuleOp"> {
             clEnumValN(circt::firrtl::VerificationFlavor::Immediate,
               "immediate", "Use immediate verif statements"),
             clEnumValN(circt::firrtl::VerificationFlavor::SVA, "sva", "Use SVA")
-          )}]>
+          )}]
+           >
   ];
 }
 
@@ -650,6 +648,11 @@ def LowerLTLToCore : Pass<"lower-ltl-to-core", "hw::HWModuleOp"> {
     "hw::HWDialect", "sv::SVDialect", "comb::CombDialect",
     "seq::SeqDialect"
   ];
+  let options =
+    [Option<"assumeFirstClock", "assume-first-clock", "bool", "false",
+            "Assume that implicitly clocked LTL operations are clocked by the"
+            "first clock argument, or failing that, the first seq.to_clock"
+            "operation in their parent hw.module.">];
 }
 
 //===----------------------------------------------------------------------===//
@@ -854,7 +857,7 @@ def LowerSimToSV: Pass<"lower-sim-to-sv",  "mlir::ModuleOp"> {
 // ConvertCombToSynth
 //===----------------------------------------------------------------------===//
 
-def ConvertCombToSynth : Pass<"convert-comb-to-synth"> {
+def ConvertCombToSynth : Pass<"convert-comb-to-synth", "hw::HWModuleOp"> {
   let summary = "Lower Comb ops to Synth ops.";
   let dependentDialects = ["circt::comb::CombDialect",
                            "circt::synth::SynthDialect"];
@@ -862,9 +865,12 @@ def ConvertCombToSynth : Pass<"convert-comb-to-synth"> {
   let options =
       [ListOption<"additionalLegalOps", "additional-legal-ops", "std::string",
                   "Specify additional legal ops to partially legalize Comb">,
-       Option<"forceAIG", "force-aig", "bool", "true",
-              "Force lowering to AIG-only synth ops instead of preserving "
-              "higher-level synth ops such as synth.xor_inv">,
+       Option<"targetIR", "target-ir", "circt::CombToSynthTargetIR",
+              /*default=*/"circt::CombToSynthTargetIR::AIG", "Target IR kind",
+              [{::llvm::cl::values(
+             clEnumValN(circt::CombToSynthTargetIR::AIG, "aig", "Lower to AIG"),
+             clEnumValN(circt::CombToSynthTargetIR::MIG, "mig", "Lower to MIG")
+           )}]>,
        Option<"maxEmulationUnknownBits", "max-emulation-unknown-bits",
               "uint32_t", "10",
               "Maximum number of unknown bits to emulate in a table lookup">];
@@ -888,7 +894,7 @@ def ConvertSynthToComb: Pass<"convert-synth-to-comb"> {
 // ConvertCombToDatapath
 //===----------------------------------------------------------------------===//
 
-def ConvertCombToDatapath: Pass<"convert-comb-to-datapath"> {
+def ConvertCombToDatapath: Pass<"convert-comb-to-datapath",  "hw::HWModuleOp"> {
   let summary = "Lower Comb ops to Datapath ops";
   let description = [{
     This pass converts arithmetic Comb operations into Datapath operations that

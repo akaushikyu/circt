@@ -51,20 +51,17 @@ struct FunctionRewrite {
   FunctionType type;
 };
 
-struct FlattenMemRefsState {
-  unsigned counter = 0;
-  DenseMap<StringAttr, StringAttr> nameMap;
-};
+static std::atomic<unsigned> globalCounter(0);
+static DenseMap<StringAttr, StringAttr> globalNameMap;
 
 static MemRefType getFlattenedMemRefType(MemRefType type) {
   return MemRefType::get(SmallVector<int64_t>{type.getNumElements()},
                          type.getElementType());
 }
 
-static std::string getFlattenedMemRefName(FlattenMemRefsState &state,
-                                          StringAttr baseName,
+static std::string getFlattenedMemRefName(StringAttr baseName,
                                           MemRefType type) {
-  unsigned uniqueID = state.counter++;
+  unsigned uniqueID = globalCounter++;
   return llvm::formatv("{0}_{1}x{2}_{3}", baseName, type.getNumElements(),
                        type.getElementType(), uniqueID);
 }
@@ -197,9 +194,7 @@ struct AllocaOpConversion : public OpConversionPattern<memref::AllocaOp> {
 };
 
 struct GlobalOpConversion : public OpConversionPattern<memref::GlobalOp> {
-  GlobalOpConversion(TypeConverter &typeConverter, MLIRContext *context,
-                     FlattenMemRefsState &state)
-      : OpConversionPattern(typeConverter, context), state(state) {}
+  using OpConversionPattern::OpConversionPattern;
 
   LogicalResult
   matchAndRewrite(memref::GlobalOp op, OpAdaptor adaptor,
@@ -217,10 +212,9 @@ struct GlobalOpConversion : public OpConversionPattern<memref::GlobalOp> {
       flattenedVals.push_back(attr);
 
     auto newTypeAttr = TypeAttr::get(newType);
-    auto newNameStr =
-        getFlattenedMemRefName(state, op.getConstantAttrName(), type);
+    auto newNameStr = getFlattenedMemRefName(op.getConstantAttrName(), type);
     auto newName = rewriter.getStringAttr(newNameStr);
-    state.nameMap[op.getSymNameAttr()] = newName;
+    globalNameMap[op.getSymNameAttr()] = newName;
 
     RankedTensorType tensorType = RankedTensorType::get(
         {static_cast<int64_t>(flattenedVals.size())}, type.getElementType());
@@ -232,15 +226,10 @@ struct GlobalOpConversion : public OpConversionPattern<memref::GlobalOp> {
 
     return success();
   }
-
-private:
-  FlattenMemRefsState &state;
 };
 
 struct GetGlobalOpConversion : public OpConversionPattern<memref::GetGlobalOp> {
-  GetGlobalOpConversion(TypeConverter &typeConverter, MLIRContext *context,
-                        FlattenMemRefsState &state)
-      : OpConversionPattern(typeConverter, context), state(state) {}
+  using OpConversionPattern::OpConversionPattern;
 
   LogicalResult
   matchAndRewrite(memref::GetGlobalOp op, OpAdaptor adaptor,
@@ -255,8 +244,8 @@ struct GetGlobalOpConversion : public OpConversionPattern<memref::GetGlobalOp> {
 
     MemRefType newType = getFlattenedMemRefType(type);
     auto originalName = globalOp.getSymNameAttr();
-    auto newNameIt = state.nameMap.find(originalName);
-    if (newNameIt == state.nameMap.end())
+    auto newNameIt = globalNameMap.find(originalName);
+    if (newNameIt == globalNameMap.end())
       return failure();
     auto newName = newNameIt->second;
 
@@ -264,9 +253,6 @@ struct GetGlobalOpConversion : public OpConversionPattern<memref::GetGlobalOp> {
 
     return success();
   }
-
-private:
-  FlattenMemRefsState &state;
 };
 
 struct ReshapeOpConversion : public OpConversionPattern<memref::ReshapeOp> {
@@ -438,20 +424,17 @@ public:
 
     auto *ctx = &getContext();
     TypeConverter typeConverter;
-    FlattenMemRefsState state;
     populateTypeConversionPatterns(typeConverter);
 
     RewritePatternSet patterns(ctx);
     SetVector<StringRef> rewrittenCallees;
     patterns.add<LoadOpConversion, StoreOpConversion, AllocOpConversion,
-                 AllocaOpConversion, ReshapeOpConversion,
-                 OperandConversionPattern<func::ReturnOp>,
+                 AllocaOpConversion, GlobalOpConversion, GetGlobalOpConversion,
+                 ReshapeOpConversion, OperandConversionPattern<func::ReturnOp>,
                  OperandConversionPattern<memref::DeallocOp>,
                  OperandConversionPattern<memref::DeallocOp>,
                  OperandConversionPattern<memref::CopyOp>, CallOpConversion>(
         typeConverter, ctx);
-    patterns.add<GlobalOpConversion, GetGlobalOpConversion>(typeConverter, ctx,
-                                                            state);
     populateFunctionOpInterfaceTypeConversionPattern<func::FuncOp>(
         patterns, typeConverter);
 

@@ -41,14 +41,6 @@ class CutRewriterPassBase<string name, string op> : Pass<name, op> {
            )}]>,
     Option<"test", "test", "bool", "false", "Attach timing to IR for testing">
   ];
-  let statistics = [
-    Statistic<"numCutsCreated", "cuts-created",
-              "Number of cuts created during cut enumeration">,
-    Statistic<"numCutSetsCreated", "cut-sets-created",
-              "Number of cut sets created during cut enumeration">,
-    Statistic<"numCutsRewritten", "cuts-rewritten",
-              "Number of cuts rewritten">,
-  ];
 }
 
 def TechMapper : CutRewriterPassBase<"synth-tech-mapper", "mlir::ModuleOp"> {
@@ -85,7 +77,7 @@ def GenericLutMapper : CutRewriterPassBase<"synth-generic-lut-mapper",
   let dependentDialects = ["comb::CombDialect"];
 }
 
-def LowerVariadic : Pass<"synth-lower-variadic"> {
+def LowerVariadic : Pass<"synth-lower-variadic", "hw::HWModuleOp"> {
   let summary = "Lower variadic operations to binary operations";
   let description = [{
     This pass lowers variadic operations to binary operations using a
@@ -97,9 +89,7 @@ def LowerVariadic : Pass<"synth-lower-variadic"> {
     ListOption<"opNames", "op-names", "std::string",
                "Specify operation names to lower (empty means all)">,
     Option<"timingAware", "timing-aware", "bool", "true",
-           "Lower operators with timing information">,
-    Option<"reuseSubsets", "reuse-subsets", "bool", /*default=*/"false",
-           "Reuse existing logic subsets to minimize area">
+           "Lower operators with timing information">
   ];
   let dependentDialects = [
     "circt::comb::CombDialect", "circt::hw::HWDialect",
@@ -107,7 +97,7 @@ def LowerVariadic : Pass<"synth-lower-variadic"> {
   ];
 }
 
-def LowerWordToBits : Pass<"synth-lower-word-to-bits"> {
+def LowerWordToBits : Pass<"synth-lower-word-to-bits", "hw::HWModuleOp"> {
   let summary = "Lower multi-bit AndInverter to single-bit ones";
   let dependentDialects = ["comb::CombDialect"];
   let statistics = [
@@ -219,7 +209,7 @@ class ExternalSolverPass<string name> : Pass<name, "hw::HWModuleOp"> {
   ];
 
   let dependentDialects = ["circt::comb::CombDialect", "circt::hw::HWDialect",
-                           "circt::seq::SeqDialect", "circt::verif::VerifDialect"];
+                           "circt::seq::SeqDialect"];
 }
 
 def AIGERRunner : ExternalSolverPass<"synth-aiger-runner"> {
@@ -254,17 +244,17 @@ def ABCRunner : ExternalSolverPass<"synth-abc-runner"> {
   ];
 }
 
-def StructuralHash : Pass<"synth-structural-hash"> {
+def StructuralHash : Pass<"synth-structural-hash", "hw::HWModuleOp"> {
   let summary = "Structural hashing (CSE) for Synth operations";
   let description = [{
     This pass performs aggressive structural hashing-based CSE for Synth dialect
-    operations, domain-specific to AIG operations to enable operand
+    operations (AIG/MIG), domain-specific to AIG/MIG operations to enable operand
     reordering based on structural properties and inversion flag consideration
     for canonicalization.
   }];
 }
 
-def MaximumAndCover : Pass<"synth-maximum-and-cover"> {
+def MaximumAndCover : Pass<"synth-maximum-and-cover", "hw::HWModuleOp"> {
   let summary = "Maximum And Cover for And-Inverter";
   let description = [{
     This pass performs maximum AND-cover optimization by collapsing single-fanout
@@ -307,15 +297,11 @@ def FunctionalReduction : Pass<"synth-functional-reduction", "hw::HWModuleOp"> {
            "Enable test transformation mode. In this mode, candidates are "
            "verified only when both values in a pair carry matching "
            "`synth.test.functional_reduction_equivalence_class` attributes.">,
-    Option<"numRandomPatterns", "num-random-patterns", "unsigned", "1024",
+    Option<"numRandomPatterns", "num-random-patterns", "unsigned", "4096",
            "Number of random simulation patterns (must be a positive multiple of 64; "
            "each pattern is one bit in a 64-bit word)">,
     Option<"seed", "seed", "unsigned", "0",
-           "Seed for random pattern generation">,
-    Option<"satSolver", "sat-solver", "std::string", "\"auto\"",
-           "SAT solver backend to use: auto, z3, or cadical">,
-    Option<"conflictLimit", "conflict-limit", "int64_t", "100",
-           "Per-SAT-call conflict budget. -1 disables the limit.">
+           "Seed for random pattern generation">
   ];
   let statistics = [
     Statistic<"numEquivClasses", "num-equiv-classes",

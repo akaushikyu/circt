@@ -119,6 +119,52 @@ def InstanceOp : HardwareDeclOp<"instance", [
            CArg<"hw::InnerSymAttr", "hw::InnerSymAttr()">:$innerSym)>];
 
   let extraClassDeclaration = [{
+    /// Return the number of ports for this instance.
+    size_t getNumPorts() {
+      return getNumResults();
+    }
+
+    /// Return the port direction for the specified result number.
+    Direction getPortDirection(size_t resultNo) {
+      return direction::get(getPortDirections()[resultNo]);
+    }
+
+    /// Return the port name for the specified result number.
+    StringAttr getPortNameAttr(size_t resultNo) {
+      return cast<StringAttr>(getPortNames()[resultNo]);
+    }
+
+    StringRef getPortName(size_t resultNo) {
+      return getPortNameAttr(resultNo).getValue();
+    }
+
+    /// Returns the port location for the specified result number.
+    Location getPortLocation(size_t) {
+      return getLoc();
+    }
+
+    /// Hooks for port annotations.
+    ArrayAttr getPortAnnotation(unsigned portIdx);
+    void setAllPortAnnotations(ArrayRef<Attribute> annotations);
+
+    /// Hooks for domain information.
+    Attribute getPortDomain(unsigned portIdx);
+
+    /// Clone this instance with inserted ports.
+    InstanceOp cloneWithInsertedPorts(
+      ArrayRef<std::pair<unsigned, PortInfo>> insertions);
+
+    /// Clone this instance with inserted ports, then replaces uses.
+    InstanceOp cloneWithInsertedPortsAndReplaceUses(
+      ArrayRef<std::pair<unsigned, PortInfo>> insertions);
+
+    /// Clone this instance with erased ports.
+    InstanceOp cloneWithErasedPorts(const llvm::BitVector &erasures);
+
+    /// Clone this instance with erased ports, then replaces uses.
+    InstanceOp cloneWithErasedPortsAndReplaceUses(
+      const llvm::BitVector &erasures);
+
     //===------------------------------------------------------------------===//
     // Single-module methods
     //===------------------------------------------------------------------===//
@@ -152,14 +198,6 @@ def InstanceOp : HardwareDeclOp<"instance", [
       Operation *moduleOp = node->getModule();
       return dyn_cast_or_null<T>(moduleOp);
     }
-
-    //===------------------------------------------------------------------===//
-    // Port Annotations
-    //===------------------------------------------------------------------===//
-
-    ArrayAttr getPortAnnotation(unsigned portIdx);
-
-    void setAllPortAnnotations(ArrayRef<Attribute> annotations);
   }];
 
   let hasVerifier = true;
@@ -205,6 +243,30 @@ def InstanceChoiceOp : HardwareDeclOp<"instance_choice", [
   let hasCustomAssemblyFormat = 1;
 
   let extraClassDeclaration = [{
+    /// Return the number of ports for this instance.
+    size_t getNumPorts() {
+      return getNumResults();
+    }
+
+    /// Return the port direction for the specified result number.
+    Direction getPortDirection(size_t resultNo) {
+      return direction::get(getPortDirections()[resultNo]);
+    }
+
+    /// Return the port name for the specified result number.
+    StringAttr getPortNameAttr(size_t resultNo) {
+      return cast<StringAttr>(getPortNames()[resultNo]);
+    }
+
+    StringRef getPortName(size_t resultNo) {
+      return getPortNameAttr(resultNo).getValue();
+    }
+
+    /// Returns the port location for the specified result number.
+    Location getPortLocation(size_t resultNo) {
+      return getLoc();
+    }
+
     /// Return the default target attribute.
     FlatSymbolRefAttr getDefaultTargetAttr() {
       return llvm::cast<FlatSymbolRefAttr>(getModuleNamesAttr()[0]);
@@ -221,6 +283,21 @@ def InstanceChoiceOp : HardwareDeclOp<"instance_choice", [
     /// Return the list of case-module mappings.
     SmallVector<std::pair<SymbolRefAttr, FlatSymbolRefAttr>, 1>
     getTargetChoices();
+
+    /// Clone this instance with inserted ports.
+    InstanceChoiceOp cloneWithInsertedPorts(
+      ArrayRef<std::pair<unsigned, PortInfo>> insertions);
+
+    /// Clone this instance with inserted ports, then replaces uses.
+    InstanceChoiceOp cloneWithInsertedPortsAndReplaceUses(
+      ArrayRef<std::pair<unsigned, PortInfo>> insertions);
+
+    /// Clone this instance with erased ports.
+    InstanceChoiceOp cloneWithErasedPorts(const llvm::BitVector &erasures);
+
+    /// Clone this instance with erased ports, then replaces uses.
+    InstanceChoiceOp cloneWithErasedPortsAndReplaceUses(
+      const llvm::BitVector &erasures);
   }];
 
   let builders = [
@@ -589,17 +666,16 @@ def WireOp : HardwareDeclOp<"wire", [
   let arguments = (ins StrAttr:$name, NameKindAttr:$nameKind,
                        AnnotationArrayAttr:$annotations,
                        OptionalAttr<InnerSymAttr>:$inner_sym,
-                       UnitAttr:$forceable, // ReferenceKinds
-                       Variadic<DomainType>:$domains);
+                       UnitAttr:$forceable); // ReferenceKinds
   let results = (outs AnyType:$result, Optional<RefType>:$ref);
 
-  let hasVerifier = 1;
   let hasCanonicalizer = true;
   let skipDefaultBuilders = true;
 
   let builders = [
     OpBuilder<(ins "::mlir::TypeRange":$resultTypes, "::mlir::ValueRange":$operands,
                    CArg<"::llvm::ArrayRef<::mlir::NamedAttribute>","{}">:$attributes), [{
+      assert(operands.size() == 0u && "mismatched number of parameters");
       odsState.addOperands(operands);
       odsState.addAttributes(attributes);
       assert(resultTypes.size() >= 1u && "mismatched number of return types");
@@ -610,20 +686,16 @@ def WireOp : HardwareDeclOp<"wire", [
                    "::circt::firrtl::NameKindEnumAttr":$nameKind,
                    "::mlir::ArrayAttr":$annotations,
                    "::circt::hw::InnerSymAttr":$innerSym,
-                   "::mlir::UnitAttr":$forceable,
-                   CArg<"::mlir::ValueRange", "{}">:$domains), [{
+                   "::mlir::UnitAttr":$forceable), [{
       $_state.addAttribute(getNameAttrName($_state.name), name);
       $_state.addAttribute(getNameKindAttrName($_state.name), nameKind);
       $_state.addAttribute(getAnnotationsAttrName($_state.name), annotations);
       if (innerSym) {
         $_state.addAttribute(getInnerSymAttrName($_state.name), innerSym);
       }
-      if (forceable) {
-        $_state.addAttribute(getForceableAttrName($_state.name), forceable);
-      }
-      $_state.addOperands(domains);
       $_state.addTypes(elementType);
       if (forceable) {
+        $_state.addAttribute(getForceableAttrName($_state.name), forceable);
         if (auto type = detail::getForceableResultType(true, elementType))
           $_state.addTypes(type);
       }
@@ -633,48 +705,40 @@ def WireOp : HardwareDeclOp<"wire", [
                    "::circt::firrtl::NameKindEnum":$nameKind,
                    "::mlir::ArrayAttr":$annotations,
                    "::circt::hw::InnerSymAttr":$innerSym,
-                   "bool":$forceable,
-                   CArg<"::mlir::ValueRange", "{}">:$domains), [{
+                   "bool":$forceable), [{
       return build($_builder, $_state, elementType,
                    $_builder.getStringAttr(name),
                    ::circt::firrtl::NameKindEnumAttr::get(odsBuilder.getContext(), nameKind),
                    annotations, innerSym,
-                   forceable ? $_builder.getUnitAttr() : nullptr,
-                   domains);
+                   forceable ? $_builder.getUnitAttr() : nullptr);
     }]>,
     OpBuilder<(ins "::mlir::Type":$elementType,
                       CArg<"StringRef", "{}">:$name,
                       CArg<"NameKindEnum", "NameKindEnum::DroppableName">:$nameKind,
                       CArg<"ArrayRef<Attribute>","{}">:$annotations,
                       CArg<"StringAttr", "StringAttr()">:$innerSym,
-                      CArg<"bool", "false">:$forceable,
-                      CArg<"::mlir::ValueRange", "{}">:$domains), [{
+                      CArg<"bool", "false">:$forceable), [{
       return build($_builder, $_state, elementType,
                    name, nameKind,
                    $_builder.getArrayAttr(annotations),
                    innerSym ? hw::InnerSymAttr::get(innerSym) : hw::InnerSymAttr(),
-                   forceable,
-                   domains);
+                   forceable);
     }]>,
     OpBuilder<(ins "::mlir::Type":$elementType, "StringRef":$name,
                    "NameKindEnum":$nameKind, "::mlir::ArrayAttr":$annotations,
                    CArg<"StringAttr", "StringAttr()">:$innerSym,
-                   CArg<"bool", "false">:$forceable,
-                   CArg<"::mlir::ValueRange", "{}">:$domains), [{
+                   CArg<"bool", "false">:$forceable), [{
       return build($_builder, $_state, elementType,
                    name, nameKind, annotations,
                    innerSym ? hw::InnerSymAttr::get(innerSym) : hw::InnerSymAttr(),
-                   forceable,
-                   domains);
+                   forceable);
     }]>
   ];
 
   let assemblyFormat = [{
     (`sym` $inner_sym^)? `` custom<NameKind>($nameKind)
-    (`forceable` $forceable^)? `` custom<FIRRTLImplicitSSAName>(attr-dict)
-    (`domains` `[` $domains^ `]`)? `:`
+    (`forceable` $forceable^)? `` custom<FIRRTLImplicitSSAName>(attr-dict) `:`
     qualified(type($result)) (`,` qualified(type($ref))^)?
-    (`domains` `[` qualified(type($domains))^ `]`)?
   }];
 }
 
@@ -706,6 +770,7 @@ def ContractOp : FIRRTLOp<"contract", [
 def ObjectOp :  FIRRTLOp<"object", [
     ParentOneOf<["firrtl::FModuleOp, firrtl::ClassOp"]>,
     DeclareOpInterfaceMethods<SymbolUserOpInterface>,
+    DeclareOpInterfaceMethods<FInstanceLike>,
     DeclareOpInterfaceMethods<InstanceGraphInstanceOpInterface, [
       "getReferencedModuleSlow"
     ]>,

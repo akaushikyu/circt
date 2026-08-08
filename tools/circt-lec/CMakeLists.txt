@@ -14,7 +14,6 @@ target_link_libraries(circt-lec
   PRIVATE
   CIRCTComb
   CIRCTCombToSMT
-  CIRCTCombTransforms
   CIRCTDatapath
   CIRCTDatapathToSMT
   CIRCTEmitTransforms

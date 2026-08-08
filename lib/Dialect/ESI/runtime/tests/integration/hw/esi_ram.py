@@ -1,11 +1,13 @@
-#  Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-#  See https://llvm.org/LICENSE.txt for license information.
-#  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+# REQUIRES: esi-runtime, esi-cosim, rtl-sim
+# RUN: rm -rf %t
+# RUN: mkdir %t && cd %t
+# RUN: %PYTHON% %s %t 2>&1
+# RUN: esi-cosim.py -- %PYTHON% %S/test_software/esi_ram.py cosim env
 
 import pycde
 from pycde import (AppID, Clock, Input, Module, generator)
 from pycde.esi import DeclareRandomAccessMemory, ServiceDecl
-from esiaccel.bsp import get_bsp
+from pycde.bsp import get_bsp
 from pycde.module import Metadata
 from pycde.types import Bits
 

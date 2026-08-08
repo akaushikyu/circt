@@ -19,7 +19,6 @@
 #include "mlir/IR/SymbolTable.h"
 #include "mlir/IR/Threading.h"
 #include "mlir/Pass/Pass.h"
-#include "llvm/ADT/TypeSwitch.h"
 
 #include <memory>
 
@@ -63,7 +62,6 @@ struct ModuleInfo {
 
 struct LinkModulesPass
     : public circt::om::impl::LinkModulesBase<LinkModulesPass> {
-  using Base::Base;
   void runOnOperation() override;
 };
 
@@ -103,22 +101,18 @@ void ModuleInfo::postProcess(const SymMappingTy &symMapping) {
       return WalkResult::skip();
     }
 
-    llvm::TypeSwitch<Operation *>(op)
-        .Case<ClassOp>([&](ClassOp classOp) {
-          auto it = symMapping.find({module, classOp.getNameAttr()});
-          // Update its class name if changed.
-          if (it != symMapping.end())
-            classOp.setSymNameAttr(it->second);
-          classOp.replaceFieldTypes(replacer);
-        })
-        .Case<ObjectOp, ElaboratedObjectOp>([&](auto objectLike) {
-          auto it = symMapping.find(
-              {module, objectLike.getClassNameAttr().getAttr()});
-          // Update its class name if changed.
-          if (it != symMapping.end())
-            objectLike.setClassNameAttr(FlatSymbolRefAttr::get(it->second));
-          replacer.replaceElementsIn(objectLike, false, false, true);
-        });
+    if (auto classOp = dyn_cast<ClassOp>(op)) {
+      // Update its class name if changed.
+      auto it = symMapping.find({module, classOp.getNameAttr()});
+      if (it != symMapping.end())
+        classOp.setSymNameAttr(it->second);
+      classOp.replaceFieldTypes(replacer);
+    } else if (auto objectOp = dyn_cast<ObjectOp>(op)) {
+      // Update its class name if changed..
+      auto it = symMapping.find({module, objectOp.getClassNameAttr()});
+      if (it != symMapping.end())
+        objectOp.setClassNameAttr(it->second);
+    }
 
     // Otherwise update om.class types.
     replacer.replaceElementsIn(op,
@@ -315,4 +309,8 @@ void LinkModulesPass::runOnOperation() {
     info.module.getBody()->getOperations().splice(
         info.module.getBody()->begin(), info.block->getOperations());
   }
+}
+
+std::unique_ptr<mlir::Pass> circt::om::createOMLinkModulesPass() {
+  return std::make_unique<LinkModulesPass>();
 }

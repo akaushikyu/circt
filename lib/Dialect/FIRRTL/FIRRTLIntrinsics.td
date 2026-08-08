@@ -168,10 +168,10 @@ def CirctLTLDelay : FIRRTLIntrinsic {
     Delays the occurrence of a boolean or sequence by a specified number of
     cycles, with an optional bound on the length of the delay.
 
-    | Parameter | Type | Description                               |
-    | --------- | ---- | ----------------------------------------- |
-    | delay     | int  | minimum number of cycles to delay         |
-    | length    | int  | maximum additional delay cycles; optional |
+    | Parameter | Type | Description                              |
+    | --------- | ---- | ---------------------------------------- |
+    | delay     | int  | minimum number of cycles to delay        |
+    | length    | int  | optional maximum additional delay cycles |
 
     | Argument | Type    | Description               |
     | -------- | ------- | ------------------------- |
@@ -192,7 +192,7 @@ def CirctLTLRepeat : FIRRTLIntrinsic {
     | Parameter | Type | Description                               |
     | --------- | ---- | ----------------------------------------- |
     | base      | int  | minimum number of consecutive repetitions |
-    | more      | int  | maximum additional repetitions; optional  |
+    | more      | int  | optional maximum additional repetitions   |
 
     | Argument | Type    | Description               |
     | -------- | ------- | ------------------------- |
@@ -211,10 +211,10 @@ def CirctLTLGoToRepeat : FIRRTLIntrinsic {
     consecutively. The repetitions may be interspersed with cycles where the
     property does not hold.
 
-    | Parameter | Type | Description                              |
-    | --------- | ---- | ---------------------------------------- |
-    | base      | int  | minimum number of repetitions            |
-    | more      | int  | maximum additional repetitions; optional |
+    | Parameter | Type | Description                             |
+    | --------- | ---- | --------------------------------------- |
+    | base      | int  | minimum number of repetitions           |
+    | more      | int  | optional maximum additional repetitions |
 
     | Argument | Type    | Description               |
     | -------- | ------- | ------------------------- |
@@ -232,10 +232,10 @@ def CirctLTLNonConsecutiveRepeat : FIRRTLIntrinsic {
     Like `circt.ltl.goto_repeat`, but allows additional cycles after the last
     repetition before the overall sequence completes.
 
-    | Parameter | Type | Description                              |
-    | --------- | ---- | ---------------------------------------- |
-    | base      | int  | minimum number of repetitions            |
-    | more      | int  | maximum additional repetitions; optional |
+    | Parameter | Type | Description                             |
+    | --------- | ---- | --------------------------------------- |
+    | base      | int  | minimum number of repetitions           |
+    | more      | int  | optional maximum additional repetitions |
 
     | Argument | Type    | Description               |
     | -------- | ------- | ------------------------- |
@@ -244,27 +244,6 @@ def CirctLTLNonConsecutiveRepeat : FIRRTLIntrinsic {
     | Result | Type    | Description                     |
     | ------ | ------- | ------------------------------- |
     | out    | UInt<1> | non-consecutive repeat sequence |
-  }];
-}
-
-def CirctLTLPast : FIRRTLIntrinsic {
-  let mnemonic = "circt.ltl.past";
-  let description = [{
-    Observes a boolean value from a specified number of cycles in the past.
-    Corresponds to the SystemVerilog `$past(a, n)` function.
-
-    | Parameter | Type | Description                   |
-    | --------- | ---- | ----------------------------- |
-    | delay     | int  | number of cycles to look back |
-
-    | Argument | Type    | Description               |
-    | -------- | ------- | ------------------------- |
-    | in       | UInt<1> | input boolean             |
-    | clock    | Clock   | clock for delay           |
-
-    | Result | Type    | Description            |
-    | ------ | ------- | ---------------------- |
-    | out    | UInt<1> | value from `delay` ago |
   }];
 }
 
@@ -503,14 +482,14 @@ def CirctVerifAssert : FIRRTLIntrinsic {
     intrinsics and are also represented as `UInt<1>`, but are converted into
     dedicated sequence and property types later in the compiler.
 
-    | Parameter | Type   | Description                  |
-    | --------- | ------ | ---------------------------- |
-    | label     | string | user-defined label; optional |
+    | Parameter | Type   | Description                 |
+    | --------- | ------ | --------------------------- |
+    | label     | string | Optional user-defined label |
 
     | Argument | Type    | Description                                     |
     | -------- | ------- | ----------------------------------------------- |
     | property | UInt<1> | A property to be checked.                       |
-    | enable   | UInt<1> | Enable condition. Optional.                     |
+    | enable   | UInt<1> | Optional enable condition.                      |
     |          |         | If 0, behaves as if the assert was not present. |
   }];
 }
@@ -725,15 +704,15 @@ def CirctDPICall : FIRRTLIntrinsic {
     | inputNames   | string | Semicolon-delimited list of input names. Optional. |
     | outputName   | string | Output name. Optional.                             |
 
-    | Argument | Type    | Description                    |
-    | -------- | ------- | ------------------------------ |
-    | clock    | Clock   | Clock operand; optional        |
-    | enable   | UInt<1> | Enable signal                  |
-    | ...      | Signals | Arguments to DPI function call |
+    | Argument         | Type    | Description                    |
+    | ---------------- | ------- | ------------------------------ |
+    | clock (optional) | Clock   | Optional clock operand         |
+    | enable           | UInt<1> | Enable signal                  |
+    | ...              | Signals | Arguments to DPI function call |
 
-    | Result | Type   | Description                      |
-    | ------ | ------ | -------------------------------- |
-    | result | Signal | Result of the DPI call; optional |
+    | Result            | Type   | Description                     |
+    | ----------------- | ------ | ------------------------------- |
+    | result (optional) | Signal | Optional result of the dpi call |
 
     #### DPI Intrinsic ABI
 
@@ -795,11 +774,11 @@ def View : FIRRTLIntrinsic {
     This will become a SystemVerilog Interface that is driven by its arguments.
     This is _not_ a true SystemVerilog Interface, it is only lowered to one.
 
-    | Parameter | Type   | Description                              |
-    | --------- | ------ | ---------------------------------------- |
-    | name      | string | Instance name of the view.               |
-    | info      | string | JSON encoding the view structure.        |
-    | yaml      | string | Path to emit YAML description. Optional. |
+    | Parameter | Type   | Description                             |
+    | --------- | ------ | --------------------------------------- |
+    | name      | string | Instance name of the view.              |
+    | info      | string | JSON encoding the view structure.       |
+    | yaml      | string | Optional path to emit YAML description. |
 
     | Argument | Type   | Description                     |
     | -------- | ------ | ------------------------------- |

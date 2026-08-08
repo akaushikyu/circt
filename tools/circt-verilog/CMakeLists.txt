@@ -16,7 +16,6 @@ set(libs
   CIRCTVerif
   MLIRArithDialect
   MLIRBytecodeReader
-  MLIRBytecodeWriter
   MLIRControlFlowDialect
   MLIRFuncDialect
   MLIRFuncInlinerExtension

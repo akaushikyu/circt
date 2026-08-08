@@ -99,12 +99,10 @@ struct OpLowering {
   LogicalResult lower(MemoryOp op);
   LogicalResult lower(TapOp op);
   LogicalResult lower(InstanceOp op);
-  LogicalResult lower(hw::TriggeredOp op);
   LogicalResult lower(hw::OutputOp op);
   LogicalResult lower(seq::InitialOp op);
   LogicalResult lower(llhd::FinalOp op);
   LogicalResult lower(llhd::CurrentTimeOp op);
-  LogicalResult lower(sim::ClockedTerminateOp op);
 
   scf::IfOp createIfClockOp(Value clock);
 
@@ -201,13 +199,6 @@ LogicalResult ModuleLowering::run() {
       StorageType::get(builder.getContext(), {}), modelOp.getLoc());
   builder.setInsertionPointToStart(&modelBlock);
 
-  // Reset the next wakeup slot to `UINT64_MAX` ("no wakeup pending") at the
-  // start of every eval. Process suspension code lowers the value to the
-  // earliest scheduled wakeup over the course of the evaluation.
-  auto noWakeup = hw::ConstantOp::create(builder, moduleOp.getLoc(),
-                                         builder.getI64Type(), -1);
-  SetNextWakeupOp::create(builder, moduleOp.getLoc(), storageArg, noWakeup);
-
   // Create the `arc.initial` op to contain the ops for the initialization
   // phase.
   auto initialOp = InitialOp::create(builder, moduleOp.getLoc());
@@ -232,8 +223,7 @@ LogicalResult ModuleLowering::run() {
 
   // Lower the ops.
   for (auto &op : moduleOp.getOps()) {
-    if (mlir::isMemoryEffectFree(&op) &&
-        !isa<hw::OutputOp, sim::ClockedTerminateOp>(op))
+    if (mlir::isMemoryEffectFree(&op) && !isa<hw::OutputOp>(op))
       continue;
     if (isa<MemoryReadPortOp, MemoryWritePortOp>(op))
       continue; // handled as part of `MemoryOp`
@@ -374,7 +364,7 @@ Value ModuleLowering::detectPosedge(Value clock) {
   // Read the old clock value from storage and write the new clock value to
   // storage.
   auto oldClock = StateReadOp::create(builder, loc, oldStorage);
-  StateWriteOp::create(builder, loc, oldStorage, clock);
+  StateWriteOp::create(builder, loc, oldStorage, clock, Value{});
 
   // Detect a rising edge.
   auto edge = comb::XorOp::create(builder, loc, oldClock, clock);
@@ -426,9 +416,8 @@ static scf::IfOp createOrReuseIf(OpBuilder &builder, Value condition,
 LogicalResult OpLowering::lower() {
   return TypeSwitch<Operation *, LogicalResult>(op)
       // Operations with special lowering.
-      .Case<StateOp, sim::DPICallOp, MemoryOp, TapOp, InstanceOp,
-            hw::TriggeredOp, hw::OutputOp, seq::InitialOp, llhd::FinalOp,
-            llhd::CurrentTimeOp, sim::ClockedTerminateOp>(
+      .Case<StateOp, sim::DPICallOp, MemoryOp, TapOp, InstanceOp, hw::OutputOp,
+            seq::InitialOp, llhd::FinalOp, llhd::CurrentTimeOp>(
           [&](auto op) { return lower(op); })
 
       // Operations that should be skipped entirely and never land on the
@@ -499,7 +488,8 @@ LogicalResult OpLowering::lower(StateOp op) {
       auto state = module.getAllocatedState(result);
       if (!state)
         return failure();
-      StateWriteOp::create(module.initialBuilder, value.getLoc(), state, value);
+      StateWriteOp::create(module.initialBuilder, value.getLoc(), state, value,
+                           Value{});
     }
     return success();
   }
@@ -629,7 +619,8 @@ LogicalResult OpLowering::lowerStateful(
       if (value.getType() != type)
         value = BitcastOp::create(module.builder, loweredReset.getLoc(), type,
                                   value);
-      StateWriteOp::create(module.builder, loweredReset.getLoc(), state, value);
+      StateWriteOp::create(module.builder, loweredReset.getLoc(), state, value,
+                           Value{});
     }
     module.builder.setInsertionPoint(ifResetOp.elseYield());
   }
@@ -664,7 +655,7 @@ LogicalResult OpLowering::lowerStateful(
   // Compute the transfer function and write its results to the state's storage.
   auto loweredResults = createMapping(loweredInputs);
   for (auto [state, value] : llvm::zip(states, loweredResults))
-    StateWriteOp::create(module.builder, value.getLoc(), state, value);
+    StateWriteOp::create(module.builder, value.getLoc(), state, value, Value{});
 
   // Since we just wrote the new state value to storage, insert read ops just
   // before the if op that keep the old value around for any later ops that
@@ -782,7 +773,8 @@ LogicalResult OpLowering::lower(MemoryOp op) {
     }
 
     // Actually write to the memory.
-    MemoryWriteOp::create(module.builder, write.getLoc(), state, address, data);
+    MemoryWriteOp::create(module.builder, write.getLoc(), state, address,
+                          Value{}, data);
   }
 
   return success();
@@ -807,7 +799,7 @@ LogicalResult OpLowering::lower(TapOp op) {
     alloc->setAttr("names", op.getNamesAttr());
     state = alloc;
   }
-  StateWriteOp::create(module.builder, op.getLoc(), state, value);
+  StateWriteOp::create(module.builder, op.getLoc(), state, value, Value{});
   return success();
 }
 
@@ -835,7 +827,7 @@ LogicalResult OpLowering::lower(InstanceOp op) {
     state->setAttr("name", module.builder.getStringAttr(
                                op.getInstanceName() + "/" +
                                cast<StringAttr>(name).getValue()));
-    StateWriteOp::create(module.builder, value.getLoc(), state, value);
+    StateWriteOp::create(module.builder, value.getLoc(), state, value, Value{});
   }
 
   // HACK: Also ensure that storage has been allocated for all outputs.
@@ -844,45 +836,6 @@ LogicalResult OpLowering::lower(InstanceOp op) {
   // dialect.
   for (auto result : op.getResults())
     module.getAllocatedState(result);
-
-  return success();
-}
-
-/// Lower `hw.triggered` by inlining its body under a posedge check.
-LogicalResult OpLowering::lower(hw::TriggeredOp op) {
-  assert(phase == Phase::New);
-
-  if (op.getEvent() != hw::EventControl::AtPosEdge) {
-    if (!initial)
-      return op.emitOpError("only posedge triggers are supported");
-    return success();
-  }
-
-  lowerValue(op.getTrigger(), Phase::New);
-  SmallVector<Value> inputs;
-  for (auto input : op.getInputs())
-    inputs.push_back(lowerValue(input, Phase::Old));
-  if (initial)
-    return success();
-  if (llvm::is_contained(inputs, Value{}))
-    return failure();
-
-  auto ifClockOp = createIfClockOp(op.getTrigger());
-  if (!ifClockOp)
-    return failure();
-
-  OpBuilder::InsertionGuard guard(module.builder);
-  module.builder.setInsertionPoint(ifClockOp.thenYield());
-
-  // Expose the trigger inputs as values for the body block arguments.
-  for (auto [arg, input] : llvm::zip(op.getBodyBlock()->getArguments(), inputs))
-    module.loweredValues[{arg, Phase::New}] = input;
-  for (auto &bodyOp : llvm::make_early_inc_range(*op.getBodyBlock())) {
-    OpLowering bodyLowering(&bodyOp, Phase::New, module);
-    bodyLowering.initial = false;
-    if (failed(bodyLowering.lower()))
-      return failure();
-  }
 
   return success();
 }
@@ -907,7 +860,7 @@ LogicalResult OpLowering::lower(hw::OutputOp op) {
     auto state = RootOutputOp::create(
         module.allocBuilder, value.getLoc(), StateType::get(value.getType()),
         cast<StringAttr>(name), module.storageArg);
-    StateWriteOp::create(module.builder, value.getLoc(), state, value);
+    StateWriteOp::create(module.builder, value.getLoc(), state, value, Value{});
   }
   return success();
 }
@@ -1091,37 +1044,6 @@ LogicalResult OpLowering::lower(llhd::CurrentTimeOp op) {
   return success();
 }
 
-LogicalResult OpLowering::lower(sim::ClockedTerminateOp op) {
-  if (phase != Phase::New)
-    return success();
-
-  if (initial)
-    return success();
-
-  auto ifClockOp = createIfClockOp(op.getClock());
-  if (!ifClockOp)
-    return failure();
-
-  OpBuilder::InsertionGuard guard(module.builder);
-  module.builder.setInsertionPoint(ifClockOp.thenYield());
-
-  auto loc = op.getLoc();
-  Value cond = lowerValue(op.getCondition(), phase);
-  if (!cond)
-    return op.emitOpError("Failed to lower condition");
-
-  auto ifOp = createOrReuseIf(module.builder, cond, false);
-  if (!ifOp)
-    return op.emitOpError("Failed to create condition block");
-
-  module.builder.setInsertionPoint(ifOp.thenYield());
-
-  arc::TerminateOp::create(module.builder, loc, module.storageArg,
-                           op.getSuccessAttr());
-
-  return success();
-}
-
 /// Create the operations necessary to detect a posedge on the given clock,
 /// potentially reusing a previous posedge detection, and create an `scf.if`
 /// operation for that posedge. This also tries to reuse an `scf.if` operation
@@ -1146,22 +1068,17 @@ scf::IfOp OpLowering::createIfClockOp(Value clock) {
 /// cases. Some operations and values have special handling though. For example,
 /// states and memory reads are immediately materialized as a new read op.
 Value OpLowering::lowerValue(Value value, Phase phase) {
-  // Check if the value has already been lowered.
-  if (auto lowered = module.loweredValues.lookup({value, phase}))
-    return lowered;
-
   // Handle module inputs. They read the same in all phases.
   if (auto arg = dyn_cast<BlockArgument>(value)) {
-    if (arg.getOwner() != module.moduleOp.getBodyBlock()) {
-      if (!initial)
-        emitError(arg.getLoc()) << "block argument has not been lowered";
-      return {};
-    }
     if (initial)
       return {};
     auto state = module.allocatedInputs[arg.getArgNumber()];
     return StateReadOp::create(module.getBuilder(phase), arg.getLoc(), state);
   }
+
+  // Check if the value has already been lowered.
+  if (auto lowered = module.loweredValues.lookup({value, phase}))
+    return lowered;
 
   // At this point the value is the result of an op. (Block arguments are
   // handled above.)
@@ -1310,7 +1227,8 @@ Value OpLowering::lowerValue(seq::InitialOp op, OpResult result, Phase phase) {
                                  module.storageArg);
     OpBuilder::InsertionGuard guard(module.initialBuilder);
     module.initialBuilder.setInsertionPointAfterValue(value);
-    StateWriteOp::create(module.initialBuilder, value.getLoc(), state, value);
+    StateWriteOp::create(module.initialBuilder, value.getLoc(), state, value,
+                         Value{});
   }
 
   // Read back the value computed during the initial phase.

@@ -46,6 +46,8 @@
 #include "circt/Scheduling/Algorithms.h"
 #include "circt/Scheduling/Problems.h"
 #include "circt/Dialect/Resource/HLS/HLSOps.h"
+
+#include "mlir/Dialect/Math/IR/Math.h"
 #include "mlir/Conversion/AffineToStandard/AffineToStandard.h"
 #include "mlir/Dialect/Affine/Analysis/AffineAnalysis.h"
 #include "mlir/Dialect/Affine/Analysis/LoopAnalysis.h"
@@ -328,7 +330,7 @@ void AffineToLoopSchedule::runOnOperation() {
   schedulingAnalysis = &getAnalysis<CyclicSchedulingAnalysis>();
 
   auto &bramClass = getAnalysis<BRAMClassification>();
-  
+
   // MODIFIED: Instead of bailing on nests, collect every *innermost* loop
   // (post-coalescing) and pipeline each one in place. Outer loops of
   // non-coalescable nests remain as affine.for wrapping the pipeline.
@@ -655,6 +657,15 @@ LogicalResult AffineToLoopSchedule::populateOperatorTypes(
   problem.setLatency(fpAddOpr, 5);
   Problem::OperatorType fpDivOpr = problem.getOrInsertOperatorType("fpdiv");
   problem.setLatency(fpDivOpr, 12);
+
+  // Transcendentals map to pipelined function units in Vitis (hls::exp,
+  // hls::sqrt, ...). Latencies are order-of-magnitude estimates from the
+  // fp cores; they only shift stageStart, which matters here solely for
+  // which accesses share a modulo slot.
+  Problem::OperatorType fpExpOpr = problem.getOrInsertOperatorType("fpexp");
+  problem.setLatency(fpExpOpr, 8);
+  Problem::OperatorType fpSqrtOpr = problem.getOrInsertOperatorType("fpsqrt");
+  problem.setLatency(fpSqrtOpr, 12);
  
   Operation *unsupported;
   WalkResult result = forOp.getBody()->walk([&](Operation *op) {
@@ -695,6 +706,23 @@ LogicalResult AffineToLoopSchedule::populateOperatorTypes(
         .Case<MulIOp, DivSIOp, DivUIOp, RemSIOp, RemUIOp>(
             [&](Operation *mcOp) {
               problem.setLinkedOperatorType(mcOp, mcOpr);
+              return WalkResult::advance();
+            })
+    .Case<math::ExpOp, math::Exp2Op, math::ExpM1Op, math::LogOp,
+              math::Log2Op, math::Log10Op, math::Log1pOp, math::PowFOp,
+              math::SinOp, math::CosOp, math::TanhOp, math::ErfOp>(
+            [&](Operation *mathOp) {
+              problem.setLinkedOperatorType(mathOp, fpExpOpr);
+              return WalkResult::advance();
+            })
+        .Case<math::SqrtOp, math::RsqrtOp>([&](Operation *mathOp) {
+          problem.setLinkedOperatorType(mathOp, fpSqrtOpr);
+          return WalkResult::advance();
+        })
+        .Case<math::AbsFOp, math::AbsIOp, math::CopySignOp, math::FloorOp,
+              math::CeilOp, math::RoundOp, math::RoundEvenOp, math::TruncOp>(
+            [&](Operation *combOp) {
+              problem.setLinkedOperatorType(combOp, combOpr);
               return WalkResult::advance();
             })
         .Case<MulFOp>([&](Operation *fpOp) {

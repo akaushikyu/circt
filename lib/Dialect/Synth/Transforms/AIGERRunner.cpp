@@ -19,7 +19,6 @@
 #include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Dialect/Seq/SeqTypes.h"
 #include "circt/Dialect/Synth/Transforms/SynthPasses.h"
-#include "circt/Dialect/Verif/VerifDialect.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/Support/FileUtilities.h"

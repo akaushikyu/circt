@@ -16,7 +16,6 @@
 // CHECK-DAG: connect-source-operand-2-forwarder
 // CHECK-DAG: cse
 // CHECK-DAG: detach-subaccesses
-// CHECK-DAG: extmodule-convention-remover
 // CHECK-DAG: firrtl-eager-inliner
 // CHECK-DAG: extmodule-instance-remover
 // CHECK-DAG: firrtl-constantifier
@@ -33,7 +32,7 @@
 // CHECK-DAG: firrtl-operand0-forwarder
 // CHECK-DAG: firrtl-operand1-forwarder
 // CHECK-DAG: firrtl-operand2-forwarder
-// CHECK-DAG: firrtl-imdeadcodeelim-remove-ports
+// CHECK-DAG: firrtl-remove-unused-ports
 // CHECK-DAG: hw-constantifier
 // CHECK-DAG: hw-module-externalizer
 // CHECK-DAG: hw-module-internal-name-sanitizer
@@ -44,12 +43,10 @@
 // CHECK-DAG: instance-stubber
 // CHECK-DAG: sv-namehint-remover
 // CHECK-DAG: memory-stubber
-// CHECK-DAG: module-convention-remover
 // CHECK-DAG: module-internal-name-sanitizer
 // CHECK-DAG: module-name-sanitizer
 // CHECK-DAG: node-symbol-remover
 // CHECK-DAG: operation-pruner
-// CHECK-DAG: reset-disconnector
 // CHECK-DAG: root-port-pruner
 // CHECK-EMPTY:
 firrtl.circuit "Foo" {

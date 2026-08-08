@@ -26,71 +26,20 @@ hw.module @fmt_infinite_concat_canonicalize(in %val : i8, out res: !sim.fstring)
 
 // -----
 
-hw.module @procedural_ops_print() {
+hw.module @proc_print_hw() {
   %lit = sim.fmt.literal "Nope"
-  // expected-error @below {{must not be in a non-procedural region}}
+  // expected-error @below {{must be within a procedural region.}}
   sim.proc.print %lit
 }
 
 // -----
 
-hw.module @procedural_ops_pause() {
-  // expected-error @below {{must not be in a non-procedural region}}
-  sim.pause quiet
-}
-
-// -----
-
-hw.module @procedural_ops_terminate() {
-  // expected-error @below {{must not be in a non-procedural region}}
-  sim.terminate success, quiet
-}
-
-// -----
-
-hw.module @procedural_ops_get_file() {
-  %name = sim.fmt.literal "out.log"
-  // expected-error @below {{must not be in a non-procedural region}}
-  %file = sim.get_file %name
-}
-
-// -----
-
-hw.module @nonprocedural_ops_print(in %trigger : i1, in %clock : !seq.clock, in %cond : i1) {
-  hw.triggered posedge %trigger {
-    %lit = sim.fmt.literal "Nope"
-    // expected-error @below {{must not be in a procedural region}}
-    sim.print %lit on %clock if %cond
-  }
-}
-
-// -----
-
-hw.module @nonprocedural_ops_pause(in %trigger : i1, in %clock : !seq.clock, in %cond : i1) {
-  hw.triggered posedge %trigger {
-    // expected-error @below {{must not be in a procedural region}}
-    sim.clocked_pause %clock, %cond, quiet
-  }
-}
-
-// -----
-
-hw.module @nonprocedural_ops_terminate(in %trigger : i1, in %clock : !seq.clock, in %cond : i1) {
-  hw.triggered posedge %trigger {
-    // expected-error @below {{must not be in a procedural region}}
-    sim.clocked_terminate %clock, %cond, success, quiet
-  }
-}
-
-// -----
-
-hw.module @nonproc_print_scf_if(in %trigger : i1, in %clock : !seq.clock, in %cond : i1) {
-  hw.triggered posedge %trigger {
-    %lit = sim.fmt.literal "Nope"
-    scf.if %cond {
-      // expected-error @below {{must not be in a procedural region}}
-      sim.print %lit on %clock if %cond
-    }
+sv.macro.decl @SOMEMACRO
+hw.module @proc_print_sv() {
+  %lit = sim.fmt.literal "Nope"
+  sv.ifdef  @SOMEMACRO {
+    // expected-error @below {{must be within a procedural region.}}
+    sim.proc.print %lit
   }
 }
 
@@ -99,35 +48,9 @@ hw.module @nonproc_print_scf_if(in %trigger : i1, in %clock : !seq.clock, in %co
 hw.module.extern @non_func(out arg0: i1, in %arg1: i1, out arg2: i1)
 
 hw.module @dpi_call(in %clock : !seq.clock, in %in: i1) {
-  // expected-error @below {{callee must be 'sim.func.dpi' or 'func.func' but got 'hw.module.extern'}}
+  // expected-error @below {{callee must be 'sim.dpi.func' or 'func.func' but got 'hw.module.extern'}}
   %0, %1 = sim.func.dpi.call @non_func(%in) : (i1) -> (i1, i1)
 }
-
-// -----
-
-// expected-error @below {{'return' argument must be the last argument}}
-sim.func.dpi @dpi_bad_return(return ret: i1, out other: i1)
-
-// -----
-
-sim.func.dpi @dpi_sig(in %a: i1, return ret: i1)
-hw.module @dpi_bad_call_arity(in %clock : !seq.clock, in %in: i1) {
-  // expected-error @below {{expects 1 DPI results, but got 2}}
-  %0, %1 = sim.func.dpi.call @dpi_sig(%in) : (i1) -> (i1, i1)
-}
-
-// -----
-
-sim.func.dpi @dpi_inout(in %a: i1, inout %state: i8)
-hw.module @dpi_bad_call_types(in %clock : !seq.clock, in %in: i1) {
-  // expected-error @below {{operand type mismatch: expected 'i8', but got 'i1'}}
-  %0 = sim.func.dpi.call @dpi_inout(%in, %in) : (i1, i1) -> i8
-}
-
-// -----
-
-// expected-error @below {{'ref' arguments must use !llvm.ptr type}}
-sim.func.dpi @dpi_bad_ref_type(ref %arg : i32)
 
 // -----
 
@@ -140,3 +63,4 @@ hw.module @queue_from_array(in %uparr: !hw.array<5xi33>) {
   // expected-error @below {{'sim.queue.from_array' op sim::Queue element type 'i32' doesn't match hw::ArrayType element type 'i33'}}
   sim.queue.from_array %uparr : !hw.array<5xi33> -> <i32, 0>
 }
+

@@ -4,7 +4,6 @@ add_circt_unittest(CIRCTHWTests
   InstanceGraphTest.cpp
   InstancePathTest.cpp
   MaterializerTest.cpp
-  TypesTest.cpp
 )
 
 target_link_libraries(CIRCTHWTests

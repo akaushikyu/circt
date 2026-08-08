@@ -1,4 +1,4 @@
-//===- Cosim.cpp - Connection to ESI simulation ---------------------------===//
+//===- Cosim.cpp - Connection to ESI simulation via GRPC ------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -21,7 +21,6 @@
 #include "esi/backends/RpcClient.h"
 
 #include <cstring>
-#include <format>
 #include <fstream>
 #include <iostream>
 #include <set>
@@ -54,27 +53,23 @@ public:
 
 protected:
   void writeImpl(const MessageData &data) override {
-    auto frames = getMessageFrames(data);
-    for (const auto &frame : frames) {
-      conn.getLogger().trace(
-          [this,
-           &data](std::string &subsystem, std::string &msg,
-                  std::unique_ptr<std::map<std::string, std::any>> &details) {
-            subsystem = "cosim_write";
-            msg = "Writing message to channel '" + name + "'";
-            details = std::make_unique<std::map<std::string, std::any>>();
-            (*details)["channel"] = name;
-            (*details)["data_size"] = data.getSize();
-            (*details)["message_data"] = data.toHex();
-          });
+    // Add trace logging before sending the message.
+    conn.getLogger().trace(
+        [this,
+         &data](std::string &subsystem, std::string &msg,
+                std::unique_ptr<std::map<std::string, std::any>> &details) {
+          subsystem = "cosim_write";
+          msg = "Writing message to channel '" + name + "'";
+          details = std::make_unique<std::map<std::string, std::any>>();
+          (*details)["channel"] = name;
+          (*details)["data_size"] = data.getSize();
+          (*details)["message_data"] = data.toHex();
+        });
 
-      client.writeToServer(name, frame);
-    }
+    client.writeToServer(name, data);
   }
+
   bool tryWriteImpl(const MessageData &data) override {
-    // For simplicity, this implementation does not support backpressure and
-    // always returns true. A more complex implementation could track pending
-    // messages and return false if there are too many.
     writeImpl(data);
     return true;
   }
@@ -90,9 +85,8 @@ private:
 // ReadCosimChannelPort
 //===----------------------------------------------------------------------===//
 
-/// Cosim client implementation of a read channel port. The wire transport
-/// (see `CosimRpc`) delivers messages via callback, so this class just
-/// forwards them to the registered `ReadChannelPort` consumer.
+/// Cosim client implementation of a read channel port. Since gRPC read protocol
+/// streams messages back, this implementation is quite complex.
 class ReadCosimChannelPort : public ReadChannelPort {
 public:
   ReadCosimChannelPort(AcceleratorConnection &conn, RpcClient &client,
@@ -109,8 +103,8 @@ public:
                                "' is not a to client channel");
 
     // Connect to the channel and set up callback.
-    connection = client.connectClientReceiver(
-        name, [this](std::unique_ptr<SegmentedMessageData> &data) {
+    connection =
+        client.connectClientReceiver(name, [this](const MessageData &data) {
           // Add trace logging for the received message.
           conn.getLogger().trace(
               [this, &data](
@@ -119,13 +113,12 @@ public:
                 subsystem = "cosim_read";
                 msg = "Received message from channel '" + name + "'";
                 details = std::make_unique<std::map<std::string, std::any>>();
-                MessageData flat = data->toMessageData();
                 (*details)["channel"] = name;
-                (*details)["data_size"] = flat.getSize();
-                (*details)["message_data"] = flat.toHex();
+                (*details)["data_size"] = data.getSize();
+                (*details)["message_data"] = data.toHex();
               });
 
-          bool consumed = invokeCallback(data);
+          bool consumed = callback(data);
 
           if (consumed) {
             // Log the message consumption.
@@ -226,11 +219,10 @@ CosimAccelerator::CosimAccelerator(Context &ctxt, std::string hostname,
                                    uint16_t port)
     : AcceleratorConnection(ctxt) {
   // Connect to the simulation.
-  rpcClient = std::make_unique<RpcClient>(getLogger(), hostname, port);
+  rpcClient = std::make_unique<RpcClient>(hostname, port);
 }
 CosimAccelerator::~CosimAccelerator() {
   disconnect();
-  clearOwnedObjects();
   channels.clear();
 }
 
@@ -505,22 +497,10 @@ public:
                 " len=" + std::to_string(req->length) +
                 " tag=" + std::to_string(req->tag);
         });
-    // Send one response per 8 bytes. Zero-length reads (e.g. void / zero-width
-    // types) indicates a bug in the hardware and we log an error, but we still
-    // send a single response.
+    // Send one response per 8 bytes.
     uint64_t *dataPtr = reinterpret_cast<uint64_t *>(req->address);
-    uint32_t numDataResps = (req->length + 7) / 8;
-    if (numDataResps == 0)
-      acc.getLogger().error(
-          "hostmem",
-          std::format("Read request with length=0 from addr=0x{} tag={}. "
-                      "Reads of length 0 are not valid and indicate a bug "
-                      "in the requester.",
-                      toHex(req->address), req->tag));
-    uint32_t numResps = std::max(numDataResps, 1u);
-    for (uint32_t i = 0; i < numResps; ++i) {
-      HostMemReadResp resp{.data = i < numDataResps ? dataPtr[i] : 0,
-                           .tag = req->tag};
+    for (uint32_t i = 0, e = (req->length + 7) / 8; i < e; ++i) {
+      HostMemReadResp resp{.data = dataPtr[i], .tag = req->tag};
       acc.getLogger().trace(
           [&](std::string &subsystem, std::string &msg,
               std::unique_ptr<std::map<std::string, std::any>> &details) {

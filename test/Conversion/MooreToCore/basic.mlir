@@ -386,7 +386,7 @@ func.func @Statements(%arg0: !moore.i42) {
 }
 
 // CHECK-LABEL: func @FormatStrings
-func.func @FormatStrings(%arg0: !moore.i42, %arg1: !moore.f32, %arg2: !moore.f64, %arg3: !moore.string, %arg4: !moore.i8) {
+func.func @FormatStrings(%arg0: !moore.i42, %arg1: !moore.f32, %arg2: !moore.f64) {
   // CHECK: [[TMP:%.+]] = sim.fmt.literal "hello"
   %0 = moore.fmt.literal "hello"
   // CHECK: sim.fmt.concat ([[TMP]], [[TMP]])
@@ -427,11 +427,6 @@ func.func @FormatStrings(%arg0: !moore.i42, %arg1: !moore.f32, %arg2: !moore.f64
   // CHECK: sim.fmt.flt %arg1 fieldWidth 15 : f32
   moore.fmt.real float %arg1, align right fieldWidth 15 : f32
 
-  // CHECK: sim.fmt.string %arg3 specifierWidth 16 : !sim.dstring
-  moore.fmt.string %arg3, width 16, alignment right, padding space
-  // CHECK: sim.fmt.string %arg3 isLeftAligned true paddingChar 48 specifierWidth 8 : !sim.dstring
-  moore.fmt.string %arg3, width 8, alignment left, padding zero
-
   // CHECK: sim.fmt.hier_path
   // CHECK-NOT: escaped
   moore.fmt.hier_path
@@ -440,11 +435,6 @@ func.func @FormatStrings(%arg0: !moore.i42, %arg1: !moore.f32, %arg2: !moore.f64
 
   // CHECK: sim.proc.print [[TMP]]
   moore.builtin.display %0
-
-  // CHECK: sim.fmt.char %arg0 : i42
-  moore.fmt.char %arg0 : i42
-  // CHECK: sim.fmt.char %arg4 : i8
-  moore.fmt.char %arg4 : i8
   return
 }
 
@@ -1517,17 +1507,6 @@ func.func @IntToStringConversion(%arg0: !moore.i45) {
   return
 }
 
-// CHECK-LABEL: func.func @ConvertRealOperations
-func.func @ConvertRealOperations(%arg0: !moore.f32, %arg1: !moore.f64) {
-  // CHECK: arith.extf %arg0 : f32 to f64
-  moore.convert_real %arg0 : f32 -> f64
-
-  // CHECK: arith.truncf %arg1 : f64 to f32
-  moore.convert_real %arg1 : f64 -> f32
-  
-  return
-}
-
 // CHECK-LABEL: func.func @StringOperations
 // CHECK-SAME: %arg0: i32
 // CHECK-SAME: %arg1: !sim.dstring
@@ -1779,104 +1758,4 @@ moore.module @Nets(out o1 : !moore.l1, out o2 : !moore.l2, out o3 : !moore.l1, o
   %23 = moore.read %n24 : <l2>
 
   moore.output %0, %1, %2, %3, %4, %5, %6, %7, %8, %9, %10, %11, %12, %13, %14, %15, %16, %17, %18, %19, %20, %21, %22, %23 : !moore.l1, !moore.l2, !moore.l1, !moore.l2, !moore.l1, !moore.l2, !moore.l1, !moore.l2, !moore.l1, !moore.l2, !moore.l1, !moore.l2, !moore.l1, !moore.l2, !moore.l1, !moore.l2, !moore.l1, !moore.l2, !moore.l1, !moore.l2, !moore.l1, !moore.l2, !moore.l1, !moore.l2
-}
-
-// CHECK-LABEL: func.func @QueuePopBack
-func.func @QueuePopBack() -> !moore.i16 {
-  %q = moore.variable : <queue<i16, 0>>
-  // CHECK: [[QUEUE:%.+]], [[POPPED:%.+]] = sim.queue.pop_back from
-  // CHECK: llhd.drv %q, [[QUEUE]] after
-  %v = moore.pop_back from %q : <queue<i16, 0>>
-  // CHECK: return [[POPPED]] : i16
-  return %v : !moore.i16
-}
-
-// CHECK-LABEL: func.func @QueuePopFront
-func.func @QueuePopFront() -> !moore.i16 {
-  %q = moore.variable : <queue<i16, 0>>
-  // CHECK: [[QUEUE:%.+]], [[POPPED:%.+]] = sim.queue.pop_front from
-  // CHECK: llhd.drv %q, [[QUEUE]] after
-  %v = moore.pop_front from %q : <queue<i16, 0>>
-  // CHECK: return [[POPPED]] : i16
-  return %v : !moore.i16
-}
-
-// CHECK-LABEL: llhd.coroutine private @myTask
-// CHECK-SAME: (%arg0: !llhd.ref<i1>)
-moore.coroutine private @myTask(%arg0: !moore.ref<l1>) {
-  // CHECK: llhd.return
-  moore.return
-}
-
-// CHECK-LABEL: hw.module @CoroutineLowering
-moore.module @CoroutineLowering() {
-  %clk = moore.variable : <l1>
-  moore.procedure initial {
-    // CHECK: llhd.call_coroutine @myTask(%clk) : (!llhd.ref<i1>) -> ()
-    moore.call_coroutine @myTask(%clk) : (!moore.ref<l1>) -> ()
-    moore.return
-  }
-  moore.output
-}
-
-// CHECK-LABEL: func.func @FOpenNoMode
-func.func @FOpenNoMode(%arg0: !moore.string) {
-  // CHECK: [[FD:%.+]] = sim.sv.fopen %arg0
-  %fd = moore.builtin.fopen %arg0
-  return
-}
-
-// CHECK-LABEL: func.func @FOpenWithMode
-func.func @FOpenWithMode(%arg0: !moore.string) {
-  // CHECK: [[FD:%.+]] = sim.sv.fopen %arg0 mode = w
-  %fd = moore.builtin.fopen %arg0 mode = w
-  return
-}
-
-// CHECK-LABEL: func.func @FClose
-func.func @FClose(%arg0: !moore.i32) {
-  // CHECK: sim.sv.fclose %arg0
-  moore.builtin.fclose %arg0
-  return
-}
-
-// CHECK-LABEL: func.func @FDisplay
-func.func @FDisplay(%arg0: !moore.i32) {
-  // CHECK: [[MSG:%.+]] = sim.fmt.literal "hello"
-  %msg = moore.fmt.literal "hello"
-  // CHECK: [[STREAM:%.+]] = sim.sv.channel_to_output_stream %arg0
-  // CHECK: sim.proc.print [[MSG]] to [[STREAM]]
-  moore.builtin.fdisplay %arg0, %msg
-  return
-}
-
-// CHECK-LABEL: func.func @PlusArgs
-func.func @PlusArgs() {
-  // CHECK: sim.plusargs.test "FOO"
-  %0 = moore.builtin.plusargs_test "FOO" : i1
-  // CHECK: %{{.+}}, %{{.+}} = sim.plusargs.value "BAR=%d" : i32
-  %found, %result = moore.builtin.plusargs_value "BAR=%d" : i1, i32
-  return
-}
-
-// CHECK-LABEL: hw.module @MooreTypedArithSelect
-moore.module @MooreTypedArithSelect(in %s: i1, in %a: !moore.i8, in %b: !moore.i8, out o: !moore.i8) {
-  // CHECK-NOT: !moore.i8
-  %sel = arith.select %s, %a, %b : !moore.i8
-  moore.output %sel : !moore.i8
-}
-
-// CHECK-LABEL: func.func @FFlushNoArg
-func.func @FFlushNoArg() {
-  // CHECK: sim.sv.fflush_all
-  moore.builtin.fflush
-  return
-}
-
-// CHECK-LABEL: func.func @FFlushWithArg
-func.func @FFlushWithArg(%arg0: !moore.i32) {
-  // CHECK: [[STREAM:%.+]] = sim.sv.channel_to_output_stream %arg0
-  // CHECK-NEXT: sim.flush [[STREAM]]
-  moore.builtin.fflush %arg0
-  return
 }

@@ -11,13 +11,10 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/Sim/SimOps.h"
-#include "circt/Dialect/HW/HWOps.h"
-#include "circt/Dialect/HW/HWTypes.h"
+#include "circt/Dialect/HW/ModuleImplementation.h"
 #include "circt/Dialect/SV/SVOps.h"
 #include "circt/Support/CustomDirectiveImpl.h"
-#include "circt/Support/ProceduralRegionTrait.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
-#include "mlir/Dialect/LLVMIR/LLVMTypes.h"
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/Interfaces/FunctionImplementation.h"
 #include "llvm/ADT/MapVector.h"
@@ -25,219 +22,6 @@
 using namespace mlir;
 using namespace circt;
 using namespace sim;
-
-//===----------------------------------------------------------------------===//
-// DPIFuncOp
-//===----------------------------------------------------------------------===//
-
-void DPIFuncOp::build(OpBuilder &odsBuilder, OperationState &odsState,
-                      StringAttr symName, ArrayRef<StringAttr> argNames,
-                      ArrayRef<Type> argTypes,
-                      ArrayRef<DPIDirection> argDirections, ArrayAttr argLocs,
-                      StringAttr verilogName) {
-  // Build DPIFunctionType from argument info.
-  SmallVector<DPIArgument> args;
-  args.reserve(argNames.size());
-  for (auto [name, type, dir] : llvm::zip(argNames, argTypes, argDirections))
-    args.push_back({name, type, dir});
-  auto dpiType = DPIFunctionType::get(odsBuilder.getContext(), args);
-  build(odsBuilder, odsState, symName, dpiType, argLocs, verilogName);
-}
-
-void DPIFuncOp::build(OpBuilder &odsBuilder, OperationState &odsState,
-                      StringAttr symName, DPIFunctionType dpiFunctionType,
-                      ArrayAttr argLocs, StringAttr verilogName) {
-  odsState.addAttribute(getSymNameAttrName(odsState.name), symName);
-  odsState.addAttribute(getDpiFunctionTypeAttrName(odsState.name),
-                        TypeAttr::get(dpiFunctionType));
-  if (argLocs)
-    odsState.addAttribute(getArgumentLocsAttrName(odsState.name), argLocs);
-  if (verilogName)
-    odsState.addAttribute(getVerilogNameAttrName(odsState.name), verilogName);
-  odsState.addRegion();
-}
-
-::mlir::Type DPIFuncOp::getFunctionType() {
-  return getDpiFunctionType().getFunctionType();
-}
-
-void DPIFuncOp::setFunctionTypeAttr(::mlir::TypeAttr type) {
-  // function_type is always derived from dpi_function_type.
-  auto dpiType = llvm::dyn_cast<DPIFunctionType>(type.getValue());
-  assert(dpiType && "DPIFuncOp function type can only be set via "
-                    "DPIFunctionType, not a plain FunctionType");
-  setDpiFunctionType(dpiType);
-}
-
-::mlir::Type DPIFuncOp::cloneTypeWith(::mlir::TypeRange inputs,
-                                      ::mlir::TypeRange results) {
-  return FunctionType::get(getContext(), inputs, results);
-}
-
-ParseResult DPIFuncOp::parse(OpAsmParser &parser, OperationState &result) {
-  auto builder = parser.getBuilder();
-  auto ctx = builder.getContext();
-
-  (void)mlir::impl::parseOptionalVisibilityKeyword(parser, result.attributes);
-
-  StringAttr nameAttr;
-  if (parser.parseSymbolName(nameAttr, SymbolTable::getSymbolAttrName(),
-                             result.attributes))
-    return failure();
-
-  SmallVector<DPIArgument> args;
-  SmallVector<Attribute> argLocs;
-  auto unknownLoc = builder.getUnknownLoc();
-  bool hasLocs = false;
-
-  auto parseOneArg = [&]() -> ParseResult {
-    StringRef dirKeyword;
-    auto keyLoc = parser.getCurrentLocation();
-    if (parser.parseKeyword(&dirKeyword))
-      return failure();
-    auto dir = parseDPIDirectionKeyword(dirKeyword);
-    if (!dir)
-      return parser.emitError(keyLoc,
-                              "expected DPI argument direction keyword");
-
-    // For input/inout/ref args, parse SSA name; for output/return, bare name.
-    bool hasSSA = isCallOperandDir(*dir);
-    std::string argName;
-    if (hasSSA) {
-      OpAsmParser::UnresolvedOperand ssaName;
-      if (parser.parseOperand(ssaName, /*allowResultNumber=*/false))
-        return failure();
-      argName = ssaName.name.substr(1).str();
-    } else {
-      if (parser.parseKeywordOrString(&argName))
-        return failure();
-    }
-
-    Type argType;
-    if (parser.parseColonType(argType))
-      return failure();
-    args.push_back({StringAttr::get(ctx, argName), argType, *dir});
-
-    std::optional<Location> maybeLoc;
-    if (failed(parser.parseOptionalLocationSpecifier(maybeLoc)))
-      return failure();
-    if (maybeLoc) {
-      argLocs.push_back(*maybeLoc);
-      hasLocs = true;
-    } else {
-      argLocs.push_back(unknownLoc);
-    }
-    return success();
-  };
-
-  if (parser.parseCommaSeparatedList(OpAsmParser::Delimiter::Paren, parseOneArg,
-                                     " in DPI argument list"))
-    return failure();
-
-  auto dpiType = DPIFunctionType::get(ctx, args);
-
-  result.addAttribute(DPIFuncOp::getDpiFunctionTypeAttrName(result.name),
-                      TypeAttr::get(dpiType));
-  if (hasLocs)
-    result.addAttribute(DPIFuncOp::getArgumentLocsAttrName(result.name),
-                        builder.getArrayAttr(argLocs));
-  result.addRegion();
-
-  if (failed(parser.parseOptionalAttrDictWithKeyword(result.attributes)))
-    return failure();
-  return success();
-}
-
-void DPIFuncOp::print(OpAsmPrinter &p) {
-  p << ' ';
-
-  StringRef visibilityAttrName = SymbolTable::getVisibilityAttrName();
-  if (auto visibility = (*this)->getAttrOfType<StringAttr>(visibilityAttrName))
-    p << visibility.getValue() << ' ';
-  p.printSymbolName(getSymName());
-
-  auto dpiType = getDpiFunctionType();
-  auto dpiArgs = dpiType.getArguments();
-
-  p << '(';
-  llvm::interleaveComma(llvm::enumerate(dpiArgs), p, [&](auto it) {
-    auto &arg = it.value();
-    auto i = it.index();
-
-    p << stringifyDPIDirectionKeyword(arg.dir) << ' ';
-
-    if (isCallOperandDir(arg.dir))
-      p << '%';
-    p.printKeywordOrString(arg.name.getValue());
-    p << " : ";
-    p.printType(arg.type);
-
-    if (getArgumentLocs()) {
-      auto loc = cast<Location>(getArgumentLocsAttr()[i]);
-      if (loc != UnknownLoc::get(getContext()))
-        p.printOptionalLocationSpecifier(loc);
-    }
-  });
-  p << ')';
-
-  mlir::function_interface_impl::printFunctionAttributes(
-      p, *this,
-      {visibilityAttrName, getDpiFunctionTypeAttrName(),
-       getArgumentLocsAttrName()});
-}
-
-LogicalResult DPIFuncOp::verify() {
-  auto dpiType = getDpiFunctionType();
-
-  // Structural constraints shared with all DPIFunctionType users.
-  if (failed(dpiType.verify([&]() { return emitOpError(); })))
-    return failure();
-
-  // Sim-specific constraints.
-  for (auto &arg : dpiType.getArguments()) {
-    if (arg.dir == DPIDirection::Ref) {
-      if (!isa<LLVM::LLVMPointerType>(arg.type))
-        return emitOpError("'ref' arguments must use !llvm.ptr type");
-    }
-  }
-
-  return success();
-}
-
-LogicalResult
-sim::DPICallOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
-  auto referencedOp =
-      symbolTable.lookupNearestSymbolFrom(*this, getCalleeAttr());
-  if (!referencedOp)
-    return emitError("cannot find function declaration '")
-           << getCallee() << "'";
-  if (auto dpiFunc = dyn_cast<sim::DPIFuncOp>(referencedOp)) {
-    auto expectedFuncType = cast<FunctionType>(dpiFunc.getFunctionType());
-    auto expectedInputs = expectedFuncType.getInputs();
-    auto expectedResults = expectedFuncType.getResults();
-    if (getInputs().size() != expectedInputs.size())
-      return emitError("expects ")
-             << expectedInputs.size() << " DPI operands, but got "
-             << getInputs().size();
-    if (getResults().size() != expectedResults.size())
-      return emitError("expects ")
-             << expectedResults.size() << " DPI results, but got "
-             << getResults().size();
-    for (auto [operand, expectedType] : llvm::zip(getInputs(), expectedInputs))
-      if (operand.getType() != expectedType)
-        return emitError("operand type mismatch: expected ")
-               << expectedType << ", but got " << operand.getType();
-    for (auto [result, expectedType] : llvm::zip(getResults(), expectedResults))
-      if (result.getType() != expectedType)
-        return emitError("result type mismatch: expected ")
-               << expectedType << ", but got " << result.getType();
-    return success();
-  }
-  if (isa<func::FuncOp>(referencedOp))
-    return success();
-  return emitError("callee must be 'sim.func.dpi' or 'func.func' but got '")
-         << referencedOp->getName() << "'";
-}
 
 static StringAttr formatIntegersByRadix(MLIRContext *ctx, unsigned radix,
                                         const Attribute &value,
@@ -319,31 +103,95 @@ static StringAttr formatFloatsBySpecifier(MLIRContext *ctx, Attribute value,
   return {};
 }
 
-// (DPIFuncOp parse/print/verify are now defined above, near the top of the
-// file)
+ParseResult DPIFuncOp::parse(OpAsmParser &parser, OperationState &result) {
+  auto builder = parser.getBuilder();
+  // Parse visibility.
+  (void)mlir::impl::parseOptionalVisibilityKeyword(parser, result.attributes);
+
+  // Parse the name as a symbol.
+  StringAttr nameAttr;
+  if (parser.parseSymbolName(nameAttr, SymbolTable::getSymbolAttrName(),
+                             result.attributes))
+    return failure();
+
+  SmallVector<hw::module_like_impl::PortParse> ports;
+  TypeAttr modType;
+  if (failed(
+          hw::module_like_impl::parseModuleSignature(parser, ports, modType)))
+    return failure();
+
+  result.addAttribute(DPIFuncOp::getModuleTypeAttrName(result.name), modType);
+
+  // Convert the specified array of dictionary attrs (which may have null
+  // entries) to an ArrayAttr of dictionaries.
+  auto unknownLoc = builder.getUnknownLoc();
+  SmallVector<Attribute> attrs, locs;
+  auto nonEmptyLocsFn = [unknownLoc](Attribute attr) {
+    return attr && cast<Location>(attr) != unknownLoc;
+  };
+
+  for (auto &port : ports) {
+    attrs.push_back(port.attrs ? port.attrs : builder.getDictionaryAttr({}));
+    locs.push_back(port.sourceLoc ? Location(*port.sourceLoc) : unknownLoc);
+  }
+
+  result.addAttribute(DPIFuncOp::getPerArgumentAttrsAttrName(result.name),
+                      builder.getArrayAttr(attrs));
+  result.addRegion();
+
+  if (llvm::any_of(locs, nonEmptyLocsFn))
+    result.addAttribute(DPIFuncOp::getArgumentLocsAttrName(result.name),
+                        builder.getArrayAttr(locs));
+
+  // Parse the attribute dict.
+  if (failed(parser.parseOptionalAttrDictWithKeyword(result.attributes)))
+    return failure();
+
+  return success();
+}
+
+LogicalResult
+sim::DPICallOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  auto referencedOp =
+      symbolTable.lookupNearestSymbolFrom(*this, getCalleeAttr());
+  if (!referencedOp)
+    return emitError("cannot find function declaration '")
+           << getCallee() << "'";
+  if (isa<func::FuncOp, sim::DPIFuncOp>(referencedOp))
+    return success();
+  return emitError("callee must be 'sim.dpi.func' or 'func.func' but got '")
+         << referencedOp->getName() << "'";
+}
+
+void DPIFuncOp::print(OpAsmPrinter &p) {
+  DPIFuncOp op = *this;
+  // Print the operation and the function name.
+  auto funcName =
+      op->getAttrOfType<StringAttr>(SymbolTable::getSymbolAttrName())
+          .getValue();
+  p << ' ';
+
+  StringRef visibilityAttrName = SymbolTable::getVisibilityAttrName();
+  if (auto visibility = op->getAttrOfType<StringAttr>(visibilityAttrName))
+    p << visibility.getValue() << ' ';
+  p.printSymbolName(funcName);
+  hw::module_like_impl::printModuleSignatureNew(
+      p, op->getRegion(0), op.getModuleType(),
+      getPerArgumentAttrsAttr()
+          ? ArrayRef<Attribute>(getPerArgumentAttrsAttr().getValue())
+          : ArrayRef<Attribute>{},
+      getArgumentLocs() ? SmallVector<Location>(
+                              getArgumentLocs().value().getAsRange<Location>())
+                        : ArrayRef<Location>{});
+
+  mlir::function_interface_impl::printFunctionAttributes(
+      p, op,
+      {visibilityAttrName, getModuleTypeAttrName(),
+       getPerArgumentAttrsAttrName(), getArgumentLocsAttrName()});
+}
 
 OpFoldResult FormatLiteralOp::fold(FoldAdaptor adaptor) {
   return getLiteralAttr();
-}
-
-// --- FormatStringOp ---
-
-StringAttr FormatStringOp::formatConstant(Attribute constVal) {
-  auto strAttr = llvm::dyn_cast<StringAttr>(constVal);
-  if (!strAttr)
-    return {};
-
-  SmallString<128> strBuf(strAttr.getValue());
-  if (getSpecifierWidth().has_value()) {
-    auto padChar = static_cast<char>(getPaddingChar());
-    unsigned padWidth = getSpecifierWidth().value();
-    padWidth = padWidth > strBuf.size() ? padWidth - strBuf.size() : 0;
-    if (getIsLeftAligned())
-      strBuf.append(padWidth, padChar);
-    else
-      strBuf.insert(strBuf.begin(), padWidth, padChar);
-  }
-  return StringAttr::get(getContext(), strBuf);
 }
 
 // --- FormatDecOp ---
@@ -548,8 +396,6 @@ LogicalResult FormatStringConcatOp::verify() {
 
 LogicalResult FormatStringConcatOp::canonicalize(FormatStringConcatOp op,
                                                  PatternRewriter &rewriter) {
-  // Any helper literals created during canonicalization must dominate `op`.
-  rewriter.setInsertionPoint(op);
 
   auto fmtStrType = FormatStringType::get(op.getContext());
 
@@ -646,6 +492,29 @@ LogicalResult PrintFormattedOp::canonicalize(PrintFormattedOp op,
   return failure();
 }
 
+LogicalResult PrintFormattedProcOp::verify() {
+  // Check if we know for sure that the parent is not procedural.
+  auto *parentOp = getOperation()->getParentOp();
+
+  if (!parentOp)
+    return emitOpError("must be within a procedural region.");
+
+  if (isa_and_nonnull<hw::HWDialect>(parentOp->getDialect())) {
+    if (!isa<hw::TriggeredOp>(parentOp))
+      return emitOpError("must be within a procedural region.");
+    return success();
+  }
+
+  if (isa_and_nonnull<sv::SVDialect>(parentOp->getDialect())) {
+    if (!parentOp->hasTrait<sv::ProceduralRegion>())
+      return emitOpError("must be within a procedural region.");
+    return success();
+  }
+
+  // Don't fail for dialects that are not explicitly handled.
+  return success();
+}
+
 LogicalResult PrintFormattedProcOp::canonicalize(PrintFormattedProcOp op,
                                                  PatternRewriter &rewriter) {
   // Remove empty prints.
@@ -669,10 +538,10 @@ OpFoldResult StringConcatOp::fold(FoldAdaptor adaptor) {
 
   SmallString<128> result;
   for (auto &operand : operands) {
-    auto strAttr = cast_if_present<StringAttr>(operand);
-    if (!strAttr)
+    if (auto strAttr = cast<StringAttr>(operand))
+      result += strAttr.getValue();
+    else
       return {};
-    result += strAttr.getValue();
   }
 
   return StringAttr::get(getContext(), result);
@@ -775,34 +644,6 @@ LogicalResult QueueConcatOp::verify() {
   }
 
   return success();
-}
-
-//===----------------------------------------------------------------------===//
-// TriggeredOp
-//===----------------------------------------------------------------------===//
-
-void TriggeredOp::build(OpBuilder &builder, OperationState &odsState,
-                        Value clock, Value condition) {
-  odsState.addOperands(clock);
-  if (condition)
-    odsState.addOperands(condition);
-
-  auto *region = odsState.addRegion();
-  region->push_back(new Block());
-}
-
-void TriggeredOp::build(OpBuilder &builder, OperationState &odsState,
-                        Value clock, Value condition,
-                        llvm::function_ref<void()> bodyCtor) {
-  OpBuilder::InsertionGuard guard(builder);
-
-  odsState.addOperands(clock);
-  if (condition)
-    odsState.addOperands(condition);
-
-  builder.createBlock(odsState.addRegion());
-  if (bodyCtor)
-    bodyCtor();
 }
 
 //===----------------------------------------------------------------------===//

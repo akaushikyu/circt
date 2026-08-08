@@ -27,7 +27,6 @@
 #include "mlir/Interfaces/FunctionImplementation.h"
 #include "mlir/Support/LLVM.h"
 #include "llvm/ADT/DenseMap.h"
-#include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/PriorityQueue.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallSet.h"
@@ -317,10 +316,9 @@ static LogicalResult collapseControl(OpTy controlOp,
 
   if (isa<OpTy>(controlOp->getParentOp())) {
     Block *controlBody = controlOp.getBodyBlock();
-    // FIXME: Use rewriter to move controlOp. This currently causes infinite
-    // loop due to ParOp -> IfOp -> ParOp canonicalization loop.
     for (auto &op : make_early_inc_range(*controlBody))
       op.moveBefore(controlOp);
+
     rewriter.eraseOp(controlOp);
     return success();
   }
@@ -2238,7 +2236,7 @@ SmallVector<DictionaryAttr> SeqMemoryOp::portAttributes() {
   NamedAttrList done, clk, reset, contentEn;
   done.append(donePort, isSet);
   clk.append(clkPort, isSet);
-  reset.append(resetPort, isSet);
+  clk.append(resetPort, isSet);
   contentEn.append(goPort, isTwo);
   portAttributes.append({clk.getDictionary(context),       // Clk
                          reset.getDictionary(context),     // Reset
@@ -2373,15 +2371,14 @@ static std::optional<EnableOp> getLastEnableOp(OpTy parent) {
 /// Returns a mapping of {enabled Group name, EnableOp} for all EnableOps within
 /// the immediate ParOp's body.
 template <typename OpTy>
-static llvm::MapVector<StringAttr, EnableOp>
-getAllEnableOpsInImmediateBody(OpTy parent) {
+static llvm::StringMap<EnableOp> getAllEnableOpsInImmediateBody(OpTy parent) {
   static_assert(IsAny<OpTy, ParOp, StaticParOp>(),
                 "Should be a StaticParOp or ParOp.");
 
-  llvm::MapVector<StringAttr, EnableOp> enables;
+  llvm::StringMap<EnableOp> enables;
   Block *body = parent.getBodyBlock();
   for (EnableOp op : body->getOps<EnableOp>())
-    enables.insert(std::pair(op.getGroupNameAttr().getAttr(), op));
+    enables.insert(std::pair(op.getGroupName(), op));
 
   return enables;
 }
@@ -2443,7 +2440,8 @@ static LogicalResult commonTailPatternWithSeq(IfOpTy ifOp,
   rewriter.setInsertionPointAfter(ifOp);
   SeqOpTy seqOp = SeqOpTy::create(rewriter, ifOp.getLoc());
   Block *body = seqOp.getBodyBlock();
-  rewriter.moveOpBefore(ifOp, body, body->end());
+  ifOp->remove();
+  body->push_back(ifOp);
   rewriter.setInsertionPointToEnd(body);
   EnableOp::create(rewriter, seqOp.getLoc(), lastThenEnableOp->getGroupName());
 
@@ -2478,19 +2476,20 @@ static LogicalResult commonTailPatternWithPar(OpTy controlOp,
   auto thenControl = cast<ParOpTy>(controlOp.getThenBody()->front()),
        elseControl = cast<ParOpTy>(controlOp.getElseBody()->front());
 
-  auto a = getAllEnableOpsInImmediateBody(thenControl);
-  auto b = getAllEnableOpsInImmediateBody(elseControl);
-  SmallVector<StringRef> groupNames;
+  llvm::StringMap<EnableOp> a = getAllEnableOpsInImmediateBody(thenControl),
+                            b = getAllEnableOpsInImmediateBody(elseControl);
   // Compute the intersection between `A` and `B`.
-  for (auto [groupName, aEnable] : a) {
+  SmallVector<StringRef> groupNames;
+  for (auto aIndex = a.begin(); aIndex != a.end(); ++aIndex) {
+    StringRef groupName = aIndex->getKey();
     auto bIndex = b.find(groupName);
     if (bIndex == b.end())
       continue;
     // This is also an element in B.
-    groupNames.push_back(groupName.getValue());
+    groupNames.push_back(groupName);
     // Since these are being pulled out, erase them.
-    rewriter.eraseOp(aEnable);
-    rewriter.eraseOp(bIndex->second);
+    rewriter.eraseOp(aIndex->getValue());
+    rewriter.eraseOp(bIndex->getValue());
   }
 
   // Place the IfOp and EnableOp(s) inside a parallel region, in case this
@@ -2650,6 +2649,10 @@ static LogicalResult zeroRepeat(OpTy op, PatternRewriter &rewriter) {
   static_assert(IsAny<OpTy, RepeatOp, StaticRepeatOp>(),
                 "Should be a RepeatOp or StaticPRepeatOp");
   if (op.getCount() == 0) {
+    Block *controlBody = op.getBodyBlock();
+    for (auto &op : make_early_inc_range(*controlBody))
+      op.erase();
+
     rewriter.eraseOp(op);
     return success();
   }

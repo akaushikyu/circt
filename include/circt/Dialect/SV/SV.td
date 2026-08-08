@@ -13,7 +13,6 @@
 #ifndef CIRCT_DIALECT_SV_SV
 #define CIRCT_DIALECT_SV_SV
 
-include "circt/Support/ProceduralRegionTrait.td"
 include "mlir/IR/AttrTypeBase.td"
 include "mlir/IR/OpBase.td"
 include "mlir/IR/OpAsmInterface.td"
@@ -25,6 +24,18 @@ include "circt/Dialect/SV/SVDialect.td"
 // Base class for the operation in this dialect.
 class SVOp<string mnemonic, list<Trait> traits = []> :
     Op<SVDialect, mnemonic, traits>;
+
+def ProceduralRegion : NativeOpTrait<"ProceduralRegion"> {
+  let cppNamespace = "::circt::sv";
+}
+
+def ProceduralOp : NativeOpTrait<"ProceduralOp"> {
+  let cppNamespace = "::circt::sv";
+}
+
+def NonProceduralOp : NativeOpTrait<"NonProceduralOp"> {
+  let cppNamespace = "::circt::sv";
+}
 
 /// Mark an operation as being a vendor extension.
 def VendorExtension : NativeOpTrait<"VendorExtension"> {

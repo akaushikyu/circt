@@ -1,18 +1,15 @@
 add_circt_library(CIRCTBMCTransforms
   ExternalizeRegisters.cpp
   LowerToBMC.cpp
-  MaterializeDebugVariables.cpp
 
   DEPENDS
   CIRCTBMCTransformsIncGen
 
   LINK_LIBS PUBLIC
-  CIRCTDebug
   CIRCTHW
   CIRCTSeq
   CIRCTComb
   CIRCTVerif
-  CIRCTDebug
 
   MLIRFuncDialect
   MLIRIR
@@ -21,5 +18,3 @@ add_circt_library(CIRCTBMCTransforms
   MLIRSCFDialect
   MLIRTransforms
 )
-
-add_subdirectory(Runtime)

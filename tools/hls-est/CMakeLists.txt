@@ -2,6 +2,7 @@ add_circt_tool(hls-est main.cpp)
 
 target_link_libraries(hls-est PRIVATE
         # Upstream dialects
+        MLIRMathDialect
         MLIRAffineDialect
         MLIRArithDialect
         MLIRMemRefDialect

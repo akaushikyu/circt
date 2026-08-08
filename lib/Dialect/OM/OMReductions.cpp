@@ -147,7 +147,7 @@ struct OMClassFieldPruner : public OpReduction<ClassOp> {
 
     moduleOp.walk([&](ObjectOp objectOp) {
       // Check if this object is an instance of our class
-      if (objectOp.getClassNameAttr().getAttr() != classOp.getSymNameAttr())
+      if (objectOp.getClassNameAttr() != classOp.getSymNameAttr())
         return;
 
       // Check all object field uses of this object
@@ -156,8 +156,12 @@ struct OMClassFieldPruner : public OpReduction<ClassOp> {
         if (!fieldOp)
           continue;
 
+        auto fieldPath = fieldOp.getFieldPath();
+        if (fieldPath.empty())
+          continue;
+
         // Mark the accessed field as used.
-        usedFields.insert(fieldOp.getFieldAttr());
+        usedFields.insert(cast<FlatSymbolRefAttr>(fieldPath[0]).getAttr());
       }
     });
 
@@ -234,7 +238,7 @@ struct OMClassParameterPruner : public OpReduction<ClassOp> {
     SmallVector<ObjectOp> objectsToUpdate;
     auto moduleOp = classOp->getParentOfType<mlir::ModuleOp>();
     moduleOp.walk([&](ObjectOp objectOp) {
-      if (objectOp.getClassNameAttr().getAttr() == classOp.getSymNameAttr())
+      if (objectOp.getClassNameAttr() == classOp.getSymNameAttr())
         objectsToUpdate.push_back(objectOp);
     });
 
@@ -290,7 +294,7 @@ struct OMUnusedClassRemover : public OpReduction<ClassOp> {
 
     // Check if this class is instantiated via om.object anywhere
     auto result = moduleOp.walk([&](ObjectOp objectOp) {
-      if (objectOp.getClassNameAttr().getAttr() == classOp.getSymNameAttr())
+      if (objectOp.getClassNameAttr() == classOp.getSymNameAttr())
         return WalkResult::interrupt();
       return WalkResult::advance();
     });
@@ -346,36 +350,6 @@ struct OMAnyCastOfUnknownSimplifier : public OpReduction<om::AnyCastOp> {
   }
 };
 
-/// Generic Operation-based reduction that replaces any OM operation with
-/// om.unknown of the same result type. This operates at the lowest level by
-/// working directly on Operation* without needing to know concrete op types.
-struct OMOpToUnknown : public Reduction {
-  uint64_t match(Operation *op) override {
-    // Only handle operations from the OM dialect
-    if (!isa<OMDialect>(op->getDialect()))
-      return 0;
-
-    // Must have exactly one result (what we'll replace with unknown)
-    if (op->getNumResults() != 1)
-      return 0;
-
-    // Constant benefit: just eliminate this single operation
-    return 1;
-  }
-
-  LogicalResult rewrite(Operation *op) override {
-    OpBuilder builder(op);
-    Type resultType = op->getResult(0).getType();
-    auto unknownOp =
-        om::UnknownValueOp::create(builder, op->getLoc(), resultType);
-    op->getResult(0).replaceAllUsesWith(unknownOp.getResult());
-    op->erase();
-    return success();
-  }
-
-  std::string getName() const override { return "om-op-to-unknown"; };
-};
-
 } // namespace
 
 //===----------------------------------------------------------------------===//
@@ -392,7 +366,6 @@ void om::OMReducePatternDialectInterface::populateReducePatterns(
 
   // Medium priority reductions
   patterns.add<OMUnusedClassRemover, 40>();
-  patterns.add<OMOpToUnknown, 35>();
   patterns.add<OMAnyCastOfUnknownSimplifier, 35>();
 }
 

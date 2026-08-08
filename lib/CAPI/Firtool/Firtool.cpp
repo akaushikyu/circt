@@ -196,20 +196,24 @@ void circtFirtoolOptionsSetIgnoreReadEnableMem(
 
 void circtFirtoolOptionsSetDisableRandom(CirctFirtoolFirtoolOptions options,
                                          CirctFirtoolRandomKind value) {
-  auto *opts = unwrap(options);
+  firtool::FirtoolOptions::RandomKind converted;
+
   switch (value) {
   case CIRCT_FIRTOOL_RANDOM_KIND_NONE:
+    converted = firtool::FirtoolOptions::RandomKind::None;
     break;
   case CIRCT_FIRTOOL_RANDOM_KIND_MEM:
-    opts->mergeDisableRandom(firtool::FirtoolOptions::RandomKind::Mem);
+    converted = firtool::FirtoolOptions::RandomKind::Mem;
     break;
   case CIRCT_FIRTOOL_RANDOM_KIND_REG:
-    opts->mergeDisableRandom(firtool::FirtoolOptions::RandomKind::Reg);
+    converted = firtool::FirtoolOptions::RandomKind::Reg;
     break;
   case CIRCT_FIRTOOL_RANDOM_KIND_ALL:
-    opts->mergeDisableRandom(firtool::FirtoolOptions::RandomKind::All);
+    converted = firtool::FirtoolOptions::RandomKind::All;
     break;
   }
+
+  unwrap(options)->setDisableRandom(converted);
 }
 
 void circtFirtoolOptionsSetOutputAnnotationFilename(
@@ -220,11 +224,6 @@ void circtFirtoolOptionsSetOutputAnnotationFilename(
 void circtFirtoolOptionsSetEnableAnnotationWarning(
     CirctFirtoolFirtoolOptions options, bool value) {
   unwrap(options)->setEnableAnnotationWarning(value);
-}
-
-void circtFirtoolOptionsSetLowerToCore(CirctFirtoolFirtoolOptions options,
-                                       bool value) {
-  unwrap(options)->setLowerToCore(value);
 }
 
 void circtFirtoolOptionsSetAddMuxPragmas(CirctFirtoolFirtoolOptions options,

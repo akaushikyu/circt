@@ -320,7 +320,7 @@ LogicalResult SCModuleOp::verifyRegions() {
   return verifyUniqueNamesInRegion(getOperation(), getPortNames(), attachNote);
 }
 
-CtorOp SCModuleOp::getOrCreateCtor(OpBuilder &builder) {
+CtorOp SCModuleOp::getOrCreateCtor() {
   CtorOp ctor;
   getBody().walk([&](Operation *op) {
     if ((ctor = dyn_cast<CtorOp>(op)))
@@ -332,8 +332,7 @@ CtorOp SCModuleOp::getOrCreateCtor(OpBuilder &builder) {
   if (ctor)
     return ctor;
 
-  OpBuilder::InsertionGuard guard(builder);
-  builder.setInsertionPoint(getBodyBlock(), getBodyBlock()->begin());
+  auto builder = OpBuilder(getBody());
   return CtorOp::create(builder, getLoc());
 }
 

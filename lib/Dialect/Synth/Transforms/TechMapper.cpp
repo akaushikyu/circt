@@ -12,23 +12,20 @@
 //
 // The pass uses a cut-based algorithm with priority cuts and NPN canonical
 // forms for efficient pattern matching. It processes HWModuleOp instances with
-// "synth.mapping_cost" attributes as technology library patterns and maps
+// "hw.techlib.info" attributes as technology library patterns and maps
 // non-library modules to optimal gate implementations based on area and timing
 // optimization strategies.
 //
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/HW/HWOps.h"
-#include "circt/Dialect/Synth/SynthAttributes.h"
 #include "circt/Dialect/Synth/Transforms/CutRewriter.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/Threading.h"
 #include "mlir/Support/WalkResult.h"
 #include "llvm/ADT/APInt.h"
-#include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/Support/Debug.h"
-#include <atomic>
 
 namespace circt {
 namespace synth {
@@ -114,8 +111,7 @@ struct TechLibraryPattern : public CutRewritePattern {
   /// Match the cut set against this library primitive
   std::optional<MatchResult> match(CutEnumerator &enumerator,
                                    const Cut &cut) const override {
-    if (!cut.getNPNClass(enumerator.getOptions().npnTable)
-             .equivalentOtherThanPermutation(npnClass))
+    if (!cut.getNPNClass().equivalentOtherThanPermutation(npnClass))
       return std::nullopt;
 
     return MatchResult(area, delay);
@@ -135,8 +131,7 @@ struct TechLibraryPattern : public CutRewritePattern {
     const auto &network = enumerator.getLogicNetwork();
     // Create a new instance of the module
     SmallVector<unsigned> permutedInputIndices;
-    cut.getPermutatedInputIndices(enumerator.getOptions().npnTable, npnClass,
-                                  permutedInputIndices);
+    cut.getPermutatedInputIndices(npnClass, permutedInputIndices);
 
     SmallVector<Value> inputs;
     inputs.reserve(permutedInputIndices.size());
@@ -178,106 +173,54 @@ namespace {
 struct TechMapperPass : public impl::TechMapperBase<TechMapperPass> {
   using TechMapperBase<TechMapperPass>::TechMapperBase;
 
-  LogicalResult initialize(MLIRContext *context) override {
-    (void)context;
-    npnTable = std::make_shared<const NPNTable>();
-    return success();
-  }
-
   void runOnOperation() override {
     auto module = getOperation();
 
     SmallVector<std::unique_ptr<CutRewritePattern>> libraryPatterns;
 
     unsigned maxInputSize = 0;
-    // Consider modules with the "synth.mapping_cost" attribute as library
+    // Consider modules with the "hw.techlib.info" attribute as library
     // modules.
+    // TODO: This attribute should be replaced with a more structured
+    // representation of technology library information. Specifically, we should
+    // have a dedicated operation for technology library.
     SmallVector<hw::HWModuleOp> nonLibraryModules;
     for (auto hwModule : module.getOps<hw::HWModuleOp>()) {
-
-      auto mappingCost =
-          hwModule->getAttrOfType<MappingCostAttr>("synth.mapping_cost");
-      if (!mappingCost) {
+      auto techInfo =
+          hwModule->getAttrOfType<DictionaryAttr>("hw.techlib.info");
+      if (!techInfo) {
+        // If the module does not have the techlib info, it is not a library
+        // TODO: Run mapping only when the module is under the specific
+        // hierarchy.
         nonLibraryModules.push_back(hwModule);
         continue;
       }
 
-      double area = mappingCost.getArea().getValue().convertToDouble();
-
-      StringAttr outputName;
-      hw::ModulePortInfo ports(hwModule.getPortList());
-      for (const auto &port : ports.getOutputs()) {
-        if (outputName) {
-          hwModule.emitError(
-              "Modules with multiple outputs are not supported yet");
-          signalPassFailure();
-          return;
-        }
-        outputName = port.name;
-      }
-      if (!outputName) {
-        hwModule.emitError("expected library module to have an output");
+      // Get area and delay attributes
+      auto areaAttr = techInfo.getAs<FloatAttr>("area");
+      auto delayAttr = techInfo.getAs<ArrayAttr>("delay");
+      if (!areaAttr || !delayAttr) {
+        mlir::emitError(hwModule.getLoc())
+            << "Library module " << hwModule.getModuleName()
+            << " must have 'area'(float) and 'delay' (2d array to represent "
+               "input-output pair delay) attributes";
         signalPassFailure();
         return;
       }
 
-      llvm::DenseMap<StringAttr, DelayType> delayByInput;
-      for (auto attr : mappingCost.getArcs()) {
-        auto arc = cast<LinearTimingArcAttr>(attr);
-        if (!arc) {
-          hwModule.emitError(
-              "expected synth.linear_timing_arc in synth.mapping_cost arcs");
-          signalPassFailure();
-          return;
-        }
-
-        if (arc.getPin() != outputName) {
-          hwModule.emitError("mapping cost arc output '")
-              << arc.getPin().getValue() << "' does not match module output '"
-              << outputName.getValue() << "'";
-          signalPassFailure();
-          return;
-        }
-
-        int64_t intrinsicDelay = arc.getIntrinsic();
-
-        // TechMapper currently preserves the old integer per-pin delay model.
-        // The sensitivity, polarity, and input capacitance fields are carried
-        // in the attribute for future load-aware mapping.
-        if (!delayByInput
-                 .try_emplace(arc.getRelatedPin(),
-                              static_cast<DelayType>(intrinsicDelay))
-                 .second) {
-          hwModule.emitError("duplicate mapping cost arc for input '")
-              << arc.getRelatedPin().getValue() << "'";
-          signalPassFailure();
-          return;
-        }
-      }
+      double area = areaAttr.getValue().convertToDouble();
 
       SmallVector<DelayType> delay;
-      for (const auto &port : hwModule.getPortList()) {
-        if (!port.isInput())
-          continue;
-
-        auto it = delayByInput.find(port.name);
-        if (it == delayByInput.end()) {
-          hwModule.emitError("missing mapping cost arc for input '")
-              << port.name.getValue() << "'";
-          signalPassFailure();
-          return;
+      for (auto delayValue : delayAttr) {
+        auto delayArray = cast<ArrayAttr>(delayValue);
+        for (auto delayElement : delayArray) {
+          // FIXME: Currently we assume delay is given as integer attributes,
+          // this should be replaced once we have a proper cell op with
+          // dedicated timing attributes with units.
+          delay.push_back(
+              cast<mlir::IntegerAttr>(delayElement).getValue().getZExtValue());
         }
-
-        delay.push_back(it->second);
       }
-
-      if (delay.size() != delayByInput.size()) {
-        hwModule.emitError(
-            "synth.mapping_cost arcs do not match module inputs");
-        signalPassFailure();
-        return;
-      }
-
       // Compute NPN Class for the module.
       auto npnClass = getNPNClassFromModule(hwModule);
       if (failed(npnClass)) {
@@ -306,35 +249,16 @@ struct TechMapperPass : public impl::TechMapperBase<TechMapperPass> {
     options.maxCutInputSize = maxInputSize;
     options.maxCutSizePerRoot = maxCutsPerRoot;
     options.attachDebugTiming = test;
-    options.npnTable = npnTable.get();
-    std::atomic<uint64_t> numCutsCreatedCount = 0;
-    std::atomic<uint64_t> numCutSetsCreatedCount = 0;
-    std::atomic<uint64_t> numCutsRewrittenCount = 0;
     auto result = mlir::failableParallelForEach(
         module.getContext(), nonLibraryModules, [&](hw::HWModuleOp hwModule) {
           LLVM_DEBUG(llvm::dbgs() << "Processing non-library module: "
                                   << hwModule.getName() << "\n");
           CutRewriter rewriter(options, patternSet);
-          if (failed(rewriter.run(hwModule)))
-            return failure();
-          const auto &stats = rewriter.getStats();
-          numCutsCreatedCount.fetch_add(stats.numCutsCreated,
-                                        std::memory_order_relaxed);
-          numCutSetsCreatedCount.fetch_add(stats.numCutSetsCreated,
-                                           std::memory_order_relaxed);
-          numCutsRewrittenCount.fetch_add(stats.numCutsRewritten,
-                                          std::memory_order_relaxed);
-          return success();
+          return rewriter.run(hwModule);
         });
     if (failed(result))
       signalPassFailure();
-    numCutsCreated += numCutsCreatedCount;
-    numCutSetsCreated += numCutSetsCreatedCount;
-    numCutsRewritten += numCutsRewrittenCount;
   }
-
-private:
-  std::shared_ptr<const NPNTable> npnTable;
 };
 
 } // namespace

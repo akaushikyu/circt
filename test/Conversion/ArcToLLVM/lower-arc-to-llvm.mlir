@@ -77,6 +77,14 @@ func.func @StateUpdates(%arg0: !arc.storage<1>) {
   // CHECK-NEXT: [[LOAD:%.+]] = llvm.load [[PTR]] : !llvm.ptr -> i1
   arc.state_write %0 = %1 : <i1>
   // CHECK-NEXT: llvm.store [[LOAD]], [[PTR]] : i1, !llvm.ptr
+  %false = hw.constant false
+  arc.state_write %0 = %false if %1 : <i1>
+  // CHECK-NEXT:   [[FALSE:%.+]] = llvm.mlir.constant(false)
+  // CHECK-NEXT:   llvm.cond_br [[LOAD]], [[BB1:\^.+]], [[BB2:\^.+]]
+  // CHECK-NEXT: [[BB1]]:
+  // CHECK-NEXT:   llvm.store [[FALSE]], [[PTR]]
+  // CHECK-NEXT:   llvm.br [[BB2]]
+  // CHECK-NEXT: [[BB2]]:
   return
   // CHECK-NEXT: llvm.return
 }
@@ -108,6 +116,18 @@ func.func @MemoryUpdates(%arg0: !arc.storage<24>, %enable: i1) {
   // CHECK-NEXT:   llvm.br [[BB_RESUME:\^.+]]([[TMP]] : i42)
   // CHECK-NEXT: [[BB_RESUME]]([[LOADED:%.+]]: i42):
   // CHECK:        [[ADDED:%.+]] = llvm.add [[LOADED]], [[LOADED]]
+
+  arc.memory_write %0[%c3_i19], %2 if %enable : <4 x i42, i19>
+  // CHECK-NEXT:   [[ADDR:%.+]] = llvm.zext [[THREE]] : i19 to i20
+  // CHECK-NEXT:   [[FOUR:%.+]] = llvm.mlir.constant(4
+  // CHECK-NEXT:   [[INBOUNDS:%.+]] = llvm.icmp "ult" [[ADDR]], [[FOUR]]
+  // CHECK-NEXT:   [[GEP:%.+]] = llvm.getelementptr [[PTR]][[[ADDR]]] : (!llvm.ptr, i20) -> !llvm.ptr, i64
+  // CHECK-NEXT:   [[COND:%.+]] = llvm.and %arg1, [[INBOUNDS]]
+  // CHECK-NEXT:   llvm.cond_br [[COND]], [[BB_STORE:\^.+]], [[BB_RESUME:\^.+]]
+  // CHECK-NEXT: [[BB_STORE]]:
+  // CHECK-NEXT:   llvm.store [[ADDED]], [[GEP]] : i42, !llvm.ptr
+  // CHECK-NEXT:   llvm.br [[BB_RESUME]]
+  // CHECK-NEXT: [[BB_RESUME]]:
 
   arc.memory_write %0[%c3_i19], %2 : <4 x i42, i19>
   // CHECK-NEXT:   [[ADDR:%.+]] = llvm.zext [[THREE]] : i19 to i20
@@ -213,6 +233,22 @@ func.func @WriteArray(%arg0: !arc.state<!hw.array<4xi1>>, %arg1: !hw.array<4xi1>
   return
 }
 
+// The LLVM IR does not like `i0` types. The lowering replaces all `i0` values
+// with constants to allow canonicalizers to elide i0 values as needed.
+// See https://github.com/llvm/circt/pull/8871.
+// CHECK-LABEL: llvm.func @DontCrashOnI0(
+func.func @DontCrashOnI0(%arg0: i1, %arg1: !hw.array<1xi42>) -> i42 {
+  // CHECK: [[STACK:%.+]] = llvm.alloca {{%.+}} x !llvm.array<1 x i42>
+  // CHECK: [[ZERO:%.+]] = llvm.mlir.constant(0 : i0) : i0
+  // CHECK: [[ZEXT:%.+]] = llvm.zext [[ZERO]] : i0 to i1
+  // CHECK: [[GEP:%.+]] = llvm.getelementptr [[STACK]][0, [[ZEXT]]] :
+  // CHECK: [[RESULT:%.+]] = llvm.load [[GEP]] : !llvm.ptr -> i42
+  // CHECK: llvm.return [[RESULT]]
+  %0 = comb.extract %arg0 from 0 : (i1) -> i0
+  %1 = hw.array_get %arg1[%0] : !hw.array<1xi42>, i0
+  return %1 : i42
+}
+
 // CHECK-LABEL: llvm.func @ExecuteEmpty
 func.func @ExecuteEmpty() {
   // CHECK-NEXT: llvm.br [[BB:\^.+]]
@@ -312,54 +348,4 @@ func.func @Time(%arg0: !arc.storage<42>) -> (i64, !llhd.time, i64) {
   // CHECK-NEXT: [[TMP4:%.+]] = llvm.insertvalue [[TIME]], [[TMP3]][2]
   // CHECK-NEXT: llvm.return [[TMP4]]
   return %0, %1, %2 : i64, !llhd.time, i64
-}
-
-
-// CHECK-LABEL: llvm.func @ConstantTime
-// CHECK-SAME: -> !llvm.struct<(i64, i64, i64)>
-func.func @ConstantTime() -> (!llhd.time, !llhd.time, !llhd.time) {
-  // CHECK-DAG: llvm.mlir.constant(42 : i64) : i64
-  // CHECK-DAG: llvm.mlir.constant(7000 : i64) : i64
-  // CHECK-DAG: llvm.mlir.constant(10000000 : i64) : i64
-  %0 = llhd.constant_time <42fs, 0d, 0e>
-  %1 = llhd.constant_time <7ps, 0d, 0e>
-  %2 = llhd.constant_time <10ns, 0d, 0e>
-  return %0, %1, %2 : !llhd.time, !llhd.time, !llhd.time
-}
-
-
-// CHECK-LABEL: llvm.func @NextWakeup
-// CHECK-SAME: (%[[STATE:.*]]: !llvm.ptr, %[[T:.*]]: i64)
-func.func @NextWakeup(%state: !arc.storage<42>, %t: i64) -> i64 {
-  // CHECK-NEXT: %[[WGEP:.*]] = llvm.getelementptr %[[STATE]][16] : (!llvm.ptr) -> !llvm.ptr, i8
-  // CHECK-NEXT: llvm.store %[[T]], %[[WGEP]] : i64, !llvm.ptr
-  arc.set_next_wakeup %state, %t : !arc.storage<42>
-  // CHECK-NEXT: %[[RGEP:.*]] = llvm.getelementptr %[[STATE]][16] : (!llvm.ptr) -> !llvm.ptr, i8
-  // CHECK-NEXT: %[[OUT:.*]] = llvm.load %[[RGEP]] : !llvm.ptr -> i64
-  %0 = arc.get_next_wakeup %state : !arc.storage<42>
-  // CHECK-NEXT: llvm.return %[[OUT]]
-  return %0 : i64
-}
-
-
-// CHECK-LABEL: llvm.func @test_success_eval
-// CHECK-SAME: (%[[STATE:.*]]: !llvm.ptr, %[[COND:.*]]: i1)
-func.func @test_success_eval(%state: !arc.storage, %cond: i1) {
-  // CHECK-NEXT: %[[GEP:.*]] = llvm.getelementptr %[[STATE]][8] : (!llvm.ptr) -> !llvm.ptr, i8
-  // CHECK-NEXT: %[[VAL:.*]] = llvm.mlir.constant(1 : i8) : i8
-  // CHECK-NEXT: llvm.store %[[VAL]], %[[GEP]] : i8, !llvm.ptr
-  // CHECK-NEXT: llvm.return
-  arc.terminate %state, true : !arc.storage
-  return
-}
-
-// CHECK-LABEL: llvm.func @test_failure_eval
-// CHECK-SAME: (%[[STATE:.*]]: !llvm.ptr, %[[COND:.*]]: i1)
-func.func @test_failure_eval(%state: !arc.storage, %cond: i1) {
-  // CHECK-NEXT: %[[GEP_FAIL:.*]] = llvm.getelementptr %[[STATE]][8] : (!llvm.ptr) -> !llvm.ptr, i8
-  // CHECK-NEXT: %[[VAL_FAIL:.*]] = llvm.mlir.constant(2 : i8) : i8
-  // CHECK-NEXT: llvm.store %[[VAL_FAIL]], %[[GEP_FAIL]] : i8, !llvm.ptr
-  // CHECK-NEXT: llvm.return
-  arc.terminate %state, false : !arc.storage
-  return
 }

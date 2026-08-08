@@ -48,11 +48,19 @@ LogicalResult firtool::populatePreprocessTransforms(mlir::PassManager &pm,
   pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
       firrtl::createLowerIntrinsics());
 
+  if (auto mode = FirtoolOptions::toInferDomainsPassMode(opt.getDomainMode()))
+    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInferDomains({*mode}));
+
   return success();
 }
 
 LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
                                                   const FirtoolOptions &opt) {
+  // TODO: Ensure instance graph and other passes can handle instance choice
+  // then run this pass after all diagnostic passes have run.
+  pm.addNestedPass<firrtl::CircuitOp>(firrtl::createSpecializeOption(
+      {/*selectDefaultInstanceChoice*/ opt
+           .shouldSelectDefaultInstanceChoice()}));
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerSignatures());
 
   // This pass is _not_ idempotent.  It preserves its controlling annotation for
@@ -87,14 +95,10 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInferWidths());
 
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createMemToRegOfVec(
-      {/*replSeqMemFile=*/opt.shouldIgnoreReadEnableMemories()}));
+      {/*replSeqMem=*/opt.shouldReplaceSequentialMemories(),
+       /*replSeqMemFile=*/opt.shouldIgnoreReadEnableMemories()}));
 
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInferResets());
-
-  // TODO: Move this to the same location as SpecializeLayers.
-  pm.addNestedPass<firrtl::CircuitOp>(firrtl::createSpecializeOption(
-      {/*selectDefaultInstanceChoice*/ opt
-           .shouldSelectDefaultInstanceChoice()}));
 
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createDropConst());
 
@@ -127,14 +131,6 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
     modulePM.addPass(firrtl::createExpandWhens());
     modulePM.addPass(firrtl::createSFCCompat());
   }
-
-  // InferDomains runs after ExpandWhens because FIRRTL allows for last-connect
-  // semantics and users have historically relied on this behavior to set
-  // default connections that are then overridden later.  If this pass is run
-  // before ExpandWhens, then users can get errors if they rely on last-connect
-  // semantics.
-  if (auto mode = FirtoolOptions::toInferDomainsPassMode(opt.getDomainMode()))
-    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInferDomains({*mode}));
 
   pm.addNestedPass<firrtl::CircuitOp>(firrtl::createCheckCombLoops());
 
@@ -297,6 +293,7 @@ LogicalResult firtool::populateLowFIRRTLToHW(mlir::PassManager &pm,
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerDPI());
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerDomains());
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerClasses());
+  pm.nest<firrtl::CircuitOp>().addPass(om::createVerifyObjectFieldsPass());
 
   // Check for static asserts.
   pm.nest<firrtl::CircuitOp>().addPass(circt::firrtl::createLint(
@@ -304,8 +301,7 @@ LogicalResult firtool::populateLowFIRRTLToHW(mlir::PassManager &pm,
        /*lintXmrsInDesign=*/opt.getLintXmrsInDesign()}));
 
   pm.addPass(createLowerFIRRTLToHWPass(opt.shouldEnableAnnotationWarning(),
-                                       opt.getVerificationFlavor(),
-                                       opt.shouldLowerToCore()));
+                                       opt.getVerificationFlavor()));
 
   if (!opt.shouldDisableOptimization()) {
     auto &modulePM = pm.nest<hw::HWModuleOp>();
@@ -315,6 +311,9 @@ LogicalResult firtool::populateLowFIRRTLToHW(mlir::PassManager &pm,
 
   // Check inner symbols and inner refs.
   pm.addPass(hw::createVerifyInnerRefNamespace());
+
+  // Check OM object fields.
+  pm.addPass(om::createVerifyObjectFieldsPass());
 
   // Run the verif op verification pass
   pm.addNestedPass<hw::HWModuleOp>(verif::createVerifyClockedAssertLikePass());
@@ -365,6 +364,9 @@ LogicalResult firtool::populateHWToSV(mlir::PassManager &pm,
   // Check inner symbols and inner refs.
   pm.addPass(hw::createVerifyInnerRefNamespace());
 
+  // Check OM object fields.
+  pm.addPass(om::createVerifyObjectFieldsPass());
+
   return success();
 }
 
@@ -400,6 +402,9 @@ populatePrepareForExportVerilog(mlir::PassManager &pm,
 
   // Check inner symbols and inner refs.
   pm.addPass(hw::createVerifyInnerRefNamespace());
+
+  // Check OM object fields.
+  pm.addPass(om::createVerifyObjectFieldsPass());
 
   return success();
 }
@@ -439,12 +444,6 @@ LogicalResult firtool::populateFinalizeIR(mlir::PassManager &pm,
                                           const FirtoolOptions &opt) {
   pm.addPass(firrtl::createFinalizeIR());
   pm.addPass(om::createFreezePathsPass());
-  om::ElaborateObjectOptions options;
-  options.allPublicClasses = true;
-  options.allowUnevaluated = true;
-  pm.addPass(om::createElaborateObject(options));
-  // TODO: Add SymbolDCE to elimiate unused private classes once after we
-  // stopped using private classes.
 
   return success();
 }
@@ -472,11 +471,10 @@ LogicalResult firtool::populateHWToBTOR2(mlir::PassManager &pm,
 //===----------------------------------------------------------------------===//
 
 namespace {
-/// This class contains command line options that can be used to initialize
-/// various bits of a Firtool pipeline. This uses a class wrapper to avoid the
+/// This struct contains command line options that can be used to initialize
+/// various bits of a Firtool pipeline. This uses a struct wrapper to avoid the
 /// need for global command line options.
-class FirtoolCmdOptions {
-public:
+struct FirtoolCmdOptions {
   llvm::cl::opt<std::string> outputFilename{
       "o",
       llvm::cl::desc("Output filename, or directory for split output"),
@@ -633,44 +631,21 @@ public:
                      "assigning X on read disable"),
       llvm::cl::init(false)};
 
-  firtool::FirtoolOptions::RandomKind disableRandomValue =
-      firtool::FirtoolOptions::RandomKind::None;
+  llvm::cl::opt<firtool::FirtoolOptions::RandomKind> disableRandom{
+      llvm::cl::desc(
+          "Disable random initialization code (may break semantics!)"),
+      llvm::cl::values(
+          clEnumValN(firtool::FirtoolOptions::RandomKind::Mem,
+                     "disable-mem-randomization",
+                     "Disable emission of memory randomization code"),
+          clEnumValN(firtool::FirtoolOptions::RandomKind::Reg,
+                     "disable-reg-randomization",
+                     "Disable emission of register randomization code"),
+          clEnumValN(firtool::FirtoolOptions::RandomKind::All,
+                     "disable-all-randomization",
+                     "Disable emission of all randomization code")),
+      llvm::cl::init(firtool::FirtoolOptions::RandomKind::None)};
 
-  // Make these options (and their grouping category) inaccessible as their
-  // values are not intended to be used directly.  These change a lattice of
-  // randomization disable settings and directly accessing the command line
-  // option the user provided is not useful.
-private:
-  llvm::cl::OptionCategory randomizationCategory{
-      "Disable random initialization code (may break semantics!)"};
-
-  llvm::cl::opt<bool> disableMemRandom{
-      "disable-mem-randomization",
-      llvm::cl::desc("Disable emission of memory randomization code"),
-      llvm::cl::cat(randomizationCategory), llvm::cl::ValueDisallowed,
-      llvm::cl::callback([&](const bool &) {
-        disableRandomValue = firtool::FirtoolOptions::mergeRandomKind(
-            disableRandomValue, firtool::FirtoolOptions::RandomKind::Mem);
-      })};
-
-  llvm::cl::opt<bool> disableRegRandom{
-      "disable-reg-randomization",
-      llvm::cl::desc("Disable emission of register randomization code"),
-      llvm::cl::cat(randomizationCategory), llvm::cl::ValueDisallowed,
-      llvm::cl::callback([&](const bool &) {
-        disableRandomValue = firtool::FirtoolOptions::mergeRandomKind(
-            disableRandomValue, firtool::FirtoolOptions::RandomKind::Reg);
-      })};
-
-  llvm::cl::opt<bool> disableAllRandom{
-      "disable-all-randomization",
-      llvm::cl::desc("Disable emission of all randomization code"),
-      llvm::cl::cat(randomizationCategory), llvm::cl::ValueDisallowed,
-      llvm::cl::callback([&](const bool &) {
-        disableRandomValue = firtool::FirtoolOptions::RandomKind::All;
-      })};
-
-public:
   llvm::cl::opt<std::string> outputAnnotationFilename{
       "output-annotation-file",
       llvm::cl::desc("Optional output annotation file"),
@@ -680,12 +655,6 @@ public:
       "warn-on-unprocessed-annotations",
       llvm::cl::desc(
           "Warn about annotations that were not removed by lower-to-hw"),
-      llvm::cl::init(false)};
-
-  llvm::cl::opt<bool> lowerToCore{
-      "lower-to-core",
-      llvm::cl::desc("Prefer core dialects over direct SV lowering for FIRRTL "
-                     "verification and printf operations"),
       llvm::cl::init(false)};
 
   llvm::cl::opt<bool> addMuxPragmas{
@@ -848,7 +817,7 @@ circt::firtool::FirtoolOptions::FirtoolOptions()
       lowerMemories(false), blackBoxRootPath(""), replSeqMem(false),
       replSeqMemFile(""), ignoreReadEnableMem(false),
       disableRandom(RandomKind::None), outputAnnotationFilename(""),
-      enableAnnotationWarning(false), lowerToCore(false), addMuxPragmas(false),
+      enableAnnotationWarning(false), addMuxPragmas(false),
       verificationFlavor(firrtl::VerificationFlavor::None),
       emitSeparateAlwaysBlocks(false),
       addVivadoRAMAddressConflictSynthesisBugWorkaround(false),
@@ -886,10 +855,9 @@ circt::firtool::FirtoolOptions::FirtoolOptions()
   replSeqMem = clOptions->replSeqMem;
   replSeqMemFile = clOptions->replSeqMemFile;
   ignoreReadEnableMem = clOptions->ignoreReadEnableMem;
-  disableRandom = clOptions->disableRandomValue;
+  disableRandom = clOptions->disableRandom;
   outputAnnotationFilename = clOptions->outputAnnotationFilename;
   enableAnnotationWarning = clOptions->enableAnnotationWarning;
-  lowerToCore = clOptions->lowerToCore;
   addMuxPragmas = clOptions->addMuxPragmas;
   verificationFlavor = clOptions->verificationFlavor;
   emitSeparateAlwaysBlocks = clOptions->emitSeparateAlwaysBlocks;

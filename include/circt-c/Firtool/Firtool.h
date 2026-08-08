@@ -163,10 +163,6 @@ MLIR_CAPI_EXPORTED void circtFirtoolOptionsSetEnableAnnotationWarning(
     CirctFirtoolFirtoolOptions options, bool value);
 
 MLIR_CAPI_EXPORTED void
-circtFirtoolOptionsSetLowerToCore(CirctFirtoolFirtoolOptions options,
-                                  bool value);
-
-MLIR_CAPI_EXPORTED void
 circtFirtoolOptionsSetAddMuxPragmas(CirctFirtoolFirtoolOptions options,
                                     bool value);
 

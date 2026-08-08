@@ -160,32 +160,6 @@ Sequence and property expressions in SVAs can specify a clock with respect to wh
 - `@(negedge clk) seqOrProp`. **Trigger on high-to-low clock edge.** Equivalent to `ltl.clock %seqOrProp, negedge %clk`.
 - `@(edge clk) seqOrProp`. **Trigger on any clock edge.** Equivalent to `ltl.clock %seqOrProp, edge %clk`.
 
-#### Delay clocking
-
-`ltl.delay` takes the delayed input first, followed by the delay window:
-
-```
-ltl.delay %input, <delay>[, <length>]
-```
-
-For explicitly clocked delays, use `ltl.clocked_delay`:
-
-```
-ltl.clocked_delay %input, <edge> %clock, <delay>[, <length>]
-```
-
-`%clock` is an `i1` value (e.g. a module clock); `<edge>` is `posedge`, `negedge`, or `edge`. For example, `ltl.clocked_delay %s, posedge %clk, 3` means `%s` must hold 3 cycles later on `%clk` rising edges.
-
-`ltl.delay` is unclocked and may be resolved by an enclosing `ltl.clock` or by the `InferLTLClocks` pass. `ltl.clock` globally associates a sequence/property with a clock/edge; `ltl.clocked_delay` carries an explicit per-delay clock.
-
-Examples:
-
-```mlir
-ltl.delay %s, 3
-ltl.delay %s, 3, 0
-ltl.clocked_delay %s, posedge %clk, 3, 0
-```
-
 
 ### Disable Iff
 
@@ -251,95 +225,11 @@ where the `logic_to_int` conversion is only necessary if `%cond` is 4-valued.
 %1 = seq.shiftreg n, %a, %clk, %true, powerOn %zero : i1
 ``` 
 
-- **`$isunknown(a)`**:
-```mlir
-// For 1-bit 'a'
-%x = moore.constant 1'bx : <l1>
-%isunknown = moore.case_eq %a, %x : i1
-
-// For multi-bit 'a'
-%reduced = moore.reduce_xor %a : <l1>
-%x = moore.constant 1'bx : <l1>
-%isunknown = moore.case_eq %reduced, %x : i1
-```
-
-- **`$onehot0(a)`**:
-For 2-state input `%a` (where `%a` has type `iN`):
-
-```mlir
-%one = hw.constant 1 : iN
-%sub = comb.sub %a, %one : iN
-%and = comb.and %a, %sub : iN
-%zero = hw.constant 0 : iN
-%onehot0 = comb.icmp eq %and, %zero : iN
-```
-
-For 4-state input `%a` (where `%a` has type `!moore.lN`):
-First, `%a` is checked for unknown values (equivalent to `$isunknown(a)`). If
-any bits are unknown, the result is `1'b0`. Otherwise, it uses the 2-state
-lowering above on the coerced 2-state value:
-
-```mlir
-%isunknown = ... // see $isunknown lowering
-%coerced_a = moore.logic_to_int %a
-%int_a = moore.to_builtin_int %coerced_a
-%onehot0_2state = ... // 2-state lowering on %int_a
-%zero = hw.constant 0 : i1
-%onehot0 = comb.mux %isunknown, %zero, %onehot0_2state : i1
-```
-
-- **`$onehot(a)`**:
-For 2-state input `%a` (where `%a` has type `iN`):
-
-```mlir
-%one = hw.constant 1 : iN
-%sub = comb.sub %a, %one : iN
-%and = comb.and %a, %sub : iN
-%zero = hw.constant 0 : iN
-%onehot0 = comb.icmp eq %and, %zero : iN
-%notzero = comb.icmp ne %a, %zero : iN
-%onehot = comb.and %onehot0, %notzero : i1
-```
-
-For 4-state input `%a` (where `%a` has type `!moore.lN`):
-First, `%a` is checked for unknown values (equivalent to `$isunknown(a)`). If
-any bits are unknown, the result is `1'b0`. Otherwise, it uses the 2-state
-lowering above on the coerced 2-state value:
-
-```mlir
-%isunknown = ... // see $isunknown lowering
-%coerced_a = moore.logic_to_int %a
-%int_a = moore.to_builtin_int %coerced_a
-%onehot_2state = ... // 2-state lowering on %int_a
-%zero = hw.constant 0 : i1
-%onehot = comb.mux %isunknown, %zero, %onehot_2state : i1
-```
-
-- **`$countones(a)`**:
-For 2-state input `%a` (where `%a` has type `iN`):
-The popcount is computed by extracting each bit, zero-extending to
-`iM` (where `M = ceil(log2(N+1))`), and summing them:
-
-```mlir
-// For an 8-bit input, M=4 and padding is i3:
-%b0 = comb.extract %a from 0 : (i8) -> i1
-%ext0 = comb.concat %zeros3, %b0 : i3, i1
-%b1 = comb.extract %a from 1 : (i8) -> i1
-%ext1 = comb.concat %zeros3, %b1 : i3, i1
-%sum = comb.add %ext0, %ext1 : i4
-// ... for each bit
-```
-
-For 4-state input `%a` (where `%a` has type `!moore.lN`):
-x/z bits do not match logic value 1 and are excluded from the count. The value
-is coerced to 2-state (`logic_to_int` maps x/z to 0) and then the 2-state
-lowering is applied:
-
-```mlir
-%coerced_a = moore.logic_to_int %a
-%int_a = moore.to_builtin_int %coerced_a
-%countones = ... // 2-state lowering on %int_a
-```
+> The following functions are not yet supported by CIRCT:  
+> - **`$onehot(a)`**  
+> - **`$onehot0(a)`**  
+> - **`$isunknown(a)`**  
+> - **`$countones(a)`**     
   
   
 - **`a ##n b`**:   

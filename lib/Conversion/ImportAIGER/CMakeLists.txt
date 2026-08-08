@@ -13,7 +13,6 @@ add_circt_translation_library(CIRCTImportAIGER
   CIRCTSeq
   CIRCTSupport
   CIRCTSynth
-  CIRCTVerif
   MLIRIR
   MLIRSupport
   MLIRTranslateLib

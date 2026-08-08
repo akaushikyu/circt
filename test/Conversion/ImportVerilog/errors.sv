@@ -187,62 +187,17 @@ endmodule
 
 // -----
 module Foo;
-  logic a, clk;
-  // expected-error @below {{sampled value functions are only supported with posedge clocks}}
-  assert property (@(negedge clk) $rose(a));
-endmodule
-
-// -----
-module Foo;
-  logic a, clk1, clk2;
-  // expected-error @below {{sampled value functions with multiple event triggers are not supported}}
-  assert property (@(posedge clk1 or posedge clk2) $rose(a));
-endmodule
-
-// -----
-module Foo;
   int a;
   // expected-error @below {{sequence has no explicit clocking event and one cannot be inferred from context}}
   assert property (a);
 endmodule
 
 // -----
-module Foo;
-  typedef enum { A, B, C } e;
-  e val;
-  initial begin
-    // expected-error @below {{unsupported system call `next`}}
-    val = val.next();
-  end
-endmodule
-
-// -----
-module Foo;
-  typedef enum { A, B, C } e;
-  e val;
-  initial begin
-    // expected-error @below {{unsupported system call `prev`}}
-    val = val.prev();
-  end
-endmodule
-
-// -----
-module Foo;
-  int inp[];
-  int tmp[];
-  initial begin
-    // expected-error @below {{unsupported system call `$size`}}
-    tmp = new[$size(inp)];
-  end
-endmodule
-
-// -----
-module Foo;
-  reg i;
-  wire o;
-  // expected-error @below {{unsupported delay with rise/fall/turn-off}}
-  assign #(1, 2) o = i;
-endmodule
+function Foo;
+  logic [1:0] a;
+  // expected-error @below {{unsupported system call `$fwrite`}}
+  $fwrite(32'h0, "%x", a);
+endfunction
 
 // -----
 module Foo;
@@ -316,36 +271,4 @@ module Foo;
 
   // expected-error @below {{'always' procedure does not advance time and so will create a simulation deadlock}}
   always a = ~a;
-endmodule
-
-// -----
-
-module drive_strength_prim;
-    logic A, B, Q;
-    // expected-error @below {{primitive instances with explicit drive strengths are not supported.}}
-    and (pull0, strong1) a (Q, A, B);
-endmodule
-
-// -----
-
-module multi_delay_input_prim;
-    logic A, B, Q;
-    // expected-error @below {{only n-input primitives that specify a single delay are currently supported.}}
-    and #(5, 5) a (Q, A, B);
-endmodule
-
-
-// -----
-
-module multi_delay_noutput_prim;
-    wire A, Q;
-    // expected-error @below {{only n-output primitives that specify a single delay are currently supported.}}
-    not #(5, 5) n (Q, A);
-endmodule
-
-// -----
-
-module unsupported_prim(inout A, inout B);
-    // expected-error @below {{unsupported instance of primitive `tran`}}
-    tran u1 (A, B);
 endmodule
