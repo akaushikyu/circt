@@ -14,6 +14,7 @@ the headers of the Vitis install, the way the Vitis front end does, instead of a
 | the proxy objects of `x.range(h, l)`, `x[i]`, `(a, b)` (`ap_range_ref`, `ap_bit_ref`, `ap_concat_ref`, ...; a reference plus indices) | `--xlx-headers` (inlined and scalarised to shift / mask arithmetic; also namespace-qualified tables and two-reference structs) |
 | `-fhls` makes `__fp16` a native type with half arguments and returns | `-Xclang -fnative-half-type -Xclang -fnative-half-arguments-and-returns` |
 | `no_ctor`, `hls_preserve` attributes                                  | ignored (`-Xclang -Wno-unknown-attributes`); they only matter for streams and the FFT IP |
+| C++: `-fno-threadsafe-statics -fno-use-cxa-atexit`                    | `-Xclang -fno-threadsafe-statics -Xclang -fno-use-cxa-atexit` (cc1 accepts them for C too, without effect; cgeist emits its own static-initialisation guards, so the MLIR of the harness subset does not change) |
 
 plus `--scalar-wrapper-abi`, so that `ap_int` / `ap_fixed` objects reach hls-est as `iN`
 like with `shim/exactclass`. The language standard (C++: gnu++14, C: gnu99) comes from

@@ -10,4 +10,6 @@
 -Xclang -fxlx-bitwidth -Xclang -fxlx-apint-promote
 -Xclang -fnative-half-type -Xclang -fnative-half-arguments-and-returns
 -Xclang -Wno-unknown-attributes
+# Vitis' C++-only flags, passed to cc1 (accepted for C too, where they have no effect).
+-Xclang -fno-threadsafe-statics -Xclang -fno-use-cxa-atexit
 --scalar-wrapper-abi --xlx-headers
