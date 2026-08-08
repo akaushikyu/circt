@@ -341,6 +341,188 @@ static void rewriteMemrefLoad(memref::LoadOp loadOp, ArrayRef<Value> banks,
   loadOp.erase();
 }
 
+//===----------------------------------------------------------------------===//
+// Loads that together read each bank once (steered loads)
+//===----------------------------------------------------------------------===//
+//
+// Unrolled copies of one runtime-indexed read, `A[(base + 4*i + u) & 4095]`
+// for u = 0..3 with A cyclic-partitioned by 4, address a different bank each
+// whatever `base` is: their indices differ by constants that are distinct
+// modulo the factor. Vitis proves that and reads every bank once per
+// iteration, steering the addresses and results through sparse muxes
+// (VITIS_NOTES N27; kernel w7rv_rt4: 4 banks `ram_1p`, II 1, four
+// sparsemux_9_2_32; w7rv_rt2, two copies: 8 BRAM too). Rewriting each
+// copy on its own reads every candidate bank per copy, which makes each bank
+// look read four times per cycle (3 RAM_1WNR copies per bank, 24 BRAM against
+// Vitis' 8). So such a group is rewritten as one load per bank, at the offset
+// of the copy that addresses it, and each copy selects its bank's value.
+
+// `v` as `base + c (mod factor)`: peels constant additions, index casts,
+// truncations that keep log2(factor) bits and `and` masks whose low
+// log2(factor) bits are ones (the last two only for a power-of-two factor).
+static std::pair<Value, int64_t> residueBase(Value v, int64_t factor) {
+  bool pow2 = llvm::isPowerOf2_64(static_cast<uint64_t>(factor));
+  unsigned bits = llvm::Log2_64(static_cast<uint64_t>(factor));
+  auto constOf = [](Value x) -> std::optional<int64_t> {
+    if (auto c = getConstantIndexValue(x))
+      return c;
+    if (auto cast = x.getDefiningOp<arith::IndexCastOp>())
+      x = cast.getIn();
+    if (auto apply = x.getDefiningOp<affine::AffineApplyOp>()) {
+      SmallVector<Attribute> attrs;
+      for (Value o : apply.getMapOperands()) {
+        std::optional<int64_t> c = getConstantIndexValue(o);
+        if (!c)
+          return std::nullopt;
+        attrs.push_back(IntegerAttr::get(o.getType(), *c));
+      }
+      SmallVector<Attribute> res;
+      if (succeeded(apply.getAffineMap().constantFold(attrs, res)) &&
+          res.size() == 1)
+        if (auto ia = dyn_cast<IntegerAttr>(res.front()))
+          return ia.getInt();
+    }
+    return std::nullopt;
+  };
+  int64_t c = 0;
+  for (unsigned guard = 0; guard < 32; ++guard) {
+    Operation *def = v.getDefiningOp();
+    if (!def)
+      break;
+    if (isa<arith::IndexCastOp, arith::IndexCastUIOp, arith::ExtSIOp,
+            arith::ExtUIOp>(def)) {
+      v = def->getOperand(0);
+      continue;
+    }
+    if (auto tr = dyn_cast<arith::TruncIOp>(def)) {
+      if (!pow2 || tr.getType().getIntOrFloatBitWidth() < bits)
+        break;
+      v = tr.getIn();
+      continue;
+    }
+    if (isa<arith::AndIOp, arith::AddIOp>(def)) {
+      Value lhs = def->getOperand(0), rhs = def->getOperand(1);
+      std::optional<int64_t> k = constOf(rhs);
+      if (!k) {
+        k = constOf(lhs);
+        std::swap(lhs, rhs);
+      }
+      if (!k)
+        break;
+      if (isa<arith::AndIOp>(def)) {
+        uint64_t low = (uint64_t(1) << bits) - 1;
+        if (!pow2 || (static_cast<uint64_t>(*k) & low) != low)
+          break;
+      } else {
+        c += *k;
+      }
+      v = lhs;
+      continue;
+    }
+    break;
+  }
+  return {v, c};
+}
+
+// Move the side-effect-free ops `v` depends on, in this block after
+// `before`, to just before it. False (nothing moved) when one has effects or
+// regions.
+static bool hoistBefore(Value v, Operation *before, bool dryRun,
+                        unsigned depth = 0) {
+  Operation *def = v.getDefiningOp();
+  if (!def || def->getBlock() != before->getBlock() ||
+      def->isBeforeInBlock(before) || def == before)
+    return def != before;
+  if (depth > 64 || def->getNumRegions() || !isMemoryEffectFree(def))
+    return false;
+  for (Value o : def->getOperands())
+    if (!hoistBefore(o, before, dryRun, depth + 1))
+      return false;
+  if (!dryRun)
+    def->moveBefore(before);
+  return true;
+}
+
+static void steerLoadGroups(Value site, ArrayRef<Value> banks,
+                            const BankLayout &l) {
+  if (l.dims.size() != 1 || l.dims.front().kind == PartitionSpec::Block)
+    return;
+  const DimPartition &p = l.dims.front();
+  int64_t f = p.factor;
+  if (static_cast<int64_t>(banks.size()) != f || f < 2)
+    return;
+  // Group the runtime-indexed loads of one block by the base of their index.
+  llvm::MapVector<std::pair<Block *, Value>,
+                  SmallVector<std::pair<memref::LoadOp, int64_t>>>
+      groups;
+  for (Operation *user : site.getUsers()) {
+    auto ld = dyn_cast<memref::LoadOp>(user);
+    if (!ld || ld.getMemRef() != site ||
+        getConstantIndexValue(ld.getIndices()[p.dim]))
+      continue;
+    auto [base, c] = residueBase(ld.getIndices()[p.dim], f);
+    groups[{ld->getBlock(), base}].push_back({ld, c});
+  }
+  for (auto &[key, members] : groups) {
+    if (members.size() < 2)
+      continue;
+    llvm::SmallDenseSet<int64_t> residues;
+    for (auto &m : members)
+      residues.insert(((m.second % f) + f) % f);
+    if (residues.size() != members.size())
+      continue; // two copies may meet in one bank: rewrite them one by one
+    llvm::sort(members, [](auto &a, auto &b) {
+      return a.first->isBeforeInBlock(b.first);
+    });
+    Operation *first = members.front().first;
+    bool movable = llvm::all_of(members, [&](auto &m) {
+      return llvm::all_of(m.first.getIndices(), [&](Value i) {
+        return hoistBefore(i, first, /*dryRun=*/true);
+      });
+    });
+    if (!movable)
+      continue;
+    for (auto &m : members)
+      for (Value i : m.first.getIndices())
+        hoistBefore(i, first, /*dryRun=*/false);
+    OpBuilder b(first);
+    Location loc = first->getLoc();
+    // Per copy: its offsets and its (runtime) bank.
+    SmallVector<MemrefBanking> mbs;
+    for (auto &m : members)
+      mbs.push_back(resolveMemref(b, loc, m.first.getIndices(), l));
+    // hit[j][k]: copy j addresses bank k.
+    SmallVector<SmallVector<Value>> hit(members.size());
+    for (auto [j, mb] : llvm::enumerate(mbs))
+      for (int64_t k = 0; k < f; ++k)
+        hit[j].push_back(arith::CmpIOp::create(
+            b, loc, arith::CmpIPredicate::eq, mb.rotIdx,
+            arith::ConstantIndexOp::create(b, loc, k)));
+    SmallVector<Value> bankVals;
+    for (int64_t k = 0; k < f; ++k) {
+      SmallVector<Value> idx(mbs.back().bankedIndices.begin(),
+                             mbs.back().bankedIndices.end());
+      for (unsigned d = 0; d < idx.size(); ++d)
+        for (size_t j = mbs.size() - 1; j-- > 0;)
+          if (mbs[j].bankedIndices[d] != idx[d])
+            idx[d] = arith::SelectOp::create(b, loc, hit[j][k],
+                                             mbs[j].bankedIndices[d], idx[d]);
+      bankVals.push_back(memref::LoadOp::create(b, loc, banks[k], idx));
+    }
+    SmallVector<Value> results;
+    for (size_t j = 0; j < members.size(); ++j) {
+      Value r = bankVals[f - 1];
+      for (int64_t k = f - 1; k-- > 0;)
+        r = arith::SelectOp::create(b, loc, hit[j][k], bankVals[k], r);
+      results.push_back(r);
+    }
+    for (auto [m, r] : llvm::zip(members, results)) {
+      m.first.replaceAllUsesWith(r);
+      m.first.erase();
+    }
+  }
+}
+
 static void rewriteMemrefStore(memref::StoreOp storeOp, ArrayRef<Value> banks,
                                const BankLayout &lowerIndex) {
   OpBuilder buildPoint(storeOp);
@@ -709,6 +891,7 @@ void BankingPlan::createGlobalBanks(memref::GlobalOp globalOp,
 
 void BankingPlan::rewriteAccesses(Value site, const BankLayout &lowerIndex) {
   SmallVector<Value> banks = banksOf[site];
+  steerLoadGroups(site, banks, l);
   SmallVector<Operation *> users(site.getUsers().begin(),
                                  site.getUsers().end());
   for (Operation *user : users) {

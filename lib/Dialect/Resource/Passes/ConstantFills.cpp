@@ -22,10 +22,15 @@
 // it is an integer constant, a side-effect-free op whose operands evaluate
 // (folded with the op's own folder: what LLVM constant folding does to a
 // constant expression, not an algebraic rewrite of a non-constant value), or
-// the parameter of a private function every call of which passes such a
-// value. An alloca or global written by exactly one store (direct, or inside
-// a callee through a parameter it is passed to, reached by one call) that
-// stores such a value gets
+// the parameter of a callee, through the call that leads to the store (the
+// value that call passes; Vitis specialises the constant per call: kernel
+// w7rv_twoconst, `set_value(A, 1); set_value(B, 300)` gives A 4096x1 and B
+// 4096x9 ROMs). An alloca or global written by exactly one store (direct, or
+// inside a callee through a parameter it is passed to, reached by one call),
+// unconditionally (no scf.if / affine.if between the store and the array's
+// scope, nor around a call on the way: kernel w7rv_cond0, `if (in[i] > 0)
+// buf[i] = 0` leaves `buf 4096x1 RAM_AUTO_1R1W`), that stores such a value
+// gets
 // `hls.const_fill = <width>`: the element width its values need (N26's rule;
 // a dense initial value counts as values too; 0 when every value is 0).
 // --memory-banking-bram copies the mark to the banks, and --bram-analysis
@@ -39,6 +44,7 @@
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
+#include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/Matchers.h"
 #include "mlir/IR/SymbolTable.h"
@@ -51,8 +57,14 @@ namespace {
 
 constexpr unsigned kMaxDepth = 24;
 
-// The integer value(s) `v` always has, or false.
-static bool evaluate(Value v, SmallVectorImpl<APInt> &out, unsigned depth) {
+// The integer value(s) `v` always has, or false. `path` is the chain of calls
+// that leads from the array's scope to the function `v` is in (outermost
+// first): a parameter of the innermost callee is the operand the last call
+// passes, evaluated in the caller with the rest of the path. With an empty
+// path (the array is declared in the function the value is in), a parameter
+// of a private function stands for every call of it.
+static bool evaluate(Value v, SmallVectorImpl<APInt> &out, unsigned depth,
+                     ArrayRef<func::CallOp> path = {}) {
   if (!v || depth > kMaxDepth || !v.getType().isIntOrIndex())
     return false;
   APInt c;
@@ -68,7 +80,7 @@ static bool evaluate(Value v, SmallVectorImpl<APInt> &out, unsigned depth) {
     SmallVector<Attribute> operands;
     for (Value o : op->getOperands()) {
       SmallVector<APInt> vals;
-      if (!evaluate(o, vals, depth + 1) || vals.size() != 1)
+      if (!evaluate(o, vals, depth + 1, path) || vals.size() != 1)
         return false;
       operands.push_back(IntegerAttr::get(o.getType(), vals.front()));
     }
@@ -84,7 +96,17 @@ static bool evaluate(Value v, SmallVectorImpl<APInt> &out, unsigned depth) {
   }
   auto arg = cast<BlockArgument>(v);
   auto fn = dyn_cast_or_null<func::FuncOp>(arg.getOwner()->getParentOp());
-  if (!fn || arg.getOwner() != &fn.getBody().front() || !fn.isPrivate())
+  if (!fn || arg.getOwner() != &fn.getBody().front())
+    return false;
+  if (!path.empty()) {
+    func::CallOp call = path.back();
+    if (circt::hls_analysis::resolveDefinedCallee(call) != fn ||
+        arg.getArgNumber() >= call.getNumOperands())
+      return false;
+    return evaluate(call.getOperand(arg.getArgNumber()), out, depth + 1,
+                    path.drop_back());
+  }
+  if (!fn.isPrivate())
     return false;
   auto module = fn->getParentOfType<ModuleOp>();
   std::optional<SymbolTable::UseRange> uses =
@@ -124,40 +146,54 @@ static unsigned romWidth(ArrayRef<APInt> vals) {
   return width;
 }
 
+// Whether `op` runs only under a condition inside `scope`: an scf.if or an
+// affine.if lies between them (N26: a conditional store leaves a RAM).
+static bool isConditionalIn(Operation *op, Region *scope) {
+  Operation *scopeOp = scope->getParentOp();
+  for (Operation *p = op->getParentOp(); p && p != scopeOp;
+       p = p->getParentOp())
+    if (isa<affine::AffineIfOp, scf::IfOp>(p))
+      return true;
+  return false;
+}
+
 // Collect the values stored into the memory `mem` names, following calls
 // into private callees; `writes` counts the stores, a store in a callee once
-// per call that reaches it. False when some write cannot be evaluated or the
-// memory escapes (a view, an unknown use, a callee without a body).
-static bool collectFill(Value mem, SmallVectorImpl<APInt> &vals,
-                        unsigned &writes, unsigned depth) {
-  if (depth > kMaxDepth)
+// per call that reaches it. `scope` is the region the array lives in (its
+// alloca's region, the function body of a get_global or callee parameter),
+// `path` the calls followed to get here. False when some write cannot be
+// evaluated, is conditional, or the memory escapes (a view, an unknown use, a
+// callee without a body).
+static bool collectFill(Value mem, Region *scope, SmallVectorImpl<APInt> &vals,
+                        unsigned &writes, SmallVectorImpl<func::CallOp> &path) {
+  if (path.size() > kMaxDepth)
     return false;
   for (OpOperand &use : mem.getUses()) {
     Operation *user = use.getOwner();
     if (isa<affine::AffineLoadOp, memref::LoadOp, memref::DimOp>(user))
       continue;
-    if (auto st = dyn_cast<affine::AffineStoreOp>(user)) {
-      if (st.getValueToStore() == mem)
+    if (isa<affine::AffineStoreOp, memref::StoreOp>(user)) {
+      Value stored = isa<affine::AffineStoreOp>(user)
+                         ? cast<affine::AffineStoreOp>(user).getValueToStore()
+                         : cast<memref::StoreOp>(user).getValueToStore();
+      if (stored == mem || isConditionalIn(user, scope))
         return false;
       ++writes;
-      if (!evaluate(st.getValueToStore(), vals, 0))
-        return false;
-      continue;
-    }
-    if (auto st = dyn_cast<memref::StoreOp>(user)) {
-      if (st.getValueToStore() == mem)
-        return false;
-      ++writes;
-      if (!evaluate(st.getValueToStore(), vals, 0))
+      if (!evaluate(stored, vals, 0, path))
         return false;
       continue;
     }
     if (auto call = dyn_cast<func::CallOp>(user)) {
       func::FuncOp callee = circt::hls_analysis::resolveDefinedCallee(call);
       unsigned i = use.getOperandNumber();
-      if (!callee || i >= callee.getNumArguments())
+      if (!callee || i >= callee.getNumArguments() ||
+          isConditionalIn(call, scope))
         return false;
-      if (!collectFill(callee.getArgument(i), vals, writes, depth + 1))
+      path.push_back(call);
+      bool ok = collectFill(callee.getArgument(i), &callee.getBody(), vals,
+                            writes, path);
+      path.pop_back();
+      if (!ok)
         return false;
       continue;
     }
@@ -188,14 +224,23 @@ struct MarkConstantFillsPass
         return;
       SmallVector<APInt> vals(initVals.begin(), initVals.end());
       unsigned writes = 0;
-      for (Value s : sites)
-        if (!collectFill(s, vals, writes, 0))
+      for (Value s : sites) {
+        // A local lives in its alloca's region; a global, for each
+        // get_global, in the function the get_global is in.
+        Region *scope = s.getParentRegion();
+        if (isa<memref::GlobalOp>(op))
+          if (auto fn = s.getDefiningOp()->getParentOfType<func::FuncOp>())
+            scope = &fn.getBody();
+        SmallVector<func::CallOp> path;
+        if (!collectFill(s, scope, vals, writes, path))
           return;
-      // One store, once: a fill loop (w7_rf*, w7_rf_part, w7_rf_stride) or
-      // a filler called once (activation_op1). Two fill loops, two calls or
-      // a conditional pair of stores leave a RAM (dead_globals dg_c_const01,
-      // dg_c_const0_x2: `buf 512x1 RAM`, narrowed but not a ROM; that
-      // narrowing is not modelled, OPEN_ISSUES O18).
+      }
+      // One unconditional store, once: a fill loop (w7_rf*, w7_rf_part,
+      // w7_rf_stride) or a filler called once (activation_op1). Two fill
+      // loops, two calls (dead_globals dg_c_const01, dg_c_const0_x2: `buf
+      // 512x1 RAM`, narrowed but not a ROM; that narrowing is not modelled,
+      // OPEN_ISSUES O18) or a conditional store (collectFill; w7rv_cond0,
+      // dg_c_const0_cond) leave a RAM.
       if (writes != 1)
         return;
       unsigned width = ty.getElementType().getIntOrFloatBitWidth();
