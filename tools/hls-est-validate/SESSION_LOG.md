@@ -1395,3 +1395,12 @@ Polygeist:
 - Relaunch (`scratchpad/vitis_v2_run2.sh`): tier 2 without hlsyn-vitis, then tier 3, at -j 4 (memory). Then hlsyn-vitis
   designs without an ok result, with --force, -j 2 and a 2 h timeout. No relaunched design is one of the orphans' designs,
   so their work directories are untouched.
+
+## 2026-10-11 ~20:50: W5 cgeist installed (coordinator step (c))
+
+- Control run, everything fixed but the cgeist (frozen hls-est from circt 8dfc934b5, private HOME, `--force-cgeist`):
+  `/home/peter/tmp/inst5/{exactclass,scalar}-{old,new}.json`. Old 2ec1956c and new c7be40ee give the same status, total
+  and per-array BRAM on every design: exactclass 70 / 95 exact, 73 in band, |err| 1952; scalar 49 / 95, 52, 23160. Gates
+  exact. MLIR differs only in spector_hls/fir, spector_hls/histogram and flowgnn/gcn (D1).
+- Installed: `build/bin/cgeist` = c7be40ee (md5 7d923368...), the old one kept as `cgeist.prev-2ec1956c` (md5 947214ff...).
+  CHANGELOG entry "W5 (Polygeist c7be40ee) installed".

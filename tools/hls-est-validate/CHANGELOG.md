@@ -3,6 +3,23 @@
 Newest entry first. One entry per logical change, including changes that were
 tried and reverted. Branch: `hls-est-vitis-match` in `~/circt`.
 
+## 2026-10-11 — cgeist: W5 (Polygeist c7be40ee) installed as the shared cgeist after a control run
+- **Commit:** Polygeist c7be40ee (branch `hls-est-vitis-match` in `/mnt/d/HLS`), installed binary; circt: the commit that adds this entry.
+- **Files:** `/mnt/d/HLS/Polygeist/build/bin/cgeist` is now W5's fix build `/home/peter/tmp/w5fix3/cgeist.d15` (md5 7d9233685c50fe57cdc36997d6650271; `cmp` equal, `ninja -t restat bin/cgeist` run). The previous binary (W3's build, Polygeist 2ec1956c, md5 947214ff4640d47c32387d20df58493e) is kept as `bin/cgeist.prev-2ec1956c`. No source file changed.
+- **What:** installs W5's frontend items #13 (`polygeist.nsw` marking), #14 (narrow counters, `hls.uncounted`), #10 (lit shim) and the review fixes D1 / D2 (entry below) as the cgeist every harness run uses by default.
+- **Why:** coordinator step (c) of W5; rule 4 checked on a control run with everything but the cgeist fixed.
+- **Effect** (default pipeline, harness default catalogue (polygeist), the 11 datasets with an ok Vitis result in `results/vitis.json` (md5 5f7616d5), frozen hls-est copy of circt 8dfc934b5 (`/home/peter/tmp/inst5/bin/hls-est`, sha256 11d6e5ca474c...), private HOME `/home/peter/tmp/inst5/home`, `--force-cgeist`, -j 8, timeout 120 s; runs `/home/peter/tmp/inst5/{exactclass,scalar}-{old,new}.json`, compared by `scratchpad/inst5_cmp.py` with compare.py's `compare_one` and the 15 % band of make_compare_csv.py):
+
+  | shim | cgeist | hls-est ok | compared | exact | in band | \|err\| |
+  |---|---|---|---|---|---|---|
+  | exactclass | old 2ec1956c | 102 / 169 | 95 | 70 | 73 | 1952 |
+  | exactclass | new c7be40ee | 102 / 169 | 95 | 70 | 73 | 1952 |
+  | scalar | old 2ec1956c | 102 / 169 | 95 | 49 | 52 | 23160 |
+  | scalar | new c7be40ee | 102 / 169 | 95 | 49 | 52 | 23160 |
+
+  No design changes its status, its total or any per-array BRAM under either shim. The MLIR is byte-identical for 110 of 113 designs under exactclass and 109 of 111 under scalar; it differs in spector_hls/fir and spector_hls/histogram (both shims) and flowgnn/gcn (exactclass) (exactclass MLIR: fir 4 and histogram 8 more loads stay `memref.load`, because an index read unsigned is raised to an affine map only with a non-negativity proof (D1); gcn has one `memref.load` fewer and simpler index setup in one loop; the rest is constant order). hls-est prices all of them the same. Gates exact under both shims with both binaries: bicg 8, gesummv 16, mvt 8, syrk 32. Rule 4 holds (exact count equal, error equal, nothing stops being exact).
+- **Reverted?:** no
+
 ## 2026-10-11 — cgeist: W5 review fixes (D1: a marked op or wide cast read unsigned is raised only when provably non-negative; D2: no termination assumption for loops that access volatile objects)
 - **Commit:** Polygeist c7be40ee (branch `hls-est-vitis-match` in `/mnt/d/HLS`); circt: the commit that adds this entry. **Not installed.** Private binary: `/home/peter/tmp/w5fix3/cgeist.d15`, md5 7d9233685c50fe57cdc36997d6650271 (W5's `cgeist.i2b`, md5 95b960fc, is superseded; `build/bin/cgeist` is untouched).
 - **Files (Polygeist):** lib/polygeist/Passes/AffineCFG.cpp (`unsignedReadKeepsValue`; `exactArith`, `peelExactCasts`, `roundTripKeepsValue` use it; `IntRangeOracle` ranges for `scf.parallel` / `affine.parallel` induction variables and the gpu thread / block ids and dims); lib/polygeist/Passes/CanonicalizeFor.cpp (`mayDoObservableWork`, `WhileToForHelper::terminationImpliesNoWrap`); include/polygeist/Passes/Passes.h (`kVolatileAccessAttrName` = `polygeist.volatile_access`); tools/cgeist/Lib/clang-mlir.cc (`VolatileAccessFinder`, `accessesVolatile`, set in `MLIRScanner::init`); tools/cgeist/Lib/HLSPragma.cc (`HLSFuncInlinerInterface::processInlinedCallBlocks` carries the mark to the caller); tools/cgeist/driver.cc (`stripFrontendAssumptions` removes the mark); Test/HLS/regressions/nowrap-unsigned-read.c (new), Test/HLS/regressions/narrow-counter-assume-termination.c (4 volatile cases).
