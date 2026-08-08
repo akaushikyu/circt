@@ -10,7 +10,6 @@
 #include "mlir/Tools/mlir-opt/MlirOptMain.h"
 #include "mlir/Transforms/Passes.h"   // createCSEPass, registerCSEPass, registerCanonicalizerPass et al.
 
-#include "mlir/Dialect/Math/IR/Math.h"
 #include "mlir/Dialect/Affine/IR/AffineOps.h"          // affine::AffineDialect
 #include "mlir/Dialect/Arith/IR/Arith.h"               // arith::ArithDialect
 #include "mlir/Dialect/MemRef/IR/MemRef.h"             // memref::MemRefDialect
@@ -32,7 +31,6 @@ int main(int argc, char **argv) {
 
   registry.insert<
       // Upstream
-      mlir::math::MathDialect,
       mlir::affine::AffineDialect,
       mlir::arith::ArithDialect,
       mlir::memref::MemRefDialect,

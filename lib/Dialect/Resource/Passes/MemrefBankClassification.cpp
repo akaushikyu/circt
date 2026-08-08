@@ -31,7 +31,7 @@ StringRef stringifyStorageMode(StorageMode mode) {
   return "?";
 }
 
-static StringRef stringifyStorageKind(StorageKind mode) {
+StringRef stringifyStorageKind(StorageKind mode) {
   switch (mode) {
   case StorageKind::RAM_1P:
     return "ram_1p";
@@ -44,16 +44,17 @@ static StringRef stringifyStorageKind(StorageKind mode) {
   }
 }
 
-static StorageKind classifyStorageKind(unsigned reads, unsigned writes) {
+StorageKind classifyStorageKind(unsigned reads, unsigned writes) {
   if (reads + writes <= 1) return StorageKind::RAM_1P;
   if (writes > 1) return StorageKind::RAM_2P;
   return StorageKind::RAM_1WNR;
 }
 
 StorageMode classifyMode(unsigned reads, unsigned writes) {
-  if (writes >= 2 || reads >= 2) return StorageMode::TDP;  // needs 2 write-capable ports
-  if (writes <= 1 && reads <= 1) return StorageMode::SDP;  // 1W-NR = RAM_1WNR
-  return StorageMode::TDP;
+  if (writes >= 2) return StorageMode::TDP;  // needs 2 write-capable ports
+  if (writes == 1 && reads >= 1) return StorageMode::SDP;  // 1W-NR = RAM_1WNR
+  if (reads >= 2) return StorageMode::SDP; // CHANGED: many reads, no write
+  return StorageMode::OnePort;
 }
 
 /// Returns the memref operand of a load/store and flags which it was. Returns a

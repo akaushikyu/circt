@@ -405,47 +405,20 @@ struct BRAMAnalysisLoopSchedule
   }
 
   void runOnOperation() override {
-    struct FuncTotal {
-      int64_t bram = 0;
-      unsigned memories = 0;
-      unsigned infeasible = 0;
-    };
-    llvm::MapVector<StringRef, FuncTotal> byFunc;
     int64_t total = 0;
-
     getOperation().walk([&](Operation *op) {
       auto iface = dyn_cast<MemoryResourceOpInterface>(op);
       if (!iface)
         return;
-
-      StringRef fnName = "<module>";
-      if (auto fn = op->getParentOfType<FunctionOpInterface>())
-        fnName = fn.getName();
-
       BRAMCost cost = estimateBRAM(iface);
-      llvm::outs() << "[" << fnName << "] " << op->getName() << " @ "
-                   << op->getLoc() << "\n"
+      llvm::outs() << op->getName() << " @ " << op->getLoc() << "\n"
                    << "  kind=" << kindName(cost.kind)
                    << "  bram=" << cost.bramCount
                    << (cost.infeasible ? "  [INFEASIBLE]" : "") << "\n"
                    << "    " << cost.note << "\n";
-
-      FuncTotal &ft = byFunc[fnName];
-      ft.bram += cost.bramCount;
-      ft.memories++;
-      ft.infeasible += cost.infeasible ? 1 : 0;
       total += cost.bramCount;
     });
-
-    llvm::outs() << "\n=== BRAM_18K by function ===\n";
-    for (auto &kv : byFunc) {
-      llvm::outs() << llvm::format("%8lld  ", (long long)kv.second.bram)
-                   << kv.first << "  (" << kv.second.memories << " memories";
-      if (kv.second.infeasible)
-        llvm::outs() << ", " << kv.second.infeasible << " infeasible";
-      llvm::outs() << ")\n";
-    }
-    llvm::outs() << llvm::format("%8lld  TOTAL\n", (long long)total);
+    llvm::outs() << "Total BRAM: " << total << "\n";
   }
 };
 
