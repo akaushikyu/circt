@@ -40,6 +40,7 @@
 // JSON:      "instances": [
 // JSON-NEXT:   {
 // JSON-NEXT:     "func": "work",
+// JSON-NEXT:     "inline_auto_off": false,
 // JSON-NEXT:     "inline_off": true,
 // JSON-NEXT:     "instances": 2,
 // JSON-NEXT:     "parents": [

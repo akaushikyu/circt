@@ -107,7 +107,7 @@ BRAMClassification::BRAMClassification(Operation *op) {
 void BRAMClassification::enumerateBanks(Operation *root) {
 
   if (auto fn = dyn_cast<func::FuncOp>(root)) {
-    bool isCallee = fn.isPrivate() || fn->hasAttr(kInlineOffAttr);
+    bool isCallee = fn.isPrivate() || isKeptCallee(fn);
     SmallVector<int64_t> portBound;
     if (auto bound = fn->getAttrOfType<ArrayAttr>(kPortBoundArgsAttr))
       for (Attribute arrayValue : bound)

@@ -1470,8 +1470,8 @@ static bool yieldOpLegalityCallback(AffineYieldOp op) {
 /// are left untouched.
 static void composeBoundApplies(AffineForOp forOp) {
   auto readsApply = [](ValueRange operands) {
-    return llvm::any_of(operands, [](Value v) {
-      return v.getDefiningOp<AffineApplyOp>() != nullptr;
+    return llvm::any_of(operands, [](Value valueHandle) {
+      return valueHandle.getDefiningOp<AffineApplyOp>() != nullptr;
     });
   };
   if (readsApply(forOp.getLowerBoundOperands())) {

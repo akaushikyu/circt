@@ -26,7 +26,9 @@ struct VitisInlinerInterface : public DialectInlinerInterface {
                        bool cloneRequested) const final {
     if (allowInliningKeptCallees)
       return true;
-    return !calledFunction->hasAttr(circt::hls_analysis::kInlineOffAttr);
+
+    return !circt::hls_analysis::isKeptCallee(calledFunction) &&
+           !callSite->hasAttr(circt::hls_analysis::kInlineAutoOffAttr);
   }
   bool isLegalToInline(Region *, Region *, bool, IRMapping &) const final {
     return true;

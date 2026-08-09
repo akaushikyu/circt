@@ -3,6 +3,14 @@
 Newest entry first. One entry per logical change, including changes that were
 tried and reverted. Branch: `hls-est-vitis-match` in `~/circt`.
 
+## 2026-10-12 — hls-est: a callee cgeist keeps because Vitis would not inline it automatically (`hls.inline_auto_off`) is treated like an `inline off` callee (W10, MEMOS #34, VITIS_NOTES N18)
+- **Commit:** the commit that adds this entry (branch `hls-est-vitis-match`).
+- **Files:** `include/circt/Dialect/Resource/Passes/CallInstances.h` (`kInlineAutoOffAttr`, `isKeptCallee`); `lib/Dialect/Resource/Passes/HlsInliner.cpp` (`HlsFuncInlinerInterface::isLegalToInline`); `lib/Dialect/Resource/Passes/MemrefBankClassification.cpp` (`BRAMClassification::enumerateBanks`: a kept callee's parameters are a callee's); `lib/Dialect/Resource/Passes/BRAMAnalysis.cpp` (`InstanceRecord::inlineAutoOff`, debug text "(not inlined automatically)", JSON `"inline_auto_off"`, additive); tests `test/hls-est/Passes/inline_auto_off_kept.mlir` (new), `call_instances_bram.mlir` (JSON key).
+- **What:** W10's cgeist (`--hls-auto-inline`, Polygeist branch `w10-autoinline`) keeps every call Vitis would not inline automatically and marks the call and the callee `hls.inline_auto_off`. hls-est now keys its kept-callee handling on either attribute: `--inline` keeps such calls, the classification treats the callee's array parameters as a callee's (untracked, two ports, N14 R6), and the instance model already counts every remaining `func.call` (N14 R1-R3), so a kept callee's memories are charged once per instance. The instance model needed no change: it keys on the call, not on the attribute.
+- **Why:** N18 (`[HLS 214-178]`): Vitis keeps a callee without a pragma when size x calls > 100; a kept callee is its own module with its own memories per instance, exactly as for `inline off` (N14).
+- **Effect:** none on MLIR from the installed cgeist (c7be40ee), which never writes the attribute: hls-est lit unchanged (93 pass, 4 pre-existing forgebench failures, 24 unresolved, 1 expected failure); `check_debug_invariance.sh` 41 pass, 0 fail, 1 tool timeout with identical outputs. The harness effect with W10's cgeist is in the W10 cgeist entry.
+- **Reverted?:** no
+
 ## 2026-10-12 — hls-est: a sequential loop whose bound reads an affine.apply keeps a valid bound in --convert-affine-to-loopschedule (W8b, class "hls-est error")
 - **Commit:** the commit that adds this entry (branch `hls-est-vitis-match`).
 - **Files:** `lib/Dialect/Resource/Passes/AffineToLoopScheduleModified.cpp` (new `composeBoundApplies`, called at the start of `lowerAffineStructures`); new test `test/hls-est/Passes/loop_bound_apply.mlir`.

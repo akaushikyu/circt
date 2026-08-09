@@ -66,6 +66,18 @@ namespace circt::hls_analysis {
 /// `#pragma HLS inline off`; cgeist keeps its calls and so does hls-est's
 /// `--inline` (HlsInliner.cpp).
 constexpr llvm::StringLiteral kInlineOffAttr = "hls.inline_off";
+/// `hls.inline_auto_off` (dictionary, on a func.func and on its func.call
+/// ops): Vitis would not inline these calls automatically (callee size x
+/// calls above its threshold, or a dataflow process; VITIS_NOTES N18), so
+/// cgeist keeps them (--hls-auto-inline, W10). hls-est treats such a callee
+/// exactly like an `inline off` one.
+constexpr llvm::StringLiteral kInlineAutoOffAttr = "hls.inline_auto_off";
+
+/// Whether `fn` is a callee whose calls Vitis keeps: `inline off`, or kept by
+/// Vitis's automatic-inlining rule.
+inline bool isKeptCallee(mlir::Operation *fn) {
+  return fn->hasAttr(kInlineOffAttr) || fn->hasAttr(kInlineAutoOffAttr);
+}
 /// `hls.allocation` (array of dictionaries, on a func.func): the function's
 /// `#pragma HLS allocation` pragmas, `{instances = ["name", ...], limit = N,
 /// type = "function"}` as cgeist --hls-annotate writes them.

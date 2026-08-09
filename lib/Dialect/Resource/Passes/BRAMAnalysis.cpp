@@ -281,6 +281,7 @@ struct InstanceRecord {
   std::string func;
   unsigned instances = 1;
   bool inlineOff = false;
+  bool inlineAutoOff = false; ///< kept by Vitis's automatic-inlining rule
   struct Parent {
     std::string parent;
     unsigned parentInstances = 1;
@@ -2168,6 +2169,7 @@ static void printDebugText(ArrayRef<MemrefRecord> records,
     for (const InstanceRecord &fieldValue : instances) {
       os << "  @" << fieldValue.func << ": " << fieldValue.instances
          << " instance(s)" << (fieldValue.inlineOff ? " (inline off)" : "")
+         << (fieldValue.inlineAutoOff ? " (not inlined automatically)" : "")
          << "\n";
       for (const InstanceRecord::Parent &portValue : fieldValue.parents) {
         os << "    in @" << portValue.parent << " (x"
@@ -2476,6 +2478,7 @@ static std::error_code writeDebugJson(ArrayRef<MemrefRecord> records,
     fo["func"] = fieldValue.func;
     fo["instances"] = static_cast<int64_t>(fieldValue.instances);
     fo["inline_off"] = fieldValue.inlineOff;
+    fo["inline_auto_off"] = fieldValue.inlineAutoOff;
     llvm::json::Array parents;
     for (const InstanceRecord::Parent &portValue : fieldValue.parents) {
       llvm::json::Object po;
@@ -2810,6 +2813,7 @@ collectInstanceRecords(const InstanceModel &model) {
     resultValue.func = callee.getName().str();
     resultValue.instances = model.instancesOf(callee);
     resultValue.inlineOff = callee->hasAttr(kInlineOffAttr);
+    resultValue.inlineAutoOff = callee->hasAttr(kInlineAutoOffAttr);
     for (const ParentInstances &pi : parents) {
       InstanceRecord::Parent portValue;
       func::FuncOp parentFn = pi.parent;
