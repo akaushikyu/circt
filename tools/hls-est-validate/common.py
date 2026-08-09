@@ -91,8 +91,10 @@ HLS_EST = os.environ.get("HLS_EST_BIN") or HLS_EST_DEFAULT
 # (OPEN_ISSUES O25). `--inline` keeps the calls to `hls.inline_off` callees (VITIS_NOTES N14).
 # --mark-constant-fills (W7 item 3, decision #45 under #36) marks the arrays whose every write
 # stores a compile-time constant, which Vitis turns into ROMs, before the folds (VITIS_NOTES N26).
-DME_FRONT = ("--lower-polygeist-subindex --inline --mark-constant-fills --canonicalize --sccp "
-             "--vitis-fold --dead-memory-elimination")
+# --split-struct-memrefs (W8b, under #36) gives each member of a local array of structs its own
+# memref, as Vitis disaggregates it (VITIS_NOTES N29); it is a no-op on modules without such arrays.
+DME_FRONT = ("--lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills "
+             "--canonicalize --sccp --vitis-fold --dead-memory-elimination")
 NO_FRONT_PIPELINE = ("--affine-loop-normalize --auto-pipeline-unroll "
                      "--memory-banking-bram --convert-affine-to-loopschedule --bram-analysis")
 DEFAULT_PIPELINE = DME_FRONT + " " + NO_FRONT_PIPELINE

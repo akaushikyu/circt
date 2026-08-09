@@ -55,6 +55,8 @@ int main(int argc, char **argv) {
   circt::hls_analysis::registerHlsInlinerExtension(targetRegistry);
 
   mlir::LLVM::registerInlinerInterface(targetRegistry);
+
+  circt::hls_analysis::registerPolygeistMemRefElementTypes(targetRegistry);
   circt::hls_analysis::registerBRAMInterfaceExternalModels(targetRegistry);
   circt::hls_analysis::registerBRAMLoopscheduleAnalysisPass();
   circt::hls_analysis::registerAffineToLoopScheduleAnalysisPass();
@@ -65,6 +67,7 @@ int main(int argc, char **argv) {
   circt::hls_analysis::registerInferVitisSplitArray();
   circt::hls_analysis::registerVitisCleanupPasses();
   circt::hls_analysis::registerLowerSubIndexPass();
+  circt::hls_analysis::registerSplitStructMemrefsPass();
 
   mlir::affine::registerAffinePasses();
   mlir::registerCSEPass();

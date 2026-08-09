@@ -14,6 +14,7 @@ add_mlir_library(HLSPasses
         CallInstances.cpp
         HlsInliner.cpp
         PolygeistCompat.cpp
+        SplitStructMemrefs.cpp
         PartitionLayout.cpp
         ConstantFills.cpp
 
@@ -39,6 +40,7 @@ add_mlir_library(HLSPasses
         MLIRArithDialect
         MLIRSCFDialect
         MLIRControlFlowDialect
+        MLIRLLVMDialect
         MLIRTransformUtils
         MLIRPass
         CIRCTScheduling

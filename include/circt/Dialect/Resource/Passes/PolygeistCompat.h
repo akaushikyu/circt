@@ -9,7 +9,7 @@
 // cgeist passes a row of a multi-dimensional array (`f(a[k])`, a reference to
 // an element) as `"polygeist.subindex"(%a, %k) : (memref<NxMxT>, index) ->
 // memref<MxT>`, an op of Polygeist's own dialect that hls-est could not parse
-// (OPEN_ISSUES.md O25). This file gives hls-est a minimal `polygeist` dialect
+// This file gives hls-est a minimal `polygeist` dialect
 // with that one op (a pure, view-like rank-reducing index into the leading
 // dimension) and the pass `--lower-polygeist-subindex` that removes it:
 //
@@ -32,6 +32,7 @@
 #define CIRCT_DIALECT_RESOURCE_PASSES_POLYGEISTCOMPAT_H
 
 #include "mlir/IR/Dialect.h"
+#include "mlir/IR/DialectRegistry.h"
 #include "mlir/IR/OpDefinition.h"
 #include "mlir/Interfaces/SideEffectInterfaces.h"
 #include "mlir/Interfaces/ViewLikeInterface.h"
@@ -86,6 +87,69 @@ public:
   bool isRowSelect();
 };
 
+/// `"polygeist.pointer2memref"(%p) : (!llvm.ptr) -> memref<...>`: Polygeist's
+/// cast of an LLVM pointer to a memref (cgeist emits it for a string literal
+/// argument, e.g. the name of `hls::stream<T> s("fifo_0")`, and for pointers
+/// it could not type). A pure cast: it allocates no storage, so it is never a
+/// memory of its own; accesses through it are of unknown origin (W8b, O25).
+class Pointer2MemrefOp
+    : public mlir::Op<Pointer2MemrefOp, mlir::OpTrait::OneResult,
+                      mlir::OpTrait::OneTypedResult<mlir::BaseMemRefType>::Impl,
+                      mlir::OpTrait::OneOperand, mlir::OpTrait::ZeroRegions,
+                      mlir::OpTrait::ZeroSuccessors,
+                      mlir::MemoryEffectOpInterface::Trait> {
+public:
+  using Op::Op;
+  static llvm::StringRef getOperationName() {
+    return "polygeist.pointer2memref";
+  }
+  static llvm::ArrayRef<llvm::StringRef> getAttributeNames() { return {}; }
+  mlir::Value getSource() { return getOperand(); }
+  void getEffects(
+      llvm::SmallVectorImpl<mlir::SideEffects::EffectInstance<
+          mlir::MemoryEffects::Effect>> &effects) {}
+  mlir::LogicalResult verify();
+};
+
+/// `"polygeist.memref2pointer"(%m) : (memref<...>) -> !llvm.ptr`: the inverse
+/// cast (cgeist emits it for pointer comparisons, `memcpy` / `memset`
+/// arguments and pointers stored into structs). Pure.
+class Memref2PointerOp
+    : public mlir::Op<Memref2PointerOp, mlir::OpTrait::OneResult,
+                      mlir::OpTrait::OneTypedResult<mlir::Type>::Impl,
+                      mlir::OpTrait::OneOperand, mlir::OpTrait::ZeroRegions,
+                      mlir::OpTrait::ZeroSuccessors,
+                      mlir::MemoryEffectOpInterface::Trait> {
+public:
+  using Op::Op;
+  static llvm::StringRef getOperationName() {
+    return "polygeist.memref2pointer";
+  }
+  static llvm::ArrayRef<llvm::StringRef> getAttributeNames() { return {}; }
+  mlir::Value getSource() { return getOperand(); }
+  void getEffects(
+      llvm::SmallVectorImpl<mlir::SideEffects::EffectInstance<
+          mlir::MemoryEffects::Effect>> &effects) {}
+  mlir::LogicalResult verify();
+};
+
+/// Lets `memref<... x !llvm.struct<...>>` (cgeist's arrays of structs) parse:
+/// attaches MLIR's MemRefElementTypeInterface to the LLVM struct and array
+/// types, as Polygeist itself does. Call on every context that parses cgeist
+/// output.
+void registerPolygeistMemRefElementTypes(mlir::DialectRegistry &registry);
+
+/// Bits of one element of a memref whose element type is an LLVM aggregate
+/// (`!llvm.struct`, `!llvm.array`), counted as the sum of its scalar leaves
+/// (a packed struct, no padding), or 0 for anything else. Vitis' treatment
+/// of a struct array: one memory per member (VITIS_NOTES.md N29).
+unsigned aggregateElementBits(mlir::Type type);
+
+/// --split-struct-memrefs (SplitStructMemrefs.cpp): one memref per member of
+/// a local array of structs, as Vitis disaggregates it (VITIS_NOTES.md N29).
+std::unique_ptr<mlir::Pass> createSplitStructMemrefsPass();
+void registerSplitStructMemrefsPass();
+
 std::unique_ptr<mlir::Pass> createLowerSubIndexPass();
 void registerLowerSubIndexPass();
 
@@ -93,5 +157,7 @@ void registerLowerSubIndexPass();
 
 MLIR_DECLARE_EXPLICIT_TYPE_ID(circt::hls_analysis::PolygeistCompatDialect)
 MLIR_DECLARE_EXPLICIT_TYPE_ID(circt::hls_analysis::SubIndexOp)
+MLIR_DECLARE_EXPLICIT_TYPE_ID(circt::hls_analysis::Pointer2MemrefOp)
+MLIR_DECLARE_EXPLICIT_TYPE_ID(circt::hls_analysis::Memref2PointerOp)
 
 #endif // CIRCT_DIALECT_RESOURCE_PASSES_POLYGEISTCOMPAT_H

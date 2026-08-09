@@ -7,11 +7,14 @@
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/Dialect/LLVMIR/LLVMDialect.h"
+#include "mlir/Dialect/LLVMIR/LLVMTypes.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/Diagnostics.h"
 #include "mlir/IR/SymbolTable.h"
+#include "mlir/Transforms/InliningUtils.h"
 #include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/SmallVector.h"
 
@@ -20,11 +23,80 @@ using namespace circt::hls_analysis;
 
 MLIR_DEFINE_EXPLICIT_TYPE_ID(circt::hls_analysis::PolygeistCompatDialect)
 MLIR_DEFINE_EXPLICIT_TYPE_ID(circt::hls_analysis::SubIndexOp)
+MLIR_DEFINE_EXPLICIT_TYPE_ID(circt::hls_analysis::Pointer2MemrefOp)
+MLIR_DEFINE_EXPLICIT_TYPE_ID(circt::hls_analysis::Memref2PointerOp)
+
+namespace {
+/// The polygeist ops are pure casts and views, so a callee that contains one
+/// may be inlined (without an interface MLIR's inliner refuses such a callee:
+/// a struct member access `p.a` through a reference parameter then stays a
+/// call, W8b).
+struct PolygeistCompatInlinerInterface : public DialectInlinerInterface {
+  using DialectInlinerInterface::DialectInlinerInterface;
+  bool isLegalToInline(Operation *, Region *, bool, IRMapping &) const final {
+    return true;
+  }
+};
+} // namespace
 
 PolygeistCompatDialect::PolygeistCompatDialect(MLIRContext *context)
     : Dialect(getDialectNamespace(), context,
               TypeID::get<PolygeistCompatDialect>()) {
-  addOperations<SubIndexOp>();
+  addOperations<SubIndexOp, Pointer2MemrefOp, Memref2PointerOp>();
+  addInterfaces<PolygeistCompatInlinerInterface>();
+}
+
+LogicalResult Pointer2MemrefOp::verify() {
+  if (!isa<LLVM::LLVMPointerType>(getSource().getType()))
+    return emitOpError("expects an LLVM pointer operand");
+  return success();
+}
+
+LogicalResult Memref2PointerOp::verify() {
+  if (!isa<BaseMemRefType>(getSource().getType()))
+    return emitOpError("expects a memref operand");
+  if (!isa<LLVM::LLVMPointerType>(getResult().getType()))
+    return emitOpError("expects an LLVM pointer result");
+  return success();
+}
+
+namespace {
+/// MemRefElementTypeInterface for the LLVM aggregate types cgeist puts in
+/// memrefs (an array of structs). The interface has no methods; attaching it
+/// is what makes the type a valid memref element type.
+template <typename T>
+struct AggregateMemRefElement
+    : public MemRefElementTypeInterface::ExternalModel<
+          AggregateMemRefElement<T>, T> {};
+} // namespace
+
+void circt::hls_analysis::registerPolygeistMemRefElementTypes(
+    DialectRegistry &targetRegistry) {
+  targetRegistry.addExtension(+[](MLIRContext *context, LLVM::LLVMDialect *) {
+    LLVM::LLVMStructType::attachInterface<
+        AggregateMemRefElement<LLVM::LLVMStructType>>(*context);
+    LLVM::LLVMArrayType::attachInterface<
+        AggregateMemRefElement<LLVM::LLVMArrayType>>(*context);
+  });
+}
+
+unsigned circt::hls_analysis::aggregateElementBits(Type type) {
+  if (type.isIntOrFloat())
+    return type.getIntOrFloatBitWidth();
+  if (isa<IndexType>(type))
+    return 64;
+  if (isa<LLVM::LLVMPointerType>(type))
+    return 64;
+  if (auto arr = dyn_cast<LLVM::LLVMArrayType>(type))
+    return arr.getNumElements() * aggregateElementBits(arr.getElementType());
+  if (auto st = dyn_cast<LLVM::LLVMStructType>(type)) {
+    unsigned bits = 0;
+    if (!st.isOpaque())
+      for (Type fieldValue : st.getBody())
+        bits += aggregateElementBits(fieldValue);
+    return bits;
+  }
+  return 0;
 }
 
 void SubIndexOp::build(OpBuilder &passBuilder, OperationState &state,

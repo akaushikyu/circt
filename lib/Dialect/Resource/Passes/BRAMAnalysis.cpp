@@ -239,6 +239,8 @@ struct MemrefRecord {
   std::optional<std::string> varname;
   std::optional<std::string> fromGlobal;
 
+  std::optional<std::string> structMember;
+
   std::optional<std::string> keptReason;
   std::string kind;
   std::optional<std::string> func;
@@ -1161,6 +1163,8 @@ static void describeMemref(Operation *op, unsigned index,
     resultValue.varname = buildPoint.getValue().str();
   if (auto globalOp = op->getAttrOfType<StringAttr>("hls.from_global"))
     resultValue.fromGlobal = globalOp.getValue().str();
+  if (auto memoryOp = op->getAttrOfType<StringAttr>("hls.struct_member"))
+    resultValue.structMember = memoryOp.getValue().str();
   if (auto keyValue = op->getAttrOfType<StringAttr>("hls.kept_reason"))
     resultValue.keptReason = keyValue.getValue().str();
 
@@ -2009,6 +2013,9 @@ static void printDebugText(ArrayRef<MemrefRecord> records,
     if (resultValue.fromGlobal)
       os << "  promoted from memref.global @" << *resultValue.fromGlobal
          << " (--promote-globals-to-allocas)\n";
+    if (resultValue.structMember)
+      os << "  struct array split: " << *resultValue.structMember
+         << " (--split-struct-memrefs)\n";
     os << "  shape " << shapeString(resultValue.shape) << " x "
        << resultValue.elemType << " (" << resultValue.elemBits << " bits)";
     if (resultValue.words)
@@ -2217,6 +2224,8 @@ static llvm::json::Object toJson(const MemrefRecord &resultValue) {
 
   if (resultValue.fromGlobal)
     opHandle["from_global"] = *resultValue.fromGlobal;
+  if (resultValue.structMember)
+    opHandle["struct_member"] = *resultValue.structMember;
   if (resultValue.rom)
     opHandle["rom"] = true;
   if (resultValue.adapter) {

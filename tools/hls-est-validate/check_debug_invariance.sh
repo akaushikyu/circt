@@ -15,8 +15,8 @@ set -u
 
 CIRCT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 HLS_EST="${HLS_EST:-$CIRCT/build/clion/bin/hls-est}"
-# default: common.py DEFAULT_PIPELINE (MEMOS.md M1 and M5, decisions #1 and #4; W3)
-PIPELINE="${PIPELINE:---lower-polygeist-subindex --inline --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --memory-banking-bram --convert-affine-to-loopschedule --bram-analysis}"
+# default: common.py DEFAULT_PIPELINE (MEMOS.md M1 and M5, decisions #1 and #4; W3; W8b)
+PIPELINE="${PIPELINE:---lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --memory-banking-bram --convert-affine-to-loopschedule --bram-analysis}"
 TIMEOUT="${TIMEOUT:-60}"
 TESTS="${TESTS:-$CIRCT/test/hls-est/Estimation}"
 
