@@ -1460,10 +1460,41 @@ static bool yieldOpLegalityCallback(AffineYieldOp op) {
 /// complex computations in the condition of ifs, or the addresses of loads
 /// and stores. The dependence analysis will be updated so the dependences
 /// from the affine loads and stores are now on the memref loads and stores.
+/// Folds the affine.apply ops that feed a bound of `forOp` into the bound map.
+/// lowerAffineStructures expands every affine.apply into arith ops, and an
+/// arith value computed inside a loop is no valid affine dimension or symbol,
+/// so an affine.for left in place (a sequential loop) whose bound read such an
+/// apply would no longer verify: polybench nussinov's `for (k = i + 1; k < j;
+/// k++)`, whose `j` is an apply of the enclosing loops' counters ("operand
+/// cannot be used as a dimension id", W8b). Loops whose bounds read no apply
+/// are left untouched.
+static void composeBoundApplies(AffineForOp forOp) {
+  auto readsApply = [](ValueRange operands) {
+    return llvm::any_of(operands, [](Value v) {
+      return v.getDefiningOp<AffineApplyOp>() != nullptr;
+    });
+  };
+  if (readsApply(forOp.getLowerBoundOperands())) {
+    AffineMap map = forOp.getLowerBoundMap();
+    SmallVector<Value> operands(forOp.getLowerBoundOperands());
+    affine::fullyComposeAffineMapAndOperands(&map, &operands);
+    affine::canonicalizeMapAndOperands(&map, &operands);
+    forOp.setLowerBound(operands, map);
+  }
+  if (readsApply(forOp.getUpperBoundOperands())) {
+    AffineMap map = forOp.getUpperBoundMap();
+    SmallVector<Value> operands(forOp.getUpperBoundOperands());
+    affine::fullyComposeAffineMapAndOperands(&map, &operands);
+    affine::canonicalizeMapAndOperands(&map, &operands);
+    forOp.setUpperBound(operands, map);
+  }
+}
+
 LogicalResult AffineToLoopSchedule::lowerAffineStructures(
     MemoryDependenceAnalysis &dependenceAnalysis) {
   auto *context = &getContext();
   auto op = getOperation();
+  op.walk([](AffineForOp forOp) { composeBoundApplies(forOp); });
 
   ConversionTarget target(*context);
   target.addLegalDialect<AffineDialect, ArithDialect, MemRefDialect, SCFDialect,
