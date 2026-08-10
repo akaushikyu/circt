@@ -25,6 +25,7 @@ MLIR_DEFINE_EXPLICIT_TYPE_ID(circt::hls_analysis::PolygeistCompatDialect)
 MLIR_DEFINE_EXPLICIT_TYPE_ID(circt::hls_analysis::SubIndexOp)
 MLIR_DEFINE_EXPLICIT_TYPE_ID(circt::hls_analysis::Pointer2MemrefOp)
 MLIR_DEFINE_EXPLICIT_TYPE_ID(circt::hls_analysis::Memref2PointerOp)
+MLIR_DEFINE_EXPLICIT_TYPE_ID(circt::hls_analysis::UndefOp)
 
 namespace {
 /// The polygeist ops are pure casts and views, so a callee that contains one
@@ -42,7 +43,8 @@ struct PolygeistCompatInlinerInterface : public DialectInlinerInterface {
 PolygeistCompatDialect::PolygeistCompatDialect(MLIRContext *context)
     : Dialect(getDialectNamespace(), context,
               TypeID::get<PolygeistCompatDialect>()) {
-  addOperations<SubIndexOp, Pointer2MemrefOp, Memref2PointerOp>();
+  addOperations<SubIndexOp, Pointer2MemrefOp, Memref2PointerOp, UndefOp>();
+  allowUnknownOperations();
   addInterfaces<PolygeistCompatInlinerInterface>();
 }
 
@@ -77,6 +79,8 @@ void circt::hls_analysis::registerPolygeistMemRefElementTypes(
         AggregateMemRefElement<LLVM::LLVMStructType>>(*context);
     LLVM::LLVMArrayType::attachInterface<
         AggregateMemRefElement<LLVM::LLVMArrayType>>(*context);
+    LLVM::LLVMFunctionType::attachInterface<
+        AggregateMemRefElement<LLVM::LLVMFunctionType>>(*context);
   });
 }
 

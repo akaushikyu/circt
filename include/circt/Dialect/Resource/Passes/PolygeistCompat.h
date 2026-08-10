@@ -42,6 +42,10 @@
 
 namespace circt::hls_analysis {
 
+/// Polygeist ops hls-est does not model (e.g. `polygeist.get_func`, the
+/// address of a function passed as a value, as in `std::cout << std::endl`,
+/// console output Vitis ignores in synthesis) parse as unregistered ops of
+/// this dialect: unknown effects, never a memory.
 class PolygeistCompatDialect : public mlir::Dialect {
 public:
   explicit PolygeistCompatDialect(mlir::MLIRContext *ctx);
@@ -133,8 +137,27 @@ public:
   mlir::LogicalResult verify();
 };
 
-/// Lets `memref<... x !llvm.struct<...>>` (cgeist's arrays of structs) parse:
-/// attaches MLIR's MemRefElementTypeInterface to the LLVM struct and array
+/// `"polygeist.undef"() : () -> T`: an undefined value of type T (cgeist
+/// emits it for a variable read before any assignment on some path, e.g. a
+/// pointer that a loop advances, chstone sha). Pure; no storage.
+class UndefOp
+    : public mlir::Op<UndefOp, mlir::OpTrait::OneResult,
+                      mlir::OpTrait::OneTypedResult<mlir::Type>::Impl,
+                      mlir::OpTrait::ZeroOperands, mlir::OpTrait::ZeroRegions,
+                      mlir::OpTrait::ZeroSuccessors,
+                      mlir::MemoryEffectOpInterface::Trait> {
+public:
+  using Op::Op;
+  static llvm::StringRef getOperationName() { return "polygeist.undef"; }
+  static llvm::ArrayRef<llvm::StringRef> getAttributeNames() { return {}; }
+  void getEffects(
+      llvm::SmallVectorImpl<mlir::SideEffects::EffectInstance<
+          mlir::MemoryEffects::Effect>> &effects) {}
+};
+
+/// Lets `memref<... x !llvm.struct<...>>` (cgeist's arrays of structs) and
+/// `memref<?x!llvm.func<...>>` (a function passed by pointer) parse: attaches
+/// MLIR's MemRefElementTypeInterface to the LLVM struct, array and function
 /// types, as Polygeist itself does. Call on every context that parses cgeist
 /// output.
 void registerPolygeistMemRefElementTypes(mlir::DialectRegistry &registry);
@@ -159,5 +182,6 @@ MLIR_DECLARE_EXPLICIT_TYPE_ID(circt::hls_analysis::PolygeistCompatDialect)
 MLIR_DECLARE_EXPLICIT_TYPE_ID(circt::hls_analysis::SubIndexOp)
 MLIR_DECLARE_EXPLICIT_TYPE_ID(circt::hls_analysis::Pointer2MemrefOp)
 MLIR_DECLARE_EXPLICIT_TYPE_ID(circt::hls_analysis::Memref2PointerOp)
+MLIR_DECLARE_EXPLICIT_TYPE_ID(circt::hls_analysis::UndefOp)
 
 #endif // CIRCT_DIALECT_RESOURCE_PASSES_POLYGEISTCOMPAT_H
