@@ -155,6 +155,22 @@ def kill_windows_tree(marker):
         pass
 
 
+def windows_tree_commit_gb(marker):
+    r"""Committed memory (private bytes, GB) of the Windows processes whose command line names the work
+    dir `marker`, matched like kill_windows_tree. None when the query fails. Windows stopped the WSL VM
+    on 2026-10-12 when one vitis_hls.exe reached 71 GB of virtual memory next to WSL's 56 GB."""
+    sep = r"[\/]"
+    pat = "".join(sep if ch in "/\\" else ch for ch in marker.rstrip("/\\")) + sep
+    ps = ("$t = (Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like '*%s*' } | "
+          "Measure-Object -Property PrivatePageCount -Sum).Sum; if ($t) { $t } else { 0 }") % pat
+    try:
+        r = subprocess.run([C.POWERSHELL_EXE, "-NoProfile", "-Command", ps], timeout=60,
+                           capture_output=True, text=True)
+        return int(r.stdout.strip().splitlines()[-1]) / 2**30
+    except Exception:
+        return None
+
+
 def disassemble(db_dir):
     """Produce .ll next to the interesting .bc files (idempotent)."""
     wanted = ["a.g.ld.0.bc", "a.g.ld.5.gdce.bc", "a.o.1.bc", "a.o.2.bc", "a.o.3.bc"]
@@ -271,16 +287,38 @@ def synthesise(d, args, key, cdir, res_path, tag, work_wsl, lock_fd):
     try:
         # pass_fds: the child holds the design lock too, so if this runner dies the design stays
         # locked until the Vitis run itself ends (a restarted runner would otherwise wipe its work dir)
-        p = subprocess.run([C.CMD_EXE, "/c", cmd], cwd=work_wsl, capture_output=True,
-                           text=True, errors="replace", timeout=args.timeout, pass_fds=(lock_fd,))
-        (Path(work_wsl) / "vpp_stdout.txt").write_text(p.stdout + "\n--- stderr ---\n" + p.stderr)
-        if p.returncode != 0:
+        with open(Path(work_wsl) / "vpp.out", "w") as fo, open(Path(work_wsl) / "vpp.err", "w") as fe:
+            p = subprocess.Popen([C.CMD_EXE, "/c", cmd], cwd=work_wsl, stdout=fo, stderr=fe,
+                                 text=True, errors="replace", pass_fds=(lock_fd,))
+            # --mem-limit-gb: poll the run's committed memory and stop it above the limit, so one design
+            # cannot exhaust Windows memory and take the WSL VM down with it.
+            while p.poll() is None:
+                if time.time() - t0 > args.timeout:
+                    raise subprocess.TimeoutExpired(cmd, args.timeout)
+                time.sleep(30 if args.mem_limit_gb else 5)
+                if args.mem_limit_gb and p.poll() is None:
+                    gb = windows_tree_commit_gb(work_win.replace("/", "\\"))
+                    if gb is not None and gb > args.mem_limit_gb:
+                        status, note = "vitis memory limit", f"{gb:.1f} GB > {args.mem_limit_gb} GB"
+                        kill_windows_tree(work_win.replace("/", "\\"))
+                        p.kill()
+                        p.wait()
+                        time.sleep(3)
+                        break
+        out = (Path(work_wsl) / "vpp.out").read_text(errors="replace")
+        err = (Path(work_wsl) / "vpp.err").read_text(errors="replace")
+        (Path(work_wsl) / "vpp_stdout.txt").write_text(out + "\n--- stderr ---\n" + err)
+        if status == "ok" and p.returncode != 0:
             status = "vitis failed"
-            errs = re.findall(r"^ERROR: .*$", p.stdout, re.M)
+            errs = re.findall(r"^ERROR: .*$", out, re.M)
             note = (errs[0] if errs else f"exit {p.returncode}")[:300]
     except subprocess.TimeoutExpired:
         status, note = "vitis timeout", f"{args.timeout}s"
         kill_windows_tree(work_win.replace("/", "\\"))
+        try:
+            p.kill()
+        except Exception:
+            pass
         time.sleep(3)
     elapsed = time.time() - t0
 
@@ -333,6 +371,9 @@ def main():
     ap.add_argument("--benchmarks", default="", help="comma list of benchmark names")
     ap.add_argument("-j", type=int, default=6)
     ap.add_argument("--timeout", type=int, default=3600)
+    ap.add_argument("--mem-limit-gb", type=float, default=0,
+                    help="stop a design whose Windows processes commit more than this many GB "
+                         "(status 'vitis memory limit'); 0 = no limit")
     ap.add_argument("--force", action="store_true")
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--keep-work", action="store_true")
