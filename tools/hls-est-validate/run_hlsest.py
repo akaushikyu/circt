@@ -211,6 +211,9 @@ def run_cgeist(d, shim, force=False):
     out.parent.mkdir(parents=True, exist_ok=True)
     log = out.with_suffix(".cgeist.log")
     status, note = "ok", ""
+    # Every attempt's command and output, so that a failed by-name retry does not hide why the '*'
+    # attempt failed (OPEN_ISSUES O28: the log held only the retry's empty output).
+    attempts = ""
     # The HLSFactory lit tests were generated with --function='*'; a C++ top
     # given by name can silently produce an empty module.  Try '*' first.
     for func in ("*", d["top"]):
@@ -221,7 +224,9 @@ def run_cgeist(d, shim, force=False):
         except subprocess.TimeoutExpired:
             status, note = "cgeist timeout", f"{CGEIST_TIMEOUT}s"
             break
-        log.write_text(" ".join(cmd) + "\n\n" + p.stdout + "\n--- stderr ---\n" + p.stderr)
+        this = " ".join(cmd) + "\n\n" + p.stdout + "\n--- stderr ---\n" + p.stderr
+        attempts = this + ("\n\n--- earlier attempt ---\n" + attempts if attempts else "")
+        log.write_text(attempts)    # the latest attempt first: its command is the log's first line
         if p.returncode == 0 and out.exists() and out.stat().st_size > 0                 and re.search(r"func\.func\s", out.read_text(errors="replace")):
             sanitize_mlir(out)
             status, note = "ok", f"--function={func}"

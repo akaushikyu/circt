@@ -91,6 +91,12 @@ _CLANG18_DIR = os.environ.get("CS_CLANG18_DIR") or next(
 CLANG = _CLANG18_DIR + "/clang"
 CLANGXX = _CLANG18_DIR + "/clang++"
 POLYGEIST_OPT = os.environ.get("POLYGEIST_OPT", "/mnt/d/HLS/Polygeist/build/bin/polygeist-opt")
+# polygeist-opt's LLVM dialect has typed pointers, which this tree's mlir-opt / mlir-translate do not
+# parse: its output is finished with Polygeist's own (reconcile-unrealized-casts, translation; the LLVM IR
+# they write uses opaque pointers, which this tree's llc reads).
+POLYGEIST_MLIR_OPT = os.environ.get("POLYGEIST_MLIR_OPT", "/mnt/d/HLS/Polygeist/llvm-project/build/bin/mlir-opt")
+POLYGEIST_MLIR_TRANSLATE = os.environ.get("POLYGEIST_MLIR_TRANSLATE",
+                                          "/mnt/d/HLS/Polygeist/llvm-project/build/bin/mlir-translate")
 SAN_LINKER = os.environ.get("CS_SAN_LINKER", "/usr/bin/clang++-14")
 # the real-header reference: Vitis' C simulation compiles with GCC; Polygeist's clang is a Debug build
 # that needs more than 10 minutes for hls_math.h, the system g++ 15 s.  GCC 13: -ftrivial-auto-var-init
@@ -815,6 +821,8 @@ template <class CsR, class... CsA> void cs_invoke(CsR (*cs_f)(CsA...), void **cs
 template <class... CsP> struct CsPick {
   template <class CsR> static CsR (*cs_get(CsR (*cs_f)(CsP...)))(CsP...) { return cs_f; }
 };
+// a value of type T in an unevaluated call (the result type of the top, by overload resolution)
+template <class CsT> CsT cs_val();
 }  // namespace cs_detail
 #ifndef CS_TOP_FN
 #define CS_TOP_FN &CS_TOP
@@ -1033,6 +1041,8 @@ template <class CsR, class... CsA> void cs_invoke(CsR (*cs_f)(CsA...), void **cs
 template <class... CsP> struct CsPick {
   template <class CsR> static CsR (*cs_get(CsR (*cs_f)(CsP...)))(CsP...) { return cs_f; }
 };
+// a value of type T in an unevaluated call (the result type of the top, by overload resolution)
+template <class CsT> CsT cs_val();
 }  // namespace cs_detail
 #ifndef CS_TOP_FN
 #define CS_TOP_FN &CS_TOP
@@ -1630,16 +1640,22 @@ class Checker:
             if not os.path.exists(POLYGEIST_OPT):
                 return "polygeist ops (" + ",".join(sorted(set(re.findall(r"polygeist\.(\w+)", text)))) + \
                        ") need polygeist-opt (not built)"
-            lower = [POLYGEIST_OPT, str(wd / "cand.mlir"), "--lower-affine", "--convert-scf-to-cf",
-                     "--convert-polygeist-to-llvm=use-c-style-memref=0", "--reconcile-unrealized-casts",
-                     "-o", str(wd / "cand.ll.mlir")]
+            # polygeist-opt registers neither --convert-scf-to-cf (its convert-polygeist-to-llvm
+            # lowers scf itself) nor --reconcile-unrealized-casts.
+            lowers = [[POLYGEIST_OPT, str(wd / "cand.mlir"), "--lower-affine",
+                       "--convert-polygeist-to-llvm=use-c-style-memref=0", "-o", str(wd / "cand.pg.mlir")],
+                      [POLYGEIST_MLIR_OPT, str(wd / "cand.pg.mlir"), "--reconcile-unrealized-casts",
+                       "-o", str(wd / "cand.ll.mlir")]]
+            translate = POLYGEIST_MLIR_TRANSLATE
         else:
-            lower = [MLIR_OPT, str(wd / "cand.mlir"), *UPSTREAM_LOWERING, "-o", str(wd / "cand.ll.mlir")]
-        rc, so, se, _ = run(lower, timeout=600)
-        if rc != 0:
-            (wd / "lower.err").write_text(se)
-            return "lowering failed: " + first_err(se)
-        rc, so, se, _ = run([MLIR_TRANSLATE, "--mlir-to-llvmir", str(wd / "cand.ll.mlir"), "-o", str(wd / "cand.ll")])
+            lowers = [[MLIR_OPT, str(wd / "cand.mlir"), *UPSTREAM_LOWERING, "-o", str(wd / "cand.ll.mlir")]]
+            translate = MLIR_TRANSLATE
+        for lower in lowers:
+            rc, so, se, _ = run(lower, timeout=600)
+            if rc != 0:
+                (wd / "lower.err").write_text(se)
+                return "lowering failed: " + first_err(se)
+        rc, so, se, _ = run([translate, "--mlir-to-llvmir", str(wd / "cand.ll.mlir"), "-o", str(wd / "cand.ll")])
         if rc != 0:
             (wd / "translate.err").write_text(se)
             return "mlir-translate failed: " + first_err(se)
@@ -1948,7 +1964,13 @@ class Checker:
         if rc != 0 and "overloaded function" in se and top_fn.startswith("_Z"):
             # several functions share the top's name: pick the one the MLIR top was compiled from
             params = cxx_params(demangle(top_fn))
-            pick = (f"#define CS_TOP_FN cs_detail::CsPick<{', '.join(params)}>::cs_get(&CS_TOP)\n")
+            # The result type comes from a call with the MLIR top's parameter types, and the cast picks
+            # the overload: deducing it from `&CS_TOP` fails when the name also denotes a function
+            # template (a top named `forward` next to `using namespace std;`, whose std::forward joins
+            # the overload set; WIP / stream_hls FeedForward).
+            args = ", ".join(f"cs_detail::cs_val<{p}>()" for p in params)
+            pick = (f"#define CS_TOP_FN static_cast<decltype(CS_TOP({args})) (*)({', '.join(params)})>"
+                    f"(&CS_TOP)\n")
             tf.write_text(thunk.replace("#define CS_TOP ", pick + "#define CS_TOP ", 1))
             rc, so, se, _ = run(compile_thunk, cwd=str(ddir))
         if rc != 0:
