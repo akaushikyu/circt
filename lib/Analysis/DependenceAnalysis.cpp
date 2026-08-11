@@ -59,7 +59,14 @@ namespace {
 struct PairKey {
   Block *srcBlock = nullptr;
   Block *dstBlock = nullptr;
+  // The access maps without the constant terms of their results, and the
+  // source's constant terms minus the destination's: the dependence system
+  // `src(x) + cs = dst(y) + cd` is `src(x) - dst(y) = cd - cs`, so pairs
+  // that differ only by a common shift of their constants (the copies of a
+  // fully unrolled body, `a[%i + 3]` / `a[%i + 5]` and `a[%i + 7]` /
+  // `a[%i + 9]`) have one result.
   AffineMap srcMap, dstMap;
+  SmallVector<int64_t, 4> constantDelta;
   SmallVector<Value, 4> srcOperands, dstOperands;
   unsigned depth = 0;
   bool srcBeforeDst = false;
@@ -67,6 +74,7 @@ struct PairKey {
   bool operator==(const PairKey &o) const {
     return srcBlock == o.srcBlock && dstBlock == o.dstBlock &&
            srcMap == o.srcMap && dstMap == o.dstMap &&
+           constantDelta == o.constantDelta &&
            srcOperands == o.srcOperands && dstOperands == o.dstOperands &&
            depth == o.depth && srcBeforeDst == o.srcBeforeDst;
   }
@@ -87,6 +95,8 @@ struct PairKeyInfo {
     return llvm::hash_combine(
         k.srcBlock, k.dstBlock, k.srcMap.getAsOpaquePointer(),
         k.dstMap.getAsOpaquePointer(),
+        llvm::hash_combine_range(k.constantDelta.begin(),
+                                 k.constantDelta.end()),
         llvm::hash_combine_range(k.srcOperands.begin(), k.srcOperands.end()),
         llvm::hash_combine_range(k.dstOperands.begin(), k.dstOperands.end()),
         k.depth, k.srcBeforeDst);
@@ -103,6 +113,32 @@ struct PairResult {
 };
 
 } // namespace
+
+/// `map` with the constant term of every result removed (`d0 + 5` becomes
+/// `d0`, `7` becomes `0`); the removed terms go to `constants`. Simplified
+/// affine expressions keep the constant as the right operand of the
+/// outermost addition.
+static AffineMap stripConstantTerms(AffineMap map,
+                                    SmallVectorImpl<int64_t> &constants) {
+  SmallVector<AffineExpr, 4> parts;
+  for (AffineExpr e : map.getResults()) {
+    int64_t c = 0;
+    if (auto ce = dyn_cast<AffineConstantExpr>(e)) {
+      c = ce.getValue();
+      e = getAffineConstantExpr(0, map.getContext());
+    } else if (auto add = dyn_cast<AffineBinaryOpExpr>(e)) {
+      if (add.getKind() == AffineExprKind::Add)
+        if (auto ce = dyn_cast<AffineConstantExpr>(add.getRHS())) {
+          c = ce.getValue();
+          e = add.getLHS();
+        }
+    }
+    parts.push_back(e);
+    constants.push_back(c);
+  }
+  return AffineMap::get(map.getNumDims(), map.getNumSymbols(), parts,
+                        map.getContext());
+}
 
 /// True if `a` comes before `b` in their lowest common block (what the
 /// dependence test consults for same-iteration dependences).
@@ -241,8 +277,11 @@ void MemoryDependenceAnalysis::checkMemrefDependence(
         PairKey key;
         key.srcBlock = source->getBlock();
         key.dstBlock = destination->getBlock();
-        key.srcMap = srcMap.getAffineMap();
-        key.dstMap = dstMap.getAffineMap();
+        SmallVector<int64_t, 4> srcConstants, dstConstants;
+        key.srcMap = stripConstantTerms(srcMap.getAffineMap(), srcConstants);
+        key.dstMap = stripConstantTerms(dstMap.getAffineMap(), dstConstants);
+        for (auto [cs, cd] : llvm::zip(srcConstants, dstConstants))
+          key.constantDelta.push_back(cs - cd);
         key.srcOperands.assign(srcMap.getOperands().begin(),
                                srcMap.getOperands().end());
         key.dstOperands.assign(dstMap.getOperands().begin(),

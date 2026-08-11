@@ -993,6 +993,8 @@ private:
   SmallVector<SmallVector<Problem::ResourceType, 1>> rsrcs;
   SmallVector<unsigned> topo;
 
+  unsigned numCarriedEdges = 0;
+
   LogicalResult build();
   unsigned resMinII() const;
   /// Longest-path ASAP times at `ii`; false on a positive cycle.
@@ -1054,6 +1056,8 @@ LogicalResult FastModuloScheduler::build() {
       if (dist == 0) {
         succ0[loopIndex].push_back(innerIndex);
         ++indeg[innerIndex];
+      } else {
+        ++numCarriedEdges;
       }
     }
   }
@@ -1071,6 +1075,13 @@ LogicalResult FastModuloScheduler::build() {
       if (--indeg[innerIndex] == 0)
         ready.push(innerIndex);
   }
+  DEBUG_WITH_TYPE("fast-modulo-size", {
+    size_t edges = 0;
+    for (auto &portValue : preds)
+      edges += portValue.size();
+    llvm::dbgs() << "fast modulo scheduler: " << elementCount << " ops, "
+                 << edges << " edges, " << numCarriedEdges << " carried\n";
+  });
 
   return success(topo.size() == elementCount);
 }
@@ -1088,13 +1099,33 @@ unsigned FastModuloScheduler::resMinII() const {
   return ii;
 }
 
+/// Whether the predecessor graph `parent` (each op's last relaxing
+/// predecessor, -1 for none) has a cycle.
+static bool hasParentCycle(ArrayRef<int64_t> parent) {
+  unsigned elementCount = parent.size();
+
+  SmallVector<unsigned> walk(elementCount, 0);
+  for (unsigned start = 0; start < elementCount; ++start) {
+    int64_t valueHandle = start;
+    while (valueHandle >= 0 && walk[valueHandle] == 0) {
+      walk[valueHandle] = start + 1;
+      valueHandle = parent[valueHandle];
+    }
+    if (valueHandle >= 0 && walk[valueHandle] == start + 1)
+      return true;
+  }
+  return false;
+}
+
 bool FastModuloScheduler::asapTimes(unsigned ii,
                                     SmallVectorImpl<int64_t> &asap) const {
   unsigned elementCount = ops.size();
   asap.assign(elementCount, 0);
+  SmallVector<int64_t> parent(elementCount, -1);
   bool changed = true;
 
-  for (unsigned round = 0; changed && round <= elementCount; ++round) {
+  unsigned rounds = std::min<unsigned>(elementCount, numCarriedEdges + 1);
+  for (unsigned round = 0; changed && round <= rounds; ++round) {
     changed = false;
     for (unsigned innerIndex : topo)
       for (const Edge &entryValue : preds[innerIndex]) {
@@ -1103,9 +1134,13 @@ bool FastModuloScheduler::asapTimes(unsigned ii,
                        static_cast<int64_t>(entryValue.distance) * ii;
         if (cand > asap[innerIndex]) {
           asap[innerIndex] = cand;
+          parent[innerIndex] = entryValue.src;
           changed = true;
         }
       }
+
+    if (changed && hasParentCycle(parent))
+      return false;
   }
   return !changed;
 }
@@ -1821,7 +1856,9 @@ AffineToLoopSchedule::solveSchedulingProblem(AffineForOp forOp,
   bool scheduled = false, triedFast = false;
 
   StringRef scheduler;
-  if (fastThreshold == 0 || limited > fastThreshold) {
+  bool hugeProblem = fastOpsThreshold != 0 &&
+                     problem.getOperations().size() > fastOpsThreshold;
+  if (fastThreshold == 0 || limited > fastThreshold || hugeProblem) {
     triedFast = true;
     FastModuloScheduler fast(problem);
     scheduled = succeeded(fast.schedule(4096));

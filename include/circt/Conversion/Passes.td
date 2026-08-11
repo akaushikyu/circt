@@ -41,6 +41,14 @@ def AffineToLoopSchedule : Pass<"convert-affine-to-loopschedule", "mlir::func::F
            "operations are scheduled by the greedy resource-bound modulo list "
            "scheduler instead of the simplex-based one; 0 uses the greedy "
            "scheduler for every loop.">,
+    Option<"fastOpsThreshold", "fast-ops-threshold", "unsigned",
+           /*default=*/"16384",
+           "Loop bodies whose scheduling problem has more than this many "
+           "operations go to the greedy scheduler as well, whatever their "
+           "number of resource-limited operations: the simplex scheduler's "
+           "tableau is dense (one row per dependence, one column per "
+           "operation), more than a gigabyte at this size. 0 disables the "
+           "rule.">,
     Option<"cseBeforeSchedule", "cse", "bool", /*default=*/"true",
            "Merge duplicated side-effect-free ops (index arithmetic left by "
            "per-access affine-map expansion) before the scheduling problem is "
