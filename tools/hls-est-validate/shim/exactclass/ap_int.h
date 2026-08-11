@@ -30,6 +30,14 @@
 #ifndef HLSEST_EXACTCLASS_AP_INT_H
 #define HLSEST_EXACTCLASS_AP_INT_H
 #ifdef __cplusplus
+// Vitis marks every ap_int / ap_fixed member and operator AP_INLINE, i.e.
+// `inline __attribute__((always_inline))` under __SYNTHESIS__
+// (etc/ap_common.h): clang inlines them before Vitis's own inliner, which
+// never lists them ([HLS 214-178]). cgeist's automatic-inlining rule
+// (--hls-auto-inline, VITIS_NOTES N18) reads the same attribute.
+#ifdef __clang__
+#pragma clang attribute push(__attribute__((always_inline)), apply_to = function)
+#endif
 
 enum ap_q_mode { AP_RND, AP_RND_ZERO, AP_RND_MIN_INF, AP_RND_INF, AP_RND_CONV, AP_TRN, AP_TRN_ZERO };
 enum ap_o_mode { AP_SAT, AP_SAT_ZERO, AP_SAT_SYM, AP_WRAP, AP_WRAP_SM };
@@ -508,6 +516,10 @@ template <int W> struct ap_uint : ap_int_base<W, false> {
   template <class T> constexpr ap_uint(const T &v) : Base(v) {}
   template <class T> constexpr ap_uint &operator=(const T &v) { this->V = ap_uint(v).V; return *this; }
 };
+
+#ifdef __clang__
+#pragma clang attribute pop
+#endif
 
 #include "ap_fixed.h"
 
