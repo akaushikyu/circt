@@ -41,6 +41,7 @@
 #include "llvm/Support/Debug.h"
 
 #include <chrono>
+#include <map>
 
 #define DEBUG_TYPE "memory-dependence-analysis"
 
@@ -134,6 +135,27 @@ static bool haveDisjointConstantIndex(const AffineValueMap &ma,
   return false;
 }
 
+/// The result dimensions that are constant in the access map of every
+/// access in `ops` (all of one memref, so all of one rank).
+static SmallVector<unsigned>
+dimsConstantInAll(ArrayRef<Operation *> ops,
+                  DenseMap<Operation *, AffineValueMap> &accessMaps) {
+  SmallVector<unsigned> dims;
+  if (ops.empty())
+    return dims;
+  unsigned rank = accessMaps[ops.front()].getNumResults();
+  for (unsigned d = 0; d < rank; ++d) {
+    bool allConstant = llvm::all_of(ops, [&](Operation *op) {
+      AffineMap map = accessMaps[op].getAffineMap();
+      return d < map.getNumResults() &&
+             isa<AffineConstantExpr>(map.getResult(d));
+    });
+    if (allConstant)
+      dims.push_back(d);
+  }
+  return dims;
+}
+
 unsigned MemoryDependenceAnalysis::slotFor(Operation *op) {
   auto [it, inserted] = slotOf.try_emplace(op, slots.size());
   if (inserted)
@@ -157,7 +179,17 @@ void MemoryDependenceAnalysis::checkMemrefDependence(
   for (auto *op : memoryOps) {
     MemRefAccess access(op);
     byMemref[access.memref].push_back(op);
-    access.getAccessMap(&accessMaps[op]);
+    // With constant operands folded into the map (`a[%i, %c3]` built by the
+    // unroller is `(d0, d1) -> (d0, d1)` on a constant %c3): the constant
+    // indices then show as such, for haveDisjointConstantIndex and the
+    // buckets below. The folded map is the same access function, so the
+    // memo key built from it still determines the test's result.
+    AffineValueMap vm;
+    access.getAccessMap(&vm);
+    AffineMap map = vm.getAffineMap();
+    SmallVector<Value, 8> operands(vm.getOperands());
+    canonicalizeMapAndOperands(&map, &operands);
+    accessMaps[op].reset(map, operands);
   }
 
   DenseMap<PairKey, PairResult, PairKeyInfo> memo;
@@ -166,10 +198,37 @@ void MemoryDependenceAnalysis::checkMemrefDependence(
 
   for (auto &group : byMemref) {
     SmallVectorImpl<Operation *> &ops = group.second;
+    // A fully unrolled body holds thousands of accesses to one memref that
+    // differ in a constant index (`a[%i][3]`, `a[%i][7]`, ...), and testing
+    // every pair is quadratic. Two accesses whose constant indices differ
+    // along a dimension that is constant in every access of the group are
+    // disjoint (haveDisjointConstantIndex), so only accesses with equal
+    // constants along those dimensions are paired. Pairs are still visited
+    // in program order of the source, then of the destination.
+    SmallVector<unsigned> constantDims =
+        dimsConstantInAll(ops, accessMaps);
+    DenseMap<Operation *, unsigned> bucketOf;
+    SmallVector<SmallVector<Operation *>> buckets;
+    {
+      std::map<SmallVector<int64_t>, unsigned> bucketIds;
+      for (auto *op : ops) {
+        SmallVector<int64_t> constants;
+        for (unsigned d : constantDims)
+          constants.push_back(
+              cast<AffineConstantExpr>(
+                  accessMaps[op].getAffineMap().getResult(d))
+                  .getValue());
+        auto [it, fresh] = bucketIds.try_emplace(constants, buckets.size());
+        if (fresh)
+          buckets.emplace_back();
+        buckets[it->second].push_back(op);
+        bucketOf[op] = it->second;
+      }
+    }
     for (auto *source : ops) {
       MemRefAccess src(source);
       const AffineValueMap &srcMap = accessMaps[source];
-      for (auto *destination : ops) {
+      for (auto *destination : buckets[bucketOf[source]]) {
         if (source == destination)
           continue;
         ++numPairs;

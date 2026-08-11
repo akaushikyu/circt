@@ -411,10 +411,43 @@ struct KnownValue {
 };
 } // namespace
 
+/// `e` as (the expression without its constant term, the constant term):
+/// `d0 + 5` is (d0, 5), `7` is (null, 7), `d0` is (d0, 0). Simplified affine
+/// expressions keep the constant as the right operand of the outermost
+/// addition.
+static std::pair<AffineExpr, int64_t> splitConstantTerm(AffineExpr entryValue) {
+  if (auto candidateValue = dyn_cast<AffineConstantExpr>(entryValue))
+    return {AffineExpr(), candidateValue.getValue()};
+  if (auto add = dyn_cast<AffineBinaryOpExpr>(entryValue))
+    if (add.getKind() == AffineExprKind::Add)
+      if (auto candidateValue = dyn_cast<AffineConstantExpr>(add.getRHS()))
+        return {add.getLHS(), candidateValue.getValue()};
+  return {entryValue, 0};
+}
+
 static AddrRelation compareAddresses(const AccessAddr &arrayValue,
                                      const AccessAddr &buildPoint) {
   if (arrayValue.map.getNumResults() != buildPoint.map.getNumResults())
     return AddrRelation::MayAlias;
+
+  if (arrayValue.operands == buildPoint.operands &&
+      arrayValue.map.getNumDims() == buildPoint.map.getNumDims() &&
+      arrayValue.map.getNumSymbols() == buildPoint.map.getNumSymbols()) {
+    bool allEqualParts = true;
+    for (auto [ea, eb] :
+         llvm::zip(arrayValue.map.getResults(), buildPoint.map.getResults())) {
+      auto [va, ca] = splitConstantTerm(ea);
+      auto [vb, callback] = splitConstantTerm(eb);
+      if (va != vb) {
+        allEqualParts = false;
+        continue;
+      }
+      if (ca != callback)
+        return AddrRelation::Disjoint;
+    }
+    if (allEqualParts)
+      return AddrRelation::Same;
+  }
   AffineValueMap va(arrayValue.map, arrayValue.operands),
       vb(buildPoint.map, buildPoint.operands), diff;
   AffineValueMap::difference(va, vb, &diff);

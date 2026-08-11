@@ -198,6 +198,20 @@ static bool isMemrefWrittenInLoop(Value mem, AffineForOp loop) {
   return written;
 }
 
+/// `e` as (the expression without its constant term, the constant term):
+/// `d0 * 2 + 5` is (d0 * 2, 5), `7` is (null, 7), `d0` is (d0, 0). Simplified
+/// affine expressions keep the constant as the right operand of the outermost
+/// addition.
+static std::pair<AffineExpr, int64_t> splitConstantTerm(AffineExpr entryValue) {
+  if (auto candidateValue = dyn_cast<AffineConstantExpr>(entryValue))
+    return {AffineExpr(), candidateValue.getValue()};
+  if (auto add = dyn_cast<AffineBinaryOpExpr>(entryValue))
+    if (add.getKind() == AffineExprKind::Add)
+      if (auto candidateValue = dyn_cast<AffineConstantExpr>(add.getRHS()))
+        return {add.getLHS(), candidateValue.getValue()};
+  return {entryValue, 0};
+}
+
 /// Two loop-invariant addresses of one memory that provably never meet:
 /// same operands, and the maps differ by a nonzero constant in some
 /// dimension (`acc[0]` vs `acc[1]`, `buf[i][2]` vs `buf[i][5]`).
@@ -205,6 +219,14 @@ static bool provablyDisjoint(const Access &exprValue, const Access &rowValue) {
   if (exprValue.operands != rowValue.operands ||
       exprValue.map.getNumResults() != rowValue.map.getNumResults())
     return false;
+
+  for (auto [ex, ey] :
+       llvm::zip(exprValue.map.getResults(), rowValue.map.getResults())) {
+    auto [vx, cx] = splitConstantTerm(ex);
+    auto [vy, cy] = splitConstantTerm(ey);
+    if (vx == vy && cx != cy)
+      return true;
+  }
   for (auto [ex, ey] :
        llvm::zip(exprValue.map.getResults(), rowValue.map.getResults())) {
     AffineExpr dimensionIndex = simplifyAffineExpr(
@@ -230,6 +252,17 @@ isPromotableIn(Value mem, AffineForOp loop,
                SmallVector<SmallVector<Access, 4>, 2> *groups = nullptr) {
   bool ok = true, anyStore = false, allDirect = true;
   SmallVector<SmallVector<Access, 4>, 2> found;
+
+  std::optional<SmallVector<AffineExpr, 4>> shared;
+  bool uniform = true;
+  DenseMap<AffineMap, unsigned> groupOfMap;
+  std::set<SmallVector<int64_t, 4>> seenConstants;
+  auto nonConstantParts = [](const Access &exprValue) {
+    SmallVector<AffineExpr, 4> parts;
+    for (AffineExpr entryValue : exprValue.map.getResults())
+      parts.push_back(splitConstantTerm(entryValue).first);
+    return parts;
+  };
   loop.getBody()->walk([&](Operation *op) {
     if (!llvm::is_contained(op->getOperands(), mem))
       return WalkResult::advance();
@@ -242,6 +275,30 @@ isPromotableIn(Value mem, AffineForOp loop,
     anyStore |= arrayValue->isWrite;
     if (op->getBlock() != loop.getBody())
       allDirect = false;
+    if (uniform) {
+      SmallVector<AffineExpr, 4> parts = nonConstantParts(*arrayValue);
+      if (!shared)
+        shared = parts;
+      if (*shared == parts &&
+          (found.empty() ||
+           found.front().front().operands == arrayValue->operands)) {
+        auto it = groupOfMap.find(arrayValue->map);
+        if (it != groupOfMap.end()) {
+          found[it->second].push_back(*arrayValue);
+          return WalkResult::advance();
+        }
+
+        SmallVector<int64_t, 4> constants;
+        for (AffineExpr entryValue : arrayValue->map.getResults())
+          constants.push_back(splitConstantTerm(entryValue).second);
+        if (seenConstants.insert(constants).second) {
+          groupOfMap[arrayValue->map] = found.size();
+          found.push_back({*arrayValue});
+          return WalkResult::advance();
+        }
+      }
+      uniform = false;
+    }
     auto *globalOp = llvm::find_if(found, [&](auto &grp) {
       return sameAddress(grp.front(), *arrayValue);
     });
@@ -609,6 +666,9 @@ static AffineForOp promoteInvariantAccesses(AffineForOp loop,
     Type elemType = cast<MemRefType>(mem.getType()).getElementType();
     if (!allAffine || !elemType.isIntOrIndexOrFloat())
       continue;
+
+    SmallVector<const SmallVector<Access, 4> *> carried;
+    SmallVector<Value> inits;
     for (auto &accesses : groups) {
       const Access &first = accesses.front();
       bool anyStore = llvm::any_of(accesses, [](const Access &arrayValue) {
@@ -634,38 +694,49 @@ static AffineForOp promoteInvariantAccesses(AffineForOp loop,
         ++promoted;
         continue;
       }
-      IRRewriter rewriter(loop.getContext());
-      SmallPtrSet<Operation *, 8> accessOps;
-      for (const Access &arrayValue : accesses)
-        accessOps.insert(arrayValue.op);
-      Block *body = loop.getBody();
-      DictionaryAttr attrs = loop->getDiscardableAttrDictionary();
-      FailureOr<LoopLikeOpInterface> replaced =
-          loop.replaceWithAdditionalYields(
-              rewriter, initialValue, false,
-              [&](OpBuilder &, Location, ArrayRef<BlockArgument> newArgs) {
-                Value cur = newArgs[0];
-                SmallVector<Operation *> toErase;
-                for (Operation &op : body->without_terminator()) {
-                  if (!accessOps.contains(&op))
-                    continue;
-                  if (auto store = dyn_cast<AffineStoreOp>(op))
-                    cur = store.getValueToStore();
-                  else
-                    op.getResult(0).replaceAllUsesWith(cur);
-                  toErase.push_back(&op);
-                }
-                for (Operation *op : toErase)
-                  op->erase();
-                return SmallVector<Value>{cur};
-              });
-      if (failed(replaced))
-        break;
-      loop = cast<AffineForOp>(replaced->getOperation());
-      loop->setDiscardableAttrs(attrs);
+      carried.push_back(&accesses);
+      inits.push_back(initialValue);
+    }
+    if (carried.empty())
+      continue;
+    IRRewriter rewriter(loop.getContext());
+    DenseMap<Operation *, unsigned> carriedIndexOf;
+    for (auto [loopIndex, accesses] : llvm::enumerate(carried))
+      for (const Access &arrayValue : *accesses)
+        carriedIndexOf[arrayValue.op] = loopIndex;
+    Block *body = loop.getBody();
+    DictionaryAttr attrs = loop->getDiscardableAttrDictionary();
+    FailureOr<LoopLikeOpInterface> replaced = loop.replaceWithAdditionalYields(
+        rewriter, inits, false,
+        [&](OpBuilder &, Location, ArrayRef<BlockArgument> newArgs) {
+          SmallVector<Value> cur(newArgs.begin(), newArgs.end());
+          SmallVector<Operation *> toErase;
+          for (Operation &op : body->without_terminator()) {
+            auto it = carriedIndexOf.find(&op);
+            if (it == carriedIndexOf.end())
+              continue;
+            if (auto store = dyn_cast<AffineStoreOp>(op))
+              cur[it->second] = store.getValueToStore();
+            else
+              op.getResult(0).replaceAllUsesWith(cur[it->second]);
+            toErase.push_back(&op);
+          }
+          for (Operation *op : toErase)
+            op->erase();
+          return cur;
+        });
+    if (failed(replaced))
+      continue;
+    loop = cast<AffineForOp>(replaced->getOperation());
+    loop->setDiscardableAttrs(attrs);
+
+    unsigned firstResult = loop.getNumResults() - carried.size();
+    for (auto [loopIndex, accesses] : llvm::enumerate(carried)) {
+      const Access &first = accesses->front();
       OpBuilder after(loop.getContext());
       after.setInsertionPointAfter(loop);
-      AffineStoreOp::create(after, loop.getLoc(), loop.getResults().back(), mem,
+      AffineStoreOp::create(after, loop.getLoc(),
+                            loop.getResult(firstResult + loopIndex), mem,
                             first.map, first.operands);
       ++promoted;
     }
