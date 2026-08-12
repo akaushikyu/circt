@@ -90,6 +90,9 @@ _CLANG18_DIR = os.environ.get("CS_CLANG18_DIR") or next(
      if os.path.exists(d + "/clang-18")), "/mnt/d/HLS/Polygeist/llvm-project/build/bin")
 CLANG = _CLANG18_DIR + "/clang"
 CLANGXX = _CLANG18_DIR + "/clang++"
+# The macros Vitis' front end adds in synthesis (run_hlsest.VITIS_FRONTEND_DEFINES; that module loads
+# the design catalogue on import, so the tuple is repeated here).
+VITIS_FRONTEND_DEFINES = ("__SYNTHESIS__", "__VITIS_HLS__", "__HLS_SYN__", "AESL_SYN")
 POLYGEIST_OPT = os.environ.get("POLYGEIST_OPT", "/mnt/d/HLS/Polygeist/build/bin/polygeist-opt")
 # polygeist-opt's LLVM dialect has typed pointers, which this tree's mlir-opt / mlir-translate do not
 # parse: its output is finished with Polygeist's own (reconcile-unrealized-casts, translation; the LLVM IR
@@ -1502,6 +1505,21 @@ def ref_flags(kind, flags, rec, vitis_inc):
     the real Vitis headers for kind `real`."""
     if kind != "real":
         return list(flags)
+    # Vitis' C simulation defines none of the synthesis macros its front end adds (run_hlsest's
+    # VITIS_FRONTEND_DEFINES, VITIS_NOTES N19); with __SYNTHESIS__ the real headers take their
+    # synthesis-only branches, which g++ does not compile.
+    synthesis_only = {"-D" + m for m in VITIS_FRONTEND_DEFINES}
+    kept, k = [], 0
+    while k < len(flags):
+        if flags[k] == "-D" and k + 1 < len(flags) and "-D" + flags[k + 1] in synthesis_only:
+            k += 2
+            continue
+        if flags[k] in synthesis_only:
+            k += 1
+            continue
+        kept.append(flags[k])
+        k += 1
+    flags = kept
     shim_dirs = {os.path.normpath(p) for p in (rec.get("shim"), C.SHIM_INCLUDE) if p}
     shim_root = os.path.normpath(str(Path(C.__file__).resolve().parent / "shim"))
     out, k, placed = [], 0, False
@@ -1740,6 +1758,15 @@ class Checker:
             else:
                 crc, ct = (wd / f"cand.{mode}.{seed}.rc").read_text().strip(), 0.0
                 crc = int(crc) if crc.lstrip("-").isdigit() else crc
+            if crc == -8:
+                # SIGFPE: an integer division by zero (or INT_MIN / -1) in the candidate. That is
+                # undefined in C and C++, so the native build's result for these inputs means nothing
+                # (it need not trap: the reference took its value from whatever its division gave).
+                r.update(cand_rc=crc, cand_s=round(ct, 2), valid=False,
+                         why="candidate divides by zero (SIGFPE; undefined behaviour in C)")
+                runs.append(r)
+                ro.unlink(missing_ok=True)
+                continue
             r.update(cand_rc=crc, cand_s=round(ct, 2), valid=True)
             valid += 1
             ra = ro.read_bytes()
@@ -2044,7 +2071,7 @@ NA_CLASSES = (
     (r"undefined .*(cordic_apfixed|hls::|hotbm|_ZN3hls)", "real headers: needs Vitis' csim math library"),
     (r"native build|native thunk", "native build"),
     (r"uninitialised", "reads uninitialised memory"),
-    (r"no valid run.*FPE", "no valid run: division by zero"),
+    (r"no valid run.*(FPE|divides by zero)", "no valid run: division by zero"),
     (r"no valid run.*(overflow|SEGV|use-after|AddressSanitizer)", "no valid run: out-of-bounds access"),
     (r"no valid run.*timeout", "no valid run: timeout"),
     (r"no valid run", "no valid run"),
