@@ -80,10 +80,11 @@ def shim_cgeist_flags(shim):
 
 # What Vitis 2025.1's front end is given beyond the design's own flags (VITIS_NOTES N19, OPEN_ISSUES
 # O30 / O31): the synthesis macros, and the language standard (C++ sources get no -std= and compile
-# as C++14, the hls-llvm-project clang's default gnu++14; C sources get -std=gnu99).  Opt-in with
-# VITIS_FRONTEND=1 until it is measured on the harness subset (W8b).
+# as C++14, the hls-llvm-project clang's default gnu++14; C sources get -std=gnu99).  On by default
+# since W8b measured it (MEMOS decision #54: no estimate of the v2 catalogue or the harness subset
+# changes, 16 more v2 designs compile); VITIS_FRONTEND=0 gives the command and cache keys of before.
 VITIS_FRONTEND_DEFINES = ("__SYNTHESIS__", "__VITIS_HLS__", "__HLS_SYN__", "AESL_SYN")
-VITIS_FRONTEND = os.environ.get("VITIS_FRONTEND", "0") not in ("0", "off", "no", "")
+VITIS_FRONTEND = os.environ.get("VITIS_FRONTEND", "1") not in ("0", "off", "no", "")
 
 
 def vitis_frontend_flags(d):
