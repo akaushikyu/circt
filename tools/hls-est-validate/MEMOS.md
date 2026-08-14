@@ -910,3 +910,9 @@ once at stage 3 (as for O6).
 
 
 **Coordinator addendum (2026-10-11).** Speed is part of W11's go/no-go (#41). `--shim real` replaces exactclass only if its cgeist compile time on the harness is acceptable against #41's targets (median under 2 s for a source change), with a release-built clang and, if needed, a precompiled header, and the cause of the superlinear parse time found. The DSE latency study (M14) measures real against exactclass when it resumes.
+
+## M15 — Phase 6 plan (DSP, FF, LUT; decision #56)
+
+| memo | pointer | status |
+|---|---|---|
+| M15 | `hls-doc/design/phase6-plan.md`: category shares, the model and Vitis evidence per category, the kernels still needed, the mapping onto the P2 scheduling interfaces (#37, memo section 8.7), the stages S0-S6 with in-band ceilings, the risks, the harness / compare / make_compare_csv extensions and the position against W9 and P1-P3. Studies: `~/hls-est-work/coord/scratch/p6/{ground-truth-anatomy,cost-tables,hlsest-capabilities}.md`. Open decisions: cost-table delivery under #42, P2-sched first, the under-count policy, when `hls.state` may change BRAM. | plan written, waiting for coordinator sequencing |
