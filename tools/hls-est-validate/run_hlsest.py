@@ -442,6 +442,14 @@ def process(d, args, shim, run_id):
     r["mlir"] = str(mlir)
     top_fn, rule = find_top(mlir, d["top"])
     r["top_fn"], r["top_rule"] = top_fn, rule
+    if rule in ("single", "last") and d["top"] and d["top"] not in (top_fn or ""):
+        # The design's top is not among the MLIR functions: the fallback function (a helper such
+        # as ap_detail::bits::val) is not the design, so its estimate is no estimate (W8b review:
+        # three designs reported ok with BRAM 0). make_hlsfactory_report.py tells whether the top
+        # is defined in the sources at all (top-not-found / top-not-in-sources).
+        r["status"] = "top not found"
+        r["note"] = f"top {d['top']!r} is not among the MLIR functions (fallback '{rule}' would pick {top_fn!r})"
+        return r
     log_prefix = str(LOG_ROOT / run_id / f"{d['dataset']}__{d['benchmark']}")
     Path(log_prefix).parent.mkdir(parents=True, exist_ok=True)
     # Always emit the per-memref debug JSON: compare.py needs it to match arrays by name.

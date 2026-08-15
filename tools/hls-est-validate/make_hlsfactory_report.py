@@ -312,7 +312,9 @@ def classify(r):
     """{'cause', 'cause_detail', 'stage', 'error_line'} for a sweep record (cause None when ok)."""
     st = r.get("status", "")
     out = {"cause": None, "cause_detail": "", "stage": None, "error_line": ""}
-    if st == "ok":
+    if st in ("ok", "top not found"):
+        # run_hlsest marks a design whose top is not among the MLIR functions 'top not found'
+        # (W8b review); older sweeps marked it ok and ran hls-est on the fallback function.
         top, fn = r.get("top"), r.get("top_fn") or ""
         if r.get("top_rule") in ("last", "single") and top and top not in fn:
             defined = _top_in_sources(r)
@@ -320,7 +322,8 @@ def classify(r):
                        cause_detail=f"picked {fn[:60]!r} ({r.get('top_rule')})",
                        error_line=f"top {top!r} not among the MLIR functions"
                                   + ("" if defined else " and not defined in any design source")
-                                  + f"; hls-est ran on {fn[:60]!r}")
+                                  + (f"; hls-est ran on {fn[:60]!r}" if st == "ok"
+                                     else f"; not estimated (the fallback would pick {fn[:60]!r})"))
         return out
     if st == "harness error":
         out.update(cause="harness-error", stage="harness", error_line=r.get("note", "")[:300])

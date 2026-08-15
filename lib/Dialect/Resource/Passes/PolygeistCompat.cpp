@@ -399,8 +399,36 @@ struct LowerSubIndexPass
     return true;
   }
 
+  /// A Polygeist op hls-est does not model parses as an unregistered op of
+  /// the polygeist dialect (PolygeistCompatDialect). That is safe only while
+  /// it owns and touches no memory, as `polygeist.get_func` (a function's
+  /// address) does: the memory analyses see memrefs through the ops they
+  /// know, so an unknown op that reads, writes or views a memref would go
+  /// uncounted. Such an op is an error rather than a silent miss (W8b
+  /// review). True when the module has none.
+  static bool checkUnmodelledOps(ModuleOp module) {
+    bool ok = true;
+    module.walk([&](Operation *op) {
+      if (op->isRegistered() ||
+          op->getName().getDialectNamespace() !=
+              PolygeistCompatDialect::getDialectNamespace())
+        return;
+      auto isMemRef = [](Type t) { return isa<BaseMemRefType>(t); };
+      if (llvm::any_of(op->getOperandTypes(), isMemRef) ||
+          llvm::any_of(op->getResultTypes(), isMemRef)) {
+        op->emitError("polygeist op not modelled by hls-est takes or "
+                      "returns a memref: the memory it touches would not be "
+                      "counted");
+        ok = false;
+      }
+    });
+    return ok;
+  }
+
   void runOnOperation() override {
     ModuleOp module = getOperation();
+    if (!checkUnmodelledOps(module))
+      return signalPassFailure();
     SymbolTable symbols(module);
     SmallVector<SubIndexOp> worklist;
     module.walk([&](SubIndexOp si) { worklist.push_back(si); });
