@@ -4,6 +4,12 @@ Known defects and unfinished work that no change-log entry has fixed yet.
 Newest first. Each entry names its evidence and the CHANGELOG.md entry that
 filed it; remove an entry when the change log records its fix.
 
+## O47. A memref passed to any kept call loses load CSE and store forwarding in the whole function (filed 2026-10-13, W10 merge control run)
+- **Symptom:** machsuite backprop 40 (exact) -> 42 once cgeist keeps `update_weights` as a call (W10, correct: Vitis keeps module `update_weights_1`). `oracle_activations1` goes RAM_1P 2 -> RAM_2P 4 (Vitis ram_1p 2): the accumulator loop of `get_oracle_activations` had `forwarded_loads 2` / `removed_stores 2` before and none after (3 writes, 2 reads per iteration).
+- **Cause:** `AffineToLoopScheduleModified.cpp` `collectMemrefAliases` / `isPlainMemrefUse` mark a memref as escaped as soon as any use is a `CallOpInterface`, so the array passed to the kept call after the loop disables CSE and forwarding everywhere in the function. Vitis still forwards inside the loop.
+- **Fix direction:** treat a call as a barrier only at its own position (accesses before and after it), not as escaping the memref for the whole function. Related to, but not the same as, N14 R7 and O40 (forwarding through a callee's parameter).
+- **Evidence:** `/home/peter/tmp/inst10/{exactclass,scalar}-{old,new}.json`, report `~/hls-est-work/coord/scratch/reports/` (W10 merge), debug JSON of the two runs.
+
 ## O44. One HLSFactory_v2 design whose cgeist MLIR differs from both native builds (filed 2026-10-12, W8b; updated 2026-10-13)
 - **Symptom:** `check_semantics.py --ref real,shim` (`~/hls-est-work/w8b9/sem/sem_final.json`, work dir `~/hls-est-work/w8b9/sem/work/class_ece8893_spring_2025__davendra_maharaj_ece8893_spring25_lab2/`): class_ece8893_spring_2025 davendra_maharaj lab2 differs at element 0 of its `memref<4x100x128xi16>` output (wide seed 1). The real-header and the shim reference agree with each other, not with the candidate; no uninitialised read (the -ftrivial-auto-var-init builds agree). Its MLIR is the same with cgeist c22 (the loop-break fix did not change it).
 - **Resolved here:** machsuite aes_tableless, the second design filed here, was the do-while break bug (`gf_log`'s `do { if (..) break; } while (++i > 0)`), fixed in Polygeist ba032913; it is equal now.
