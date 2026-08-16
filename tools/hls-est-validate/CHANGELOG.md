@@ -3,6 +3,14 @@
 Newest entry first. One entry per logical change, including changes that were
 tried and reverted. Branch: `hls-est-vitis-match` in `~/circt`.
 
+## 2026-10-13 — ground truth: the HLSFactory_v2 Vitis run merged into results/vitis.json (W8c part 1)
+- **Commit:** this entry's commit (branch `hls-est-vitis-match`)
+- **Files:** `tools/hls-est-validate/merge_vitis_results.py` (new: `merge`, `failure_class`, `dataset_table`); `results/vitis.json` (not tracked, `results/*.json` is gitignored; pre-merge copy `~/hls-est-work/coord/scratch/w1b_w8c/vitis.json.before-merge`, md5 5f7616d5)
+- **What:** the v2 runner's summary `~/hls-est-work/results/vitis-v2.json` (652 entries; runner stopped by the coordinator 2026-10-12 19:04, MEMOS #52) merged into the ground truth: 149 -> 795 entries; 646 added unchanged; 6 keys in both (class_ece8893_2023_spring Analog-CIM x3, ECG_Classifier, GradCAM avg_pool / conv_ds) have equal Vitis cache keys, so vitis.json's entries were kept; 0 conflicts. The script never overwrites a key and lists any key whose cache keys differ. Against the v2 catalogue (812 designs with sources): 736 Vitis ok, 40 failed, 19 timeouts, 17 without an entry (13 hlsyn-vitis never run, MEMOS #52; the 4 MLIR-only `basic` inputs). Every v2.json entry's cache key equals the current v2 record's key; 6 old vitis.json entries do not (rosetta 3d-rendering, BNN, digit-recognition, face-detection, optical-flow, spam-filter: failures from the Polygeist copies, which lack `../host` headers v2 has; compare.py does not compare them).
+- **Why:** W8c (MEMOS #28): ground truth for the HLSFactory_v2 catalogue.
+- **Effect:** ground truth only; no estimate changes. Designs with a Vitis result 137 -> 736.
+- **Reverted?:** no
+
 ## 2026-10-13 — math cores: W2-impl review fixes (instances in sequential code, fabs of double, logic_only check, one warning per unlisted pair, pipeline lit coverage)
 - **Commit:** this entry's commit `hls-est: math-function cost configuration review fixes` (branch `hls-est-vitis-match`)
 - **Files:** `lib/Dialect/Resource/Passes/MathCores.cpp` (`analyzeMathCores`: sequential instances; new `mayOverlapInSequentialCode`, `accessedRoots`; removed `maxIndependent`, `forwardReach`; `MathCostConfig::load`: logic_only check), `lib/Dialect/Resource/Passes/CallInstances.cpp` / `include/.../CallInstances.h` (`groupConcurrentCalls`: optional `alsoOrdered` callback, default unchanged), `test/hls-est/Passes/math_costs_{rules,config}.mlir`, `math_costs.json` (entry `abs` of double; instancing-rule texts), generator `~/hls-est-work/exp-src/mathcost/make_math_costs.py` (outside the repo), VITIS_NOTES N16 (new R10, (i) resolved), OPEN_ISSUES O46
