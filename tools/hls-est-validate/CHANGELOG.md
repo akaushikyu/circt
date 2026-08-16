@@ -3,6 +3,14 @@
 Newest entry first. One entry per logical change, including changes that were
 tried and reverted. Branch: `hls-est-vitis-match` in `~/circt`.
 
+## 2026-10-13 — W10's cgeist merged and installed (Polygeist a7e7b2ed = ddfa8ee1 + w10-autoinline baa1f85e)
+- **Commit:** Polygeist merge `a7e7b2ed` (one conflict in HLSPragmaSema.cc, both sides kept); circt `9ac403bab` (OPEN_ISSUES O47)
+- **Files:** `/mnt/d/HLS/Polygeist/build/bin/cgeist` = m1 (md5 8f27f3c0...); the previous binary (c25, md5 555d1d05...) is kept as `cgeist.prev-ddfa8ee1`
+- **What:** W10's automatic inlining like Vitis (`--hls-auto-inline`, on with `--hls-annotate`) and the Vitis merge of two array_partition pragmas on one dimension, on top of W8b's cgeist
+- **Why:** VITIS_NOTES N18, N28; MEMOS #33, #34
+- **Effect (control run: frozen hls-est f1 md5 08f8b51e, private HOMEs, harness subset, `/home/peter/tmp/inst10/`):** exactclass exact 80 -> 86, |err| 1584 -> 485, in band 83 -> 90; scalar exact 59 -> 62, |err| 22677 -> 22252, in band 62 -> 68. Newly exact: forgebench conv_A/B/C (594/586/610), mult_op_p1/p2/p3 (2), testing_unroll (2). No longer exact: machsuite backprop 40 -> 42, per array `oracle_activations1` RAM_1P 2 -> RAM_2P 4 because hls-est disables store forwarding for a memref passed to the newly kept `update_weights` call anywhere in the function (O47); Vitis keeps the call too. forgebench mlp (no ground truth) times out at 120 s (finishes in 167 s). Gates: bicg 8, gesummv 16, mvt 8, syrk 32 under both shims. cgeist lit 815 pass / 4 fail (the same 4 stale hlsfactory tests as c25: they still expect errors W8b's d9ea97f3 turned into warnings; to regenerate); W8b's 64 break/condition probes and W10's 19 review kernels unchanged.
+- **Reverted?:** no
+
 ## 2026-10-13 — W8b's cgeist (Polygeist ddfa8ee1) installed
 - **Commit:** none in circt (binary install); Polygeist `ddfa8ee1` on `hls-est-vitis-match` (W8b fixes 73bde58b, 95a7a567, ba032913, fe364b78, 9c83fd76, 715f02c1, review fixes 66a8afca, ddfa8ee1)
 - **Files:** `/mnt/d/HLS/Polygeist/build/bin/cgeist` = c25 (md5 555d1d05...); the previous binary (c7be40ee, md5 7d923368...) is kept as `cgeist.prev-c7be40ee`
