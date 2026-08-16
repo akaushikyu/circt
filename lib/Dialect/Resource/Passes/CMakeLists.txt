@@ -17,6 +17,7 @@ add_mlir_library(HLSPasses
         SplitStructMemrefs.cpp
         PartitionLayout.cpp
         ConstantFills.cpp
+        MathCores.cpp
 
         DEPENDS
         CIRCTTransformsPassIncGen

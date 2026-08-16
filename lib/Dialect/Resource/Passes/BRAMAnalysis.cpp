@@ -5,6 +5,7 @@
 #include "circt/Dialect/Resource/Interfaces/MemoryInterface.h"
 #include "circt/Dialect/Resource/Passes/CallInstances.h"
 #include "circt/Dialect/Resource/Passes/LoopPragmas.h"
+#include "circt/Dialect/Resource/Passes/MathCores.h"
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
@@ -262,6 +263,7 @@ struct MemrefRecord {
   bool accessesAttributed = false;
   bool rom = false;
   std::optional<AdapterRecord> adapter;
+  std::optional<MathCoreRecord> math;
   PortDemand demand;
   SmallVector<ScopeDemandRecord> perScope;
 
@@ -1974,6 +1976,15 @@ static void printDebugText(ArrayRef<MemrefRecord> records,
   else
     os << "top: none (every function is costed)\n";
   for (const MemrefRecord &resultValue : records) {
+    if (resultValue.math) {
+      os << "[" << resultValue.id << "] math core '"
+         << resultValue.math->coreName << "' (" << resultValue.kind << ") in @"
+         << (resultValue.func ? *resultValue.func : "?") << " @ "
+         << resultValue.locText << "\n";
+      printMathCoreText(*resultValue.math, os);
+      os << "  bram: " << resultValue.bram << "\n";
+      continue;
+    }
     if (resultValue.adapter) {
       const AdapterRecord &arrayValue = *resultValue.adapter;
       os << "[" << resultValue.id << "] m_axi bundle '" << arrayValue.bundle
@@ -2230,6 +2241,8 @@ static llvm::json::Object toJson(const MemrefRecord &resultValue) {
     opHandle["struct_member"] = *resultValue.structMember;
   if (resultValue.rom)
     opHandle["rom"] = true;
+  if (resultValue.math)
+    opHandle["math"] = mathCoreJson(*resultValue.math);
   if (resultValue.adapter) {
     const AdapterRecord &arrayValue = *resultValue.adapter;
     llvm::json::Object ad;
@@ -2841,6 +2854,28 @@ collectInstanceRecords(const InstanceModel &model) {
   return out;
 }
 
+static MemrefRecord mathCoreDebugRecord(MathCoreRecord memoryOp) {
+  MemrefRecord rec;
+  rec.id = memoryOp.func + "#math:" + memoryOp.function + ":" + memoryOp.type +
+           ":" + memoryOp.arguments;
+  rec.kind = "math_core";
+  rec.name = memoryOp.coreName;
+  rec.varname = "math_core:" + memoryOp.coreName;
+  rec.func = memoryOp.func;
+  rec.locText = memoryOp.loc;
+  rec.elemType = memoryOp.type;
+  rec.status = memoryOp.status;
+  rec.ramType = "MATH_CORE";
+  rec.ramReason = memoryOp.reason;
+  rec.bram = static_cast<unsigned>(memoryOp.bram);
+
+  rec.instances = memoryOp.functionInstances;
+  rec.bramPerInstance =
+      static_cast<unsigned>(memoryOp.bram / memoryOp.functionInstances);
+  rec.math = std::move(memoryOp);
+  return rec;
+}
+
 struct BRAMAnalysisLoopSchedule
     : PassWrapper<BRAMAnalysisLoopSchedule, OperationPass<ModuleOp>> {
 
@@ -2879,8 +2914,29 @@ struct BRAMAnalysisLoopSchedule
           "function holds memrefs"),
       llvm::cl::init("")};
 
+  Option<std::string> mathCostsOpt{
+      *this, "math-costs",
+      llvm::cl::desc("Cost table of the hls:: math cores (JSON, "
+                     "tools/hls-est-validate/math_costs.json): every math op, "
+                     "libm call and exactclass-shim marker call gets the BRAM "
+                     "of its (function, type, argument form) entry per core "
+                     "instance, instances by the call structure; a pair the "
+                     "table does not list is reported with a warning and "
+                     "costs 0. Without it math calls cost nothing"),
+      llvm::cl::value_desc("path"), llvm::cl::init("")};
+
   void runOnOperation() override {
     ModuleOp module = getOperation();
+
+    MathCostConfig mathCosts;
+    if (!mathCostsOpt.empty()) {
+      std::string err;
+      if (!mathCosts.load(mathCostsOpt, err)) {
+        mlir::emitError(module.getLoc(), "--bram-analysis: math-costs: ")
+            << err;
+        return signalPassFailure();
+      }
+    }
     TopScope scope;
     if (!topOpt.empty()) {
       if (!computeTopScope(module, topOpt, scope))
@@ -3050,6 +3106,22 @@ struct BRAMAnalysisLoopSchedule
         rec.bram = bram;
         rec.adapter = std::move(arrayValue);
         records.push_back(std::move(rec));
+      }
+
+    if (!mathCostsOpt.empty())
+      for (MathCoreRecord &memoryOp : analyzeMathCores(
+               module, mathCosts,
+               [&](Operation *op) { return scope.covers(op); },
+               [&](Operation *fn) {
+                 return instanceModel.instancesOf(cast<func::FuncOp>(fn));
+               },
+               [&](Location loc, const std::string &msg) {
+                 mlir::emitWarning(loc)
+                     << "--bram-analysis: math-costs: " << msg;
+               })) {
+        printMathCoreLine(memoryOp, llvm::outs());
+        total += memoryOp.bram;
+        records.push_back(mathCoreDebugRecord(std::move(memoryOp)));
       }
     llvm::outs() << "Total BRAM: " << total << "\n";
     if (bramDebugOpt || !bramDebugJsonOpt.empty()) {

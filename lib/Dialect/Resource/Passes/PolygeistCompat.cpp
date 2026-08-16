@@ -413,7 +413,9 @@ struct LowerSubIndexPass
           op->getName().getDialectNamespace() !=
               PolygeistCompatDialect::getDialectNamespace())
         return;
-      auto isMemRef = [](Type t) { return isa<BaseMemRefType>(t); };
+      auto isMemRef = [](Type typeValue) {
+        return isa<BaseMemRefType>(typeValue);
+      };
       if (llvm::any_of(op->getOperandTypes(), isMemRef) ||
           llvm::any_of(op->getResultTypes(), isMemRef)) {
         op->emitError("polygeist op not modelled by hls-est takes or "
