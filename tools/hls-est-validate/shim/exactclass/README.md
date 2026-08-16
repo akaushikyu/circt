@@ -132,3 +132,27 @@ two shim errors listed under "Fixed" below. Results are in CHANGELOG.md.
 - `hls::stream`, `hls::vector`, `ap_axis`, `ap_cint.h` are the declare-only
   stand-ins of `shim/exact` (a stream or vector containing an `ap_fixed` now
   has an `iW` field).
+
+## Math-core markers (`hls_math.h`, `-DHLSEST_MATH_MARKERS` in `cgeist_flags`)
+
+hls-est prices the cores Vitis builds for hls:: math calls from a cost table
+(`--bram-analysis math-costs=`, `../../math_costs.json`, MEMOS.md decision
+#18). The cost depends on the ap_fixed type (`exp` of `ap_fixed<32,16>` costs
+5 BRAM, of `ap_fixed<16,5>` 0), which this shim's fixed-point functions lose:
+they compute in double. With the macro, the libm builtin at the heart of each
+fixed-point function (`__builtin_exp`, `__builtin_sqrt`, ...) is replaced by a
+call of the declaration `__hlsest_math_<hls name>(args..., W, I, S)`, which
+returns the builtin's value; W, I, S are the argument's template parameters.
+cgeist already emitted these builtins as calls of libm functions (sqrt: a
+`math.sqrt`), so the MLIR is the same up to the callee's name and three
+constant operands, and hls-est without math-costs gives the same estimate.
+Functions computed in integer arithmetic (recip, abs, floor, ...) carry no
+marker; the `half` overloads carry none either (hls-est reads their type from
+the MLIR). Without the macro the builtins are called directly (host builds:
+`check_shim.py`; `check_semantics.py` drops the macro from its native builds
+and links stubs for the markers the MLIR declares).
+
+`hls::pow` of two `ap_fixed` values of one type is provided (evaluated in
+double, saturating, like `log`): before, the call was ambiguous between the
+float, double and half overloads and did not compile; Vitis 2025.1 has a
+fixed-point pow core (`pow_16_5_s`).

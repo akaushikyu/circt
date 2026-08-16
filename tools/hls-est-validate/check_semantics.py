@@ -1500,9 +1500,49 @@ LAYOUT_EXIT = 87            # REF_THUNK_REAL's exit code when an argument cannot
 MODE_INDEX = {"small": 0, "wide": 1, "pos": 2}
 
 
+# The exactclass shim's math-core markers (shim/exactclass/cgeist_flags): with this macro its
+# fixed-point math functions call __hlsest_math_<name>(args..., W, I, S) declarations instead of the
+# libm builtins, for hls-est's math-costs; a native build compiles the builtins instead.
+MATH_MARKER_DEFINE = "HLSEST_MATH_MARKERS"
+
+
+def drop_define(flags, name):
+    """`flags` without -D<name> / -D <name>."""
+    out, k = [], 0
+    while k < len(flags):
+        if flags[k] == "-D" and k + 1 < len(flags) and flags[k + 1] == name:
+            k += 2
+            continue
+        if flags[k] == "-D" + name:
+            k += 1
+            continue
+        out.append(flags[k])
+        k += 1
+    return out
+
+
+# Each marker returns the value of the builtin it stands for (shim/exactclass/hls_math.h HLSEST_M1 /
+# HLSEST_M2): the hls:: name, except where the shim computes the function from another builtin.
+MATH_MARKER_BUILTIN = {"rsqrt": "sqrt", "sinpi": "sin", "cospi": "cos"}
+LL_MATH_MARKER = re.compile(r"^declare\s+double\s+@__hlsest_math_(\w+)\(([^)]*)\)", re.M)
+
+
+def math_marker_stubs(ll_text):
+    """C definitions of the math-core markers the lowered candidate declares (empty when none)."""
+    out = []
+    for name, params in sorted(set(LL_MATH_MARKER.findall(ll_text))):
+        n_double = params.count("double")
+        args = ", ".join(f"double x{i}" for i in range(n_double)) + ", int w, int i, int s"
+        call = ", ".join(f"x{i}" for i in range(n_double))
+        out.append(f"double __hlsest_math_{name}({args}) {{ (void)w; (void)i; (void)s; "
+                   f"return {MATH_MARKER_BUILTIN.get(name, name)}({call}); }}")
+    return ("#include <math.h>\n" + "\n".join(out) + "\n") if out else ""
+
+
 def ref_flags(kind, flags, rec, vitis_inc):
     """The native build's -I/-D/-U/-std flags: the cgeist command's, with the shim directory replaced by
-    the real Vitis headers for kind `real`."""
+    the real Vitis headers for kind `real`; never the shim's math-core marker macro."""
+    flags = drop_define(list(flags), MATH_MARKER_DEFINE)
     if kind != "real":
         return list(flags)
     # Vitis' C simulation defines none of the synthesis macros its front end adds (run_hlsest's
@@ -1695,6 +1735,15 @@ class Checker:
                 (wd / "cand_streams.err").write_text(se)
                 return "hls::stream runtime does not compile: " + first_err(se)
             extra_objs.append(str(wd / "cand_streams.o"))
+        stubs = math_marker_stubs(ll_text)
+        if stubs:
+            # the exactclass shim's math-core markers are declarations only: call the builtin
+            (wd / "cand_math.c").write_text(stubs)
+            rc, so, se, _ = run([GCC, "-c", "-O0", "-w",
+                                 str(wd / "cand_math.c"), "-o", str(wd / "cand_math.o")])
+            if rc != 0:
+                return "math-core marker stubs do not compile: " + first_err(se)
+            extra_objs.append(str(wd / "cand_math.o"))
         (wd / "cs_spec.h").write_text(spec_header(plan))
         (wd / "cs_main.cpp").write_text(DRIVER_MAIN)
         (wd / "cand_thunk.cpp").write_text(cand_thunk(plan, "descriptor"))

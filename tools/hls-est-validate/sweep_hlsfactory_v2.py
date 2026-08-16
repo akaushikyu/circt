@@ -142,7 +142,8 @@ def followup(a, designs, prev):
     by_key = {C.design_key(d): d for d in designs}
     run_id = a.run_id or "w8a-fu-" + time.strftime("%Y%m%d-%H%M%S")
     args = SimpleNamespace(pipeline=a.pipeline, timeout=a.timeout, force_cgeist=False, mlir_from=None,
-                           mlir_from_records=None, no_privatize=False, no_debug_json=False)
+                           mlir_from_records=None, no_privatize=False, no_debug_json=False,
+                           math_costs=a.math_costs)
     jobs = []
     for k, r in prev.items():
         if k == "_meta" or k not in by_key:
@@ -189,6 +190,7 @@ def main():
     ap.add_argument("--keys", default="", help="comma-separated dataset/benchmark keys")
     ap.add_argument("--pipeline", default=C.DEFAULT_PIPELINE)
     ap.add_argument("--shim", default=C.DEFAULT_SHIM)
+    R.add_math_costs_args(ap)
     ap.add_argument("--hlsfactory-root", default=None)
     ap.add_argument("--out", default=str(C.RESULTS_DIR / "hlsfactory-v2-sweep.json"))
     ap.add_argument("--merge", action="store_true", help="update --out instead of replacing it")
@@ -216,6 +218,7 @@ def main():
                          "failed designs whose sources mention __SYNTHESIS__ ('synmacro-ok': the same for the "
                          "designs that passed, to see whether the macro changes their estimate)")
     a = ap.parse_args()
+    R.resolve_math_costs(a)
     global VITIS_KEYS
     VITIS_KEYS = set((C.load_json(a.vitis, {}) or {}).keys())
 
@@ -256,7 +259,8 @@ def main():
     shim = R.resolve_shim(a.shim)
     run_id = a.run_id or "w8a-" + time.strftime("%Y%m%d-%H%M%S")
     args = SimpleNamespace(pipeline=a.pipeline, timeout=a.timeout, force_cgeist=a.force_cgeist,
-                           mlir_from=None, mlir_from_records=None, no_privatize=False, no_debug_json=False)
+                           mlir_from=None, mlir_from_records=None, no_privatize=False, no_debug_json=False,
+                           math_costs=a.math_costs)
     ghash, bsha = C.hls_est_identity()
     md5 = R.cgeist_md5_or_raise() if hasattr(R, "cgeist_md5_or_raise") else R.cgeist_md5()
     meta = {"pipeline": a.pipeline, "shim": str(shim), "hls_est": C.HLS_EST, "hls_est_git": ghash,
@@ -266,7 +270,8 @@ def main():
             "catalogue_load_s": load_s, "hlsest_timeout": a.timeout, "cgeist_timeout": R.CGEIST_TIMEOUT,
             "jobs": a.j, "run_id": run_id, "started": time.strftime("%Y-%m-%d %H:%M:%S"),
             "skipped": info.get("skipped", []), "vanished": info.get("vanished", []),
-            "home": str(Path.home()), "extra_defines": a.extra_define}
+            "home": str(Path.home()), "extra_defines": a.extra_define, "math_costs": a.math_costs,
+            "math_costs_md5": C.md5_of_file(a.math_costs) if a.math_costs else None}
     out = {}
     if prev:
         out = prev

@@ -17,14 +17,60 @@
 //         double and truncated (floor) to the Vitis result type; Vitis uses
 //         CORDIC / table algorithms there, so a last-bit difference is
 //         possible ("unconfirmed" in VITIS_NOTES.md). recip is 1/x with the
-//         exact fixed-point division. There is no hls::pow for ap_fixed in
-//         Vitis either: it is computed in double through operator double().
+//         exact fixed-point division. pow of two ap_fixed values of one type
+//         is evaluated in double too (Vitis 2025.1 synthesizes a fixed-point
+//         pow core, pow_16_5_s for ap_fixed<16,5>; its last bits are not
+//         checked here). Before this overload the call was ambiguous between
+//         the float, double and half overloads and did not compile.
+// Math-core markers (for hls-est --bram-analysis math-costs=, the cost table
+// tools/hls-est-validate/math_costs.json): with
+// -DHLSEST_MATH_MARKERS (this directory's cgeist_flags) the builtin call at the
+// heart of every fixed-point function below (__builtin_exp, __builtin_sqrt,
+// ...) becomes a call of the extern "C" declaration
+// __hlsest_math_<hls name>(args..., W, I, S) of the ARGUMENT's ap_fixed_base
+// parameters, so hls-est can price the Vitis core of hls::<name> on
+// ap_fixed<W,I> (S = 0: ap_ufixed). It replaces a call that is already opaque
+// (cgeist emits these builtins as calls of the libm functions; sqrt is a
+// math.sqrt next to the opaque floor of raw_sat), returns the builtin's value
+// and is never constant-evaluated (none of these builtins is constexpr in
+// clang 18), so the IR is the same up to the callee's name and its three
+// constant operands. Functions computed in integer arithmetic (recip, abs,
+// fabs, floor, ceil, trunc, fmin, fmax, fdim, copysign) have no such call and
+// no marker; round / rint keep __builtin_round / __builtin_rint (hls-est does
+// not price rounding). Without the macro (host compilers: check_shim.py, and
+// check_semantics.py's native builds, which drop it) the builtins are called
+// directly, as before; check_semantics.py links the MLIR's markers to stubs
+// that call the builtin.
 #ifndef HLSEST_EXACTCLASS_HLS_MATH_H
 #define HLSEST_EXACTCLASS_HLS_MATH_H
 #include <math.h>
 #ifdef __cplusplus
 #include "ap_fixed.h"
 #include "hls_half.h"
+
+#ifdef HLSEST_MATH_MARKERS
+extern "C" {
+#define HLSEST_MDECL1(N) double __hlsest_math_##N(double, int, int, int);
+#define HLSEST_MDECL2(N) double __hlsest_math_##N(double, double, int, int, int);
+HLSEST_MDECL1(sqrt) HLSEST_MDECL1(exp) HLSEST_MDECL1(exp2) HLSEST_MDECL1(expm1)
+HLSEST_MDECL1(log) HLSEST_MDECL1(log2) HLSEST_MDECL1(log10) HLSEST_MDECL1(log1p)
+HLSEST_MDECL1(logb) HLSEST_MDECL1(tanh) HLSEST_MDECL1(sinh) HLSEST_MDECL1(cosh)
+HLSEST_MDECL1(atanh) HLSEST_MDECL1(asinh) HLSEST_MDECL1(acosh) HLSEST_MDECL1(erf)
+HLSEST_MDECL1(erfc) HLSEST_MDECL1(cbrt) HLSEST_MDECL1(rsqrt) HLSEST_MDECL1(tan)
+HLSEST_MDECL1(sinpi) HLSEST_MDECL1(cospi) HLSEST_MDECL1(sin) HLSEST_MDECL1(cos)
+HLSEST_MDECL1(atan) HLSEST_MDECL1(asin) HLSEST_MDECL1(acos)
+HLSEST_MDECL2(atan2) HLSEST_MDECL2(pow)
+#undef HLSEST_MDECL1
+#undef HLSEST_MDECL2
+}
+// N: the hls:: function, B: the builtin it stands for (the value returned);
+// W, I, S: the template parameters of the enclosing fixed-point overload.
+#define HLSEST_M1(N, B, X) __hlsest_math_##N((X), W, I, (int)S)
+#define HLSEST_M2(N, B, X, Y) __hlsest_math_##N((X), (Y), W, I, (int)S)
+#else
+#define HLSEST_M1(N, B, X) B(X)
+#define HLSEST_M2(N, B, X, Y) B((X), (Y))
+#endif
 
 namespace hls {
 namespace detail {
@@ -160,14 +206,14 @@ HLSEST_FB constexpr ap_fixed_base<W, I, S> sqrt(const HLSEST_FBT &x) {
     const int lsbx = (-I + 2 <= W) ? (W + I - 2) : 0;
     if (((ap_detail::ubits<W>)x.V >> lsbx) != 0) { r.V = 0; return r; }
   }
-  double s = __builtin_sqrt(xv);
+  double s = HLSEST_M1(sqrt, __builtin_sqrt, xv);
   r.V = detail::raw_sat<W, S>(s * ap_detail::pow2<W - I>::v + 0.5);
   return r;
 }
 // exp: floor(exp(x)*2^F), saturating to the maximum (never wraps).
 HLSEST_FB constexpr ap_fixed_base<W, I, S> exp(const HLSEST_FBT &x) {
   if (I > 33 || W - I > 32) { ap_fixed_base<W, I, S> z; z.V = 0; return z; }
-  return detail::fixed_from_double_sat<W, I, S>(__builtin_exp(x.to_double()));
+  return detail::fixed_from_double_sat<W, I, S>(HLSEST_M1(exp, __builtin_exp, x.to_double()));
 }
 #define HLSEST_FIXED_VIA_DOUBLE(NAME, EXPR)                                                 \
   HLSEST_FB constexpr ap_fixed_base<W, I, S> NAME(const HLSEST_FBT &x) {                    \
@@ -175,46 +221,51 @@ HLSEST_FB constexpr ap_fixed_base<W, I, S> exp(const HLSEST_FBT &x) {
     (void)d;                                                                                \
     return detail::fixed_from_double_sat<W, I, S>(EXPR);                                    \
   }
-HLSEST_FIXED_VIA_DOUBLE(log, d > 0 ? __builtin_log(d) : 0.0)
-HLSEST_FIXED_VIA_DOUBLE(log2, d > 0 ? __builtin_log2(d) : 0.0)
-HLSEST_FIXED_VIA_DOUBLE(log10, d > 0 ? __builtin_log10(d) : 0.0)
-HLSEST_FIXED_VIA_DOUBLE(logb, d > 0 ? __builtin_logb(d) : 0.0)
-HLSEST_FIXED_VIA_DOUBLE(exp2, __builtin_exp2(d))
-HLSEST_FIXED_VIA_DOUBLE(expm1, __builtin_expm1(d))
-HLSEST_FIXED_VIA_DOUBLE(log1p, __builtin_log1p(d))
-HLSEST_FIXED_VIA_DOUBLE(tanh, __builtin_tanh(d))
-HLSEST_FIXED_VIA_DOUBLE(sinh, __builtin_sinh(d))
-HLSEST_FIXED_VIA_DOUBLE(cosh, __builtin_cosh(d))
-HLSEST_FIXED_VIA_DOUBLE(atanh, __builtin_atanh(d))
-HLSEST_FIXED_VIA_DOUBLE(asinh, __builtin_asinh(d))
-HLSEST_FIXED_VIA_DOUBLE(acosh, __builtin_acosh(d))
-HLSEST_FIXED_VIA_DOUBLE(erf, __builtin_erf(d))
-HLSEST_FIXED_VIA_DOUBLE(erfc, __builtin_erfc(d))
-HLSEST_FIXED_VIA_DOUBLE(cbrt, __builtin_cbrt(d))
-HLSEST_FIXED_VIA_DOUBLE(rsqrt, d > 0 ? 1.0 / __builtin_sqrt(d) : 0.0)
-HLSEST_FIXED_VIA_DOUBLE(tan, __builtin_tan(d))
-HLSEST_FIXED_VIA_DOUBLE(sinpi, __builtin_sin(d * 3.14159265358979323846))
-HLSEST_FIXED_VIA_DOUBLE(cospi, __builtin_cos(d * 3.14159265358979323846))
+HLSEST_FIXED_VIA_DOUBLE(log, d > 0 ? HLSEST_M1(log, __builtin_log, d) : 0.0)
+HLSEST_FIXED_VIA_DOUBLE(log2, d > 0 ? HLSEST_M1(log2, __builtin_log2, d) : 0.0)
+HLSEST_FIXED_VIA_DOUBLE(log10, d > 0 ? HLSEST_M1(log10, __builtin_log10, d) : 0.0)
+HLSEST_FIXED_VIA_DOUBLE(logb, d > 0 ? HLSEST_M1(logb, __builtin_logb, d) : 0.0)
+HLSEST_FIXED_VIA_DOUBLE(exp2, HLSEST_M1(exp2, __builtin_exp2, d))
+HLSEST_FIXED_VIA_DOUBLE(expm1, HLSEST_M1(expm1, __builtin_expm1, d))
+HLSEST_FIXED_VIA_DOUBLE(log1p, HLSEST_M1(log1p, __builtin_log1p, d))
+HLSEST_FIXED_VIA_DOUBLE(tanh, HLSEST_M1(tanh, __builtin_tanh, d))
+HLSEST_FIXED_VIA_DOUBLE(sinh, HLSEST_M1(sinh, __builtin_sinh, d))
+HLSEST_FIXED_VIA_DOUBLE(cosh, HLSEST_M1(cosh, __builtin_cosh, d))
+HLSEST_FIXED_VIA_DOUBLE(atanh, HLSEST_M1(atanh, __builtin_atanh, d))
+HLSEST_FIXED_VIA_DOUBLE(asinh, HLSEST_M1(asinh, __builtin_asinh, d))
+HLSEST_FIXED_VIA_DOUBLE(acosh, HLSEST_M1(acosh, __builtin_acosh, d))
+HLSEST_FIXED_VIA_DOUBLE(erf, HLSEST_M1(erf, __builtin_erf, d))
+HLSEST_FIXED_VIA_DOUBLE(erfc, HLSEST_M1(erfc, __builtin_erfc, d))
+HLSEST_FIXED_VIA_DOUBLE(cbrt, HLSEST_M1(cbrt, __builtin_cbrt, d))
+HLSEST_FIXED_VIA_DOUBLE(rsqrt, d > 0 ? 1.0 / HLSEST_M1(rsqrt, __builtin_sqrt, d) : 0.0)
+HLSEST_FIXED_VIA_DOUBLE(tan, HLSEST_M1(tan, __builtin_tan, d))
+HLSEST_FIXED_VIA_DOUBLE(sinpi, HLSEST_M1(sinpi, __builtin_sin, d * 3.14159265358979323846))
+HLSEST_FIXED_VIA_DOUBLE(cospi, HLSEST_M1(cospi, __builtin_cos, d * 3.14159265358979323846))
 #undef HLSEST_FIXED_VIA_DOUBLE
 // sin / cos return ap_fixed<W-I+2, 2>, atan ap_fixed<W, 2>, asin / acos
 // ap_fixed<W-I+3, 3> (hls_math.h signatures).
 HLSEST_FB constexpr ap_fixed_base<W - I + 2, 2, true> sin(const HLSEST_FBT &x) {
-  return detail::fixed_from_double_sat<W - I + 2, 2, true>(__builtin_sin(x.to_double()));
+  return detail::fixed_from_double_sat<W - I + 2, 2, true>(HLSEST_M1(sin, __builtin_sin, x.to_double()));
 }
 HLSEST_FB constexpr ap_fixed_base<W - I + 2, 2, true> cos(const HLSEST_FBT &x) {
-  return detail::fixed_from_double_sat<W - I + 2, 2, true>(__builtin_cos(x.to_double()));
+  return detail::fixed_from_double_sat<W - I + 2, 2, true>(HLSEST_M1(cos, __builtin_cos, x.to_double()));
 }
 HLSEST_FB constexpr ap_fixed_base<W, 2, true> atan(const HLSEST_FBT &x) {
-  return detail::fixed_from_double_sat<W, 2, true>(__builtin_atan(x.to_double()));
+  return detail::fixed_from_double_sat<W, 2, true>(HLSEST_M1(atan, __builtin_atan, x.to_double()));
 }
 HLSEST_FB constexpr ap_fixed_base<W - I + 3, 3, true> asin(const HLSEST_FBT &x) {
-  return detail::fixed_from_double_sat<W - I + 3, 3, true>(__builtin_asin(x.to_double()));
+  return detail::fixed_from_double_sat<W - I + 3, 3, true>(HLSEST_M1(asin, __builtin_asin, x.to_double()));
 }
 HLSEST_FB constexpr ap_fixed_base<W - I + 3, 3, true> acos(const HLSEST_FBT &x) {
-  return detail::fixed_from_double_sat<W - I + 3, 3, true>(__builtin_acos(x.to_double()));
+  return detail::fixed_from_double_sat<W - I + 3, 3, true>(HLSEST_M1(acos, __builtin_acos, x.to_double()));
 }
 HLSEST_FB constexpr ap_fixed_base<W, 3, true> atan2(const HLSEST_FBT &y, const HLSEST_FBT &x) {
-  return detail::fixed_from_double_sat<W, 3, true>(__builtin_atan2(y.to_double(), x.to_double()));
+  return detail::fixed_from_double_sat<W, 3, true>(HLSEST_M2(atan2, __builtin_atan2, y.to_double(), x.to_double()));
+}
+// pow: evaluated in double like log (Vitis has a fixed-point pow core,
+// pow_W_I_s; last-bit agreement not checked).
+HLSEST_FB constexpr ap_fixed_base<W, I, S> pow(const HLSEST_FBT &x, const HLSEST_FBT &y) {
+  return detail::fixed_from_double_sat<W, I, S>(HLSEST_M2(pow, __builtin_pow, x.to_double(), y.to_double()));
 }
 // recip: 1 / x with the exact fixed-point division (truncation).
 HLSEST_FB constexpr ap_fixed_base<W, I, S> recip(const HLSEST_FBT &x) {
@@ -338,6 +389,7 @@ HLSEST_FIXED_DERIVED2(fmax)
 HLSEST_FIXED_DERIVED2(fmin)
 HLSEST_FIXED_DERIVED2(fdim)
 HLSEST_FIXED_DERIVED2(copysign)
+HLSEST_FIXED_DERIVED2(pow)
 #undef HLSEST_FIXED_DERIVED2
 template <int W, int I, ap_q_mode Q, ap_o_mode O, int N>
 constexpr ap_fixed<W - I + 2, 2> sin(const ap_fixed<W, I, Q, O, N> &x) { return ap_fixed<W - I + 2, 2>(sin((const ap_fixed_base<W, I, true, Q, O, N> &)x)); }
@@ -360,5 +412,7 @@ constexpr ap_ufixed<W - I + 2, 2> cos(const ap_ufixed<W, I, Q, O, N> &x) { retur
 #undef HLSEST_FB
 #undef HLSEST_FBT
 } // namespace hls
+#undef HLSEST_M1
+#undef HLSEST_M2
 #endif // __cplusplus
 #endif

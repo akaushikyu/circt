@@ -31,6 +31,27 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import common as C  # noqa: E402
 
+def math_core_index(path=None):
+    """The Vitis modules of the hls:: math cores and the ROM tables of the inlined CORDIC entries,
+    from the cost table (math_costs.json): {"modules": set, "tables": set};
+    empty sets when the file cannot be read."""
+    p = Path(path) if path else Path(__file__).resolve().parent / "math_costs.json"
+    mods, tabs = set(), set()
+    try:
+        doc = json.loads(p.read_text())
+    except (OSError, ValueError):
+        return {"modules": mods, "tables": tabs}
+    for e in doc.get("entries", []):
+        core = e.get("core")
+        if isinstance(core, list):
+            mods.update(c for c in core if c)
+        elif e.get("core_kind") == "inline_cordic":
+            tabs.update(t["name"] for t in e.get("tables", []) if t.get("name"))
+    return {"modules": mods, "tables": tabs}
+
+
+MATH_CORES = math_core_index()
+
 # Partition-bank (`_1`, `_0_7`) and inline (`.i`, `.i2`) suffixes, as in align_arrays.py.
 BANK_TAIL_RE = re.compile(r"^(?:\.i\d*|[._]\d+)+$")
 
@@ -67,10 +88,19 @@ def vitis_array_name(m, known=None):
 def vitis_arrays(v, known=None):
     """Aggregate the Vitis per-memory rows by C array name (banks and module copies summed;
     `known` = the hls-est array names, see `vitis_array_name`).
-    m_axi/s_axi adapters and ROM tables of library functions are kept but flagged."""
+    m_axi/s_axi adapters and ROM tables of library functions are kept but flagged.
+    hls:: math cores (MATH_CORES, from math_costs.json): an instance row of a core module (not
+    nested in another core) is listed as `math_core:<module>` with the instance BRAM, the memory
+    rows inside core modules are left out (their BRAM is the instance's), and an inlined CORDIC
+    table row is `math_core:<table>`: the names hls-est's math_core records carry
+    (--bram-analysis math-costs=)."""
     out = {}
     for m in v.get("memories", []):
+        if m.get("module") in MATH_CORES["modules"]:
+            continue
         name = vitis_array_name(m, known)
+        if m.get("array") in MATH_CORES["tables"]:
+            name = "math_core:" + m["array"]
         a = out.setdefault(name, {"name": name, "vitis_bram": 0, "banks": 0, "rows": 0,
                                   "words": 0, "bits": m.get("Bits"), "cores": set(), "modules": set()})
         a["vitis_bram"] += m.get("bram") or 0
@@ -92,6 +122,17 @@ def vitis_arrays(v, known=None):
         a["vitis_bram"] += inst.get("BRAM_18K") or 0
         a["rows"] += 1
         a["cores"].add("m_axi_adapter")
+        a["modules"].add(inst.get("parent", ""))
+    for inst in v.get("instances", []):
+        mod = inst.get("Module") or ""
+        if mod not in MATH_CORES["modules"] or inst.get("parent") in MATH_CORES["modules"]:
+            continue
+        name = "math_core:" + mod
+        a = out.setdefault(name, {"name": name, "vitis_bram": 0, "banks": 0, "rows": 0,
+                                  "words": 0, "bits": None, "cores": set(), "modules": set()})
+        a["vitis_bram"] += inst.get("BRAM_18K") or 0
+        a["rows"] += 1
+        a["cores"].add("math_core")
         a["modules"].add(inst.get("parent", ""))
     for a in out.values():
         a["cores"] = sorted(a["cores"])

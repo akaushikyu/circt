@@ -6,6 +6,7 @@
                           [--shim exactclass|exact|scalar|polygeist|<dir>]
                           [--out results/hlsest.json] [--force-cgeist] [--debug-json]
                           [--mlir-from <earlier result json>]
+                          [--math-costs <cost table json> | --no-math-costs]
 
 --shim defaults to common.DEFAULT_SHIM = exactclass (MEMOS.md M2, decision #8): a name is a
 directory under shim/, "polygeist" Polygeist's own stand-ins, anything else a path. The shim's
@@ -24,6 +25,11 @@ Per design:
      --bram-analysis (MEMOS M7: costs only what the top reaches through calls;
      the same set as the prefix gives, and no warning about several public
      functions). --no-privatize drops both.
+--math-costs (default tools/hls-est-validate/math_costs.json: the cost table is how the
+programmer sets the BRAM of the hls:: math cores, one fixed cost per core instance) adds
+math-costs=<path> to the pipeline's --bram-analysis, so every math call is priced from the table;
+--no-math-costs leaves it out (no math cost, the behaviour before W2). A binary without the option
+runs without it (recorded per design as math_costs null).
 --mlir-from reuses the MLIR files (and cgeist outcomes) an earlier result file
 recorded instead of running cgeist, so two hls-est builds or pipelines can be
 compared on byte-identical inputs even after a shim or cgeist change.
@@ -53,6 +59,29 @@ MLIR_ROOT = Path.home() / "hls-est-work" / "mlir"
 LOG_ROOT = Path.home() / "hls-est-work" / "hlsest-logs"
 CGEIST_TIMEOUT = 600
 HDR_EXT = {".h", ".hh", ".hpp", ".hxx", ".inc", ".tcc", ".ipp"}
+
+
+# The harness default cost table of the hls:: math cores (the programmer edits it).
+DEFAULT_MATH_COSTS = Path(__file__).resolve().parent / "math_costs.json"
+
+
+def add_math_costs_args(ap):
+    """--math-costs / --no-math-costs (run_hlsest.py and sweep_hlsfactory_v2.py)."""
+    ap.add_argument("--math-costs", default=str(DEFAULT_MATH_COSTS),
+                    help="cost table of the hls:: math cores, passed as --bram-analysis math-costs= "
+                         f"(default {DEFAULT_MATH_COSTS.name})")
+    ap.add_argument("--no-math-costs", action="store_true",
+                    help="no math-core cost (leave math-costs= out)")
+
+
+def resolve_math_costs(args):
+    """args.math_costs: the absolute path of the cost table, or None with --no-math-costs."""
+    if args.no_math_costs:
+        args.math_costs = None
+    elif not Path(args.math_costs).is_file():
+        sys.exit(f"--math-costs {args.math_costs}: no such file (--no-math-costs to run without)")
+    else:
+        args.math_costs = str(Path(args.math_costs).resolve())
 
 
 def resolve_shim(s):
@@ -339,8 +368,15 @@ _TOP_LOCK = threading.Lock()
 def bram_top_supported(binary):
     """Whether this hls-est build has --bram-analysis's top= option (from its --help), so that a
     frozen binary older than the option still runs (it then gets the prefix alone)."""
+    return bram_option_supported(binary, "top")
+
+
+def bram_option_supported(binary, option):
+    """Whether this hls-est build's --bram-analysis has the pass option `option` (top,
+    math-costs, ...), read from its --help once per binary."""
+    key = (binary, option)
     with _TOP_LOCK:
-        if binary not in _TOP_SUPPORT:
+        if key not in _TOP_SUPPORT:
             ok = False
             try:
                 out = subprocess.run([binary, "--help"], capture_output=True, text=True, errors="replace",
@@ -353,13 +389,13 @@ def bram_top_supported(binary):
                             s = m.lstrip()
                             if s.startswith("--") and len(m) - len(s) <= ind:
                                 break
-                            if s.startswith("--top="):
+                            if s.startswith(f"--{option}="):
                                 ok = True
                         break
             except (OSError, subprocess.SubprocessError):
                 ok = False
-            _TOP_SUPPORT[binary] = ok
-        return _TOP_SUPPORT[binary]
+            _TOP_SUPPORT[key] = ok
+        return _TOP_SUPPORT[key]
 
 
 def with_top(args, top_fn):
@@ -376,13 +412,36 @@ def with_top(args, top_fn):
     return out
 
 
-def run_hlsest(mlir, top_fn, pipeline, timeout, log_prefix, privatize=True, debug_json=None):
+def with_bram_option(args, option):
+    """The pipeline's --bram-analysis with the pass option `option` ("math-costs=<path>") added
+    (one argv element, as with_top); an option of that name already given is left alone."""
+    name = option.split("=", 1)[0]
+    out = []
+    for a in args:
+        if a == "--bram-analysis":
+            a = f"--bram-analysis={option}"
+        elif a.startswith("--bram-analysis=") and not re.search(rf"(^|[= ]){re.escape(name)}=",
+                                                                 a[len("--bram-analysis="):]):
+            a = f"{a} {option}"
+        out.append(a)
+    return out
+
+
+def run_hlsest(mlir, top_fn, pipeline, timeout, log_prefix, privatize=True, debug_json=None,
+               math_costs=None):
+    """... math_costs: the cost table to add as --bram-analysis math-costs= (None: none); the
+    result records the one actually passed (None also when the binary lacks the option)."""
     cmd = [C.HLS_EST, str(mlir)]
+    args = pipeline.split()
     if privatize and top_fn:
         cmd += [f"--symbol-privatize=exclude={top_fn}", "--symbol-dce"]
-        cmd += with_top(pipeline.split(), top_fn) if bram_top_supported(C.HLS_EST) else pipeline.split()
-    else:
-        cmd += pipeline.split()
+        if bram_top_supported(C.HLS_EST):
+            args = with_top(args, top_fn)
+    applied = None
+    if math_costs and bram_option_supported(C.HLS_EST, "math-costs"):
+        args = with_bram_option(args, f"math-costs={math_costs}")
+        applied = str(math_costs)
+    cmd += args
     if debug_json:
         cmd += [f"--bram-debug-json={debug_json}"]
     cmd += ["-o", "/dev/null"]
@@ -401,7 +460,7 @@ def run_hlsest(mlir, top_fn, pipeline, timeout, log_prefix, privatize=True, debu
     # from `pipeline` alone: without the prefix uncalled public functions are costed too (O12).
     full = shlex.join(a for a in cmd[2:] if a not in ("-o", "/dev/null"))
     r = {"elapsed_s": round(el, 2), "cmd": shlex.join(cmd), "pipeline_full": full, "total_bram": total,
-         "memrefs": mems, "exit": p.returncode}
+         "memrefs": mems, "exit": p.returncode, "math_costs": applied}
     if p.returncode < 0 or p.returncode > 1 and ("Stack dump" in p.stderr or "Aborted" in p.stderr or "Assertion" in p.stderr):
         r["status"] = "hls-est error: crash"
         a = re.search(r"Assertion `([^']*)' failed", p.stderr)
@@ -455,7 +514,8 @@ def process(d, args, shim, run_id):
     # Always emit the per-memref debug JSON: compare.py needs it to match arrays by name.
     dbg = log_prefix + ".debug.json" if not args.no_debug_json else None
     hr = run_hlsest(mlir, top_fn, args.pipeline, args.timeout, log_prefix,
-                    privatize=not args.no_privatize, debug_json=dbg)
+                    privatize=not args.no_privatize, debug_json=dbg,
+                    math_costs=getattr(args, "math_costs", None))
     r.update(hr)
     return r
 
@@ -478,12 +538,14 @@ def main():
     ap.add_argument("--debug-json", action="store_true", help="(default now; kept for compatibility)")
     ap.add_argument("--no-debug-json", action="store_true")
     ap.add_argument("--quiet", action="store_true")
+    add_math_costs_args(ap)
     ap.add_argument("--catalog", choices=D.CATALOGS, default=None,
                     help="design catalogue (designs.py): 'polygeist' (default) or 'v2' (the HLSFactory 1.1.0 "
                          "tree; the default when HLSFACTORY_ROOT is set)")
     args = ap.parse_args()
 
     shim = resolve_shim(args.shim)
+    resolve_math_costs(args)
     args.mlir_from_records = None
     if args.mlir_from:
         prev = C.load_json(args.mlir_from, {}) or {}
@@ -512,7 +574,11 @@ def main():
                                         "--symbol-privatize=exclude=<top> --symbol-dce prepended per design; "
                                         + ("top=<top> on --bram-analysis" if bram_top_supported(C.HLS_EST)
                                          else "no top= (this hls-est build has no such option)")),
-                         "timeout": args.timeout, "run_id": run_id, "hls_est": C.HLS_EST}}
+                         "timeout": args.timeout, "run_id": run_id, "hls_est": C.HLS_EST,
+                         "math_costs": args.math_costs,
+                         "math_costs_md5": C.md5_of_file(args.math_costs) if args.math_costs else None,
+                         "math_costs_applied": bool(args.math_costs) and
+                                               bram_option_supported(C.HLS_EST, "math-costs")}}
     results["_meta"]["catalog"] = (f"{catalog} ({D.hlsfactory_root()})" if catalog != "polygeist"
                                    else catalog)
     if not args.quiet:
