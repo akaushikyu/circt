@@ -127,6 +127,12 @@ bool MathCostConfig::load(StringRef file, std::string &error) {
       return false;
     }
     entryValue.bram = *bram;
+
+    if (entryValue.instancing == "logic_only" && entryValue.bram != 0) {
+      error = where + ": instancing \"logic_only\" (no memory) needs "
+                      "\"bram_18k\": 0";
+      return false;
+    }
     if (std::optional<StringRef> keyValue = opHandle->getString("core_kind"))
       entryValue.coreKind = keyValue->str();
     if (const llvm::json::Value *candidateValue = opHandle->get("core")) {
@@ -656,58 +662,6 @@ static bool sameValue(Value arrayValue, Value buildPoint, unsigned depth = 8) {
   return true;
 }
 
-static void forwardReach(Operation *from, llvm::DenseSet<Operation *> &out) {
-  SmallVector<Operation *> work{from};
-  while (!work.empty() && out.size() < 200000) {
-    Operation *op = work.pop_back_val();
-    for (Value resultValue : op->getResults())
-      for (Operation *useValue : resultValue.getUsers())
-        if (out.insert(useValue).second) {
-          work.push_back(useValue);
-          if (useValue->hasTrait<OpTrait::IsTerminator>())
-            if (Operation *portValue = useValue->getParentOp();
-                portValue && !isa<func::FuncOp>(portValue) &&
-                out.insert(portValue).second)
-              work.push_back(portValue);
-        }
-  }
-}
-
-static unsigned maxIndependent(ArrayRef<const Site *> sites) {
-  unsigned elementCount = sites.size();
-  if (elementCount <= 1)
-    return elementCount;
-  std::vector<std::vector<unsigned>> adj(elementCount);
-  for (unsigned loopIndex = 0; loopIndex < elementCount; ++loopIndex) {
-    llvm::DenseSet<Operation *> reach;
-    forwardReach(sites[loopIndex]->op, reach);
-    for (unsigned innerIndex = 0; innerIndex < elementCount; ++innerIndex)
-      if (loopIndex != innerIndex && reach.contains(sites[innerIndex]->op))
-        adj[loopIndex].push_back(innerIndex);
-  }
-  std::vector<int> matchR(elementCount, -1);
-  std::function<bool(unsigned, std::vector<bool> &)> augment =
-      [&](unsigned useValue, std::vector<bool> &vis) {
-        for (unsigned valueHandle : adj[useValue]) {
-          if (vis[valueHandle])
-            continue;
-          vis[valueHandle] = true;
-          if (matchR[valueHandle] < 0 || augment(matchR[valueHandle], vis)) {
-            matchR[valueHandle] = static_cast<int>(useValue);
-            return true;
-          }
-        }
-        return false;
-      };
-  unsigned matched = 0;
-  for (unsigned useValue = 0; useValue < elementCount; ++useValue) {
-    std::vector<bool> vis(elementCount, false);
-    if (augment(useValue, vis))
-      ++matched;
-  }
-  return elementCount - matched;
-}
-
 static bool isLoop(Operation *op) {
   return isa<LoopLikeOpInterface, LoopSchedulePipelineOp>(op);
 }
@@ -846,6 +800,47 @@ static void placeSite(
     }
   }
   stringValue.stretch = index.lookup(cur);
+}
+
+static void accessedRoots(Operation *op, SmallVectorImpl<StorageRoot> &out) {
+  op->walk([&](Operation *inner) {
+    for (Value valueHandle : inner->getOperands())
+      if (isa<BaseMemRefType>(valueHandle.getType())) {
+        StorageRoot resultValue = storageRoot(valueHandle);
+        if (!llvm::is_contained(out, resultValue))
+          out.push_back(resultValue);
+      }
+  });
+}
+
+static bool mayOverlapInSequentialCode(const Site &arrayValue,
+                                       const Site &buildPoint) {
+  if (arrayValue.scope == buildPoint.scope &&
+      arrayValue.block == buildPoint.block &&
+      arrayValue.stretch == buildPoint.stretch)
+    return true;
+
+  llvm::DenseMap<Block *, Operation *> holderOfA;
+  for (Operation *portValue = arrayValue.op; portValue;
+       portValue = portValue->getParentOp())
+    holderOfA.try_emplace(portValue->getBlock(), portValue);
+  for (Operation *queueValue = buildPoint.op; queueValue;
+       queueValue = queueValue->getParentOp()) {
+    auto it = holderOfA.find(queueValue->getBlock());
+    if (it == holderOfA.end())
+      continue;
+    Operation *exprValue = it->second;
+    if (exprValue == queueValue || !isLoop(exprValue) || !isLoop(queueValue) ||
+        !isa<func::FuncOp>(queueValue->getParentOp()))
+      return false;
+    SmallVector<StorageRoot, 8> rootsA, rootsB;
+    accessedRoots(exprValue, rootsA);
+    accessedRoots(queueValue, rootsB);
+    return llvm::none_of(rootsA, [&](const StorageRoot &resultValue) {
+      return llvm::is_contained(rootsB, resultValue);
+    });
+  }
+  return false;
 }
 
 static std::string locText(Location loc) {
@@ -996,6 +991,7 @@ analyzeMathCores(ModuleOp module, const MathCostConfig &config,
     members[it->second].push_back(loopIndex);
   }
 
+  std::set<std::string> warnedPairs;
   for (size_t ri = 0; ri < records.size(); ++ri) {
     MathCoreRecord &resultValue = records[ri];
     const MathCostEntry *entryValue =
@@ -1094,7 +1090,11 @@ analyzeMathCores(ModuleOp module, const MathCostConfig &config,
       bram += reg.instances * reg.bramPerInstance;
       resultValue.regions.push_back(std::move(reg));
     }
-    unsigned seqInst = 0;
+
+    std::vector<Operation *> seqOps;
+    std::vector<const Site *> seqSites;
+    std::vector<size_t> seqRegion;
+    size_t firstSeqRegion = resultValue.regions.size();
     for (const auto &key : seqOrder) {
       const auto &valueHandle = perStretch[key];
       MathRegionRecord reg;
@@ -1103,17 +1103,39 @@ analyzeMathCores(ModuleOp module, const MathCostConfig &config,
       reg.loc = (scope ? locText(scope->getLoc()) : std::string("function")) +
                 " stretch " + std::to_string(std::get<2>(key));
       reg.calls = valueHandle.size();
-      reg.instances = maxIndependent(valueHandle);
+      std::vector<const Site *> kept(valueHandle.begin(), valueHandle.end());
       if (valueHandle.front()->notPipelined) {
-
         unsigned copies = valueHandle.front()->unrollCopies;
-        reg.instances = std::max(1u, (reg.instances + copies - 1) / copies);
         reg.kind = "sequential (loop not pipelined by Vitis)";
         reg.unrollCopies = copies;
+
+        kept.resize(
+            std::max<size_t>(1, (valueHandle.size() + copies - 1) / copies));
+      }
+      for (const Site *stringValue : kept) {
+        seqOps.push_back(stringValue->op);
+        seqSites.push_back(stringValue);
+        seqRegion.push_back(resultValue.regions.size());
       }
       reg.bramPerInstance = perInst;
-      seqInst = std::max(seqInst, reg.instances);
       resultValue.regions.push_back(std::move(reg));
+    }
+    unsigned seqInst = 0;
+    std::string seqRule;
+    if (!seqOps.empty()) {
+      SmallVector<unsigned> group;
+      seqInst = groupConcurrentCalls(
+          cast<func::FuncOp>(firstLive->funcOp), seqOps, std::nullopt, group,
+          &seqRule, [&](unsigned loopIndex, unsigned innerIndex) {
+            return !mayOverlapInSequentialCode(*seqSites[loopIndex],
+                                               *seqSites[innerIndex]);
+          });
+
+      std::map<size_t, std::set<unsigned>> used;
+      for (size_t keyValue = 0; keyValue < seqOps.size(); ++keyValue)
+        used[seqRegion[keyValue]].insert(group[keyValue]);
+      for (size_t ri2 = firstSeqRegion; ri2 < resultValue.regions.size(); ++ri2)
+        resultValue.regions[ri2].instances = used[ri2].size();
     }
     bram += seqInst * perInst;
     resultValue.instances = pipeInst + seqInst;
@@ -1131,7 +1153,11 @@ analyzeMathCores(ModuleOp module, const MathCostConfig &config,
           (resultValue.arguments != "any" ? " (" + resultValue.arguments + ")"
                                           : "") +
           " in " + config.path + ": unknown cost, 0 assumed";
-      if (live)
+
+      if (live && warnedPairs
+                      .insert(resultValue.function + "|" + resultValue.type +
+                              "|" + resultValue.arguments)
+                      .second)
         warn(firstLive ? firstLive->op->getLoc()
                        : UnknownLoc::get(module.getContext()),
              resultValue.reason);
@@ -1165,12 +1191,11 @@ analyzeMathCores(ModuleOp module, const MathCostConfig &config,
                " -> " + std::to_string(reg.instances) + " x " +
                std::to_string(reg.bramPerInstance);
       else
-        why += std::to_string(reg.calls) + " sequential call(s), " +
-               std::to_string(reg.instances) + " concurrent";
+        why += std::to_string(reg.calls) + " sequential call(s) using " +
+               std::to_string(reg.instances) + " instance(s)";
     }
     if (seqInst)
-      why += "; sequential stretches share: " + std::to_string(seqInst) +
-             " x " + std::to_string(perInst);
+      why += "; sequential code: " + seqRule + " x " + std::to_string(perInst);
     if (mult != 1)
       why += "; x " + std::to_string(mult) + " instance(s) of @" +
              resultValue.func;

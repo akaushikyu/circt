@@ -8,6 +8,7 @@
 // RUN: diff %t/on.out %t/dbg.out
 // RUN: FileCheck %s --input-file=%t/dbg.err --check-prefix=DBG
 // RUN: FileCheck %s --input-file=%t/dbg.json --check-prefix=JSON
+// RUN: hls-est %t/pipe.mlir --convert-affine-to-loopschedule --bram-analysis=math-costs=%t/pipecosts.json -o /dev/null | FileCheck %s --check-prefix=PIPE
 
 // --bram-analysis=math-costs=<file>: every hls:: math call is priced from
 // the cost table, BRAM_18K per core instance, instances by the call
@@ -20,8 +21,12 @@
 // Outside pipelines one instance per call that can run concurrently:
 // independent calls in one straight-line stretch are concurrent (@indep 2), a
 // chain f(f(x)) is one instance (@chain), a call in a sequential loop is one
-// (@seqloop), k unrolled copies are k (@unrolled 4), stretches separated by a
-// loop share (@twoloops 1; resource binding, unconfirmed). In a loop that
+// (@seqloop), k unrolled copies are k (@unrolled 4), calls in the two arms
+// of an if share one (@excl 1). Calls in different stretches run one after
+// the other and share (@around: before and after a loop, 1), except in two
+// loops of the function body that access no common array, which Vitis runs
+// concurrently (@twoloops_disjoint 2; @twoloops, both loops read A: 1). In a
+// loop that
 // keeps its hls.pipeline tag (not scheduled here): ceil(calls / requested II)
 // (@tagged 3 calls at II 2 -> 2). Constant arguments fold (@folded), an
 // unused result is removed (@dead); pow with a constant base takes the
@@ -53,6 +58,9 @@
 // CHECK-DAG: math.core function=exp type=double func=@seqloop instances=1 bram=5 (exp_test_s, per_concurrent_call)
 // CHECK-DAG: math.core function=exp type=double func=@unrolled instances=4 bram=20 (exp_test_s, per_concurrent_call)
 // CHECK-DAG: math.core function=exp type=double func=@twoloops instances=1 bram=5 (exp_test_s, per_concurrent_call)
+// CHECK-DAG: math.core function=exp type=double func=@twoloops_disjoint instances=2 bram=10 (exp_test_s, per_concurrent_call)
+// CHECK-DAG: math.core function=exp type=double func=@excl instances=1 bram=5 (exp_test_s, per_concurrent_call)
+// CHECK-DAG: math.core function=exp type=double func=@around instances=1 bram=5 (exp_test_s, per_concurrent_call)
 // CHECK-DAG: math.core function=exp type=double func=@tagged instances=2 bram=10 (exp_test_s, per_concurrent_call)
 // CHECK-DAG: math.core function=exp type=double func=@folded instances=0 bram=0 (folded: evaluated at compile time)
 // CHECK-DAG: math.core function=exp type=double func=@dead instances=0 bram=0 (dead: no call result reaches an output)
@@ -75,7 +83,7 @@
 // CHECK-DAG: math.core function=sin type=double func=@blocked_auto instances=1 bram=8 (sin_or_cos_double_s, per_concurrent_call)
 // CHECK-DAG: math.core function=sin type=double func=@blocked_user instances=2 bram=16 (sin_or_cos_double_s, per_concurrent_call)
 // CHECK-NOT: func=@floorcall
-// CHECK: Total BRAM: 125
+// CHECK: Total BRAM: 145
 
 // WARN-DAG: warning: --bram-analysis: math-costs: no entry for atan of float in {{.*}}costs.json: unknown cost, 0 assumed
 // WARN-DAG: warning: --bram-analysis: math-costs: no entry for sin of ap_ufixed<16,5> in {{.*}}costs.json: unknown cost, 0 assumed
@@ -96,6 +104,24 @@
 
 // JSON: "id": "sincos_same#math:sin:ap_fixed<16,5>:any",
 // JSON: "kind": "math_core",
+
+// Scheduled pipelines (--convert-affine-to-loopschedule): ceil(calls / the
+// scheduled II) per loopschedule.pipeline (@user2 2 calls at II 1: 2; @ports4
+// 4 calls, 4 loads of A per iteration schedule at II 2: 2), automatic or user
+// source (@auto1 1); a chain f(f(x)) whose second call is in a later stage
+// stays live through the stage registers (@chain_pipe 2); the CORDIC entry
+// folds its table in a pragma-pipelined loop (@cordic_user 0) and keeps it in
+// an automatically pipelined one (@cordic_auto 4); a pipelined fill of a
+// local array from the induction variable is evaluated at compile time
+// (@fill_pipe: folded).
+// PIPE-DAG: math.core function=exp type=double func=@user2 instances=2 bram=10 (exp_test_s, per_concurrent_call)
+// PIPE-DAG: math.core function=exp type=double func=@ports4 instances=2 bram=10 (exp_test_s, per_concurrent_call)
+// PIPE-DAG: math.core function=exp type=double func=@auto1 instances=1 bram=5 (exp_test_s, per_concurrent_call)
+// PIPE-DAG: math.core function=exp type=double func=@chain_pipe instances=2 bram=10 (exp_test_s, per_concurrent_call)
+// PIPE-DAG: math.core function=sin type=double func=@cordic_user instances=1 bram=0 (cordic_test_table, cordic_loop)
+// PIPE-DAG: math.core function=sin type=double func=@cordic_auto instances=1 bram=4 (cordic_test_table, cordic_loop)
+// PIPE-DAG: math.core function=exp type=double func=@fill_pipe instances=0 bram=0 (folded: evaluated at compile time)
+// PIPE: Total BRAM:
 
 //--- costs.json
 {
@@ -187,6 +213,42 @@ module {
       %1 = math.exp %0 : f64
       affine.store %1, %P[%i] : memref<16xf64>
     }
+    return
+  }
+  func.func @twoloops_disjoint(%A: memref<16xf64>, %B: memref<16xf64>, %O: memref<16xf64>, %P: memref<16xf64>) {
+    affine.for %i = 0 to 16 {
+      %0 = affine.load %A[%i] : memref<16xf64>
+      %1 = math.exp %0 : f64
+      affine.store %1, %O[%i] : memref<16xf64>
+    }
+    affine.for %i = 0 to 16 {
+      %0 = affine.load %B[%i] : memref<16xf64>
+      %1 = math.exp %0 : f64
+      affine.store %1, %P[%i] : memref<16xf64>
+    }
+    return
+  }
+  func.func @excl(%c: i1, %a: f64, %b: f64, %o: memref<1xf64>) {
+    %r = scf.if %c -> f64 {
+      %0 = math.exp %a : f64
+      scf.yield %0 : f64
+    } else {
+      %1 = math.exp %b : f64
+      scf.yield %1 : f64
+    }
+    affine.store %r, %o[0] : memref<1xf64>
+    return
+  }
+  func.func @around(%a: f64, %b: f64, %A: memref<16xf64>, %O: memref<16xf64>, %o: memref<2xf64>) {
+    %0 = math.exp %a : f64
+    affine.store %0, %o[0] : memref<2xf64>
+    affine.for %i = 0 to 16 {
+      %x = affine.load %A[%i] : memref<16xf64>
+      %y = arith.mulf %x, %x : f64
+      affine.store %y, %O[%i] : memref<16xf64>
+    }
+    %1 = math.exp %b : f64
+    affine.store %1, %o[1] : memref<2xf64>
     return
   }
   func.func @tagged(%A: memref<48xf64>, %O: memref<48xf64>) {
@@ -413,6 +475,94 @@ module {
     %1 = func.call @__hlsest_math_sin(%0, %c16, %c5, %c0) : (f64, i32, i32, i32) -> f64
     %2 = arith.fptoui %1 : f64 to i16
     affine.store %2, %o[0] : memref<1xi16>
+    return
+  }
+}
+
+//--- pipecosts.json
+{"version": 1, "entries": [
+ {"function": "exp", "type": "double", "instancing": "per_concurrent_call", "bram_18k": 5, "core": "exp_test_s"},
+ {"function": "sin", "type": "double", "instancing": "cordic_loop", "bram_18k": 4, "core": "cordic_test_table", "bram_18k_if_cordic_loop_unrolled": 0, "cordic_loop_unrolled_in": "user_pipeline"}]}
+
+//--- pipe.mlir
+module {
+  func.func @user2(%A: memref<64xf64>, %O: memref<64xf64>) {
+    affine.for %i = 0 to 32 {
+      %0 = affine.load %A[%i * 2] : memref<64xf64>
+      %1 = affine.load %A[%i * 2 + 1] : memref<64xf64>
+      %2 = math.exp %0 : f64
+      %3 = math.exp %1 : f64
+      affine.store %2, %O[%i * 2] : memref<64xf64>
+      affine.store %3, %O[%i * 2 + 1] : memref<64xf64>
+    } {hls.pipeline = [{II = 1 : i32}]}
+    return
+  }
+  func.func @ports4(%A: memref<128xf64>, %O: memref<64xf64>, %P: memref<64xf64>) {
+    affine.for %i = 0 to 32 {
+      %0 = affine.load %A[%i * 4] : memref<128xf64>
+      %1 = affine.load %A[%i * 4 + 1] : memref<128xf64>
+      %2 = affine.load %A[%i * 4 + 2] : memref<128xf64>
+      %3 = affine.load %A[%i * 4 + 3] : memref<128xf64>
+      %4 = math.exp %0 : f64
+      %5 = math.exp %1 : f64
+      %6 = math.exp %2 : f64
+      %7 = math.exp %3 : f64
+      affine.store %4, %O[%i * 2] : memref<64xf64>
+      affine.store %5, %O[%i * 2 + 1] : memref<64xf64>
+      affine.store %6, %P[%i * 2] : memref<64xf64>
+      affine.store %7, %P[%i * 2 + 1] : memref<64xf64>
+    } {hls.pipeline = [{II = 1 : i32}]}
+    return
+  }
+  func.func @auto1(%A: memref<64xf64>, %O: memref<64xf64>) {
+    affine.for %i = 0 to 64 {
+      %0 = affine.load %A[%i] : memref<64xf64>
+      %1 = math.exp %0 : f64
+      affine.store %1, %O[%i] : memref<64xf64>
+    }
+    return
+  }
+  func.func @chain_pipe(%A: memref<64xf64>, %O: memref<64xf64>) {
+    affine.for %i = 0 to 64 {
+      %0 = affine.load %A[%i] : memref<64xf64>
+      %1 = math.exp %0 : f64
+      %2 = arith.mulf %1, %1 : f64
+      %3 = math.exp %2 : f64
+      %4 = arith.addf %3, %0 : f64
+      affine.store %4, %O[%i] : memref<64xf64>
+    } {hls.pipeline = [{II = 1 : i32}]}
+    return
+  }
+  func.func @cordic_user(%A: memref<64xf64>, %O: memref<64xf64>) {
+    affine.for %i = 0 to 64 {
+      %0 = affine.load %A[%i] : memref<64xf64>
+      %1 = math.sin %0 : f64
+      affine.store %1, %O[%i] : memref<64xf64>
+    } {hls.pipeline = [{II = 1 : i32}]}
+    return
+  }
+  func.func @cordic_auto(%A: memref<64xf64>, %O: memref<64xf64>) {
+    affine.for %i = 0 to 64 {
+      %0 = affine.load %A[%i] : memref<64xf64>
+      %1 = math.sin %0 : f64
+      affine.store %1, %O[%i] : memref<64xf64>
+    }
+    return
+  }
+  func.func @fill_pipe(%A: memref<64xf64>, %O: memref<64xf64>) {
+    %t = memref.alloca() : memref<64xf64>
+    affine.for %i = 0 to 64 {
+      %c = arith.index_cast %i : index to i32
+      %f = arith.sitofp %c : i32 to f64
+      %e = math.exp %f : f64
+      affine.store %e, %t[%i] : memref<64xf64>
+    } {hls.pipeline = [{II = 1 : i32}]}
+    affine.for %i = 0 to 64 {
+      %0 = affine.load %A[%i] : memref<64xf64>
+      %1 = affine.load %t[%i] : memref<64xf64>
+      %2 = arith.mulf %0, %1 : f64
+      affine.store %2, %O[%i] : memref<64xf64>
+    }
     return
   }
 }

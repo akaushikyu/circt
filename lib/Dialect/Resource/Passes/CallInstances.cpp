@@ -377,10 +377,11 @@ readsWrites(Operation *op, const SmallVectorImpl<StorageRoot> &roots,
 }
 } // namespace
 
-unsigned groupConcurrentCalls(func::FuncOp parent, ArrayRef<Operation *> sites,
-                              std::optional<int64_t> limit,
-                              SmallVectorImpl<unsigned> &group,
-                              std::string *rule) {
+unsigned
+groupConcurrentCalls(func::FuncOp parent, ArrayRef<Operation *> sites,
+                     std::optional<int64_t> limit,
+                     SmallVectorImpl<unsigned> &group, std::string *rule,
+                     llvm::function_ref<bool(unsigned, unsigned)> alsoOrdered) {
   unsigned elementCount = sites.size();
   group.assign(elementCount, 0);
   if (elementCount == 0)
@@ -388,7 +389,7 @@ unsigned groupConcurrentCalls(func::FuncOp parent, ArrayRef<Operation *> sites,
 
   SmallVector<llvm::BitVector> before(elementCount,
                                       llvm::BitVector(elementCount));
-  unsigned byArray = 0, byValue = 0, byBranch = 0;
+  unsigned byArray = 0, byValue = 0, byBranch = 0, byCaller = 0;
   auto order = [&](unsigned loopIndex, unsigned innerIndex, unsigned &counter) {
     if (before[loopIndex].test(innerIndex) ||
         before[innerIndex].test(loopIndex))
@@ -569,6 +570,13 @@ unsigned groupConcurrentCalls(func::FuncOp parent, ArrayRef<Operation *> sites,
       if (mutuallyExclusive(sites[loopIndex], sites[innerIndex]))
         order(loopIndex, innerIndex, byBranch);
 
+  if (alsoOrdered)
+    for (unsigned loopIndex = 0; loopIndex < elementCount; ++loopIndex)
+      for (unsigned innerIndex = loopIndex + 1; innerIndex < elementCount;
+           ++innerIndex)
+        if (alsoOrdered(loopIndex, innerIndex))
+          order(loopIndex, innerIndex, byCaller);
+
   for (unsigned keyValue = 0; keyValue < elementCount; ++keyValue)
     for (unsigned loopIndex = 0; loopIndex < elementCount; ++loopIndex)
       if (before[loopIndex].test(keyValue))
@@ -593,6 +601,8 @@ unsigned groupConcurrentCalls(func::FuncOp parent, ArrayRef<Operation *> sites,
       if (byBranch)
         stringValue +=
             ", " + std::to_string(byBranch) + " by exclusive branches";
+      if (byCaller)
+        stringValue += ", " + std::to_string(byCaller) + " by sequential code";
       if (limit)
         stringValue += "; allocation limit " + std::to_string(*limit) +
                        (uncapped > groups ? " applied" : " not binding");

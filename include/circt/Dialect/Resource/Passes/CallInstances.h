@@ -204,12 +204,13 @@ computeInstances(mlir::ModuleOp module,
 /// run one after the other), then capped by `limit`. Returns the group of
 /// each site and the number of groups; `rule` receives a one-line
 /// explanation. Works on the affine form (--convert-affine-to-loopschedule)
-/// and on the loopschedule form (--bram-analysis) alike.
-unsigned groupConcurrentCalls(mlir::func::FuncOp parent,
-                              llvm::ArrayRef<mlir::Operation *> sites,
-                              std::optional<int64_t> limit,
-                              llvm::SmallVectorImpl<unsigned> &group,
-                              std::string *rule = nullptr);
+/// and on the loopschedule form (--bram-analysis) alike. `alsoOrdered`
+/// (optional) orders further pairs (i < j) the caller knows never overlap.
+unsigned groupConcurrentCalls(
+    mlir::func::FuncOp parent, llvm::ArrayRef<mlir::Operation *> sites,
+    std::optional<int64_t> limit, llvm::SmallVectorImpl<unsigned> &group,
+    std::string *rule = nullptr,
+    llvm::function_ref<bool(unsigned, unsigned)> alsoOrdered = nullptr);
 
 } // namespace circt::hls_analysis
 
