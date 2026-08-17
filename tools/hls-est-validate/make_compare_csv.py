@@ -33,6 +33,13 @@ def band(vitis, est):
     return "under"
 
 
+def row_band(r):
+    """The goal band of one comparison row, empty unless the row is compared: a row whose Vitis entry was
+    synthesised from other sources ('sources differ') carries both totals but is not a comparison, so it
+    must not count towards the goal band (the summary counts compared rows only)."""
+    return band(r["vitis_bram"], r["hlsest_bram"]) if r["status"] == "compared" else ""
+
+
 def band_counts(compared):
     b = [band(r["vitis_bram"], r["hlsest_bram"]) for r in compared]
     inb = sum(1 for x in b if x in ("exact", "over<=15%"))
@@ -61,7 +68,7 @@ def main():
         for r in rows:
             worst = sorted((x for x in r.get("arrays", []) if x.get("diff")), key=lambda x: -abs(x["diff"]))[:3]
             w.writerow([r["dataset"], r["benchmark"], r["vitis_bram"], r["hlsest_bram"], r["diff"],
-                        abs(r["diff"]) if r["diff"] is not None else None, r["exact"], band(r["vitis_bram"], r["hlsest_bram"]), r["status"],
+                        abs(r["diff"]) if r["diff"] is not None else None, r["exact"], row_band(r), r["status"],
                         r["vitis_status"], r["hlsest_status"],
                         "; ".join(f"{x['name']}: hls-est {x['hlsest_bram']} vs Vitis {x['vitis_bram']}" for x in worst)])
 

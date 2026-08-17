@@ -111,13 +111,35 @@ def cache_key(d, extra_cfg=None, files=None):
     return C.sha256_of_files(design_files(d) if files is None else files, extra)[:16]
 
 
+def equivalent_records(d):
+    """Records that compile the same design as d from another directory, so a ground-truth entry synthesised
+    from either one applies to d.  An HLSFactory_v2 record whose sources are identical to the HLSFactory
+    tree's (source_match 'identical') compiles the Polygeist lit copy, which keeps the cache keys of the
+    first ground truth; a design that only became identical when the copy was refreshed from the tree still
+    has its ground truth keyed on the tree's directory.  Both directories hold the same files, and the
+    record uses the same sources, includes and defines in both, so both keys name one synthesis."""
+    v2 = d.get("v2") or {}
+    if d.get("source_match") != "identical" or not d.get("v2_dir") or d["v2_dir"] == d["dir"]:
+        return []
+    if (v2.get("v2_sources", d["sources"]) != d["sources"] or v2.get("v2_includes", d["includes"]) != d["includes"]
+            or v2.get("v2_defines", d["defines"]) != d["defines"]):
+        return []
+    return [dict(d, dir=d["v2_dir"], win_dir=d.get("v2_win_dir"))]
+
+
 def cache_keys(d):
     """{td: cache key} for both --td settings: the identity of the sources a ground-truth entry was
     synthesised from (each entry records its key), which compare.py checks against the hls-est side, so a
     result from one catalogue is never compared with a design of another (two catalogues can give one
-    dataset/benchmark key different sources)."""
+    dataset/benchmark key different sources).  A record with an equivalent record in another directory
+    (equivalent_records) also carries that record's keys, as '<td>@v2_dir'; every reader compares with
+    the dict's values."""
     files = design_files(d)
-    return {td: cache_key(d, extra_cfg_for(td), files) for td in ("off", "auto")}
+    keys = {td: cache_key(d, extra_cfg_for(td), files) for td in ("off", "auto")}
+    for e in equivalent_records(d):
+        efiles = design_files(e)
+        keys.update({f"{td}@v2_dir": cache_key(e, extra_cfg_for(td), efiles) for td in ("off", "auto")})
+    return keys
 
 
 def cache_dir(d, key):
@@ -253,6 +275,14 @@ def run_one(d, args):
         r = C.load_json(res_path)
         r["cached"] = True
         return r
+    if not args.force:
+        # the same design synthesised from an equivalent directory (equivalent_records): reuse that result
+        for e in equivalent_records(d):
+            e_path = cache_dir(e, cache_key(e)) / "result.json"
+            if e_path.exists():
+                r = C.load_json(e_path)
+                r["cached"] = True
+                return r
     if args.dry_run:
         return {"dataset": d["dataset"], "benchmark": d["benchmark"], "status": "dry-run", "key": key}
 

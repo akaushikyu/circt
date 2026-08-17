@@ -223,8 +223,8 @@ class_ece8893_2023_spring,FocusedACO__HLS__three-opt,,,,False,vitis missing,viti
 class_ece8893_2023_spring,GradCAM__src_hls,,122,,False,vitis missing,vitis failed,ok
 class_ece8893_2023_spring,GradCAM__src_hls__avg_pool,3,3,0,True,compared,ok,ok
 class_ece8893_2023_spring,GradCAM__src_hls__cam,33,33,0,True,compared,ok,ok
-class_ece8893_2023_spring,GradCAM__src_hls__conv1,28,28,,False,sources differ,ok,ok
-class_ece8893_2023_spring,GradCAM__src_hls__conv_3x3_s1,32,32,,False,sources differ,ok,ok
+class_ece8893_2023_spring,GradCAM__src_hls__conv1,28,28,0,True,compared,ok,ok
+class_ece8893_2023_spring,GradCAM__src_hls__conv_3x3_s1,32,32,0,True,compared,ok,ok
 class_ece8893_2023_spring,GradCAM__src_hls__conv_ds,0,0,0,True,compared,ok,ok
 class_ece8893_2023_spring,GradCAM__src_hls__linear_fc,8,8,0,True,compared,ok,ok
 class_ece8893_2023_spring,GradCAM__src_hls__maxpool,22,22,0,True,compared,ok,ok
@@ -676,11 +676,11 @@ polybench_pragmas,k3mm,312,296,-16,False,compared,ok,ok
 polybench_pragmas,mvt,8,8,0,True,compared,ok,ok
 polybench_pragmas,syr2k,280,280,0,True,compared,ok,ok
 polybench_pragmas,syrk,32,32,0,True,compared,ok,ok
-pp4fpgas,23_pp4fpgas_unoptimized_fft,0,0,,False,sources differ,ok,ok
-pp4fpgas,24_pp4fpgas_multi_stage_fft,16,8,,False,sources differ,ok,ok
+pp4fpgas,23_pp4fpgas_unoptimized_fft,0,0,0,True,compared,ok,ok
+pp4fpgas,24_pp4fpgas_multi_stage_fft,16,8,-8,False,compared,ok,ok
 pp4fpgas,25_pp4fpgas_huffman_encoding,23,21,-2,False,compared,ok,ok
 pp4fpgas,26_pp4fpgas_matmul,0,0,0,True,compared,ok,ok
-pp4fpgas,27_pp4fpgas_parallel_merge_sort,0,0,,False,sources differ,ok,ok
+pp4fpgas,27_pp4fpgas_parallel_merge_sort,0,0,0,True,compared,ok,ok
 rosetta,3d-rendering__src__sdsoc,,,,False,vitis missing,vitis failed,cgeist error: rendering.cpp:284:22: error: no viable overloaded '='
 rosetta,BNN__cpp__accel,,,,False,vitis missing,vitis failed,cgeist error: ./Accel.h:5:10: fatal error: 'hls_video.h' file not found
 rosetta,digit-recognition__src__sdsoc,,544,,False,vitis missing,vitis failed,ok
