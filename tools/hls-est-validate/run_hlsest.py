@@ -576,6 +576,7 @@ def main():
                                          else "no top= (this hls-est build has no such option)")),
                          "timeout": args.timeout, "run_id": run_id, "hls_est": C.HLS_EST,
                          "math_costs": args.math_costs,
+                         "vitis_frontend": VITIS_FRONTEND,
                          "math_costs_md5": C.md5_of_file(args.math_costs) if args.math_costs else None,
                          "math_costs_applied": bool(args.math_costs) and
                                                bram_option_supported(C.HLS_EST, "math-costs")}}

@@ -3,6 +3,44 @@
 Newest entry first. One entry per logical change, including changes that were
 tried and reverted. Branch: `hls-est-vitis-match` in `~/circt`.
 
+## 2026-10-13 — harness: full HLSFactory_v2 runs under the current and the previous default saved as baselines; hls-doc pages, comparison CSVs and the workbook regenerated (W8c part 3, W1b part 2)
+- **Commit:** this entry's commit (branch `hls-est-vitis-match`)
+- **Files:** `make_sheet.py` (new `pipeline_name`, `run_label`; `second_label` uses them; sheet `second pipeline` renamed `pipeline comparison`, both run columns and the run-config rows labelled from each run's `_meta`), `make_hlsdoc.py` (new `never_run_rows`; `render_ground_truth` lists the catalogue designs without any ground-truth entry, read from the keys of the hls-est run), `make_hlsfactory_report.py` (`truth_of` matches the ground truth by the record's `vitis_keys` as compare.py does, falling back to the Polygeist source match for older records; new `semantics_class`, `semantics_table`: a semantic-check table per dataset next to the ingestion table; a section listing every design without Vitis ground truth with the reason, `make_sheet.exclusion` for failed / timed-out ones), `run_hlsest.py` (`_meta.vitis_frontend`, additive), `hls-doc/README.md` and `hls-doc/harness.md` (the catalogue location is the HLSFactory_v2 tree; workbook sheet name), regenerated `hls-doc/{comparison.csv, comparison-summary.csv, ground-truth.md, ground-truth-memories.md, results.md, hlsfactory-v2.md, hlsfactory-v2.csv}`, `hls-est-results.xlsx`, new tracked CSVs `results/baseline/hlsest-2026-10-13-v2-{defaults,previous-default}.csv` (the JSONs next to them are untracked)
+- **What:** two full runs of the v2 catalogue (812 designs: 801 HLSFactory + polybench_pragmas 7 + basic 4), frozen hls-est ccf2deaa (= build/clion at b48ea0ec5), installed cgeist 8f27f3c0 (Polygeist a7e7b2ed), `-j 6`, `--timeout 120`, shared HOME (installed cgeist). (1) **Current default**: exactclass, `common.DEFAULT_PIPELINE`, math costs, Vitis front-end flags. (2) **Previous default** (before W1 / W2 / MEMOS #54): `--shim scalar --no-math-costs`, `VITIS_FRONTEND=0`, pipeline `--affine-loop-normalize --auto-pipeline-unroll=float-loads-perfect=false --infer-vitis-split-array --memory-banking-bram --convert-affine-to-loopschedule=forward-stores=false --bram-analysis=bram-formula=n6 --bram-seq-dual-port=false --bram-maxi-adapters=false` (every option whose default changed in W1a / W1c set back; no DME front). Timeouts re-run once at `-j 2` on a quiet machine: (1) 19 -> 16, (2) 16 -> 13 (forgebench/mlp, hlsyn adi, hlsyn trmm-opt finish; the rest time out again). Check of (2): on the pre-W1 MLIR of W1c's `s_prew1` run (`--mlir-from`, same pipeline) 101 of 112 harness-subset totals are identical to the pre-W1 binary's, e.g. polybench atax 68, bicg 69, gesummv 134, forgebench attention_op_p1 432, Llama_GPT_module 65, conv_module 1769; the 11 others are 5 designs the old binary could not parse (W8b parse fixes) and 6 forgebench designs (diff_dims_p1, diff_orders_p1/p2/p3, testing_impl, vec_mtx_p1) whose arrays are now partitioned by the W7 banking (callee-parameter pragmas, every dimension of a spec), not an option default. With fresh MLIR from today's cgeist, 60 of 91 designs ok in both have the pre-W1 total (frontend changes since cgeist c70ba2b0 plus the same W7 banking).
+- **Why:** W8c (MEMOS #28, #52) and W1b (MEMOS #16): a baseline of the whole new catalogue, the pages generated from it, the #52 designs listed as unsynthesised, the workbook with a comparison against the previous default.
+- **Effect:** no estimate changes (harness and pages only). Per dataset, current default; last column the previous default (hls-est ok / compared / exact / in band / \|err\|). *in band* = exact or over-count of at most 15 %:
+
+| dataset | designs | cgeist ok | hls-est ok | Vitis ok | compared | exact | in band | under | over>15% | \|err\| | prev: hls-est ok / compared / exact / in band / \|err\| |
+|---|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|---|
+| accelerators | 7 | 4 | 4 | 6 | 4 | 0 | 1 | 2 | 1 | 520 | 4 / 4 / 0 / 1 / 521 |
+| auto_ntt | 17 | 17 | 17 | 13 | 13 | 11 | 11 | 0 | 2 | 18 | 0 / 0 / 0 / 0 / 0 |
+| basic | 4 | 4 | 4 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 4 / 0 / 0 / 0 / 0 |
+| chstone | 2 | 2 | 2 | 2 | 2 | 0 | 0 | 1 | 1 | 18 | 2 / 2 / 0 / 0 / 18 |
+| class_ece8893_2022_fall | 17 | 8 | 6 | 6 | 4 | 0 | 0 | 3 | 1 | 418 | 5 / 4 / 0 / 0 / 163 |
+| class_ece8893_2023_spring | 32 | 27 | 27 | 28 | 23 | 12 | 13 | 7 | 3 | 456 | 27 / 23 / 2 / 2 / 1972 |
+| class_ece8893_spring_2025 | 94 | 68 | 66 | 79 | 59 | 13 | 14 | 35 | 10 | 16182 | 63 / 56 / 1 / 4 / 23861 |
+| flowgnn | 5 | 3 | 3 | 2 | 1 | 0 | 0 | 1 | 0 | 16842 | 0 / 0 / 0 / 0 / 0 |
+| forgebench | 45 | 45 | 45 | 44 | 44 | 35 | 38 | 3 | 3 | 313 | 45 / 44 / 0 / 7 / 21841 |
+| gnnbuilder | 4 | 4 | 4 | 4 | 4 | 0 | 2 | 2 | 0 | 394 | 4 / 4 / 0 / 3 / 448 |
+| hlsyn-vitis | 42 | 42 | 30 | 17 | 16 | 10 | 11 | 4 | 1 | 165 | 29 / 15 / 4 / 6 / 244 |
+| hp_fft_hls | 16 | 0 | 0 | 16 | 0 | 0 | 0 | 0 | 0 | 0 | 0 / 0 / 0 / 0 / 0 |
+| machsuite | 18 | 18 | 18 | 18 | 18 | 14 | 15 | 1 | 2 | 14 | 18 / 18 / 13 / 14 / 56 |
+| polybench | 9 | 9 | 9 | 9 | 9 | 8 | 8 | 1 | 0 | 114 | 9 / 9 / 0 / 0 / 873 |
+| polybench__reproducible | 196 | 193 | 193 | 196 | 193 | 193 | 193 | 0 | 0 | 0 | 196 / 196 / 196 / 196 / 0 |
+| polybench_pragmas | 7 | 7 | 7 | 7 | 7 | 6 | 6 | 1 | 0 | 16 | 7 / 7 / 6 / 6 / 16 |
+| pp4fpgas | 5 | 5 | 5 | 5 | 2 | 1 | 1 | 1 | 0 | 2 | 4 / 1 / 1 / 1 / 0 |
+| rosetta | 8 | 1 | 1 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 0 / 0 / 0 / 0 / 0 |
+| soda | 11 | 0 | 0 | 11 | 0 | 0 | 0 | 0 | 0 | 0 | 0 / 0 / 0 / 0 / 0 |
+| spector_hls | 10 | 10 | 10 | 10 | 10 | 9 | 9 | 1 | 0 | 1 | 10 / 10 / 8 / 8 / 5 |
+| stream_hls | 77 | 77 | 76 | 77 | 76 | 3 | 3 | 73 | 0 | 47000 | 38 / 38 / 3 / 3 / 19340 |
+| vitis_examples | 23 | 21 | 21 | 22 | 20 | 17 | 17 | 2 | 1 | 5 | 21 / 20 / 16 / 16 / 6 |
+| whetstone | 1 | 1 | 1 | 1 | 1 | 0 | 0 | 0 | 1 | 16 | 1 / 1 / 1 / 1 / 0 |
+| WIP | 162 | 162 | 160 | 162 | 160 | 6 | 6 | 154 | 0 | 97230 | 76 / 76 / 6 / 6 / 38680 |
+| **all** | 812 | 728 | 709 | 736 | 666 | 338 | 348 | 292 | 26 | 179724 | 563 / 528 / 257 / 274 / 108044 |
+
+  Harness subset (polybench, polybench_pragmas, forgebench, machsuite, spector_hls, vitis_examples): current default compared 108 / exact 89 / in band 93 / \|err\| 463 (= W2 / W8c part 2); previous default 108 / 43 / 51 / 22797. Gates: bicg 8, gesummv 16, mvt 8, syrk 32 exact. Observations, not diagnosed here: stream_hls and WIP (its stream_hls copies) under-count on 227 of 236 compared designs (\|err\| 144230 together), in the Autoencoder rows looked at, hls-est has half of Vitis per array (e.g. Autoencoder__opt2 v222 512 vs 1024; unconfirmed beyond those); polybench__reproducible gramschmidt x3 fail in cgeist under the current default (`nextafter` is ambiguous) and are exact under scalar; 5 designs are `sources differ` (GradCAM conv1 / conv_3x3_s1, pp4fpgas 23 / 24 / 27: the ground truth's cache key is not the record's since the Polygeist Inputs refresh). `hlsfactory-v2.md` comes from a `sweep_hlsfactory_v2.py` run with the same binaries (798 of 801 totals equal to run (1); trmm-opt timed out again in its -j 2 retry). Lit `test/hls-est`: 124 pass / 0 fail / 1 unresolved / 1 expected failure (unchanged).
+- **Reverted?:** no
+
 ## 2026-10-13 — lit: Estimation CHECKs regenerated under the current defaults (W1b part 1, MEMOS #16)
 - **Commit:** this entry's commit (branch `hls-est-vitis-match`)
 - **Files:** `tools/hls-est-validate/regen_estimation_checks.py` (rewritten: `split_header`, `top_by_name`, `main`), the 42 `test/hls-est/Estimation/**/*.mlir` headers, `MEMOS.md` row 16

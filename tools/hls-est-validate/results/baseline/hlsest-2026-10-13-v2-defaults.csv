@@ -1,0 +1,813 @@
+dataset,benchmark,vitis_bram,hlsest_bram,diff,exact,status,vitis_status,hlsest_status
+WIP,stream_hls__Autoencoder__opt1,2768,1352,-1416,False,compared,ok,ok
+WIP,stream_hls__Autoencoder__opt2,3376,1960,-1416,False,compared,ok,ok
+WIP,stream_hls__Autoencoder__opt3,2684,1358,-1326,False,compared,ok,ok
+WIP,stream_hls__Autoencoder__opt4,3512,1962,-1550,False,compared,ok,ok
+WIP,stream_hls__Autoencoder__opt5,2984,1675,-1309,False,compared,ok,ok
+WIP,stream_hls__DepthwiseSeparableConvBlock__opt1,2048,1024,-1024,False,compared,ok,ok
+WIP,stream_hls__DepthwiseSeparableConvBlock__opt2,1536,512,-1024,False,compared,ok,ok
+WIP,stream_hls__DepthwiseSeparableConvBlock__opt3,1952,1024,-928,False,compared,ok,ok
+WIP,stream_hls__DepthwiseSeparableConvBlock__opt4,1952,1024,-928,False,compared,ok,ok
+WIP,stream_hls__DepthwiseSeparableConvBlock__opt5,1952,1024,-928,False,compared,ok,ok
+WIP,stream_hls__FeedForward__opt1,2048,1024,-1024,False,compared,ok,ok
+WIP,stream_hls__FeedForward__opt2,1920,896,-1024,False,compared,ok,ok
+WIP,stream_hls__FeedForward__opt3,2432,1282,-1150,False,compared,ok,ok
+WIP,stream_hls__FeedForward__opt4,2432,1028,-1404,False,compared,ok,ok
+WIP,stream_hls__FeedForward__opt5,3328,1157,-2171,False,compared,ok,ok
+WIP,stream_hls__MultiHeadSelfAttention1__opt1,1480,692,-788,False,compared,ok,ok
+WIP,stream_hls__MultiHeadSelfAttention1__opt2,1368,580,-788,False,compared,ok,ok
+WIP,stream_hls__MultiHeadSelfAttention1__opt3,2272,1897,-375,False,compared,ok,ok
+WIP,stream_hls__MultiHeadSelfAttention1__opt4,2048,732,-1316,False,compared,ok,ok
+WIP,stream_hls__MultiHeadSelfAttention1__opt5,2688,2267,-421,False,compared,ok,ok
+WIP,stream_hls__ResMLP__opt1,3701,1841,-1860,False,compared,ok,ok
+WIP,stream_hls__ResMLP__opt2,3709,1849,-1860,False,compared,ok,ok
+WIP,stream_hls__ResMLP__opt3,3829,1844,-1985,False,compared,ok,ok
+WIP,stream_hls__ResMLP__opt4,3861,1852,-2009,False,compared,ok,ok
+WIP,stream_hls__ResMLP__opt5,3885,1876,-2009,False,compared,ok,ok
+WIP,stream_hls__ResidualBlock__opt1,1280,512,-768,False,compared,ok,ok
+WIP,stream_hls__ResidualBlock__opt2,1280,512,-768,False,compared,ok,ok
+WIP,stream_hls__ResidualBlock__opt3,1248,512,-736,False,compared,ok,ok
+WIP,stream_hls__ResidualBlock__opt4,1248,,,False,hls-est missing,ok,hls-est timeout 120s
+WIP,stream_hls__ResidualBlock__opt5,1248,512,-736,False,compared,ok,ok
+WIP,stream_hls______processed_dataset__Autoencoder__opt1,2768,1352,-1416,False,compared,ok,ok
+WIP,stream_hls______processed_dataset__Autoencoder__opt2,3376,1960,-1416,False,compared,ok,ok
+WIP,stream_hls______processed_dataset__Autoencoder__opt3,2684,1358,-1326,False,compared,ok,ok
+WIP,stream_hls______processed_dataset__Autoencoder__opt4,3512,1962,-1550,False,compared,ok,ok
+WIP,stream_hls______processed_dataset__Autoencoder__opt5,2984,1675,-1309,False,compared,ok,ok
+WIP,stream_hls______processed_dataset__DepthwiseSeparableConvBlock__opt1,2048,1024,-1024,False,compared,ok,ok
+WIP,stream_hls______processed_dataset__DepthwiseSeparableConvBlock__opt2,1536,512,-1024,False,compared,ok,ok
+WIP,stream_hls______processed_dataset__DepthwiseSeparableConvBlock__opt3,1952,1024,-928,False,compared,ok,ok
+WIP,stream_hls______processed_dataset__DepthwiseSeparableConvBlock__opt4,1952,1024,-928,False,compared,ok,ok
+WIP,stream_hls______processed_dataset__DepthwiseSeparableConvBlock__opt5,1952,1024,-928,False,compared,ok,ok
+WIP,stream_hls______processed_dataset__FeedForward__opt1,2048,1024,-1024,False,compared,ok,ok
+WIP,stream_hls______processed_dataset__FeedForward__opt2,1920,896,-1024,False,compared,ok,ok
+WIP,stream_hls______processed_dataset__FeedForward__opt3,2432,1282,-1150,False,compared,ok,ok
+WIP,stream_hls______processed_dataset__FeedForward__opt4,2432,1028,-1404,False,compared,ok,ok
+WIP,stream_hls______processed_dataset__FeedForward__opt5,3328,1157,-2171,False,compared,ok,ok
+WIP,stream_hls______processed_dataset__MultiHeadSelfAttention1__opt1,1480,692,-788,False,compared,ok,ok
+WIP,stream_hls______processed_dataset__MultiHeadSelfAttention1__opt2,1368,580,-788,False,compared,ok,ok
+WIP,stream_hls______processed_dataset__MultiHeadSelfAttention1__opt3,2272,1897,-375,False,compared,ok,ok
+WIP,stream_hls______processed_dataset__MultiHeadSelfAttention1__opt4,2048,732,-1316,False,compared,ok,ok
+WIP,stream_hls______processed_dataset__MultiHeadSelfAttention1__opt5,2688,2267,-421,False,compared,ok,ok
+WIP,stream_hls______processed_dataset__ResMLP__opt1,3701,1841,-1860,False,compared,ok,ok
+WIP,stream_hls______processed_dataset__ResMLP__opt2,3709,1849,-1860,False,compared,ok,ok
+WIP,stream_hls______processed_dataset__ResMLP__opt3,3829,1844,-1985,False,compared,ok,ok
+WIP,stream_hls______processed_dataset__ResMLP__opt4,3861,1852,-2009,False,compared,ok,ok
+WIP,stream_hls______processed_dataset__ResMLP__opt5,3885,1876,-2009,False,compared,ok,ok
+WIP,stream_hls______processed_dataset__ResidualBlock__opt1,1280,512,-768,False,compared,ok,ok
+WIP,stream_hls______processed_dataset__ResidualBlock__opt2,1280,512,-768,False,compared,ok,ok
+WIP,stream_hls______processed_dataset__ResidualBlock__opt3,1248,512,-736,False,compared,ok,ok
+WIP,stream_hls______processed_dataset__ResidualBlock__opt4,1248,,,False,hls-est missing,ok,hls-est timeout 120s
+WIP,stream_hls______processed_dataset__ResidualBlock__opt5,1248,512,-736,False,compared,ok,ok
+WIP,stream_hls______processed_dataset__atax__opt1,1031,515,-516,False,compared,ok,ok
+WIP,stream_hls______processed_dataset__atax__opt2,519,3,-516,False,compared,ok,ok
+WIP,stream_hls______processed_dataset__atax__opt3,1230,610,-620,False,compared,ok,ok
+WIP,stream_hls______processed_dataset__atax__opt4,630,11,-619,False,compared,ok,ok
+WIP,stream_hls______processed_dataset__atax__opt5,630,11,-619,False,compared,ok,ok
+WIP,stream_hls______processed_dataset__bicg__opt1,6,2,-4,False,compared,ok,ok
+WIP,stream_hls______processed_dataset__bicg__opt2,6,2,-4,False,compared,ok,ok
+WIP,stream_hls______processed_dataset__bicg__opt3,30,10,-20,False,compared,ok,ok
+WIP,stream_hls______processed_dataset__bicg__opt4,30,10,-20,False,compared,ok,ok
+WIP,stream_hls______processed_dataset__bicg__opt5,30,10,-20,False,compared,ok,ok
+WIP,stream_hls______processed_dataset__gemm__opt1,384,128,-256,False,compared,ok,ok
+WIP,stream_hls______processed_dataset__gemm__opt2,384,128,-256,False,compared,ok,ok
+WIP,stream_hls______processed_dataset__gemm__opt3,264,90,-174,False,compared,ok,ok
+WIP,stream_hls______processed_dataset__gemm__opt4,264,90,-174,False,compared,ok,ok
+WIP,stream_hls______processed_dataset__gemm__opt5,264,90,-174,False,compared,ok,ok
+WIP,stream_hls______processed_dataset__gesummv__opt1,8,2,-6,False,compared,ok,ok
+WIP,stream_hls______processed_dataset__gesummv__opt2,8,2,-6,False,compared,ok,ok
+WIP,stream_hls______processed_dataset__gesummv__opt3,0,0,0,True,compared,ok,ok
+WIP,stream_hls______processed_dataset__gesummv__opt4,0,0,0,True,compared,ok,ok
+WIP,stream_hls______processed_dataset__gesummv__opt5,0,0,0,True,compared,ok,ok
+WIP,stream_hls______processed_dataset__k2mm__opt1,768,384,-384,False,compared,ok,ok
+WIP,stream_hls______processed_dataset__k2mm__opt2,768,384,-384,False,compared,ok,ok
+WIP,stream_hls______processed_dataset__k2mm__opt3,504,248,-256,False,compared,ok,ok
+WIP,stream_hls______processed_dataset__k2mm__opt4,504,250,-254,False,compared,ok,ok
+WIP,stream_hls______processed_dataset__k2mm__opt5,504,248,-256,False,compared,ok,ok
+WIP,stream_hls______processed_dataset__k3mm__opt1,1152,768,-384,False,compared,ok,ok
+WIP,stream_hls______processed_dataset__k3mm__opt2,769,385,-384,False,compared,ok,ok
+WIP,stream_hls______processed_dataset__k3mm__opt3,880,521,-359,False,compared,ok,ok
+WIP,stream_hls______processed_dataset__k3mm__opt4,900,561,-339,False,compared,ok,ok
+WIP,stream_hls______processed_dataset__k3mm__opt5,900,561,-339,False,compared,ok,ok
+WIP,stream_hls______processed_dataset__k7mmseq_balanced__opt1,160,104,-56,False,compared,ok,ok
+WIP,stream_hls______processed_dataset__k7mmseq_balanced__opt2,160,104,-56,False,compared,ok,ok
+WIP,stream_hls______processed_dataset__k7mmseq_balanced__opt3,432,208,-224,False,compared,ok,ok
+WIP,stream_hls______processed_dataset__k7mmseq_balanced__opt4,432,208,-224,False,compared,ok,ok
+WIP,stream_hls______processed_dataset__k7mmseq_balanced__opt5,432,208,-224,False,compared,ok,ok
+WIP,stream_hls______processed_dataset__k7mmseq_unbalanced__opt1,184,122,-62,False,compared,ok,ok
+WIP,stream_hls______processed_dataset__k7mmseq_unbalanced__opt2,184,122,-62,False,compared,ok,ok
+WIP,stream_hls______processed_dataset__k7mmseq_unbalanced__opt3,428,213,-215,False,compared,ok,ok
+WIP,stream_hls______processed_dataset__k7mmseq_unbalanced__opt4,428,213,-215,False,compared,ok,ok
+WIP,stream_hls______processed_dataset__k7mmseq_unbalanced__opt5,428,213,-215,False,compared,ok,ok
+WIP,stream_hls______processed_dataset__k7mmtree_balanced__opt5,432,208,-224,False,compared,ok,ok
+WIP,stream_hls______processed_dataset__k7mmtree_unbalanced__opt5,508,255,-253,False,compared,ok,ok
+WIP,stream_hls______processed_dataset__mvt__opt1,1030,514,-516,False,compared,ok,ok
+WIP,stream_hls______processed_dataset__mvt__opt2,518,2,-516,False,compared,ok,ok
+WIP,stream_hls______processed_dataset__mvt__opt3,1054,522,-532,False,compared,ok,ok
+WIP,stream_hls______processed_dataset__mvt__opt4,512,1,-511,False,compared,ok,ok
+WIP,stream_hls______processed_dataset__mvt__opt5,512,1,-511,False,compared,ok,ok
+WIP,stream_hls__atax__opt1,1031,515,-516,False,compared,ok,ok
+WIP,stream_hls__atax__opt2,519,3,-516,False,compared,ok,ok
+WIP,stream_hls__atax__opt3,1230,610,-620,False,compared,ok,ok
+WIP,stream_hls__atax__opt4,630,11,-619,False,compared,ok,ok
+WIP,stream_hls__atax__opt5,630,11,-619,False,compared,ok,ok
+WIP,stream_hls__bicg__opt1,6,2,-4,False,compared,ok,ok
+WIP,stream_hls__bicg__opt2,6,2,-4,False,compared,ok,ok
+WIP,stream_hls__bicg__opt3,30,10,-20,False,compared,ok,ok
+WIP,stream_hls__bicg__opt4,30,10,-20,False,compared,ok,ok
+WIP,stream_hls__bicg__opt5,30,10,-20,False,compared,ok,ok
+WIP,stream_hls__gemm__opt1,384,128,-256,False,compared,ok,ok
+WIP,stream_hls__gemm__opt2,384,128,-256,False,compared,ok,ok
+WIP,stream_hls__gemm__opt3,264,90,-174,False,compared,ok,ok
+WIP,stream_hls__gemm__opt4,264,90,-174,False,compared,ok,ok
+WIP,stream_hls__gemm__opt5,264,90,-174,False,compared,ok,ok
+WIP,stream_hls__gesummv__opt1,8,2,-6,False,compared,ok,ok
+WIP,stream_hls__gesummv__opt2,8,2,-6,False,compared,ok,ok
+WIP,stream_hls__gesummv__opt3,0,0,0,True,compared,ok,ok
+WIP,stream_hls__gesummv__opt4,0,0,0,True,compared,ok,ok
+WIP,stream_hls__gesummv__opt5,0,0,0,True,compared,ok,ok
+WIP,stream_hls__k15mmseq__opt5,736,360,-376,False,compared,ok,ok
+WIP,stream_hls__k15mmseq_imbalanced__opt5,233,115,-118,False,compared,ok,ok
+WIP,stream_hls__k15mmseq_relu__opt5,712,240,-472,False,compared,ok,ok
+WIP,stream_hls__k15mmseq_relu_imbalanced__opt5,347,115,-232,False,compared,ok,ok
+WIP,stream_hls__k15mmtree__opt5,720,336,-384,False,compared,ok,ok
+WIP,stream_hls__k15mmtree_imbalanced__opt5,681,349,-332,False,compared,ok,ok
+WIP,stream_hls__k15mmtree_relu__opt5,944,304,-640,False,compared,ok,ok
+WIP,stream_hls__k15mmtree_relu_imbalanced__opt5,1019,343,-676,False,compared,ok,ok
+WIP,stream_hls__k2mm__opt1,768,384,-384,False,compared,ok,ok
+WIP,stream_hls__k2mm__opt2,768,384,-384,False,compared,ok,ok
+WIP,stream_hls__k2mm__opt3,504,248,-256,False,compared,ok,ok
+WIP,stream_hls__k2mm__opt4,504,250,-254,False,compared,ok,ok
+WIP,stream_hls__k2mm__opt5,504,248,-256,False,compared,ok,ok
+WIP,stream_hls__k3mm__opt1,1152,768,-384,False,compared,ok,ok
+WIP,stream_hls__k3mm__opt2,769,385,-384,False,compared,ok,ok
+WIP,stream_hls__k3mm__opt3,880,521,-359,False,compared,ok,ok
+WIP,stream_hls__k3mm__opt4,900,561,-339,False,compared,ok,ok
+WIP,stream_hls__k3mm__opt5,900,561,-339,False,compared,ok,ok
+WIP,stream_hls__k7mmseq_balanced__opt1,160,104,-56,False,compared,ok,ok
+WIP,stream_hls__k7mmseq_balanced__opt2,160,104,-56,False,compared,ok,ok
+WIP,stream_hls__k7mmseq_balanced__opt3,432,208,-224,False,compared,ok,ok
+WIP,stream_hls__k7mmseq_balanced__opt4,432,208,-224,False,compared,ok,ok
+WIP,stream_hls__k7mmseq_balanced__opt5,432,208,-224,False,compared,ok,ok
+WIP,stream_hls__k7mmseq_unbalanced__opt1,184,122,-62,False,compared,ok,ok
+WIP,stream_hls__k7mmseq_unbalanced__opt2,184,122,-62,False,compared,ok,ok
+WIP,stream_hls__k7mmseq_unbalanced__opt3,428,213,-215,False,compared,ok,ok
+WIP,stream_hls__k7mmseq_unbalanced__opt4,428,213,-215,False,compared,ok,ok
+WIP,stream_hls__k7mmseq_unbalanced__opt5,428,213,-215,False,compared,ok,ok
+WIP,stream_hls__k7mmtree_balanced__opt5,432,208,-224,False,compared,ok,ok
+WIP,stream_hls__k7mmtree_unbalanced__opt5,508,255,-253,False,compared,ok,ok
+WIP,stream_hls__mvt__opt1,1030,514,-516,False,compared,ok,ok
+WIP,stream_hls__mvt__opt2,518,2,-516,False,compared,ok,ok
+WIP,stream_hls__mvt__opt3,1054,522,-532,False,compared,ok,ok
+WIP,stream_hls__mvt__opt4,512,1,-511,False,compared,ok,ok
+WIP,stream_hls__mvt__opt5,512,1,-511,False,compared,ok,ok
+accelerators,DGNN_Booster_EvolveGCN,1723,1928,205,False,compared,ok,ok
+accelerators,DGNN_Booster_convLSTM,1543,1855,312,False,compared,ok,ok
+accelerators,GP_selection_kernel_fixed_dataset,67,65,-2,False,compared,ok,ok
+accelerators,GP_selection_kernel_float_dataset,73,72,-1,False,compared,ok,ok
+accelerators,Mask-Net_dataset,421,,,False,hls-est missing,ok,cgeist error: src/net_hls.cc:313:40: error: no viable overloaded '='
+accelerators,SkyNet_dataset,414,,,False,hls-est missing,ok,cgeist error: src/net_hls.cc:297:36: error: no viable overloaded '='
+accelerators,edgemoe,,,,False,vitis missing,vitis failed,cgeist error: src/../include/kernel.hpp:5:10: fatal error: 'gmp.h' file not found
+auto_ntt,BU,0,0,0,True,compared,ok,ok
+auto_ntt,Mmap2Stream_tf_0_1_limbs,0,0,0,True,compared,ok,ok
+auto_ntt,NTT_kernel,0,0,0,True,compared,ok,ok
+auto_ntt,TFBuf_wiFW_0,,2,,False,vitis missing,vitis failed,ok
+auto_ntt,TFBuf_wiFW_1,,2,,False,vitis missing,vitis failed,ok
+auto_ntt,TFBuf_wiFW_2,,2,,False,vitis missing,vitis failed,ok
+auto_ntt,TFBuf_woFW_3,,2,,False,vitis missing,vitis failed,ok
+auto_ntt,dual_interface_FIFO_receive,0,0,0,True,compared,ok,ok
+auto_ntt,dual_interface_FIFO_send,0,0,0,True,compared,ok,ok
+auto_ntt,fwd_load_inv_store_poly_1_limbs,0,0,0,True,compared,ok,ok
+auto_ntt,fwd_store_inv_load_poly_1_limbs,0,0,0,True,compared,ok,ok
+auto_ntt,input_selector_single,0,0,0,True,compared,ok,ok
+auto_ntt,output_slector_single,0,0,0,True,compared,ok,ok
+auto_ntt,shuffler_buf,16,32,16,False,compared,ok,ok
+auto_ntt,shuffler_in,0,0,0,True,compared,ok,ok
+auto_ntt,shuffler_out_shift,0,0,0,True,compared,ok,ok
+auto_ntt,shuffler_out_shuff,0,2,2,False,compared,ok,ok
+basic,arraypartition_block,,4,,False,vitis missing,missing,ok
+basic,arraypartition_complete,,0,,False,vitis missing,missing,ok
+basic,arraypartition_cyclic,,2,,False,vitis missing,missing,ok
+basic,arraypartition_multidim,,8,,False,vitis missing,missing,ok
+chstone,gsm,2,1,-1,False,compared,ok,ok
+chstone,sha,7,24,17,False,compared,ok,ok
+class_ece8893_2022_fall,Dehazing-denoising__source_code__src,93,26,-67,False,compared,ok,ok
+class_ece8893_2022_fall,Dehazing-denoising__source_code__src__debayer_csynth,,,,False,vitis missing,vitis failed,top not found
+class_ece8893_2022_fall,Dehazing-denoising__source_code__src__script,,,,False,vitis missing,vitis failed,top not found
+class_ece8893_2022_fall,Explainable-ML__source_code,39,79,40,False,compared,ok,ok
+class_ece8893_2022_fall,FLAT-acceleration__source_code__HLS,262,,,False,hls-est missing,ok,cgeist error: systolic_array.cpp:13:16: error: call to 'exp' is ambiguous
+class_ece8893_2022_fall,FLAT-acceleration__source_code__HLS__test_systolic_array,,24,,False,vitis missing,vitis timeout,ok
+class_ece8893_2022_fall,GNN-virtual-node__source_code__gin_vn_base_hls,,1153,,False,vitis missing,vitis failed,ok
+class_ece8893_2022_fall,GNN-virtual-node__source_code__gin_vn_bitstream,,,,False,vitis missing,vitis failed,cgeist error: ./dcl.hpp:6:10: fatal error: '/tools/software/xilinx/Vitis_HLS/2021.1/include/gmp.h' file not found
+class_ece8893_2022_fall,GNN-virtual-node__source_code__gin_vn_pipelined_hls,,,,False,vitis missing,vitis failed,cgeist error: ./dcl.hpp:6:10: fatal error: '/tools/software/xilinx/Vitis_HLS/2021.1/include/gmp.h' file not found
+class_ece8893_2022_fall,Ray-tracing__source_code__HLS,440,,,False,hls-est missing,ok,cgeist error: ./fxp_sqrt.h:101:25: error: no viable overloaded '='
+class_ece8893_2022_fall,Ray-tracing__source_code__golden_c,,,,False,vitis missing,vitis failed,cgeist error: trianglemesh.cpp:238:17: error: use of undeclared identifier 'stderr'
+class_ece8893_2022_fall,Yolo-v3-tiny__source_code__src_24Layers,,,,False,vitis missing,vitis failed,cgeist error: conv_3x3.cpp:8:16: error: use of undeclared identifier 'IN_BUF_DEPTH'
+class_ece8893_2022_fall,Yolo-v3-tiny__source_code__src_24Layers__conv_synth,,,,False,vitis missing,vitis failed,cgeist error: conv_3x3.cpp:8:16: error: use of undeclared identifier 'IN_BUF_DEPTH'
+class_ece8893_2022_fall,Yolo-v3-tiny__source_code__src_24Layers__yolov3_tiny_synth,257,112,-145,False,compared,ok,ok
+class_ece8893_2022_fall,Yolo-v3-tiny__source_code__src_4Layers,,,,False,vitis missing,vitis failed,cgeist error: conv_3x3.cpp:8:16: error: use of undeclared identifier 'IN_BUF_DEPTH'
+class_ece8893_2022_fall,Yolo-v3-tiny__source_code__src_4Layers__conv_synth,,,,False,vitis missing,vitis failed,cgeist error: conv_3x3.cpp:8:16: error: use of undeclared identifier 'IN_BUF_DEPTH'
+class_ece8893_2022_fall,Yolo-v3-tiny__source_code__src_4Layers__yolov3_tiny_synth,229,63,-166,False,compared,ok,ok
+class_ece8893_2023_spring,Analog-CIM__hls__baseline,94,154,60,False,compared,ok,ok
+class_ece8893_2023_spring,Analog-CIM__hls__optimized,32,82,50,False,compared,ok,ok
+class_ece8893_2023_spring,Analog-CIM__on-board,202,318,116,False,compared,ok,ok
+class_ece8893_2023_spring,DSC_Acceleration__Golden_C__unoptimized,,116,,False,vitis missing,vitis failed,ok
+class_ece8893_2023_spring,DSC_Acceleration__HLS__optimized,120,120,0,True,compared,ok,ok
+class_ece8893_2023_spring,ECG_Classifier__HLS__Baseline,357,198,-159,False,compared,ok,ok
+class_ece8893_2023_spring,ECG_Classifier__HLS__Optimized,188,191,3,False,compared,ok,ok
+class_ece8893_2023_spring,Eyeriss,2,,,False,hls-est missing,ok,cgeist error: convolution.cpp:366:17: error: no matching function for call to 'processingelement'
+class_ece8893_2023_spring,FocusedACO__FACO,0,0,0,True,compared,ok,ok
+class_ece8893_2023_spring,FocusedACO__HLS__LocalSearchOptimized,131,,,False,hls-est missing,ok,cgeist error: two_opt_nn.cpp:14:22: error: unknown type name 'uint32_t'
+class_ece8893_2023_spring,FocusedACO__HLS__LocalSearchUnoptimized,83,,,False,hls-est missing,ok,cgeist error: two_opt_nn.cpp:14:22: error: unknown type name 'uint32_t'
+class_ece8893_2023_spring,FocusedACO__HLS__three-opt,,,,False,vitis missing,vitis failed,cgeist error: three_opt_nn.cpp:23:22: error: unknown type name 'uint32_t'
+class_ece8893_2023_spring,GradCAM__src_hls,,122,,False,vitis missing,vitis failed,ok
+class_ece8893_2023_spring,GradCAM__src_hls__avg_pool,3,3,0,True,compared,ok,ok
+class_ece8893_2023_spring,GradCAM__src_hls__cam,33,33,0,True,compared,ok,ok
+class_ece8893_2023_spring,GradCAM__src_hls__conv1,28,28,,False,sources differ,ok,ok
+class_ece8893_2023_spring,GradCAM__src_hls__conv_3x3_s1,32,32,,False,sources differ,ok,ok
+class_ece8893_2023_spring,GradCAM__src_hls__conv_ds,0,0,0,True,compared,ok,ok
+class_ece8893_2023_spring,GradCAM__src_hls__linear_fc,8,8,0,True,compared,ok,ok
+class_ece8893_2023_spring,GradCAM__src_hls__maxpool,22,22,0,True,compared,ok,ok
+class_ece8893_2023_spring,Monte-Carlo__MersenneTwister,4,4,0,True,compared,ok,ok
+class_ece8893_2023_spring,Monte-Carlo__Paths,294,264,-30,False,compared,ok,ok
+class_ece8893_2023_spring,Monte-Carlo__Random 100 Paths,,,,False,vitis missing,vitis failed,cgeist error: genRandNums.cpp:2:10: fatal error: './mersenneTwister.hpp' file not found
+class_ece8893_2023_spring,YOLOv4-Tiny-Accelerator__HLS_C__CSP_Layer1Layer2,133,133,0,True,compared,ok,ok
+class_ece8893_2023_spring,YOLOv4-Tiny-Accelerator__HLS_C__Conv2D_Layer1Layer2,54,33,-21,False,compared,ok,ok
+class_ece8893_2023_spring,YOLOv4-Tiny-Accelerator__HLS_C__Maxpool_Layer,15,15,0,True,compared,ok,ok
+class_ece8893_2023_spring,YOLOv4-Tiny-Accelerator__HLS_C__Project_L1,37,37,0,True,compared,ok,ok
+class_ece8893_2023_spring,YOLOv4-Tiny-Accelerator__HLS_C__Project_L2,25,25,0,True,compared,ok,ok
+class_ece8893_2023_spring,YOLOv4-Tiny-Accelerator__HLS_C__Project_L3,18,17,-1,False,compared,ok,ok
+class_ece8893_2023_spring,YOLOv4-Tiny-Accelerator__HLS_C__Project_L4,18,11,-7,False,compared,ok,ok
+class_ece8893_2023_spring,YOLOv4-Tiny-Accelerator__HLS_C__Project_L5,18,15,-3,False,compared,ok,ok
+class_ece8893_2023_spring,YOLOv4-Tiny-Accelerator__HLS_C__Project_L6,16,10,-6,False,compared,ok,ok
+class_ece8893_spring_2025,Apurba_Prasad_Padhy_ece8893_spring25_lab3,64,37,-27,False,compared,ok,ok
+class_ece8893_spring_2025,Gaurav_Singh_Chandrabhan_ece8893_spring25_lab2,973,523,-450,False,compared,ok,ok
+class_ece8893_spring_2025,Gaurav_Singh_Chandrabhan_ece8893_spring25_lab3,132,,,False,hls-est missing,ok,"cgeist error: top.cpp:61:32: error: no viable conversion from 'data_t' (aka 'ap_fixed<16, 5>') to 'hls::vector<data_t, 64>' (aka 'vector<ap_fixed<16, 5>, 64>')"
+class_ece8893_spring_2025,Hsuanchen_Fang_lab2,128,103,-25,False,compared,ok,ok
+class_ece8893_spring_2025,Hsuanchen_Fang_lab3,6,6,0,True,compared,ok,ok
+class_ece8893_spring_2025,Mingyu_Zhang_lab2,221,221,0,True,compared,ok,ok
+class_ece8893_spring_2025,Mingyu_Zhang_lab3,36,4,-32,False,compared,ok,ok
+class_ece8893_spring_2025,NeuroFPGA_Project__neural_hls_NeuroFPGA,,,,False,vitis missing,vitis failed,cgeist error: ./top.h:6:10: fatal error: 'ap_float.h' file not found
+class_ece8893_spring_2025,NeuroFPGA_Project__symbolic_HLS,272,256,-16,False,compared,ok,ok
+class_ece8893_spring_2025,Sunchips_Topic5_Modular_Multiplication,0,0,0,True,compared,ok,ok
+class_ece8893_spring_2025,Xiyin_Xue_Lab2_2025,137,137,0,True,compared,ok,ok
+class_ece8893_spring_2025,Xiyin_xue_lab3,250,,,False,hls-est missing,ok,cgeist error: top.cpp:132:52: error: no viable overloaded '='
+class_ece8893_spring_2025,adithi_upadhya_ece8893_spring25_lab2,2057,2953,896,False,compared,ok,ok
+class_ece8893_spring_2025,adithi_upadhya_ece8893_spring25_lab3,212,148,-64,False,compared,ok,ok
+class_ece8893_spring_2025,akshaya_shivprasad_ece8893_spring25_lab2,473,545,72,False,compared,ok,ok
+class_ece8893_spring_2025,akshaya_shivprasad_ece8893_spring25_lab3,4,4,0,True,compared,ok,ok
+class_ece8893_spring_2025,anirudh_tulasi_ece8893_spring25_lab2,459,459,0,True,compared,ok,ok
+class_ece8893_spring_2025,anirudh_tulasi_ece8893_spring25_lab3,,28,,False,vitis missing,vitis timeout,ok
+class_ece8893_spring_2025,anuvab_sen_ece_8893_spring_29__Anuvab_Sen_lab_2_ECE_8893_spring_29,1353,854,-499,False,compared,ok,ok
+class_ece8893_spring_2025,anuvab_sen_ece_8893_spring_29__Anuvab_Sen_lab_3_ECE_8893_spring_29,86,76,-10,False,compared,ok,ok
+class_ece8893_spring_2025,apurba_prasad_padhy_ece8893_spring25_lab2,362,361,-1,False,compared,ok,ok
+class_ece8893_spring_2025,arati_ganesh_ece8893_spring25_lab2,1228,258,-970,False,compared,ok,ok
+class_ece8893_spring_2025,arati_ganesh_ece8893_spring25_lab3,24,92,68,False,compared,ok,ok
+class_ece8893_spring_2025,ayush_saxena_ece_8893_spring_26__Ayush_Saxena_lab_2_ECE_8893_spring_26,1361,861,-500,False,compared,ok,ok
+class_ece8893_spring_2025,ayush_saxena_ece_8893_spring_26__Ayush_Saxena_lab_3_ECE_8893_spring_26,247,19,-228,False,compared,ok,ok
+class_ece8893_spring_2025,barry_walker_lab_2,830,,,False,hls-est missing,ok,cgeist error: top.cpp:47:56: error: no viable overloaded '='
+class_ece8893_spring_2025,barry_walker_lab_3,624,,,False,hls-est missing,ok,cgeist error: top.cpp:47:40: error: no viable overloaded '='
+class_ece8893_spring_2025,connor_talley_lab_2,513,,,False,hls-est missing,ok,"cgeist error: top.cpp:162:38: error: no viable conversion from 'fixed_t' (aka 'ap_fixed<16, 5>') to 'hls::vector<fixed_t, 128>' (aka 'vector<ap_fixed<16, 5>, 128>')"
+class_ece8893_spring_2025,connor_talley_lab_3,57,,,False,hls-est missing,ok,"cgeist error: top.cpp:24:32: error: no viable conversion from 'data_t' (aka 'ap_fixed<16, 5>') to 'hls::vector<data_t, 64>' (aka 'vector<ap_fixed<16, 5>, 64>')"
+class_ece8893_spring_2025,davendra_maharaj_ece8893_spring25_lab2,238,104,-134,False,compared,ok,ok
+class_ece8893_spring_2025,davendra_maharaj_ece8893_spring25_lab3,106,,,False,hls-est missing,ok,"cgeist error: spmm.cpp:78:32: error: no viable conversion from 'data_t' (aka 'ap_fixed<16, 5>') to 'hls::vector<data_t, 64>' (aka 'vector<ap_fixed<16, 5>, 64>')"
+class_ece8893_spring_2025,ece8893_dataset_lab_1__0001,,,,False,vitis missing,vitis failed,cgeist error: top.cpp:137:5: error: no matching function for call to 'softmax_HLS'
+class_ece8893_spring_2025,ece8893_dataset_lab_1__0002,82,82,0,True,compared,ok,ok
+class_ece8893_spring_2025,gabriel_lopez_lugo_ece8893_spring2025__gabriel_lopez_lugo_lab2,203,,,False,hls-est missing,ok,"cgeist error: top.cpp:53:82: error: no member named 'reduce_add' in 'hls::vector<ap_fixed<16, 5>, 32>'"
+class_ece8893_spring_2025,gabriel_lopez_lugo_ece8893_spring2025__gabriel_lopez_lugo_lab3,44,44,0,True,compared,ok,ok
+class_ece8893_spring_2025,hyungseok_bae_lab2_2025,232,77,-155,False,compared,ok,ok
+class_ece8893_spring_2025,hyungseok_bae_lab3_2025,322,4,-318,False,compared,ok,ok
+class_ece8893_spring_2025,kaihong_lin_lab2,460,,,False,hls-est missing,ok,cgeist error: top.cpp:95:45: error: no viable overloaded '='
+class_ece8893_spring_2025,kaihong_lin_lab3,,,,False,vitis missing,vitis failed,cgeist error: top.cpp:28:60: error: no viable overloaded '='
+class_ece8893_spring_2025,kamya_hari_lab_2_2025,2056,3970,1914,False,compared,ok,ok
+class_ece8893_spring_2025,kamya_hari_lab_3_2025,,26,,False,vitis missing,vitis timeout,ok
+class_ece8893_spring_2025,karthikeya_sharma_ece8893_spring_25_lab_2,383,,,False,hls-est missing,ok,cgeist error: top.cpp:198:5: error: no matching function for call to 'loadQuery'
+class_ece8893_spring_2025,karthikeya_sharma_ece8893_spring_25_lab_3,104,,,False,hls-est missing,ok,"cgeist error: top.cpp:32:32: error: no viable conversion from 'data_t' (aka 'ap_fixed<16, 5>') to 'hls::vector<data_t, 64>' (aka 'vector<ap_fixed<16, 5>, 64>')"
+class_ece8893_spring_2025,lab2_hanchen,,,,False,vitis missing,vitis timeout,hls-est timeout 120s
+class_ece8893_spring_2025,lab2_sushkrutha,,4109,,False,vitis missing,vitis timeout,ok
+class_ece8893_spring_2025,lab3_hanchen,16,22,6,False,compared,ok,ok
+class_ece8893_spring_2025,lab3_sushkrutha,46,32,-14,False,compared,ok,ok
+class_ece8893_spring_2025,matrix_methods__ben_hall_lab2_2025_attention,432,381,-51,False,compared,ok,ok
+class_ece8893_spring_2025,matrix_methods__ben_hall_lab3_sparse_matrix_multiplication,132,,,False,hls-est missing,ok,cgeist error: ./dcl.h:13:10: fatal error: 'hls_task.h' file not found
+class_ece8893_spring_2025,max_beaulieu_Lab_3_2025,35,47,12,False,compared,ok,ok
+class_ece8893_spring_2025,michael_meng_ece_8893_spring_25__lab2,73,73,0,True,compared,ok,ok
+class_ece8893_spring_2025,michael_meng_ece_8893_spring_25__lab3,,,,False,vitis missing,vitis failed,"cgeist error: top.cpp:50:32: error: no viable conversion from 'data_t' (aka 'ap_fixed<16, 5>') to 'hls::vector<data_t, 64>' (aka 'vector<ap_fixed<16, 5>, 64>')"
+class_ece8893_spring_2025,minjun_kim_Lab2_2025,709,45,-664,False,compared,ok,ok
+class_ece8893_spring_2025,minjun_kim_Lab3_2025,20,20,0,True,compared,ok,ok
+class_ece8893_spring_2025,mizanur_Lab2_2025,968,868,-100,False,compared,ok,ok
+class_ece8893_spring_2025,mizanur_Lab3_2025,,204,,False,vitis missing,vitis failed,ok
+class_ece8893_spring_2025,mohammad_zain_lab_2,113,114,1,False,compared,ok,ok
+class_ece8893_spring_2025,mohammad_zain_lab_3,425,5,-420,False,compared,ok,ok
+class_ece8893_spring_2025,nayan_nair_ece8893_spring25_lab2,2114,834,-1280,False,compared,ok,ok
+class_ece8893_spring_2025,nayan_nair_ece8893_spring25_lab3,25,36,11,False,compared,ok,ok
+class_ece8893_spring_2025,neuro_monarchs_neural_kernel_ece8893_spring_2025,,36111,,False,vitis missing,vitis timeout,ok
+class_ece8893_spring_2025,neuro_monarchs_symbolic_kernel_ece8893_spring_2025,973,,,False,hls-est missing,ok,cgeist error: top.cpp:205:65: error: no viable overloaded '='
+class_ece8893_spring_2025,nikhil_p_ece8893_spring25_lab2,95,,,False,hls-est missing,ok,"cgeist error: top.cpp:78:48: error: invalid operands to binary expression ('fixed_t' (aka 'ap_fixed<16, 5>') and 'fixed_t[128]' (aka 'ap_fixed<16, 5>[128]'))"
+class_ece8893_spring_2025,nikhil_p_ece8893_spring25_lab3,743,,,False,hls-est missing,ok,cgeist error: top.cpp:198:5: error: no matching function for call to 'load_values_A'
+class_ece8893_spring_2025,nikhil_s_ece8893_sp25_lab2,521,521,0,True,compared,ok,ok
+class_ece8893_spring_2025,nikhil_s_ece8893_sp25_lab3,25,36,11,False,compared,ok,ok
+class_ece8893_spring_2025,oscar_baglivio_lab_2,242,,,False,hls-est missing,ok,cgeist error: top.cpp:63:5: error: use of undeclared identifier 'memcpy'; did you mean 'wmemcpy'?
+class_ece8893_spring_2025,oscar_baglivio_lab_3,95,,,False,hls-est missing,ok,cgeist error: top.cpp:44:3: error: use of undeclared identifier 'memcpy'; did you mean 'wmemcpy'?
+class_ece8893_spring_2025,pengzhao_liu_Lab2_2025,178,882,704,False,compared,ok,ok
+class_ece8893_spring_2025,pengzhao_liu_Lab3_2025,31,21,-10,False,compared,ok,ok
+class_ece8893_spring_2025,pranay_kamineny_lab2,394,234,-160,False,compared,ok,ok
+class_ece8893_spring_2025,pranay_kamineny_lab3,26,32,6,False,compared,ok,ok
+class_ece8893_spring_2025,ritik_raj_lab2,797,,,False,hls-est missing,ok,cgeist error: top.cpp:124:86: error: no viable overloaded '='
+class_ece8893_spring_2025,ritik_raj_lab3,184,72,-112,False,compared,ok,ok
+class_ece8893_spring_2025,sahith_lab2_2025,,,,False,vitis missing,vitis failed,"cgeist error: top.cpp:11:55: error: conditional expression is ambiguous; 'ap_fixed<16, 5>' can be converted to 'ap_fixed<32, 8>' and vice versa"
+class_ece8893_spring_2025,sahith_lab3_2025,284,236,-48,False,compared,ok,ok
+class_ece8893_spring_2025,shengxi_liang_ece8893_spring_25__Shengxi_Liang_LAB2,,,,False,vitis missing,vitis failed,cgeist error: top.cpp:29:42: error: use of undeclared variable 'V_local' in '#pragma HLS array_partition'
+class_ece8893_spring_2025,shengxi_liang_ece8893_spring_25__Shengxi_Liang_LAB3,263,20,-243,False,compared,ok,ok
+class_ece8893_spring_2025,shibao_su_ece8893_lab2,,302,,False,vitis missing,vitis timeout,ok
+class_ece8893_spring_2025,shibao_su_ece8893_lab3,41,36,-5,False,compared,ok,ok
+class_ece8893_spring_2025,shreesahitya_balaje_lab2,,32779,,False,vitis missing,vitis timeout,ok
+class_ece8893_spring_2025,shreesahitya_balaje_lab3,54,36,-18,False,compared,ok,ok
+class_ece8893_spring_2025,siddharth_khatri_ece8893_spring25_lab2,1283,143,-1140,False,compared,ok,ok
+class_ece8893_spring_2025,siddharth_khatri_ece8893_spring25_lab3,54,36,-18,False,compared,ok,ok
+class_ece8893_spring_2025,sreenidhireddy_bommu_ece8893_spring25_lab2,2114,834,-1280,False,compared,ok,ok
+class_ece8893_spring_2025,sreenidhireddy_bommu_ece8893_spring25_lab3,,,,False,vitis missing,vitis failed,top not found
+class_ece8893_spring_2025,stefan_test_design,0,0,0,True,compared,ok,ok
+class_ece8893_spring_2025,suyeon_yoon_lab3_spring25,68,68,0,True,compared,ok,ok
+class_ece8893_spring_2025,vishnu_varma_venkata_ece8893_spring25_lab2,2114,834,-1280,False,compared,ok,ok
+class_ece8893_spring_2025,vishnu_varma_venkata_ece8893_spring25_lab3,340,246,-94,False,compared,ok,ok
+class_ece8893_spring_2025,zihan_qi_lab2,207,5,-202,False,compared,ok,ok
+class_ece8893_spring_2025,zihan_qi_lab3,1920,7,-1913,False,compared,ok,ok
+class_ece8893_spring_2025,zijun_wang_ece8893_spring25_lab2,457,,,False,hls-est missing,ok,cgeist error: top.cpp:35:36: error: no viable overloaded '='
+class_ece8893_spring_2025,zijun_wang_ece8893_spring25_lab3,270,,,False,hls-est missing,ok,cgeist error: top.cpp:17:32: error: no viable overloaded '='
+flowgnn,dgn,,12817,,False,vitis missing,vitis failed,ok
+flowgnn,gat,,,,False,vitis missing,vitis timeout,cgeist error: src/conv_layer.cc:161:33: error: no viable overloaded '='
+flowgnn,gcn,,8650,,False,vitis missing,vitis failed,ok
+flowgnn,gin,1158,,,False,hls-est missing,ok,cgeist error: src/load_inputs.cc:165:29: error: expression is not assignable
+flowgnn,pna,20600,3758,-16842,False,compared,ok,ok
+forgebench,Llama_GPT_module,30,30,0,True,compared,ok,ok
+forgebench,activation_module,258,258,0,True,compared,ok,ok
+forgebench,activation_op1,178,178,0,True,compared,ok,ok
+forgebench,activation_op2,258,258,0,True,compared,ok,ok
+forgebench,activation_op3,258,258,0,True,compared,ok,ok
+forgebench,attention_op_p1,73,73,0,True,compared,ok,ok
+forgebench,attention_op_p2,24,24,0,True,compared,ok,ok
+forgebench,attention_op_p3,24,24,0,True,compared,ok,ok
+forgebench,attn_breakdown_module,17,23,6,False,compared,ok,ok
+forgebench,attn_breakdown_op1,10,11,1,False,compared,ok,ok
+forgebench,attn_breakdown_op2,17,23,6,False,compared,ok,ok
+forgebench,conv_A,594,594,0,True,compared,ok,ok
+forgebench,conv_B,586,586,0,True,compared,ok,ok
+forgebench,conv_C,610,610,0,True,compared,ok,ok
+forgebench,conv_block_module,5139,5012,-127,False,compared,ok,ok
+forgebench,conv_block_op1,3897,3770,-127,False,compared,ok,ok
+forgebench,conv_block_op2,4796,4797,1,False,compared,ok,ok
+forgebench,conv_block_op3,4931,4932,1,False,compared,ok,ok
+forgebench,conv_module,1042,1042,0,True,compared,ok,ok
+forgebench,diff_dims_module_large,1922,1922,0,True,compared,ok,ok
+forgebench,diff_dims_module_small,1154,1154,0,True,compared,ok,ok
+forgebench,diff_dims_p1,210,210,0,True,compared,ok,ok
+forgebench,diff_dims_p2,114,114,0,True,compared,ok,ok
+forgebench,diff_dims_p3,354,354,0,True,compared,ok,ok
+forgebench,diff_orders_module,1538,1538,0,True,compared,ok,ok
+forgebench,diff_orders_p1,130,130,0,True,compared,ok,ok
+forgebench,diff_orders_p2,2,2,0,True,compared,ok,ok
+forgebench,diff_orders_p3,514,514,0,True,compared,ok,ok
+forgebench,gpt_transformer_p1,28,28,0,True,compared,ok,ok
+forgebench,llama_transformer_p2,30,30,0,True,compared,ok,ok
+forgebench,mlp,,1030,,False,vitis missing,vitis timeout,ok
+forgebench,mult_op_module_dot,58,100,42,False,compared,ok,ok
+forgebench,mult_op_module_mm,3,3,0,True,compared,ok,ok
+forgebench,mult_op_module_mmv,20,20,0,True,compared,ok,ok
+forgebench,mult_op_p1,2,2,0,True,compared,ok,ok
+forgebench,mult_op_p2,2,2,0,True,compared,ok,ok
+forgebench,mult_op_p3,2,2,0,True,compared,ok,ok
+forgebench,testing_impl,2,2,0,True,compared,ok,ok
+forgebench,testing_unroll,2,2,0,True,compared,ok,ok
+forgebench,tiled_attn_module,270,268,-2,False,compared,ok,ok
+forgebench,tiled_attn_p1,73,73,0,True,compared,ok,ok
+forgebench,tiled_attn_p2,23,23,0,True,compared,ok,ok
+forgebench,vec_mtx_module,2,2,0,True,compared,ok,ok
+forgebench,vec_mtx_p1,2,2,0,True,compared,ok,ok
+forgebench,vec_mtx_p2,2,2,0,True,compared,ok,ok
+gnnbuilder,designs__fpga_gcn_qm9,10022,10070,48,False,compared,ok,ok
+gnnbuilder,designs__fpga_gin_qm9,10408,10404,-4,False,compared,ok,ok
+gnnbuilder,designs__fpga_pna_qm9,13218,12921,-297,False,compared,ok,ok
+gnnbuilder,designs__fpga_sage_qm9,10346,10391,45,False,compared,ok,ok
+hlsyn-vitis,vivado-target__sources__2mm,,88,,False,vitis missing,vitis timeout,ok
+hlsyn-vitis,vivado-target__sources__3mm,,152,,False,vitis missing,vitis timeout,ok
+hlsyn-vitis,vivado-target__sources__adi,,64,,False,vitis missing,vitis timeout,ok
+hlsyn-vitis,vivado-target__sources__aes,6,1,-5,False,compared,ok,ok
+hlsyn-vitis,vivado-target__sources__atax,1036,1034,-2,False,compared,ok,ok
+hlsyn-vitis,vivado-target__sources__atax-medium,16396,16394,-2,False,compared,ok,ok
+hlsyn-vitis,vivado-target__sources__bicg,974,1038,64,False,compared,ok,ok
+hlsyn-vitis,vivado-target__sources__bicg-large,16398,16398,0,True,compared,ok,ok
+hlsyn-vitis,vivado-target__sources__bicg-medium,16398,16398,0,True,compared,ok,ok
+hlsyn-vitis,vivado-target__sources__correlation,132,132,0,True,compared,ok,ok
+hlsyn-vitis,vivado-target__sources__covariance,68,68,0,True,compared,ok,ok
+hlsyn-vitis,vivado-target__sources__doitgen,72,,,False,hls-est missing,ok,hls-est timeout 120s
+hlsyn-vitis,vivado-target__sources__doitgen-red,,,,False,vitis missing,vitis timeout,hls-est timeout 120s
+hlsyn-vitis,vivado-target__sources__fdtd-2d,,100,,False,vitis missing,vitis failed,ok
+hlsyn-vitis,vivado-target__sources__fdtd-2d-large,,,,False,vitis missing,vitis failed,hls-est timeout 120s
+hlsyn-vitis,vivado-target__sources__gemm-blocked,,,,False,vitis missing,vitis failed,hls-est timeout 120s
+hlsyn-vitis,vivado-target__sources__gemm-ncubed,,48,,False,vitis missing,vitis timeout,ok
+hlsyn-vitis,vivado-target__sources__gemm-p,,96,,False,vitis missing,vitis timeout,ok
+hlsyn-vitis,vivado-target__sources__gemm-p-large,,,,False,vitis missing,vitis timeout,hls-est timeout 120s
+hlsyn-vitis,vivado-target__sources__gemver,,96,,False,vitis missing,vitis timeout,ok
+hlsyn-vitis,vivado-target__sources__gemver-medium,1056,1056,0,True,compared,ok,ok
+hlsyn-vitis,vivado-target__sources__gesummv,1032,1032,0,True,compared,ok,ok
+hlsyn-vitis,vivado-target__sources__gesummv-medium,8202,8200,-2,False,compared,ok,ok
+hlsyn-vitis,vivado-target__sources__heat-3d,,64,,False,vitis missing,vitis timeout,ok
+hlsyn-vitis,vivado-target__sources__jacobi-1d,8,8,0,True,compared,ok,ok
+hlsyn-vitis,vivado-target__sources__jacobi-2d,,64,,False,vitis missing,missing,ok
+hlsyn-vitis,vivado-target__sources__md,234,324,90,False,compared,ok,ok
+hlsyn-vitis,vivado-target__sources__mvt,976,976,0,True,compared,ok,ok
+hlsyn-vitis,vivado-target__sources__mvt-medium,16400,16400,0,True,compared,ok,ok
+hlsyn-vitis,vivado-target__sources__nw,0,0,0,True,compared,ok,ok
+hlsyn-vitis,vivado-target__sources__seidel-2d,,,,False,vitis missing,missing,hls-est timeout 120s
+hlsyn-vitis,vivado-target__sources__spmv-crs,,18,,False,vitis missing,missing,ok
+hlsyn-vitis,vivado-target__sources__spmv-ellpack,,472,,False,vitis missing,missing,ok
+hlsyn-vitis,vivado-target__sources__stencil-3d,,1152,,False,vitis missing,missing,ok
+hlsyn-vitis,vivado-target__sources__stencil_stencil2d,,80,,False,vitis missing,missing,ok
+hlsyn-vitis,vivado-target__sources__symm,,,,False,vitis missing,missing,hls-est timeout 120s
+hlsyn-vitis,vivado-target__sources__symm-opt,,,,False,vitis missing,missing,hls-est timeout 120s
+hlsyn-vitis,vivado-target__sources__symm-opt-medium,,,,False,vitis missing,missing,hls-est timeout 120s
+hlsyn-vitis,vivado-target__sources__syr2k,,,,False,vitis missing,missing,hls-est timeout 120s
+hlsyn-vitis,vivado-target__sources__syrk,,,,False,vitis missing,missing,hls-est timeout 120s
+hlsyn-vitis,vivado-target__sources__trmm,,,,False,vitis missing,missing,hls-est timeout 120s
+hlsyn-vitis,vivado-target__sources__trmm-opt,,48,,False,vitis missing,missing,ok
+hp_fft_hls,n1024__UF1,96,,,False,hls-est missing,ok,cgeist error: ./FFT.h:5:10: fatal error: 'hls_fft.h' file not found
+hp_fft_hls,n1024__UF16,640,,,False,hls-est missing,ok,cgeist error: ./FFT.h:5:10: fatal error: 'hls_fft.h' file not found
+hp_fft_hls,n1024__UF2,176,,,False,hls-est missing,ok,cgeist error: ./FFT.h:5:10: fatal error: 'hls_fft.h' file not found
+hp_fft_hls,n1024__UF32,1024,,,False,hls-est missing,ok,cgeist error: ./FFT.h:5:10: fatal error: 'hls_fft.h' file not found
+hp_fft_hls,n1024__UF4,304,,,False,hls-est missing,ok,cgeist error: ./FFT.h:5:10: fatal error: 'hls_fft.h' file not found
+hp_fft_hls,n1024__UF8,448,,,False,hls-est missing,ok,cgeist error: ./FFT.h:5:10: fatal error: 'hls_fft.h' file not found
+hp_fft_hls,n1024__no_StagePipeline,11,,,False,hls-est missing,ok,cgeist crash
+hp_fft_hls,n1024__original_C_style,27,,,False,hls-est missing,ok,cgeist error: ./FFT.h:5:10: fatal error: 'hls_fft.h' file not found
+hp_fft_hls,n256__UF1,80,,,False,hls-est missing,ok,cgeist error: ./FFT.h:5:10: fatal error: 'hls_fft.h' file not found
+hp_fft_hls,n256__UF16,0,,,False,hls-est missing,ok,cgeist error: ./FFT.h:5:10: fatal error: 'hls_fft.h' file not found
+hp_fft_hls,n256__UF2,128,,,False,hls-est missing,ok,cgeist error: ./FFT.h:5:10: fatal error: 'hls_fft.h' file not found
+hp_fft_hls,n256__UF32,0,,,False,hls-est missing,ok,cgeist error: ./FFT.h:5:10: fatal error: 'hls_fft.h' file not found
+hp_fft_hls,n256__UF4,176,,,False,hls-est missing,ok,cgeist error: ./FFT.h:5:10: fatal error: 'hls_fft.h' file not found
+hp_fft_hls,n256__UF8,256,,,False,hls-est missing,ok,cgeist error: ./FFT.h:5:10: fatal error: 'hls_fft.h' file not found
+hp_fft_hls,n256__no_StagePipeline,11,,,False,hls-est missing,ok,cgeist crash
+hp_fft_hls,n256__original_C_style,25,,,False,hls-est missing,ok,cgeist error: ./FFT.h:5:10: fatal error: 'hls_fft.h' file not found
+machsuite,aes_table,8,1,-7,False,compared,ok,ok
+machsuite,aes_tableless,0,0,0,True,compared,ok,ok
+machsuite,backprop,40,42,2,False,compared,ok,ok
+machsuite,bfs_bulk,0,0,0,True,compared,ok,ok
+machsuite,bfs_queue,1,2,1,False,compared,ok,ok
+machsuite,fft_transpose,28,28,0,True,compared,ok,ok
+machsuite,gemm_blocked,0,0,0,True,compared,ok,ok
+machsuite,gemm_ncubed,0,0,0,True,compared,ok,ok
+machsuite,md_grid,0,0,0,True,compared,ok,ok
+machsuite,md_knn,0,0,0,True,compared,ok,ok
+machsuite,nw,0,0,0,True,compared,ok,ok
+machsuite,sort_merge,4,8,4,False,compared,ok,ok
+machsuite,sort_radix,0,0,0,True,compared,ok,ok
+machsuite,spmv_crs,0,0,0,True,compared,ok,ok
+machsuite,spmv_ellpack,0,0,0,True,compared,ok,ok
+machsuite,stencil2D,0,0,0,True,compared,ok,ok
+machsuite,stencil3D,0,0,0,True,compared,ok,ok
+machsuite,viterbi,128,128,0,True,compared,ok,ok
+polybench,atax,13,13,0,True,compared,ok,ok
+polybench,bicg,14,14,0,True,compared,ok,ok
+polybench,gemm,256,256,0,True,compared,ok,ok
+polybench,gesummv,135,21,-114,False,compared,ok,ok
+polybench,k2mm,504,504,0,True,compared,ok,ok
+polybench,k3mm,728,728,0,True,compared,ok,ok
+polybench,mvt,14,14,0,True,compared,ok,ok
+polybench,syr2k,392,392,0,True,compared,ok,ok
+polybench,syrk,256,256,0,True,compared,ok,ok
+polybench__reproducible,polybench__fixed__medium__2mm,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__fixed__medium__3mm,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__fixed__medium__atax,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__fixed__medium__bicg,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__fixed__medium__cholesky,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__fixed__medium__correlation,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__fixed__medium__covariance,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__fixed__medium__doitgen,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__fixed__medium__durbin,1,1,0,True,compared,ok,ok
+polybench__reproducible,polybench__fixed__medium__fdtd-2d,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__fixed__medium__floyd-warshall,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__fixed__medium__gemm,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__fixed__medium__gemver,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__fixed__medium__gesummv,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__fixed__medium__gramschmidt,0,,,False,hls-est missing,ok,cgeist error: src/gramschmidt.cpp:23:26: error: call to 'nextafter' is ambiguous
+polybench__reproducible,polybench__fixed__medium__heat-3d,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__fixed__medium__jacobi-1d,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__fixed__medium__jacobi-2d,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__fixed__medium__lu,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__fixed__medium__ludcmp,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__fixed__medium__mvt,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__fixed__medium__nussinov,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__fixed__medium__seidel-2d,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__fixed__medium__symm,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__fixed__medium__syr2k,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__fixed__medium__syrk,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__fixed__medium__trisolv,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__fixed__medium__trmm,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__fixed__mini__2mm,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__fixed__mini__3mm,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__fixed__mini__atax,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__fixed__mini__bicg,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__fixed__mini__cholesky,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__fixed__mini__correlation,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__fixed__mini__covariance,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__fixed__mini__doitgen,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__fixed__mini__durbin,1,1,0,True,compared,ok,ok
+polybench__reproducible,polybench__fixed__mini__fdtd-2d,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__fixed__mini__floyd-warshall,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__fixed__mini__gemm,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__fixed__mini__gemver,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__fixed__mini__gesummv,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__fixed__mini__gramschmidt,0,,,False,hls-est missing,ok,cgeist error: src/gramschmidt.cpp:23:26: error: call to 'nextafter' is ambiguous
+polybench__reproducible,polybench__fixed__mini__heat-3d,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__fixed__mini__jacobi-1d,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__fixed__mini__jacobi-2d,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__fixed__mini__lu,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__fixed__mini__ludcmp,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__fixed__mini__mvt,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__fixed__mini__nussinov,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__fixed__mini__seidel-2d,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__fixed__mini__symm,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__fixed__mini__syr2k,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__fixed__mini__syrk,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__fixed__mini__trisolv,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__fixed__mini__trmm,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__fixed__small__2mm,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__fixed__small__3mm,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__fixed__small__atax,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__fixed__small__bicg,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__fixed__small__cholesky,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__fixed__small__correlation,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__fixed__small__covariance,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__fixed__small__doitgen,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__fixed__small__durbin,1,1,0,True,compared,ok,ok
+polybench__reproducible,polybench__fixed__small__fdtd-2d,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__fixed__small__floyd-warshall,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__fixed__small__gemm,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__fixed__small__gemver,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__fixed__small__gesummv,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__fixed__small__gramschmidt,0,,,False,hls-est missing,ok,cgeist error: src/gramschmidt.cpp:23:26: error: call to 'nextafter' is ambiguous
+polybench__reproducible,polybench__fixed__small__heat-3d,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__fixed__small__jacobi-1d,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__fixed__small__jacobi-2d,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__fixed__small__lu,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__fixed__small__ludcmp,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__fixed__small__mvt,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__fixed__small__nussinov,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__fixed__small__seidel-2d,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__fixed__small__symm,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__fixed__small__syr2k,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__fixed__small__syrk,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__fixed__small__trisolv,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__fixed__small__trmm,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__float__medium__2mm,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__float__medium__3mm,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__float__medium__atax,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__float__medium__bicg,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__float__medium__cholesky,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__float__medium__correlation,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__float__medium__covariance,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__float__medium__doitgen,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__float__medium__durbin,2,2,0,True,compared,ok,ok
+polybench__reproducible,polybench__float__medium__fdtd-2d,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__float__medium__floyd-warshall,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__float__medium__gemm,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__float__medium__gemver,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__float__medium__gesummv,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__float__medium__gramschmidt,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__float__medium__heat-3d,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__float__medium__jacobi-1d,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__float__medium__jacobi-2d,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__float__medium__lu,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__float__medium__ludcmp,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__float__medium__mvt,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__float__medium__nussinov,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__float__medium__seidel-2d,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__float__medium__symm,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__float__medium__syr2k,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__float__medium__syrk,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__float__medium__trisolv,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__float__medium__trmm,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__float__mini__2mm,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__float__mini__3mm,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__float__mini__atax,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__float__mini__bicg,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__float__mini__cholesky,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__float__mini__correlation,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__float__mini__covariance,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__float__mini__doitgen,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__float__mini__durbin,2,2,0,True,compared,ok,ok
+polybench__reproducible,polybench__float__mini__fdtd-2d,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__float__mini__floyd-warshall,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__float__mini__gemm,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__float__mini__gemver,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__float__mini__gesummv,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__float__mini__gramschmidt,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__float__mini__heat-3d,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__float__mini__jacobi-1d,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__float__mini__jacobi-2d,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__float__mini__lu,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__float__mini__ludcmp,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__float__mini__mvt,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__float__mini__nussinov,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__float__mini__seidel-2d,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__float__mini__symm,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__float__mini__syr2k,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__float__mini__syrk,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__float__mini__trisolv,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__float__mini__trmm,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__float__small__2mm,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__float__small__3mm,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__float__small__atax,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__float__small__bicg,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__float__small__cholesky,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__float__small__correlation,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__float__small__covariance,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__float__small__doitgen,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__float__small__durbin,2,2,0,True,compared,ok,ok
+polybench__reproducible,polybench__float__small__fdtd-2d,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__float__small__floyd-warshall,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__float__small__gemm,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__float__small__gemver,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__float__small__gesummv,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__float__small__gramschmidt,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__float__small__heat-3d,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__float__small__jacobi-1d,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__float__small__jacobi-2d,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__float__small__lu,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__float__small__ludcmp,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__float__small__mvt,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__float__small__nussinov,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__float__small__seidel-2d,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__float__small__symm,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__float__small__syr2k,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__float__small__syrk,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__float__small__trisolv,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__float__small__trmm,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__float__unsafe__math__mini__2mm,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__float__unsafe__math__mini__3mm,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__float__unsafe__math__mini__atax,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__float__unsafe__math__mini__bicg,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__float__unsafe__math__mini__cholesky,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__float__unsafe__math__mini__correlation,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__float__unsafe__math__mini__covariance,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__float__unsafe__math__mini__doitgen,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__float__unsafe__math__mini__durbin,2,2,0,True,compared,ok,ok
+polybench__reproducible,polybench__float__unsafe__math__mini__fdtd-2d,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__float__unsafe__math__mini__floyd-warshall,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__float__unsafe__math__mini__gemm,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__float__unsafe__math__mini__gemver,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__float__unsafe__math__mini__gesummv,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__float__unsafe__math__mini__gramschmidt,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__float__unsafe__math__mini__heat-3d,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__float__unsafe__math__mini__jacobi-1d,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__float__unsafe__math__mini__jacobi-2d,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__float__unsafe__math__mini__lu,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__float__unsafe__math__mini__ludcmp,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__float__unsafe__math__mini__mvt,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__float__unsafe__math__mini__nussinov,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__float__unsafe__math__mini__seidel-2d,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__float__unsafe__math__mini__symm,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__float__unsafe__math__mini__syr2k,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__float__unsafe__math__mini__syrk,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__float__unsafe__math__mini__trisolv,0,0,0,True,compared,ok,ok
+polybench__reproducible,polybench__float__unsafe__math__mini__trmm,0,0,0,True,compared,ok,ok
+polybench_pragmas,bicg,8,8,0,True,compared,ok,ok
+polybench_pragmas,gesummv,16,16,0,True,compared,ok,ok
+polybench_pragmas,k2mm,184,184,0,True,compared,ok,ok
+polybench_pragmas,k3mm,312,296,-16,False,compared,ok,ok
+polybench_pragmas,mvt,8,8,0,True,compared,ok,ok
+polybench_pragmas,syr2k,280,280,0,True,compared,ok,ok
+polybench_pragmas,syrk,32,32,0,True,compared,ok,ok
+pp4fpgas,23_pp4fpgas_unoptimized_fft,0,0,,False,sources differ,ok,ok
+pp4fpgas,24_pp4fpgas_multi_stage_fft,16,8,,False,sources differ,ok,ok
+pp4fpgas,25_pp4fpgas_huffman_encoding,23,21,-2,False,compared,ok,ok
+pp4fpgas,26_pp4fpgas_matmul,0,0,0,True,compared,ok,ok
+pp4fpgas,27_pp4fpgas_parallel_merge_sort,0,0,,False,sources differ,ok,ok
+rosetta,3d-rendering__src__sdsoc,,,,False,vitis missing,vitis failed,cgeist error: rendering.cpp:284:22: error: no viable overloaded '='
+rosetta,BNN__cpp__accel,,,,False,vitis missing,vitis failed,cgeist error: ./Accel.h:5:10: fatal error: 'hls_video.h' file not found
+rosetta,digit-recognition__src__sdsoc,,544,,False,vitis missing,vitis failed,ok
+rosetta,face-detection__src__sdsoc,,,,False,vitis missing,vitis failed,cgeist error: face_detect.cpp:1020:27: error: no matching constructor for initialization of 'uint5_t' (aka 'ap_uint<5>')
+rosetta,face-detection__src__sdsoc__origin,214,,,False,hls-est missing,ok,cgeist error: face_detect_origin.cpp:1020:27: error: no matching constructor for initialization of 'uint5_t' (aka 'ap_uint<5>')
+rosetta,optical-flow__src__sdsoc,,,,False,vitis missing,vitis failed,cgeist error: optical_flow_original.cpp:11:10: fatal error: 'hls_video.h' file not found
+rosetta,optical-flow__src__sdsoc__hls_template,,,,False,vitis missing,vitis failed,cgeist error: optical_flow.cpp:11:10: fatal error: 'hls_video.h' file not found
+rosetta,spam-filter__src__sdsoc,,,,False,vitis missing,vitis failed,cgeist error: sgd.cpp:24:73: error: no viable overloaded '='
+soda,soda__blur,77,,,False,hls-est missing,ok,cgeist error: blur.cpp:452:40: error: no viable overloaded '='
+soda,soda__contrast,290,,,False,hls-est missing,ok,cgeist error: contrast.cpp:1782:38: error: no viable overloaded '='
+soda,soda__denoise2d,48,,,False,hls-est missing,ok,cgeist error: denoise2d.cpp:898:38: error: no viable overloaded '='
+soda,soda__denoise3d,38,,,False,hls-est missing,ok,cgeist error: denoise3d.cpp:818:38: error: no viable overloaded '='
+soda,soda__erosion,92,,,False,hls-est missing,ok,cgeist error: erosion.cpp:619:38: error: no viable overloaded '='
+soda,soda__heat3d,28,,,False,hls-est missing,ok,cgeist error: heat3d.cpp:451:35: error: no viable overloaded '='
+soda,soda__jacobi2d,12,,,False,hls-est missing,ok,cgeist error: jacobi2d.cpp:406:34: error: no viable overloaded '='
+soda,soda__jacobi3d,28,,,False,hls-est missing,ok,cgeist error: jacobi3d.cpp:451:34: error: no viable overloaded '='
+soda,soda__seidel2d,20,,,False,hls-est missing,ok,cgeist error: seidel2d.cpp:420:38: error: no viable overloaded '='
+soda,soda__sobel2d,12,,,False,hls-est missing,ok,cgeist error: sobel2d.cpp:713:35: error: no viable overloaded '='
+soda,soda__xcorr,92,,,False,hls-est missing,ok,cgeist error: xcorr.cpp:806:36: error: no viable overloaded '='
+spector_hls,dct,0,0,0,True,compared,ok,ok
+spector_hls,fir,4,4,0,True,compared,ok,ok
+spector_hls,histogram,8,8,0,True,compared,ok,ok
+spector_hls,matrix_multiplication,0,0,0,True,compared,ok,ok
+spector_hls,mergesort,0,0,0,True,compared,ok,ok
+spector_hls,normals,4,4,0,True,compared,ok,ok
+spector_hls,sobel_filter_x,0,0,0,True,compared,ok,ok
+spector_hls,sobel_filter_y,0,0,0,True,compared,ok,ok
+spector_hls,spmv,0,0,0,True,compared,ok,ok
+spector_hls,template_matching,1,0,-1,False,compared,ok,ok
+stream_hls,Autoencoder__opt1,2768,1352,-1416,False,compared,ok,ok
+stream_hls,Autoencoder__opt2,3376,1960,-1416,False,compared,ok,ok
+stream_hls,Autoencoder__opt3,2684,1358,-1326,False,compared,ok,ok
+stream_hls,Autoencoder__opt4,3512,1962,-1550,False,compared,ok,ok
+stream_hls,Autoencoder__opt5,2984,1675,-1309,False,compared,ok,ok
+stream_hls,DepthwiseSeparableConvBlock__opt1,2048,1024,-1024,False,compared,ok,ok
+stream_hls,DepthwiseSeparableConvBlock__opt2,1536,512,-1024,False,compared,ok,ok
+stream_hls,DepthwiseSeparableConvBlock__opt3,1952,1024,-928,False,compared,ok,ok
+stream_hls,DepthwiseSeparableConvBlock__opt4,1952,1024,-928,False,compared,ok,ok
+stream_hls,DepthwiseSeparableConvBlock__opt5,1952,1024,-928,False,compared,ok,ok
+stream_hls,FeedForward__opt1,2048,1024,-1024,False,compared,ok,ok
+stream_hls,FeedForward__opt2,1920,896,-1024,False,compared,ok,ok
+stream_hls,FeedForward__opt3,2432,1282,-1150,False,compared,ok,ok
+stream_hls,FeedForward__opt4,2432,1028,-1404,False,compared,ok,ok
+stream_hls,FeedForward__opt5,3328,1157,-2171,False,compared,ok,ok
+stream_hls,MultiHeadSelfAttention1__opt1,1480,692,-788,False,compared,ok,ok
+stream_hls,MultiHeadSelfAttention1__opt2,1368,580,-788,False,compared,ok,ok
+stream_hls,MultiHeadSelfAttention1__opt3,2272,1897,-375,False,compared,ok,ok
+stream_hls,MultiHeadSelfAttention1__opt4,2048,732,-1316,False,compared,ok,ok
+stream_hls,MultiHeadSelfAttention1__opt5,2688,2267,-421,False,compared,ok,ok
+stream_hls,ResMLP__opt1,3701,1841,-1860,False,compared,ok,ok
+stream_hls,ResMLP__opt2,3709,1849,-1860,False,compared,ok,ok
+stream_hls,ResMLP__opt3,3829,1844,-1985,False,compared,ok,ok
+stream_hls,ResMLP__opt4,3861,1852,-2009,False,compared,ok,ok
+stream_hls,ResMLP__opt5,3885,1876,-2009,False,compared,ok,ok
+stream_hls,ResidualBlock__opt1,1280,512,-768,False,compared,ok,ok
+stream_hls,ResidualBlock__opt2,1280,512,-768,False,compared,ok,ok
+stream_hls,ResidualBlock__opt3,1248,512,-736,False,compared,ok,ok
+stream_hls,ResidualBlock__opt4,1248,,,False,hls-est missing,ok,hls-est timeout 120s
+stream_hls,ResidualBlock__opt5,1248,512,-736,False,compared,ok,ok
+stream_hls,atax__opt1,1031,515,-516,False,compared,ok,ok
+stream_hls,atax__opt2,519,3,-516,False,compared,ok,ok
+stream_hls,atax__opt3,1230,610,-620,False,compared,ok,ok
+stream_hls,atax__opt4,630,11,-619,False,compared,ok,ok
+stream_hls,atax__opt5,630,11,-619,False,compared,ok,ok
+stream_hls,bicg__opt1,6,2,-4,False,compared,ok,ok
+stream_hls,bicg__opt2,6,2,-4,False,compared,ok,ok
+stream_hls,bicg__opt3,30,10,-20,False,compared,ok,ok
+stream_hls,bicg__opt4,30,10,-20,False,compared,ok,ok
+stream_hls,bicg__opt5,30,10,-20,False,compared,ok,ok
+stream_hls,gemm__opt1,384,128,-256,False,compared,ok,ok
+stream_hls,gemm__opt2,384,128,-256,False,compared,ok,ok
+stream_hls,gemm__opt3,264,90,-174,False,compared,ok,ok
+stream_hls,gemm__opt4,264,90,-174,False,compared,ok,ok
+stream_hls,gemm__opt5,264,90,-174,False,compared,ok,ok
+stream_hls,gesummv__opt1,8,2,-6,False,compared,ok,ok
+stream_hls,gesummv__opt2,8,2,-6,False,compared,ok,ok
+stream_hls,gesummv__opt3,0,0,0,True,compared,ok,ok
+stream_hls,gesummv__opt4,0,0,0,True,compared,ok,ok
+stream_hls,gesummv__opt5,0,0,0,True,compared,ok,ok
+stream_hls,k2mm__opt1,768,384,-384,False,compared,ok,ok
+stream_hls,k2mm__opt2,768,384,-384,False,compared,ok,ok
+stream_hls,k2mm__opt3,504,248,-256,False,compared,ok,ok
+stream_hls,k2mm__opt4,504,250,-254,False,compared,ok,ok
+stream_hls,k2mm__opt5,504,248,-256,False,compared,ok,ok
+stream_hls,k3mm__opt1,1152,768,-384,False,compared,ok,ok
+stream_hls,k3mm__opt2,769,385,-384,False,compared,ok,ok
+stream_hls,k3mm__opt3,880,521,-359,False,compared,ok,ok
+stream_hls,k3mm__opt4,900,561,-339,False,compared,ok,ok
+stream_hls,k3mm__opt5,900,561,-339,False,compared,ok,ok
+stream_hls,k7mmseq_balanced__opt1,160,104,-56,False,compared,ok,ok
+stream_hls,k7mmseq_balanced__opt2,160,104,-56,False,compared,ok,ok
+stream_hls,k7mmseq_balanced__opt3,432,208,-224,False,compared,ok,ok
+stream_hls,k7mmseq_balanced__opt4,432,208,-224,False,compared,ok,ok
+stream_hls,k7mmseq_balanced__opt5,432,208,-224,False,compared,ok,ok
+stream_hls,k7mmseq_unbalanced__opt1,184,122,-62,False,compared,ok,ok
+stream_hls,k7mmseq_unbalanced__opt2,184,122,-62,False,compared,ok,ok
+stream_hls,k7mmseq_unbalanced__opt3,428,213,-215,False,compared,ok,ok
+stream_hls,k7mmseq_unbalanced__opt4,428,213,-215,False,compared,ok,ok
+stream_hls,k7mmseq_unbalanced__opt5,428,213,-215,False,compared,ok,ok
+stream_hls,k7mmtree_balanced__opt5,432,208,-224,False,compared,ok,ok
+stream_hls,k7mmtree_unbalanced__opt5,508,255,-253,False,compared,ok,ok
+stream_hls,mvt__opt1,1030,514,-516,False,compared,ok,ok
+stream_hls,mvt__opt2,518,2,-516,False,compared,ok,ok
+stream_hls,mvt__opt3,1054,522,-532,False,compared,ok,ok
+stream_hls,mvt__opt4,512,1,-511,False,compared,ok,ok
+stream_hls,mvt__opt5,512,1,-511,False,compared,ok,ok
+vitis_examples,01_basic_examples_vhls_fixed_point_sqrt,0,,,False,hls-est missing,ok,cgeist error: ./fxp_sqrt.h:101:25: error: no viable overloaded '='
+vitis_examples,02_basic_examples_vhls_fir_filter,3,1,-2,False,compared,ok,ok
+vitis_examples,03_basic_examples_vhls_fixed_point_window_conv,0,0,0,True,compared,ok,ok
+vitis_examples,04_basic_examples_vhls_floating_point_window_conv,1,1,0,True,compared,ok,ok
+vitis_examples,05_basic_examples_vhls_ap_arithmetic,0,0,0,True,compared,ok,ok
+vitis_examples,06_basic_examples_vhls_parallel_loops,0,0,0,True,compared,ok,ok
+vitis_examples,07_basic_examples_vhls_imperfect_loops,0,0,0,True,compared,ok,ok
+vitis_examples,08_basic_examples_vhls_max_bounded_loop,0,0,0,True,compared,ok,ok
+vitis_examples,09_basic_examples_vhls_perfect_nested_loops,0,0,0,True,compared,ok,ok
+vitis_examples,10_basic_examples_vhls_pipelined_nested_loops,0,0,0,True,compared,ok,ok
+vitis_examples,11_basic_examples_vhls_accs_sequential,0,0,0,True,compared,ok,ok
+vitis_examples,12_basic_examples_vhls_accs_w_asserts,0,0,0,True,compared,ok,ok
+vitis_examples,13_basic_examples_vhls_accs_w_dataflow,0,0,0,True,compared,ok,ok
+vitis_examples,14_basic_examples_vhls_static_memory,1,2,1,False,compared,ok,ok
+vitis_examples,15_basic_examples_vhls_pointer_casting,0,0,0,True,compared,ok,ok
+vitis_examples,16_basic_examples_vhls_double_pointer,0,0,0,True,compared,ok,ok
+vitis_examples,17_basic_examples_vhls_axi_master,4,2,-2,False,compared,ok,ok
+vitis_examples,18_basic_examples_vhls_axi_stream_no_side_channel,0,0,0,True,compared,ok,ok
+vitis_examples,19_basic_examples_vhls_multi_array_access_bottleneck,0,0,0,True,compared,ok,ok
+vitis_examples,20_basic_examples_vhls_resolved_array_access_bottleneck,0,0,0,True,compared,ok,ok
+vitis_examples,21_basic_examples_vhls_uram_ecc,,0,,False,vitis missing,vitis failed,ok
+vitis_examples,22_basic_examples_vhls_fixed_point_hamming_window,1,1,0,True,compared,ok,ok
+vitis_examples,28_vitis_accel_examples_streaming_vadd,58,,,False,hls-est missing,ok,cgeist error: vadd.cpp:75:36: error: use of undeclared identifier 'uint32_t'
+whetstone,whetstone,0,16,16,False,compared,ok,ok

@@ -9,7 +9,9 @@ common.py and labelled as such):
   hls-doc/ground-truth.md           the Vitis ground truth: run configuration, per-dataset counts,
                                     one row per design (status, BRAM/DSP/FF/LUT with utilisation %,
                                     top, csynth time), and the excluded designs with the reason
-                                    (make_sheet.exclusion, the rule the workbook uses)
+                                    (make_sheet.exclusion, the rule the workbook uses); with an hls-est
+                                    run (--hlsest, or when results.md is rendered too), also the run's
+                                    designs that have no ground-truth entry at all (unsynthesised)
   hls-doc/ground-truth-memories.md  every memory row of every design (module, array, instance,
                                     core, bound port type, words, bits, banks, BRAM)
   hls-doc/results.md                one hls-est run against the ground truth: per-dataset summary
@@ -193,7 +195,17 @@ def excluded_rows(V):
     return rows
 
 
-def render_ground_truth(V, vitis_path, date):
+def never_run_rows(V, catalogue_keys):
+    """The catalogue designs (the keys of a run over the whole catalogue) that have no entry in the ground
+    truth at all: Vitis was never started on them, so they are in neither table above."""
+    rows = []
+    for key in sorted(set(catalogue_keys) - set(V)):
+        category, reason = exclusion(None)
+        rows.append([*key.split("/", 1), category, reason])
+    return rows
+
+
+def render_ground_truth(V, vitis_path, date, catalogue_keys=None, catalogue_source=""):
     ok = [v for v in V.values() if vitis_ok(v)]
     config = [
         ["source file", short_path(vitis_path)],
@@ -233,6 +245,19 @@ def render_ground_truth(V, vitis_path, date):
         md_table(["dataset", "benchmark", "Vitis status", "category", "why it is excluded", "Vitis error (first line)"],
                  excluded_rows(V)), "",
     ]
+    if catalogue_keys is not None:
+        never = never_run_rows(V, catalogue_keys)
+        parts += [
+            f"## Unsynthesised designs ({len(never)})", "",
+            f"Designs of the harness catalogue (the designs of the hls-est run `{catalogue_source}`) that "
+            "have no entry in the ground-truth file: Vitis was never run on them, so they have no ground "
+            "truth and take part in no comparison. Together with the failed and timed-out designs above "
+            "they are every catalogue design without ground truth. The reasons are recorded in "
+            "`tools/hls-est-validate/MEMOS.md`: the hlsyn-vitis runner was stopped by decision #52 (its remaining "
+            "designs exceed the time and memory budget, and their kernels are covered by polybench and "
+            "machsuite); the `basic` designs are MLIR inputs without C sources.", "",
+            md_table(["dataset", "benchmark", "category", "why it has no ground truth"], never), "",
+        ]
     return "\n".join(parts)
 
 
@@ -424,7 +449,14 @@ def main():
         sys.exit(f"make_hlsdoc.py: no designs in {args.vitis}")
 
     if "ground-truth" in pages:
-        write_page(out_dir / "ground-truth.md", render_ground_truth(V, args.vitis, date))
+        # The catalogue is read from the hls-est run (a full run covers every catalogue design), so the
+        # page can list the designs Vitis never ran without loading the catalogue itself.
+        catalogue_keys, catalogue_source = None, ""
+        if args.hlsest or "results" in pages:
+            run_path, _ = pick_hlsest(args.hlsest)
+            catalogue_keys, catalogue_source = list(load_hlsest(run_path)[0]), short_path(run_path)
+        write_page(out_dir / "ground-truth.md",
+                   render_ground_truth(V, args.vitis, date, catalogue_keys, catalogue_source))
     if "memories" in pages:
         write_page(out_dir / "ground-truth-memories.md", render_memories(V, args.vitis, date))
     if "results" in pages:

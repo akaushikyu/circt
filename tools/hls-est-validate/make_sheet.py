@@ -9,9 +9,10 @@
 Sheets, in order:
   results               exactly the CLAUDE.md columns: dataset | benchmark | BRAM | DSP | FF | LUT |
                         BRAM_util_pct | DSP_util_pct | FF_util_pct | LUT_util_pct | BRAM (prediction, shim)
-  second pipeline       Vitis BRAM next to the default pipeline's and a second run's totals (--second;
-                        e.g. the split pipeline, the default before MEMOS M1; labelled from the run's
-                        recorded pipeline unless --second-label names it)
+  pipeline comparison   Vitis BRAM next to the totals of the --hlsest run and of a second run (--second;
+                        e.g. the previous default: split pipeline, scalar shim, no math costs). Each run's
+                        column is labelled from that run's recorded configuration (_meta: pipeline, shim,
+                        math costs, run id; run_label), unless --second-label names the second one
   per-array             one row per array: Vitis BRAM vs hls-est BRAM (default pipeline)
   mismatches            designs whose default prediction differs, largest |diff| first, with cause / O-number
   failures              designs where Vitis or hls-est produced no number, with the reason
@@ -136,15 +137,45 @@ def color(ws, rows, vcol, pcol):
             ws.cell(row=i, column=pcol).fill = GREEN if v == p else RED
 
 
-def second_label(meta, given=None):
-    """Name of the second run's pipeline in the workbook: --second-label, else from its recorded pipeline
-    (the split pass is the one difference the sheet was made for; since MEMOS M1 the default has no split)."""
-    if given:
-        return given
-    pipe = (meta or {}).get("pipeline") or ""
-    if "--infer-vitis-split-array" in pipe:
+def pipeline_name(pipe):
+    """A short name for a recorded pipeline string: the current default, the default before the split
+    pass left it (common.SPLIT_PIPELINE), or the passes it has, with every option the string sets
+    spelled out (a run that resets option defaults says which)."""
+    if pipe == C.DEFAULT_PIPELINE:
+        return "default pipeline"
+    if pipe == C.SPLIT_PIPELINE:
         return "split pipeline"
-    return "second pipeline"
+    toks = pipe.split()
+    base = "split pipeline" if any(t.startswith("--infer-vitis-split-array") for t in toks) else "pipeline"
+    if " ".join(t.split("=", 1)[0] for t in toks) == C.DEFAULT_PIPELINE:
+        base = "default pipeline"
+    # "--pass=opt=v" contributes "opt=v"; a global flag "--flag=v" contributes "flag=v".
+    opts = [t.split("=", 1)[1] if t.count("=") > 1 else t[2:] for t in toks if "=" in t]
+    return base + (f" [{', '.join(opts)}]" if opts else "")
+
+
+def run_label(meta, fallback):
+    """Name of one run in the workbook, from its recorded configuration (_meta): pipeline name, shim
+    (directory name), whether the math-core cost table was applied, and the run id when the meta has one."""
+    meta = meta or {}
+    pipe = meta.get("pipeline")
+    if not pipe:
+        return fallback
+    parts = [pipeline_name(pipe)]
+    if meta.get("shim"):
+        parts.append(f"shim {Path(str(meta['shim'])).name}")
+    if "math_costs_applied" in meta or "math_costs" in meta:
+        parts.append("math costs" if meta.get("math_costs_applied", bool(meta.get("math_costs")))
+                     else "no math costs")
+    if meta.get("vitis_frontend") is False:
+        parts.append("no Vitis front-end flags")
+    label = ", ".join(parts)
+    return label + (f" (run {meta['run_id']})" if meta.get("run_id") else "")
+
+
+def second_label(meta, given=None):
+    """Name of the second run in the workbook: --second-label, else run_label of its _meta."""
+    return given or run_label(meta, "second run")
 
 
 def main():
@@ -152,7 +183,7 @@ def main():
     ap.add_argument("--vitis", default=str(C.RESULTS_DIR / "vitis.json"))
     ap.add_argument("--hlsest", default=str(C.RESULTS_DIR / "hlsest.json"), help="default-pipeline run")
     ap.add_argument("--second", "--nosplit", dest="second", default=None,
-                    help="a second run for the 'second pipeline' sheet, e.g. the split pipeline "
+                    help="a second run for the 'pipeline comparison' sheet, e.g. the split pipeline "
                          "(common.SPLIT_PIPELINE, the default before MEMOS M1). --nosplit is the old name, "
                          "from when the default had the split and this run was the one without it")
     ap.add_argument("--second-label", default=None,
@@ -168,6 +199,9 @@ def main():
     N = (C.load_json(a.second, {}) if a.second else {}) or {}
     nmeta = N.pop("_meta", {})
     nlabel = second_label(nmeta, a.second_label)
+    hlabel = run_label(hmeta, "default run")
+    if nlabel == hlabel:
+        nlabel += " (second run)"
     diags = C.load_json(a.diagnoses, {}) or {}
     keys = sorted(set(V) | set(H) | set(N))
     cmp_rows = {k: compare_one(k, V.get(k), H.get(k)) for k in keys}
@@ -191,8 +225,8 @@ def main():
     table(ws, COLS, rows)
     color(ws, rows, 3, 11)
 
-    # ---- second pipeline ----
-    wn = wb.create_sheet("second pipeline")
+    # ---- pipeline comparison ----
+    wn = wb.create_sheet("pipeline comparison")
     nrows = []
     for k in keys:
         ds, bm = k.split("/", 1)
@@ -202,8 +236,8 @@ def main():
         n = prediction(N.get(k)) if N else "second run not given (--second)"
         nrows.append([ds, bm, vb, d, (d - vb) if isinstance(d, int) and isinstance(vb, int) else None,
                       n, (n - vb) if isinstance(n, int) and isinstance(vb, int) else None])
-    table(wn, ["dataset", "benchmark", "Vitis BRAM", "default pipeline", "diff (default - Vitis)",
-               nlabel, f"diff ({nlabel} - Vitis)"], nrows)
+    table(wn, ["dataset", "benchmark", "Vitis BRAM", hlabel, "diff (first run - Vitis)",
+               nlabel, "diff (second run - Vitis)"], nrows)
     color(wn, nrows, 3, 4)
     color(wn, nrows, 3, 6)
 
@@ -340,7 +374,7 @@ def main():
         ["excluded designs (no Vitis ground truth; see 'excluded designs')",
          f"{sum(1 for v in V.values() if not vitis_ok(v))} - excluded from every comparison (Peter, 2026-10-10)"],
         ["shim", hmeta.get("shim", "")],
-        ["default pipeline (prediction column)", hmeta.get("pipeline", "")],
+        [f"prediction column ({hlabel}): pipeline", hmeta.get("pipeline", "")],
         [f"second run ({nlabel}): pipeline", nmeta.get("pipeline", "")],
         ["top selection prefix", hmeta.get("top_passes", "--symbol-privatize=exclude=<top> --symbol-dce per design")],
         ["hls-est git hash (run)", hmeta.get("hls_est_git", "")],
@@ -354,7 +388,7 @@ def main():
         ["installed cgeist md5 when this sheet was generated", md5(C.CGEIST)],
         ["hls-llvm-project commit (formula source, N8)", "tag 2025.1 = 6ad94cf7d252 (worktree ~/hls-llvm-project-2025); "
          "~/hls-llvm-project main = " + git(Path.home() / "hls-llvm-project", "log", "-1", "--format=%h")],
-        ["default pipeline: compared / exact / total |err|",
+        [f"prediction column ({hlabel}): compared / exact / total |err|",
          f"{summ.get('compared')} / {summ.get('exact')} / {summ.get('total_abs_error')}"],
         [f"second run ({nlabel}): compared / exact / total |err|",
          f"{nsumm.get('compared')} / {nsumm.get('exact')} / {nsumm.get('total_abs_error')}" if nsumm else ""],
