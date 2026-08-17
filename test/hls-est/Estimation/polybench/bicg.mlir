@@ -1,7 +1,7 @@
-// RUN: hls-est %s --auto-pipeline-unroll --canonicalize --affine-scalrep --affine-loop-normalize --memory-banking-bram --convert-affine-to-loopschedule --bram-analysis | FileCheck %s -check-prefix=CHECK-BRAM
-
+// RUN: hls-est %s --symbol-privatize=exclude=bicg --symbol-dce --lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --memory-banking-bram --convert-affine-to-loopschedule '--bram-analysis=top=bicg math-costs=%S/../../../../tools/hls-est-validate/math_costs.json' -o /dev/null | FileCheck %s
+// CHECK: Total BRAM: 14{{$}}
+// Vitis 2025.1 td=off: 14 (results/vitis.json polybench/bicg; compared by the harness, not by lit)
 // Model output after the Vitis pipeline/unroll decision (T3). Vitis HLS 2025.1 csynth (results/vitis.json polybench/bicg) = 14: buff_A 8 = 8, buff_q_out 1 = 1, buff_r 1 = 1, buff_p 2 = 2 and buff_s_out 2 = 2 (two independent accesses per state of a sequential body use both ports: --bram-seq-dual-port, on by default since MEMOS.md M6; VITIS_NOTES.md N12; 12 before, OPEN_ISSUES.md O3).
-// CHECK-BRAM: Total BRAM: 14
 
 module {
   func.func @bicg(%arg0: memref<64x64xf32>, %arg1: memref<64xf32>, %arg2: memref<64xf32>, %arg3: memref<64xf32>, %arg4: memref<64xf32>) {

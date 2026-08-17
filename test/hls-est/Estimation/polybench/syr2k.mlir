@@ -1,5 +1,6 @@
-// RUN: hls-est %s --affine-loop-normalize --memory-banking-bram --merge-conditional-stores --convert-affine-to-loopschedule --bram-analysis
-
+// RUN: hls-est %s --symbol-privatize=exclude=syr2k --symbol-dce --lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --memory-banking-bram --convert-affine-to-loopschedule '--bram-analysis=top=syr2k math-costs=%S/../../../../tools/hls-est-validate/math_costs.json' -o /dev/null | FileCheck %s
+// CHECK: Total BRAM: 392{{$}}
+// Vitis 2025.1 td=off: 392 (results/vitis.json polybench/syr2k; compared by the harness, not by lit)
 // Total BRAM: 56
 
 #set = affine_set<(d0, d1) : (d0 - d1 - 1 >= 0)>

@@ -3,6 +3,14 @@
 Newest entry first. One entry per logical change, including changes that were
 tried and reverted. Branch: `hls-est-vitis-match` in `~/circt`.
 
+## 2026-10-13 — lit: Estimation CHECKs regenerated under the current defaults (W1b part 1, MEMOS #16)
+- **Commit:** this entry's commit (branch `hls-est-vitis-match`)
+- **Files:** `tools/hls-est-validate/regen_estimation_checks.py` (rewritten: `split_header`, `top_by_name`, `main`), the 42 `test/hls-est/Estimation/**/*.mlir` headers, `MEMOS.md` row 16
+- **What:** every Estimation input is run as the harness runs a design: top from the catalogue (`run_hlsest.find_top`, by name only for inputs without a design), `--symbol-privatize=exclude=<top> --symbol-dce`, `common.DEFAULT_PIPELINE`, `--bram-analysis=top=<top> math-costs=%S/.../math_costs.json`. Header: RUN, `CHECK: Total BRAM: <current hls-est total>{{$}}` (the `{{$}}` stops 13 from matching 130), a `Vitis 2025.1 td=off:` comment (value and results/vitis.json key, or "no ground truth" with the reason). The other comments at the top of a file are kept below it. An input hls-est fails on gets no RUN line, only a comment with the error (no XFAIL). The old script wrote `XFAIL: *` for failures, removed all leading comments, and its RUN lines had no top selection, no top= and no math costs. The 24 inputs that had no RUN line now have one, except chstone_xilinx/sha.mlir: hls-est cannot parse it (`expected non-function type` at `memref<xi32>`, a stale input), so it stays unresolved with that comment.
+- **Why:** MEMOS #16: lit checks the current model, and the harness compares with Vitis. The defaults are settled (W1 / W2).
+- **Effect:** lit `test/hls-est` 97 pass / 4 fail / 24 unresolved / 1 expected failure -> **124 pass / 0 fail / 1 unresolved / 1 expected failure** (126 tests; this is the new baseline). The 4 forgebench CHECK-BRAM failures (activation_op1, tiled_attn_module, tiled_attn_p1, tiled_attn_p2) had RUN lines with no matching CHECK prefix. Against Vitis, 23 of the 36 inputs that run and have ground truth are exact (machsuite 10, spector_hls 5, polybench 8 of 9); not exact: gesummv 21 vs 135, flowgnn gin 256 vs 1158 and pna 0 vs 20600, forgebench activation_* / attention_* / tiled_attn_* (these MLIR files are older frontend output than the harness's MLIR). No estimator change, so harness numbers are unchanged.
+- **Reverted?:** no
+
 ## 2026-10-13 — harness: HLSFactory_v2 is the default design catalogue (W8c part 2)
 - **Commit:** this entry's commit (branch `hls-est-vitis-match`)
 - **Files:** `tools/hls-est-validate/common.py` (new `DEFAULT_HLSFACTORY_ROOT`, `HLSFACTORY_ROOT`, `DEFAULT_CATALOG`), `designs.py` (`default_catalog`: 'v2' unless `HLS_EST_CATALOG` names another; `hlsfactory_root` reads common's default; docstring, `--catalog` help), `run_hlsest.py` / `run_vitis.py` (`--catalog` help only), `hls-doc/harness.md`

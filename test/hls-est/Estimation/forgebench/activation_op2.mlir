@@ -1,3 +1,7 @@
+// RUN: hls-est %s --symbol-privatize=exclude=_Z3topPA28_A28_fS1_S1_S1_S1_S1_ --symbol-dce --lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --memory-banking-bram --convert-affine-to-loopschedule '--bram-analysis=top=_Z3topPA28_A28_fS1_S1_S1_S1_S1_ math-costs=%S/../../../../tools/hls-est-validate/math_costs.json' -o /dev/null | FileCheck %s
+// CHECK: Total BRAM: 256{{$}}
+// Vitis 2025.1 td=off: 258 (results/vitis.json forgebench/activation_op2; compared by the harness, not by lit)
+
 module {
   memref.global @FM_buffer_4 : memref<64x28x28xf16> = uninitialized
   memref.global @FM_buffer_3 : memref<64x28x28xf16> = uninitialized

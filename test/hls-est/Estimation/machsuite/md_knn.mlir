@@ -1,3 +1,7 @@
+// RUN: hls-est %s --symbol-privatize=exclude=md_kernel --symbol-dce --lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --memory-banking-bram --convert-affine-to-loopschedule '--bram-analysis=top=md_kernel math-costs=%S/../../../../tools/hls-est-validate/math_costs.json' -o /dev/null | FileCheck %s
+// CHECK: Total BRAM: 0{{$}}
+// Vitis 2025.1 td=off: 0 (results/vitis.json machsuite/md_knn; compared by the harness, not by lit)
+
 module {
   func.func @md_kernel(%arg0: memref<256xf64>, %arg1: memref<256xf64>, %arg2: memref<256xf64>, %arg3: memref<256xf64>, %arg4: memref<256xf64>, %arg5: memref<256xf64>, %arg6: memref<4096xi32>)  {
     %cst = arith.constant 2.000000e+00 : f64

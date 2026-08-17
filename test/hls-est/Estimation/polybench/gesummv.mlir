@@ -1,6 +1,6 @@
-// RUN: hls-est %s --affine-loop-normalize --memory-banking-bram --convert-affine-to-loopschedule --bram-analysis 
-
-// CHECK-BRAM: Total BRAM: 20
+// RUN: hls-est %s --symbol-privatize=exclude=gesummv --symbol-dce --lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --memory-banking-bram --convert-affine-to-loopschedule '--bram-analysis=top=gesummv math-costs=%S/../../../../tools/hls-est-validate/math_costs.json' -o /dev/null | FileCheck %s
+// CHECK: Total BRAM: 21{{$}}
+// Vitis 2025.1 td=off: 135 (results/vitis.json polybench/gesummv; compared by the harness, not by lit)
 
 module {
   func.func @gesummv(%arg0: f32, %arg1: f32, %arg2: memref<64x64xf32>, %arg3: memref<64x64xf32>, %arg4: memref<64xf32>, %arg5: memref<64xf32>) {

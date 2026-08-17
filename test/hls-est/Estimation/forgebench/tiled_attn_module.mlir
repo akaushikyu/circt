@@ -1,4 +1,6 @@
-// RUN: hls-est %s --affine-loop-normalize --memory-banking-bram --convert-affine-to-loopschedule --bram-analysis | FileCheck %s -check-prefix=CHECK-BRAM
+// RUN: hls-est %s --symbol-privatize=exclude=_Z3topPA256_fS0_S0_S0_S0_S0_S0_S0_S0_PA64_f --symbol-dce --lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --memory-banking-bram --convert-affine-to-loopschedule '--bram-analysis=top=_Z3topPA256_fS0_S0_S0_S0_S0_S0_S0_S0_PA64_f math-costs=%S/../../../../tools/hls-est-validate/math_costs.json' -o /dev/null | FileCheck %s
+// CHECK: Total BRAM: 360{{$}}
+// Vitis 2025.1 td=off: 270 (results/vitis.json forgebench/tiled_attn_module; compared by the harness, not by lit)
 
 module {
   func.func @_Z25load_8_256_ap_fixed_16_5_PA256_fS0_(%arg0: memref<8x256xf16>, %arg1: memref<8x256xf16>){
