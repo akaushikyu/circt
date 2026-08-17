@@ -4,6 +4,16 @@ Known defects and unfinished work that no change-log entry has fixed yet.
 Newest first. Each entry names its evidence and the CHANGELOG.md entry that
 filed it; remove an entry when the change log records its fix.
 
+## O49. A one-word memref of a wide scalar (>= 1024 bits) is priced as a BRAM (filed 2026-10-13, W9-FIFO-impl)
+- **Symptom:** the N31 kernels that write wide `ap_uint<W>` values to streams (`fifo_rvf_small_a` 57, `fifo_rvf_small_c` 31, `fifo_w9fx_a` 42 + 56): cgeist keeps the producer's temporary (`ap_uint<2000> v`) as `memref<1xi2000>`, which hls-est prices as a 1-word RAM (`1x2000b -> RAM_1P`); Vitis keeps the scalar in registers (the kernels' totals equal their FIFO rows).
+- **Fix direction:** a memref of one word that is a C scalar (no array in the source) is registers; check whether the 1024-bit LUTRAM threshold should apply to the word count rather than the total bits for such scalars, with a kernel that holds a wide scalar across loop iterations.
+- **Evidence:** `~/hls-est-work/coord/scratch/w9fifo_impl/out1/*.out` (probe.sh), Vitis results `~/hls-est-work/exp-src/fifo/fifo_{rvf_small_a,rvf_small_c,w9fx_a}.result.json`.
+
+## O48. hls::stream FIFOs: struct-member pragmas and bool members of struct elements (filed 2026-10-13, W9-FIFO-impl)
+- **Symptom:** (a) `fifo_d_member`: `#pragma HLS stream variable=ch.a depth=1024` on a struct with two stream members; the IR names no struct members, so hls-est cannot tell which member the pragma names and gives both their template depth (hls-est 0, Vitis 2). With one stream member the pragma is applied. (b) `fifo_rvf_struct`: a stream of `{bool, ap_uint<3>, char}` is 12 bits in Vitis; cgeist's struct is `(i8, i3, i8)`, so hls-est reads 19 bits (80 x 19 > 1024 -> 2 BRAM, Vitis 0). A plain `hls::stream<bool>` is right (the mangled `Ib` gives 1 bit).
+- **Fix direction:** have cgeist record the member name in the hls.stream attribute's member index (or the field names of the struct), and the bool members of a struct (e.g. an `hls.bool_members` attribute or i1 fields).
+- **Evidence:** no corpus design has either case (all 1,808 corpus `hls.stream` allocas are i32 handles; the FIFO BRAM per design matches Vitis on every `vhier` design). Kernels `~/hls-est-work/exp-src/fifo/fifo_d_member.cpp`, `fifo_rvf_struct.cpp`.
+
 ## O47. A memref passed to any kept call loses load CSE and store forwarding in the whole function (filed 2026-10-13, W10 merge control run)
 - **Symptom:** machsuite backprop 40 (exact) -> 42 once cgeist keeps `update_weights` as a call (W10, correct: Vitis keeps module `update_weights_1`). `oracle_activations1` goes RAM_1P 2 -> RAM_2P 4 (Vitis ram_1p 2): the accumulator loop of `get_oracle_activations` had `forwarded_loads 2` / `removed_stores 2` before and none after (3 writes, 2 reads per iteration).
 - **Cause:** `AffineToLoopScheduleModified.cpp` `collectMemrefAliases` / `isPlainMemrefUse` mark a memref as escaped as soon as any use is a `CallOpInterface`, so the array passed to the kept call after the loop disables CSE and forwarding everywhere in the function. Vitis still forwards inside the loop.

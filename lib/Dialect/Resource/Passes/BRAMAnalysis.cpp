@@ -6,6 +6,7 @@
 #include "circt/Dialect/Resource/Passes/CallInstances.h"
 #include "circt/Dialect/Resource/Passes/LoopPragmas.h"
 #include "circt/Dialect/Resource/Passes/MathCores.h"
+#include "circt/Dialect/Resource/Passes/StreamFifos.h"
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
@@ -77,6 +78,18 @@ static llvm::cl::opt<bool> bramMaxiAdaptersOpt(
                    "max_write_burst_length > 16; VITIS_NOTES.md N1a). On by "
                    "default (MEMOS.md M5, decision #4 of 2026-10-10); =false "
                    "leaves the adapters out"),
+    llvm::cl::init(true));
+
+static llvm::cl::opt<bool> bramStreamFifosOpt(
+    "bram-stream-fifos",
+    llvm::cl::desc("--bram-analysis: price every hls::stream object as the "
+                   "FIFO Vitis builds (one per stream, array element or "
+                   "struct member; depth from the stream pragma, the "
+                   "template argument, else 2; shift registers when depth <= "
+                   "2 or depth x width <= 1024 bits, else the depth bands at "
+                   "x18; VITIS_NOTES.md N31) instead of the stream handle "
+                   "storage as a RAM. On by default (MEMOS.md decision #53); "
+                   "=false gives the former model"),
     llvm::cl::init(true));
 
 static llvm::cl::opt<bool> bramSeqDualPortOpt(
@@ -264,6 +277,7 @@ struct MemrefRecord {
   bool rom = false;
   std::optional<AdapterRecord> adapter;
   std::optional<MathCoreRecord> math;
+  std::optional<StreamHandleRecord> fifo;
   PortDemand demand;
   SmallVector<ScopeDemandRecord> perScope;
 
@@ -1427,6 +1441,49 @@ static unsigned narrowRomWidth(ArrayRef<APInt> vals) {
   return width;
 }
 
+static BRAMCost estimateStreamFifos(MemoryResourceOpInterface iface,
+                                    MemrefRecord &rec,
+                                    StreamHandleRecord fifo) {
+  rec.shape = iface.getStaticShape();
+  Type elt = iface.getElementType();
+  {
+    llvm::raw_string_ostream os(rec.elemType);
+    elt.print(os);
+  }
+  rec.elemBits = elt.isIntOrFloat() ? elt.getIntOrFloatBitWidth() : 0u;
+  int64_t words = 1;
+  for (int64_t dimensionIndex : rec.shape)
+    if (!ShapedType::isDynamic(dimensionIndex))
+      words *= dimensionIndex;
+  rec.words = words;
+  BRAMCost cost;
+  cost.kind = StorageKind::RAM_1P;
+  cost.bramCount = fifo.bram;
+  std::string groups;
+  for (const FifoGroup &globalOp : fifo.groups) {
+    if (!groups.empty())
+      groups += "; ";
+    groups += std::to_string(globalOp.count) + " x ";
+    if (globalOp.member)
+      groups += "member " + std::to_string(*globalOp.member) + " ";
+    groups += std::to_string(globalOp.depth) + "x" +
+              std::to_string(globalOp.bits) + " (depth " +
+              globalOp.depthSource + ", width " + globalOp.bitsSource +
+              "): " + globalOp.reason;
+  }
+  cost.note = "hls::stream storage, not a RAM: " + std::to_string(fifo.fifos) +
+              " FIFO(s) = " + std::to_string(fifo.bram) + " BRAM [" + groups +
+              "]";
+  if (!fifo.note.empty())
+    cost.note += " (" + fifo.note + ")";
+  rec.status = "fifo";
+  rec.ramType = "FIFO";
+  rec.ramReason = "hls::stream FIFOs: " + groups;
+  rec.bram = cost.bramCount;
+  rec.fifo = std::move(fifo);
+  return cost;
+}
+
 static BRAMCost estimateBRAM(MemoryResourceOpInterface iface, MemrefRecord &rec,
                              ArrayRef<Value> banks, bool attributed,
                              SeqScopeIndex *seq, BramFormula formula,
@@ -2041,6 +2098,30 @@ static void printDebugText(ArrayRef<MemrefRecord> records,
       os << "  bram: 0\n";
       continue;
     }
+    if (resultValue.fifo) {
+      const StreamHandleRecord &fieldValue = *resultValue.fifo;
+      os << "  hls::stream storage (not a RAM): " << fieldValue.fifos
+         << " FIFO(s); methods:";
+      for (const std::string &memoryOp : fieldValue.methods)
+        os << " " << memoryOp;
+      os << "\n";
+      for (const FifoGroup &globalOp : fieldValue.groups) {
+        os << "  fifo: " << globalOp.count << " x ";
+        if (globalOp.member)
+          os << "member " << *globalOp.member << " ";
+        os << "depth " << globalOp.depth << " (" << globalOp.depthSource
+           << ") x " << globalOp.bits << " bits (" << globalOp.bitsSource
+           << ") -> " << globalOp.bramEach << " each: " << globalOp.reason
+           << "\n";
+      }
+      if (!fieldValue.note.empty())
+        os << "  note: " << fieldValue.note << "\n";
+      if (resultValue.instances != 1)
+        os << "  instances: " << resultValue.instances << " x "
+           << resultValue.bramPerInstance << "\n";
+      os << "  bram: " << resultValue.bram << "\n";
+      continue;
+    }
     if (resultValue.keptReason)
       os << "  " << *resultValue.keptReason << "\n";
     if (resultValue.partition.present) {
@@ -2243,6 +2324,34 @@ static llvm::json::Object toJson(const MemrefRecord &resultValue) {
     opHandle["rom"] = true;
   if (resultValue.math)
     opHandle["math"] = mathCoreJson(*resultValue.math);
+  if (resultValue.fifo) {
+    const StreamHandleRecord &fieldValue = *resultValue.fifo;
+    llvm::json::Object fo;
+    fo["fifos"] = fieldValue.fifos;
+    fo["bram"] = static_cast<int64_t>(fieldValue.bram);
+    llvm::json::Array methods;
+    for (const std::string &memoryOp : fieldValue.methods)
+      methods.push_back(memoryOp);
+    fo["methods"] = std::move(methods);
+    llvm::json::Array groups;
+    for (const FifoGroup &globalOp : fieldValue.groups) {
+      llvm::json::Object go;
+      go["count"] = globalOp.count;
+      if (globalOp.member)
+        go["member"] = static_cast<int64_t>(*globalOp.member);
+      go["depth"] = globalOp.depth;
+      go["depth_source"] = globalOp.depthSource;
+      go["bits"] = static_cast<int64_t>(globalOp.bits);
+      go["bits_source"] = globalOp.bitsSource;
+      go["bram_each"] = static_cast<int64_t>(globalOp.bramEach);
+      go["reason"] = globalOp.reason;
+      groups.push_back(std::move(go));
+    }
+    fo["groups"] = std::move(groups);
+    if (!fieldValue.note.empty())
+      fo["note"] = fieldValue.note;
+    opHandle["fifo"] = std::move(fo);
+  }
   if (resultValue.adapter) {
     const AdapterRecord &arrayValue = *resultValue.adapter;
     llvm::json::Object ad;
@@ -3019,8 +3128,16 @@ struct BRAMAnalysisLoopSchedule
       } else {
         allSites = banks;
       }
-      BRAMCost cost = estimateBRAM(iface, rec, banks, attributed, seq,
-                                   formulaOpt, &instanceModel, allSites);
+
+      std::optional<StreamHandleRecord> fifo;
+      if (bramStreamFifosOpt)
+        fifo =
+            analyzeStreamHandle(op, allSites, [](int64_t depth, unsigned bits) {
+              return estimateBlocksBand(depth, bits, false);
+            });
+      BRAMCost cost = fifo ? estimateStreamFifos(iface, rec, std::move(*fifo))
+                           : estimateBRAM(iface, rec, banks, attributed, seq,
+                                          formulaOpt, &instanceModel, allSites);
 
       unsigned instances = 1;
       bool sharedGlobal = false;
@@ -3062,7 +3179,7 @@ struct BRAMAnalysisLoopSchedule
                      (rec.ownerFunc ? *rec.ownerFunc : std::string("?")) +
                      ", N14 R9)";
       llvm::outs() << op->getName() << " @ " << op->getLoc() << "\n"
-                   << "  kind=" << kindName(cost.kind)
+                   << "  kind=" << (rec.fifo ? "FIFO" : kindName(cost.kind))
                    << "  bram=" << cost.bramCount
                    << (cost.infeasible ? "  [INFEASIBLE]" : "") << "\n"
                    << "    " << cost.note << "\n";

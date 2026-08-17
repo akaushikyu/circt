@@ -18,6 +18,7 @@ add_mlir_library(HLSPasses
         PartitionLayout.cpp
         ConstantFills.cpp
         MathCores.cpp
+        StreamFifos.cpp
 
         DEPENDS
         CIRCTTransformsPassIncGen
