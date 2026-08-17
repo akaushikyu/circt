@@ -3,6 +3,14 @@
 Newest entry first. One entry per logical change, including changes that were
 tried and reverted. Branch: `hls-est-vitis-match` in `~/circt`.
 
+## 2026-10-13 — harness: HLSFactory_v2 is the default design catalogue (W8c part 2)
+- **Commit:** this entry's commit (branch `hls-est-vitis-match`)
+- **Files:** `tools/hls-est-validate/common.py` (new `DEFAULT_HLSFACTORY_ROOT`, `HLSFACTORY_ROOT`, `DEFAULT_CATALOG`), `designs.py` (`default_catalog`: 'v2' unless `HLS_EST_CATALOG` names another; `hlsfactory_root` reads common's default; docstring, `--catalog` help), `run_hlsest.py` / `run_vitis.py` (`--catalog` help only), `hls-doc/harness.md`
+- **What:** `run_hlsest.py`, `run_vitis.py`, `designs.py`, `merge_vitis_results.py`, `rtl_memories.py` and `regen_estimation_checks.py` now read the HLSFactory 1.1.0 tree (`/mnt/d/HLSFactory_v2/HLSFactory`, `$HLSFACTORY_ROOT`) by default. Before, v2 was the default only with `HLSFACTORY_ROOT` set. `--catalog polygeist` or `HLS_EST_CATALOG=polygeist` selects the Polygeist lit copies. Loading the v2 catalogue walks /mnt/d (about 2 min when idle).
+- **Why:** MEMOS #28 (HLSFactory_v2 as the design catalogue) and W8c; the v2 ground truth is merged (entry below).
+- **Effect:** none on estimates. Harness subset (polybench, polybench_pragmas, forgebench, machsuite, spector_hls, vitis_examples), frozen hls-est ccf2deaa (= build/clion at 0ae8bb33c), installed cgeist 8f27f3c0, exactclass, math costs; v2 default (`scratch/w1b_w8c/sub_v2.json`) against `--catalog polygeist` (`sub_pg.json`): the same 112 designs by name, same `vitis_keys` for all 112; compared 108 / exact 89 / \|err\| 463 in both (W2's numbers); one status difference, forgebench/mlp ok 1030 (v2) vs hls-est timeout 120 s (polygeist run), a load-dependent timeout of a design Vitis also timed out on (not compared). No design shows `sources differ`. Gates: polybench_pragmas bicg 8, gesummv 16, mvt 8, syrk 32.
+- **Reverted?:** no
+
 ## 2026-10-13 — ground truth: the HLSFactory_v2 Vitis run merged into results/vitis.json (W8c part 1)
 - **Commit:** this entry's commit (branch `hls-est-vitis-match`)
 - **Files:** `tools/hls-est-validate/merge_vitis_results.py` (new: `merge`, `failure_class`, `dataset_table`); `results/vitis.json` (not tracked, `results/*.json` is gitignored; pre-merge copy `~/hls-est-work/coord/scratch/w1b_w8c/vitis.json.before-merge`, md5 5f7616d5)

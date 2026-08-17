@@ -384,8 +384,8 @@ def main():
     ap.add_argument("--td", default="off", choices=["off", "auto"],
                     help="syn.array_partition.throughput_driven (ground truth uses 'off')")
     ap.add_argument("--catalog", choices=D.CATALOGS, default=None,
-                    help="design catalogue (designs.py): 'polygeist' (default) or 'v2' (the HLSFactory 1.1.0 "
-                         "tree; the default when HLSFACTORY_ROOT is set).  A v2 design whose sources equal "
+                    help="design catalogue (designs.py): 'v2' (the HLSFactory 1.1.0 tree, default) or "
+                         "'polygeist' (the Polygeist lit copies; $HLS_EST_CATALOG changes the default).  A v2 design whose sources equal "
                          "its Polygeist copy is that copy's record, so its cache entry is reused")
     args = ap.parse_args()
     global EXTRA_CFG

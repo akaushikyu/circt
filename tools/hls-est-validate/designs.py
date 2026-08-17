@@ -24,15 +24,17 @@ The resource dir is not recorded here (it depends on the clang that built
 cgeist: `clang -print-resource-dir`); the runner must add it.  The absolute
 -I dirs the substitutions imply are recorded per design in 'lit_includes'.
 
-Second catalogue (opt-in): catalog="v2" (load_designs) / --catalog v2 (this CLI,
-run_hlsest.py, run_vitis.py), or HLSFACTORY_ROOT set in the environment, reads
-the HLSFactory 1.1.0 tree itself (default /mnt/d/HLSFactory_v2/HLSFactory, or
+Default catalogue (since 2026-10-13): catalog="v2" (load_designs) / --catalog v2
+(this CLI, run_hlsest.py, run_vitis.py) reads the HLSFactory 1.1.0 tree itself
+(common.DEFAULT_HLSFACTORY_ROOT = /mnt/d/HLSFactory_v2/HLSFactory, or
 $HLSFACTORY_ROOT) through hlsfactory_v2.py: hlsfactory.toml / dataset_hls.tcl /
 Tcl projects, evaluated by a small Tcl interpreter.  Designs keep the keys of
 their Polygeist copies; one whose source set is identical to the copy's IS the
 copy's record (so cache keys and results stay valid), others point at the
 HLSFactory tree (field 'source_match' says which).  polybench_pragmas and basic
-are added as in the default catalogue.  Without either switch nothing changes.
+are added as in the Polygeist catalogue.  catalog="polygeist" / --catalog
+polygeist (or HLS_EST_CATALOG=polygeist in the environment) selects the older
+catalogue built from the Polygeist lit copies described above.
 
 Python 3.10, stdlib only.  Paths are stored in WSL spelling ('dir') and in
 Windows spelling ('win_dir'); the module runs from either side.
@@ -413,17 +415,28 @@ def load_basic(circt_wsl: str, problems: list[str]) -> list[dict]:
 # --------------------------------------------------------------------------
 # HLSFactory v2: the HLSFactory 1.1.0 tree itself (opt-in; hlsfactory_v2.py)
 # --------------------------------------------------------------------------
-DEFAULT_HLSFACTORY_ROOT = "/mnt/d/HLSFactory_v2/HLSFactory"
 CATALOGS = ("polygeist", "v2")
 
 
+def _common():
+    """The harness's common.py (shared defaults), imported on first use."""
+    here = str(Path(__file__).resolve().parent)
+    if here not in sys.path:
+        sys.path.insert(0, here)
+    import common                            # noqa: E402  (harness module)
+    return common
+
+
 def hlsfactory_root() -> str:
-    return to_wsl(os.environ.get("HLSFACTORY_ROOT") or DEFAULT_HLSFACTORY_ROOT).rstrip("/")
+    return to_wsl(os.environ.get("HLSFACTORY_ROOT") or _common().DEFAULT_HLSFACTORY_ROOT).rstrip("/")
 
 
 def default_catalog() -> str:
-    """'v2' when HLSFACTORY_ROOT is set in the environment, else 'polygeist' (every result so far)."""
-    return "v2" if os.environ.get("HLSFACTORY_ROOT") else "polygeist"
+    """'v2' (the HLSFactory 1.1.0 tree), unless HLS_EST_CATALOG names another catalogue."""
+    catalog = os.environ.get("HLS_EST_CATALOG") or _common().DEFAULT_CATALOG
+    if catalog not in CATALOGS:
+        raise ValueError(f"HLS_EST_CATALOG={catalog!r} is not one of {', '.join(CATALOGS)}")
+    return catalog
 
 
 def load_hlsfactory_v2(root: str | None = None, test_hls_dir: str = DEFAULT_TEST_HLS_DIR,
@@ -554,12 +567,11 @@ def main(argv=None) -> int:
     ap.add_argument("--list", action="store_true",
                     help="also print one line per design")
     ap.add_argument("--catalog", choices=CATALOGS, default=None,
-                    help="HLSFactory designs from the Polygeist lit copies ('polygeist') or from the "
-                         "HLSFactory 1.1.0 tree ('v2'); default 'v2' if HLSFACTORY_ROOT is set, else "
-                         "'polygeist'")
+                    help="HLSFactory designs from the HLSFactory 1.1.0 tree ('v2', the default) or from "
+                         "the Polygeist lit copies ('polygeist'); $HLS_EST_CATALOG changes the default")
     ap.add_argument("--hlsfactory-root", default=None,
                     help=f"HLSFactory tree for --catalog v2 (default $HLSFACTORY_ROOT or "
-                         f"{DEFAULT_HLSFACTORY_ROOT})")
+                         f"{_common().DEFAULT_HLSFACTORY_ROOT})")
     a = ap.parse_args(argv)
     problems: list[str] = []
     info: dict = {}

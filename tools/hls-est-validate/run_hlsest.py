@@ -540,8 +540,8 @@ def main():
     ap.add_argument("--quiet", action="store_true")
     add_math_costs_args(ap)
     ap.add_argument("--catalog", choices=D.CATALOGS, default=None,
-                    help="design catalogue (designs.py): 'polygeist' (default) or 'v2' (the HLSFactory 1.1.0 "
-                         "tree; the default when HLSFACTORY_ROOT is set)")
+                    help="design catalogue (designs.py): 'v2' (the HLSFactory 1.1.0 tree, default) or "
+                         "'polygeist' (the Polygeist lit copies; $HLS_EST_CATALOG changes the default)")
     args = ap.parse_args()
 
     shim = resolve_shim(args.shim)

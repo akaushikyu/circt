@@ -53,6 +53,14 @@ WORK_WSL_ROOT = "/mnt/d/HLS/hls-est-vitis/work"
 CACHE_ROOT = Path.home() / "hls-est-work" / "vitis-cache"   # harvested Vitis artifacts, keyed by hash
 RESULTS_DIR = HERE / "results"                        # small JSON/CSV summaries (committed)
 
+# ---- design catalogue (designs.py) ---------------------------------------------------
+# The harness reads its designs from the HLSFactory 1.1.0 tree (catalogue 'v2') by default;
+# HLSFACTORY_ROOT overrides the tree, HLS_EST_CATALOG=polygeist selects the older catalogue built
+# from the Polygeist lit copies (the catalogue of every result before 2026-10-13).
+DEFAULT_HLSFACTORY_ROOT = "/mnt/d/HLSFactory_v2/HLSFactory"
+HLSFACTORY_ROOT = os.environ.get("HLSFACTORY_ROOT") or DEFAULT_HLSFACTORY_ROOT
+DEFAULT_CATALOG = os.environ.get("HLS_EST_CATALOG") or "v2"
+
 # ---- frontend ----------------------------------------------------------------------
 # CGEIST_BIN overrides the frontend binary (a private build under test, or a frozen copy, so that
 # a reinstall during a long run cannot mix two cgeist versions in one result file).
