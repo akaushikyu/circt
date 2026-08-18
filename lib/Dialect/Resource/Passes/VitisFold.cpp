@@ -317,9 +317,9 @@ bool UndefFolder::run(SmallVectorImpl<FoldNote> &notes) {
                      std::move(dimensionIndex), std::move(fn)});
   };
   auto firstU = [&](Operation *op) -> Value {
-    for (Value opHandle : op->getOperands())
-      if (isU(opHandle))
-        return opHandle;
+    for (Value o : op->getOperands())
+      if (isU(o))
+        return o;
     return {};
   };
   auto replaceWithConstant = [&](Operation *op, TypedAttr attr) {
@@ -336,13 +336,13 @@ bool UndefFolder::run(SmallVectorImpl<FoldNote> &notes) {
     done.insert(op);
   };
   auto zeroOperands = [&](Operation *op) {
-    for (OpOperand &opHandle : op->getOpOperands())
-      if (isU(opHandle.get())) {
+    for (OpOperand &o : op->getOpOperands())
+      if (isU(o.get())) {
         buildPoint.setInsertionPoint(op);
         Value depthValue = arith::ConstantOp::create(
-            buildPoint, op->getLoc(), opHandle.get().getType(),
-            buildPoint.getZeroAttr(opHandle.get().getType()));
-        opHandle.set(depthValue);
+            buildPoint, op->getLoc(), o.get().getType(),
+            buildPoint.getZeroAttr(o.get().getType()));
+        o.set(depthValue);
       }
   };
 

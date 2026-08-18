@@ -675,27 +675,26 @@ static AffineForOp promoteInvariantAccesses(AffineForOp loop,
         return arrayValue.isWrite;
       });
       OpBuilder buildPoint(loop);
-      Value initialValue;
+      Value init;
       if (!first.isWrite) {
-        initialValue = AffineLoadOp::create(buildPoint, first.op->getLoc(), mem,
-                                            first.map, first.operands);
+        init = AffineLoadOp::create(buildPoint, first.op->getLoc(), mem,
+                                    first.map, first.operands);
       } else {
 
-        initialValue =
-            arith::ConstantOp::create(buildPoint, loop.getLoc(), elemType,
-                                      buildPoint.getZeroAttr(elemType));
+        init = arith::ConstantOp::create(buildPoint, loop.getLoc(), elemType,
+                                         buildPoint.getZeroAttr(elemType));
       }
       if (!anyStore) {
 
         for (const Access &arrayValue : accesses) {
-          arrayValue.op->getResult(0).replaceAllUsesWith(initialValue);
+          arrayValue.op->getResult(0).replaceAllUsesWith(init);
           arrayValue.op->erase();
         }
         ++promoted;
         continue;
       }
       carried.push_back(&accesses);
-      inits.push_back(initialValue);
+      inits.push_back(init);
     }
     if (carried.empty())
       continue;
@@ -804,8 +803,8 @@ inline unsigned bitsOf(Type typeValue) {
 struct Ready {
   unsigned cycle = 0;
   double ns = 0.0;
-  bool operator<(const Ready &opHandle) const {
-    return cycle != opHandle.cycle ? cycle < opHandle.cycle : ns < opHandle.ns;
+  bool operator<(const Ready &o) const {
+    return cycle != o.cycle ? cycle < o.cycle : ns < o.ns;
   }
 };
 
@@ -1287,68 +1286,61 @@ struct AutoPipelineUnrollPass
     return result;
   }
 
-  void decide(Node &elementCount, SymbolTableCollection &symbolTable) {
-    if (elementCount.chain.empty())
+  void decide(Node &n, SymbolTableCollection &symbolTable) {
+    if (n.chain.empty())
       return;
     unsigned T = pipelineLoops;
-    if (elementCount.userPipelineIdx >= 0) {
-      AffineForOp useValue = elementCount.chain[elementCount.userPipelineIdx];
-      elementCount.tagged = useValue;
-      addFlattenedParents(useValue, elementCount.userPipelineIdx);
+    if (n.userPipelineIdx >= 0) {
+      AffineForOp useValue = n.chain[n.userPipelineIdx];
+      n.tagged = useValue;
+      addFlattenedParents(useValue, n.userPipelineIdx);
       remark(useValue.getLoc(), "user pipeline: unrolling everything inside, " +
-                                    Twine(elementCount.userPipelineIdx) +
+                                    Twine(n.userPipelineIdx) +
                                     " perfect parent(s) flattened into it");
       unrollInside(useValue, symbolTable);
 
-      elementCount.tagged =
-          promotePipelined ? promoteOutOfPipeline(useValue) : useValue;
-      elementCount.chain[elementCount.userPipelineIdx] = elementCount.tagged;
+      n.tagged = promotePipelined ? promoteOutOfPipeline(useValue) : useValue;
+      n.chain[n.userPipelineIdx] = n.tagged;
       return;
     }
-    bool feasible = T > 0 && !elementCount.pipelineOff;
-    for (auto &candidateValue : elementCount.children)
+    bool feasible = T > 0 && !n.pipelineOff;
+    for (auto &candidateValue : n.children)
       feasible &= candidateValue->constInside && candidateValue->maxPath <= T &&
                   !candidateValue->hasUserPipeline &&
                   !candidateValue->hasUserFixed;
     if (feasible) {
-      AffineForOp portValue = elementCount.chain.back();
-      elementCount.tagged = portValue;
+      AffineForOp portValue = n.chain.back();
+      n.tagged = portValue;
       tagAutoPipeline(portValue);
-      addFlattenedParents(portValue, elementCount.chain.size() - 1);
-      remark(
-          portValue.getLoc(),
-          "automatically set the pipeline for the loop (trip " +
-              (elementCount.dynamic ? Twine("?") : Twine(elementCount.trip)) +
-              ", " + Twine(elementCount.chain.size() - 1) +
-              " perfect parent(s) flattened, " +
-              Twine(elementCount.children.size()) +
-              " inner loop(s) to unroll)");
+      addFlattenedParents(portValue, n.chain.size() - 1);
+      remark(portValue.getLoc(),
+             "automatically set the pipeline for the loop (trip " +
+                 (n.dynamic ? Twine("?") : Twine(n.trip)) + ", " +
+                 Twine(n.chain.size() - 1) + " perfect parent(s) flattened, " +
+                 Twine(n.children.size()) + " inner loop(s) to unroll)");
       unrollInside(portValue, symbolTable);
-      elementCount.tagged =
-          promotePipelined ? promoteOutOfPipeline(portValue) : portValue;
-      elementCount.chain.back() = elementCount.tagged;
+      n.tagged = promotePipelined ? promoteOutOfPipeline(portValue) : portValue;
+      n.chain.back() = n.tagged;
       return;
     }
-    for (auto &candidateValue : elementCount.children)
+    for (auto &candidateValue : n.children)
       if (!candidateValue->viaCall)
         decide(*candidateValue, symbolTable);
 
-    if (elementCount.children.size() != 1)
+    if (n.children.size() != 1)
       return;
-    Node &candidateValue = *elementCount.children.front();
+    Node &candidateValue = *n.children.front();
 
     if (candidateValue.viaCall || candidateValue.chain.empty() ||
-        !candidateValue.tagged ||
-        (elementCount.dynamic && !elementCount.uncountedPerfect) ||
+        !candidateValue.tagged || (n.dynamic && !n.uncountedPerfect) ||
         candidateValue.dynamic)
       return;
-    if (candidateValue.chain.front()->getBlock() !=
-        elementCount.chain.back().getBody())
+    if (candidateValue.chain.front()->getBlock() != n.chain.back().getBody())
       return;
-    addFlattenedParents(candidateValue.tagged, elementCount.chain.size());
-    elementCount.tagged = candidateValue.tagged;
-    remark(elementCount.chain.front().getLoc(),
-           "flattening the loop (and " + Twine(elementCount.chain.size() - 1) +
+    addFlattenedParents(candidateValue.tagged, n.chain.size());
+    n.tagged = candidateValue.tagged;
+    remark(n.chain.front().getLoc(),
+           "flattening the loop (and " + Twine(n.chain.size() - 1) +
                " perfect inner loop(s)) into the pipelined loop at " +
                locString(candidateValue.tagged.getLoc()));
   }
@@ -1466,8 +1458,8 @@ struct AutoPipelineUnrollPass
           circt::hls_analysis::storageRoot(mem);
       ++perMemory[{root.value, root.global}];
     });
-    for (auto &[key, elementCount] : perMemory)
-      cycles = std::max(cycles, (elementCount + 1) / 2);
+    for (auto &[key, n] : perMemory)
+      cycles = std::max(cycles, (n + 1) / 2);
     stack.erase(fn.getOperation());
     return cycles;
   }

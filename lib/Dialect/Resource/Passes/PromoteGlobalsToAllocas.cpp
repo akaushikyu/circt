@@ -90,23 +90,22 @@ struct PromoteGlobalsToAllocasPass
 
       OpBuilder buildPoint(&owner.getBody().front(),
                            owner.getBody().front().begin());
-      auto localAlloca =
+      auto alloca =
           memref::AllocaOp::create(buildPoint, globalOp.getLoc(), memRefType);
       StringRef symbolName = globalOp.getSymName();
       for (NamedAttribute arrayValue : globalOp->getDiscardableAttrs())
         if (arrayValue.getName().strref().starts_with("hls."))
-          localAlloca->setAttr(arrayValue.getName(), arrayValue.getValue());
+          alloca->setAttr(arrayValue.getName(), arrayValue.getValue());
       if (auto variableName =
               globalOp->getAttrOfType<StringAttr>("polygeist.varname"))
-        localAlloca->setAttr("polygeist.varname", variableName);
+        alloca->setAttr("polygeist.varname", variableName);
       else
-        localAlloca->setAttr("polygeist.varname",
-                             buildPoint.getStringAttr(symbolName));
-      localAlloca->setAttr("hls.preserve", buildPoint.getUnitAttr());
-      localAlloca->setAttr("hls.from_global",
-                           buildPoint.getStringAttr(symbolName));
+        alloca->setAttr("polygeist.varname",
+                        buildPoint.getStringAttr(symbolName));
+      alloca->setAttr("hls.preserve", buildPoint.getUnitAttr());
+      alloca->setAttr("hls.from_global", buildPoint.getStringAttr(symbolName));
       for (memref::GetGlobalOp globalUse : sites) {
-        Value replacementValue = localAlloca.getResult();
+        Value replacementValue = alloca.getResult();
         if (globalUse.getType() != replacementValue.getType()) {
 
           OpBuilder callback(globalUse);

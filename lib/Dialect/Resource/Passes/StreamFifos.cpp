@@ -36,27 +36,25 @@ constexpr int64_t kShiftRegisterMaxBits = 1024;
 
 struct Demangler {
   StringRef stringValue;
-  size_t loopIndex = 0;
+  size_t i = 0;
 
-  bool atEnd() const { return loopIndex >= stringValue.size(); }
+  bool atEnd() const { return i >= stringValue.size(); }
   char peek(size_t ahead = 0) const {
-    return loopIndex + ahead < stringValue.size()
-               ? stringValue[loopIndex + ahead]
-               : '\0';
+    return i + ahead < stringValue.size() ? stringValue[i + ahead] : '\0';
   }
 
   bool number(int64_t &value) {
     bool negative = false;
     if (peek() == 'n') {
       negative = true;
-      ++loopIndex;
+      ++i;
     }
-    size_t start = loopIndex;
+    size_t start = i;
     while (!atEnd() && llvm::isDigit(peek()))
-      ++loopIndex;
-    if (start == loopIndex)
+      ++i;
+    if (start == i)
       return false;
-    if (stringValue.substr(start, loopIndex - start).getAsInteger(10, value))
+    if (stringValue.substr(start, i - start).getAsInteger(10, value))
       return false;
     if (negative)
       value = -value;
@@ -65,45 +63,45 @@ struct Demangler {
 
   bool sourceName() {
     int64_t len;
-    if (!number(len) || len <= 0 || loopIndex + len > stringValue.size())
+    if (!number(len) || len <= 0 || i + len > stringValue.size())
       return false;
-    loopIndex += len;
+    i += len;
     return true;
   }
 
   bool substitution() {
 
-    ++loopIndex;
+    ++i;
     if (peek() == 't') {
-      ++loopIndex;
+      ++i;
       return sourceName();
     }
     if (StringRef("absiod").contains(peek())) {
-      ++loopIndex;
+      ++i;
       return true;
     }
     while (!atEnd() && peek() != '_' &&
            (llvm::isDigit(peek()) || llvm::isUpper(peek())))
-      ++loopIndex;
+      ++i;
     if (peek() != '_')
       return false;
-    ++loopIndex;
+    ++i;
     return true;
   }
 
   bool templateArgs() {
-    ++loopIndex;
+    ++i;
     while (!atEnd() && peek() != 'E')
       if (!templateArg())
         return false;
     if (peek() != 'E')
       return false;
-    ++loopIndex;
+    ++i;
     return true;
   }
 
   bool literal(int64_t *value = nullptr) {
-    ++loopIndex;
+    ++i;
     if (peek() == '_')
       return false;
     if (!type())
@@ -113,7 +111,7 @@ struct Demangler {
       return false;
     if (peek() != 'E')
       return false;
-    ++loopIndex;
+    ++i;
     if (value)
       *value = valueHandle;
     return true;
@@ -123,22 +121,22 @@ struct Demangler {
     if (peek() == 'L')
       return literal();
     if (peek() == 'J') {
-      ++loopIndex;
+      ++i;
       while (!atEnd() && peek() != 'E')
         if (!templateArg())
           return false;
       if (peek() != 'E')
         return false;
-      ++loopIndex;
+      ++i;
       return true;
     }
     return type();
   }
 
   bool nestedName() {
-    ++loopIndex;
+    ++i;
     while (StringRef("rVK").contains(peek()) && !atEnd())
-      ++loopIndex;
+      ++i;
     while (!atEnd() && peek() != 'E') {
       if (llvm::isDigit(peek())) {
         if (!sourceName())
@@ -155,7 +153,7 @@ struct Demangler {
     }
     if (peek() != 'E')
       return false;
-    ++loopIndex;
+    ++i;
     return true;
   }
 
@@ -164,23 +162,23 @@ struct Demangler {
       return false;
     char candidateValue = peek();
     if (StringRef("rVKPRO").contains(candidateValue)) {
-      ++loopIndex;
+      ++i;
       return type();
     }
     if (StringRef("vwbcahstijlmxynofdegz").contains(candidateValue)) {
-      ++loopIndex;
+      ++i;
       return true;
     }
     if (candidateValue == 'D') {
-      loopIndex += 2;
+      i += 2;
       return true;
     }
     if (candidateValue == 'A') {
-      ++loopIndex;
+      ++i;
       int64_t elementCount;
       if (!number(elementCount) || peek() != '_')
         return false;
-      ++loopIndex;
+      ++i;
       return type();
     }
     if (llvm::isDigit(candidateValue)) {
@@ -211,20 +209,20 @@ circt::hls_analysis::parseStreamMethod(StringRef symbol) {
   else
     return std::nullopt;
   StreamTemplate typeValue;
-  Demangler demangler{rest};
-  if (!demangler.type())
+  Demangler dimensionIndex{rest};
+  if (!dimensionIndex.type())
     return typeValue;
-  typeValue.elementMangled = rest.substr(0, demangler.loopIndex).str();
-  if (demangler.peek() == 'L') {
+  typeValue.elementMangled = rest.substr(0, dimensionIndex.i).str();
+  if (dimensionIndex.peek() == 'L') {
     int64_t depth;
-    if (!demangler.literal(&depth))
+    if (!dimensionIndex.literal(&depth))
       return typeValue;
     typeValue.depth = depth;
   }
-  if (demangler.peek() != 'E')
+  if (dimensionIndex.peek() != 'E')
     return typeValue;
-  ++demangler.loopIndex;
-  typeValue.method = rest.substr(demangler.loopIndex).str();
+  ++dimensionIndex.i;
+  typeValue.method = rest.substr(dimensionIndex.i).str();
   return typeValue;
 }
 
@@ -327,7 +325,7 @@ namespace {
 /// One hls::stream method call reached from the storage.
 struct ReachedCall {
   std::optional<unsigned> member;
-  Operation *callSite;
+  Operation *call;
   StreamTemplate tmpl;
 };
 
@@ -359,10 +357,10 @@ SmallVector<ReachedCall> traceHandles(ArrayRef<Value> roots,
     auto [cur, member] = work.pop_back_val();
     for (OpOperand &use : cur.getUses()) {
       Operation *user = use.getOwner();
-      if (auto callSite = dyn_cast<CallOpInterface>(user)) {
+      if (auto call = dyn_cast<CallOpInterface>(user)) {
         auto symbolName = llvm::dyn_cast_if_present<SymbolRefAttr>(
-            callSite.getCallableForCallee());
-        auto args = callSite.getArgOperands();
+            call.getCallableForCallee());
+        auto args = call.getArgOperands();
         unsigned first = args.getBeginOperandIndex();
         unsigned elementCount = use.getOperandNumber();
         if (elementCount < first || elementCount - first >= args.size())
@@ -377,8 +375,7 @@ SmallVector<ReachedCall> traceHandles(ArrayRef<Value> roots,
             continue;
           }
         }
-        auto callee =
-            dyn_cast_or_null<func::FuncOp>(callSite.resolveCallable());
+        auto callee = dyn_cast_or_null<func::FuncOp>(call.resolveCallable());
         if (callee && !callee.isExternal() &&
             argIndex < callee.getNumArguments())
           push(callee.getArgument(argIndex), member);
@@ -411,17 +408,17 @@ SmallVector<ReachedCall> traceHandles(ArrayRef<Value> roots,
 }
 
 /// The data type a read / write call moves, from its IR signature.
-Type ioType(Operation *callSite, StringRef method) {
+Type ioType(Operation *call, StringRef method) {
   if (method.starts_with("C") || method.starts_with("D"))
     return {};
-  if (method.starts_with("4readEv") && callSite->getNumResults() == 1)
-    return callSite->getResult(0).getType();
+  if (method.starts_with("4readEv") && call->getNumResults() == 1)
+    return call->getResult(0).getType();
   bool dataByReference =
       method.starts_with("4read") || method.starts_with("5write") ||
       method.starts_with("7read_nb") || method.starts_with("8write_nb") ||
       method.starts_with("rs") || method.starts_with("ls");
-  if (dataByReference && callSite->getNumOperands() >= 2)
-    if (auto mt = dyn_cast<MemRefType>(callSite->getOperand(1).getType()))
+  if (dataByReference && call->getNumOperands() >= 2)
+    if (auto mt = dyn_cast<MemRefType>(call->getOperand(1).getType()))
       return mt.getElementType();
   return {};
 }
@@ -444,10 +441,10 @@ std::optional<StreamHandleRecord> circt::hls_analysis::analyzeStreamHandle(
     Operation *storage, ArrayRef<Value> sites,
     llvm::function_ref<int64_t(int64_t, unsigned)> bandBlocks) {
   MemRefType type;
-  if (auto arrayValue = dyn_cast<memref::AllocaOp>(storage))
-    type = arrayValue.getType();
-  else if (auto arrayValue = dyn_cast<memref::AllocOp>(storage))
-    type = arrayValue.getType();
+  if (auto a = dyn_cast<memref::AllocaOp>(storage))
+    type = a.getType();
+  else if (auto a = dyn_cast<memref::AllocOp>(storage))
+    type = a.getType();
   else if (auto globalOp = dyn_cast<memref::GlobalOp>(storage))
     type = globalOp.getType();
   if (!type)
@@ -481,8 +478,8 @@ std::optional<StreamHandleRecord> circt::hls_analysis::analyzeStreamHandle(
   std::optional<int64_t> pragmaDepth;
   std::string pragmaVariable;
   if (auto arr = storage->getAttrOfType<ArrayAttr>("hls.stream"))
-    for (Attribute arrayValue : arr)
-      if (auto dimensionIndex = dyn_cast<DictionaryAttr>(arrayValue)) {
+    for (Attribute a : arr)
+      if (auto dimensionIndex = dyn_cast<DictionaryAttr>(a)) {
         if (auto depth = dimensionIndex.getAs<IntegerAttr>("depth")) {
           pragmaDepth = depth.getInt();
           if (auto valueHandle = dimensionIndex.getAs<StringAttr>("variable"))
@@ -491,8 +488,8 @@ std::optional<StreamHandleRecord> circt::hls_analysis::analyzeStreamHandle(
       }
   std::string bindImpl;
   if (auto arr = storage->getAttrOfType<ArrayAttr>("hls.bind_storage"))
-    for (Attribute arrayValue : arr)
-      if (auto dimensionIndex = dyn_cast<DictionaryAttr>(arrayValue)) {
+    for (Attribute a : arr)
+      if (auto dimensionIndex = dyn_cast<DictionaryAttr>(a)) {
         auto typeValue = dimensionIndex.getAs<StringAttr>("type");
         auto impl = dimensionIndex.getAs<StringAttr>("impl");
         if (typeValue && impl &&
@@ -548,7 +545,7 @@ std::optional<StreamHandleRecord> circt::hls_analysis::analyzeStreamHandle(
         if (isConstructor(candidateValue->tmpl.method))
           continue;
         if (Type typeValue =
-                ioType(candidateValue->callSite, candidateValue->tmpl.method)) {
+                ioType(candidateValue->call, candidateValue->tmpl.method)) {
           if (unsigned buildPoint = packedTypeBits(typeValue)) {
             globalOp.bits = buildPoint;
             globalOp.bitsSource = "ir " + typeString(typeValue);

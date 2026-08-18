@@ -93,12 +93,12 @@ bool MathCostConfig::load(StringRef file, std::string &error) {
     MathCostEntry entryValue;
     entryValue.index = static_cast<unsigned>(loopIndex);
     auto needString = [&](StringRef key, std::string &out) {
-      std::optional<StringRef> stringValue = opHandle->getString(key);
-      if (!stringValue || stringValue->empty()) {
+      std::optional<StringRef> s = opHandle->getString(key);
+      if (!s || s->empty()) {
         error = where + ": \"" + key.str() + "\" is missing or not a string";
         return false;
       }
-      out = stringValue->str();
+      out = s->str();
       return true;
     };
     if (!needString("function", entryValue.function) ||
@@ -113,13 +113,13 @@ bool MathCostConfig::load(StringRef file, std::string &error) {
       return false;
     }
     if (const llvm::json::Value *arrayValue = opHandle->get("arguments")) {
-      std::optional<StringRef> stringValue = arrayValue->getAsString();
-      if (!stringValue || !kForms.contains(*stringValue)) {
+      std::optional<StringRef> s = arrayValue->getAsString();
+      if (!s || !kForms.contains(*s)) {
         error = where + ": \"arguments\" must be \"any\", \"constant base\" "
                         "or \"constant exponent\"";
         return false;
       }
-      entryValue.arguments = stringValue->str();
+      entryValue.arguments = s->str();
     }
     std::optional<int64_t> bram = opHandle->getInteger("bram_18k");
     if (!bram || *bram < 0) {
@@ -138,12 +138,11 @@ bool MathCostConfig::load(StringRef file, std::string &error) {
     if (const llvm::json::Value *candidateValue = opHandle->get("core")) {
       if (const llvm::json::Array *arr = candidateValue->getAsArray()) {
         for (const llvm::json::Value &exprValue : *arr)
-          if (std::optional<StringRef> stringValue = exprValue.getAsString())
-            entryValue.cores.push_back(stringValue->str());
-      } else if (std::optional<StringRef> stringValue =
-                     candidateValue->getAsString()) {
-        if (!stringValue->starts_with("("))
-          entryValue.cores.push_back(stringValue->str());
+          if (std::optional<StringRef> s = exprValue.getAsString())
+            entryValue.cores.push_back(s->str());
+      } else if (std::optional<StringRef> s = candidateValue->getAsString()) {
+        if (!s->starts_with("("))
+          entryValue.cores.push_back(s->str());
       }
     }
     if (const llvm::json::Array *tabs = opHandle->getArray("tables"))
@@ -158,14 +157,13 @@ bool MathCostConfig::load(StringRef file, std::string &error) {
         opHandle->getInteger("bram_18k_if_cordic_loop_unrolled");
     if (const llvm::json::Value *useValue =
             opHandle->get("cordic_loop_unrolled_in")) {
-      std::optional<StringRef> stringValue = useValue->getAsString();
-      if (!stringValue ||
-          (*stringValue != "any_pipeline" && *stringValue != "user_pipeline")) {
+      std::optional<StringRef> s = useValue->getAsString();
+      if (!s || (*s != "any_pipeline" && *s != "user_pipeline")) {
         error = where + ": \"cordic_loop_unrolled_in\" must be "
                         "\"any_pipeline\" or \"user_pipeline\"";
         return false;
       }
-      entryValue.cordicUnrolledIn = stringValue->str();
+      entryValue.cordicUnrolledIn = s->str();
     }
     if (const llvm::json::Value *buildPoint =
             opHandle->get("blocks_automatic_pipelining")) {
@@ -177,9 +175,8 @@ bool MathCostConfig::load(StringRef file, std::string &error) {
       }
       entryValue.blocksAutoPipelining = *valueHandle;
     }
-    if (const llvm::json::Value *stringValue =
-            opHandle->get("shares_instance_with")) {
-      const llvm::json::Array *arr = stringValue->getAsArray();
+    if (const llvm::json::Value *s = opHandle->get("shares_instance_with")) {
+      const llvm::json::Array *arr = s->getAsArray();
       if (!arr) {
         error = where + ": \"shares_instance_with\" must be an array of "
                         "function names";
@@ -223,22 +220,22 @@ const MathCostEntry *MathCostConfig::lookup(StringRef function, StringRef type,
 }
 
 static const llvm::StringSet<> &coreFunctions() {
-  static const llvm::StringSet<> stringValue = {
+  static const llvm::StringSet<> s = {
       "exp",   "exp2", "exp10", "expm1", "log",   "log2",      "log10",
       "log1p", "logb", "sqrt",  "rsqrt", "cbrt",  "recip",     "sin",
       "cos",   "tan",  "sinpi", "cospi", "asin",  "acos",      "atan",
       "atan2", "sinh", "cosh",  "tanh",  "asinh", "acosh",     "atanh",
       "pow",   "erf",  "erfc",  "hypot", "fmod",  "remainder", "abs"};
-  return stringValue;
+  return s;
 }
 
 static const llvm::StringSet<> &pureLibmHelpers() {
-  static const llvm::StringSet<> stringValue = {
+  static const llvm::StringSet<> s = {
       "floor", "floorf", "ceil",  "ceilf", "trunc",     "truncf",
       "round", "roundf", "rint",  "rintf", "nearbyint", "nearbyintf",
       "fmin",  "fminf",  "fmax",  "fmaxf", "copysign",  "copysignf",
       "fdim",  "fdimf",  "ldexp", "ldexpf"};
-  return stringValue;
+  return s;
 }
 
 static StringRef mathOpFunction(Operation *op) {
@@ -269,15 +266,15 @@ static std::string scalarTypeName(Type typeValue) {
     return "float";
   if (typeValue.isF64())
     return "double";
-  std::string stringValue;
-  llvm::raw_string_ostream os(stringValue);
+  std::string s;
+  llvm::raw_string_ostream os(s);
   typeValue.print(os);
-  return stringValue;
+  return s;
 }
 
-static func::FuncOp externalCallee(func::CallOp callSite) {
+static func::FuncOp externalCallee(func::CallOp call) {
   auto fn = SymbolTable::lookupNearestSymbolFrom<func::FuncOp>(
-      callSite, callSite.getCalleeAttr());
+      call, call.getCalleeAttr());
   return fn && fn.isExternal() ? fn : func::FuncOp();
 }
 
@@ -295,10 +292,10 @@ static std::string libmFunction(StringRef name) {
 }
 
 static bool isPureCall(Operation *op) {
-  auto callSite = dyn_cast<func::CallOp>(op);
-  if (!callSite)
+  auto call = dyn_cast<func::CallOp>(op);
+  if (!call)
     return false;
-  func::FuncOp fn = externalCallee(callSite);
+  func::FuncOp fn = externalCallee(call);
   if (!fn)
     return false;
   StringRef elementCount = fn.getName();
@@ -341,72 +338,71 @@ static void recognise(Operation *op, SmallVectorImpl<Site> &out) {
   if (StringRef fn = mathOpFunction(op); !fn.empty()) {
     if (op->getNumOperands() == 0)
       return;
-    Site stringValue;
-    stringValue.op = op;
-    stringValue.function = fn.str();
-    stringValue.type = scalarTypeName(op->getOperand(0).getType());
-    stringValue.typeSource = "mlir";
-    stringValue.opText = op->getName().getStringRef().str();
-    stringValue.args.append(op->operand_begin(), op->operand_end());
-    out.push_back(std::move(stringValue));
+    Site s;
+    s.op = op;
+    s.function = fn.str();
+    s.type = scalarTypeName(op->getOperand(0).getType());
+    s.typeSource = "mlir";
+    s.opText = op->getName().getStringRef().str();
+    s.args.append(op->operand_begin(), op->operand_end());
+    out.push_back(std::move(s));
     return;
   }
   if (op->getName().getStringRef() == "math.sincos" &&
       op->getNumOperands() == 1 && op->getNumResults() == 2) {
     for (int resultValue = 0; resultValue < 2; ++resultValue) {
-      Site stringValue;
-      stringValue.op = op;
-      stringValue.result = resultValue;
-      stringValue.function = resultValue == 0 ? "sin" : "cos";
-      stringValue.type = scalarTypeName(op->getOperand(0).getType());
-      stringValue.typeSource = "mlir";
-      stringValue.opText = "math.sincos";
-      stringValue.args.push_back(op->getOperand(0));
-      out.push_back(std::move(stringValue));
+      Site s;
+      s.op = op;
+      s.result = resultValue;
+      s.function = resultValue == 0 ? "sin" : "cos";
+      s.type = scalarTypeName(op->getOperand(0).getType());
+      s.typeSource = "mlir";
+      s.opText = "math.sincos";
+      s.args.push_back(op->getOperand(0));
+      out.push_back(std::move(s));
     }
     return;
   }
-  auto callSite = dyn_cast<func::CallOp>(op);
-  if (!callSite || callSite.getNumOperands() == 0)
+  auto call = dyn_cast<func::CallOp>(op);
+  if (!call || call.getNumOperands() == 0)
     return;
-  func::FuncOp callee = externalCallee(callSite);
+  func::FuncOp callee = externalCallee(call);
   if (!callee)
     return;
   StringRef name = callee.getName();
-  Site stringValue;
-  stringValue.op = op;
-  stringValue.opText = ("func.call @" + name).str();
+  Site s;
+  s.op = op;
+  s.opText = ("func.call @" + name).str();
   if (name.starts_with(kMarkerPrefix)) {
-    stringValue.function = name.drop_front(kMarkerPrefix.size()).str();
-    stringValue.typeSource = "marker";
-    unsigned elementCount = callSite.getNumOperands();
+    s.function = name.drop_front(kMarkerPrefix.size()).str();
+    s.typeSource = "marker";
+    unsigned elementCount = call.getNumOperands();
     APInt widthValue, loopIndex, sg;
     if (elementCount >= 4 &&
-        matchPattern(callSite.getOperand(elementCount - 3),
+        matchPattern(call.getOperand(elementCount - 3),
                      m_ConstantInt(&widthValue)) &&
-        matchPattern(callSite.getOperand(elementCount - 2),
+        matchPattern(call.getOperand(elementCount - 2),
                      m_ConstantInt(&loopIndex)) &&
-        matchPattern(callSite.getOperand(elementCount - 1),
-                     m_ConstantInt(&sg))) {
-      stringValue.type = (sg.isZero() ? "ap_ufixed<" : "ap_fixed<") +
-                         std::to_string(widthValue.getSExtValue()) + "," +
-                         std::to_string(loopIndex.getSExtValue()) + ">";
+        matchPattern(call.getOperand(elementCount - 1), m_ConstantInt(&sg))) {
+      s.type = (sg.isZero() ? "ap_ufixed<" : "ap_fixed<") +
+               std::to_string(widthValue.getSExtValue()) + "," +
+               std::to_string(loopIndex.getSExtValue()) + ">";
     } else {
-      stringValue.type = "ap_fixed<?,?>";
+      s.type = "ap_fixed<?,?>";
     }
     for (unsigned keyValue = 0; keyValue + 3 < elementCount; ++keyValue)
-      stringValue.args.push_back(callSite.getOperand(keyValue));
-    out.push_back(std::move(stringValue));
+      s.args.push_back(call.getOperand(keyValue));
+    out.push_back(std::move(s));
     return;
   }
   std::string fn = libmFunction(name);
   if (fn.empty())
     return;
-  stringValue.function = fn;
-  stringValue.type = scalarTypeName(callSite.getOperand(0).getType());
-  stringValue.typeSource = "mlir";
-  stringValue.args.append(callSite.operand_begin(), callSite.operand_end());
-  out.push_back(std::move(stringValue));
+  s.function = fn;
+  s.type = scalarTypeName(call.getOperand(0).getType());
+  s.typeSource = "mlir";
+  s.args.append(call.operand_begin(), call.operand_end());
+  out.push_back(std::move(s));
 }
 
 namespace {
@@ -616,10 +612,10 @@ static bool onlyFillsArrays(Operation *site, IndexOnlyValues &indexValue) {
   return stored;
 }
 
-static bool siteLive(const Site &stringValue, LiveValues &lv) {
-  if (stringValue.result >= 0)
-    return lv.live(stringValue.op->getResult(stringValue.result));
-  for (Value resultValue : stringValue.op->getResults())
+static bool siteLive(const Site &s, LiveValues &lv) {
+  if (s.result >= 0)
+    return lv.live(s.op->getResult(s.result));
+  for (Value resultValue : s.op->getResults())
     if (lv.live(resultValue))
       return true;
   return false;
@@ -687,8 +683,8 @@ static bool isUserPipeline(Operation *loop) {
   if (auto arr = dyn_cast<ArrayAttr>(tag))
     tag = arr.empty() ? Attribute() : arr[0];
   if (auto dict = dyn_cast_or_null<DictionaryAttr>(tag))
-    if (auto stringValue = dict.getAs<StringAttr>("source"))
-      return stringValue.getValue() != kLoopPipelineAutoSource;
+    if (auto s = dict.getAs<StringAttr>("source"))
+      return s.getValue() != kLoopPipelineAutoSource;
   return true;
 }
 
@@ -708,12 +704,12 @@ static unsigned portBoundII(Operation *loop) {
     Value mem;
     if (auto lowerIndex = dyn_cast<affine::AffineLoadOp>(op))
       mem = lowerIndex.getMemRef();
-    else if (auto stringValue = dyn_cast<affine::AffineStoreOp>(op))
-      mem = stringValue.getMemRef();
+    else if (auto s = dyn_cast<affine::AffineStoreOp>(op))
+      mem = s.getMemRef();
     else if (auto lowerIndex = dyn_cast<memref::LoadOp>(op))
       mem = lowerIndex.getMemRef();
-    else if (auto stringValue = dyn_cast<memref::StoreOp>(op))
-      mem = stringValue.getMemRef();
+    else if (auto s = dyn_cast<memref::StoreOp>(op))
+      mem = s.getMemRef();
     if (!mem)
       return;
     StorageRoot root = storageRoot(mem);
@@ -738,68 +734,67 @@ static unsigned autoUnrollCopies(Operation *loop) {
   return static_cast<unsigned>(copies);
 }
 
-static bool keptSequential(const Site &stringValue, Operation *loop) {
-  return stringValue.entry && stringValue.entry->blocksAutoPipelining &&
-         !isUserPipeline(loop);
+static bool keptSequential(const Site &s, Operation *loop) {
+  return s.entry && s.entry->blocksAutoPipelining && !isUserPipeline(loop);
 }
 
 static void placeSite(
-    Site &stringValue,
+    Site &s,
     llvm::DenseMap<Block *, llvm::DenseMap<Operation *, unsigned>> &stretchOf) {
-  for (Operation *portValue = stringValue.op->getParentOp();
+  for (Operation *portValue = s.op->getParentOp();
        portValue && !isa<func::FuncOp>(portValue);
        portValue = portValue->getParentOp()) {
     if (isa<LoopSchedulePipelineOp>(portValue) ||
         (isa<affine::AffineForOp, scf::ForOp>(portValue) &&
          portValue->hasAttr(kLoopPipelineAttr) &&
          !portValue->hasAttr(kLoopPipelineOffAttr))) {
-      if (keptSequential(stringValue, portValue)) {
+      if (keptSequential(s, portValue)) {
 
-        stringValue.notPipelined = true;
-        stringValue.unrollCopies = autoUnrollCopies(portValue);
-        stringValue.scope = portValue;
-        stringValue.block = nullptr;
-        stringValue.stretch = 0;
+        s.notPipelined = true;
+        s.unrollCopies = autoUnrollCopies(portValue);
+        s.scope = portValue;
+        s.block = nullptr;
+        s.stretch = 0;
         return;
       }
     }
     if (auto pl = dyn_cast<LoopSchedulePipelineOp>(portValue)) {
-      stringValue.pipeline = portValue;
-      stringValue.ii = std::max<unsigned>(1, static_cast<unsigned>(pl.getII()));
-      stringValue.userPipeline = isUserPipeline(portValue);
+      s.pipeline = portValue;
+      s.ii = std::max<unsigned>(1, static_cast<unsigned>(pl.getII()));
+      s.userPipeline = isUserPipeline(portValue);
       return;
     }
     if (isa<affine::AffineForOp, scf::ForOp>(portValue) &&
         portValue->hasAttr(kLoopPipelineAttr) &&
         !portValue->hasAttr(kLoopPipelineOffAttr)) {
-      stringValue.pipeline = portValue;
+      s.pipeline = portValue;
 
-      stringValue.ii = std::max(requestedII(portValue), portBoundII(portValue));
-      stringValue.iiAssumed = true;
-      stringValue.userPipeline = isUserPipeline(portValue);
+      s.ii = std::max(requestedII(portValue), portBoundII(portValue));
+      s.iiAssumed = true;
+      s.userPipeline = isUserPipeline(portValue);
       return;
     }
   }
-  Operation *cur = stringValue.op;
+  Operation *cur = s.op;
   while (true) {
     Operation *portValue = cur->getParentOp();
     if (!portValue || isa<func::FuncOp>(portValue) || isLoop(portValue)) {
-      stringValue.scope = portValue;
+      s.scope = portValue;
       break;
     }
     cur = portValue;
   }
-  stringValue.block = cur->getBlock();
-  auto &index = stretchOf[stringValue.block];
+  s.block = cur->getBlock();
+  auto &index = stretchOf[s.block];
   if (index.empty()) {
     unsigned keyValue = 0;
-    for (Operation &opHandle : *stringValue.block) {
+    for (Operation &opHandle : *s.block) {
       index[&opHandle] = keyValue;
       if (containsLoop(&opHandle))
         ++keyValue;
     }
   }
-  stringValue.stretch = index.lookup(cur);
+  s.stretch = index.lookup(cur);
 }
 
 static void accessedRoots(Operation *op, SmallVectorImpl<StorageRoot> &out) {
@@ -861,47 +856,44 @@ analyzeMathCores(ModuleOp module, const MathCostConfig &config,
       return;
     SmallVector<Site, 2> found;
     recognise(op, found);
-    for (Site &stringValue : found) {
-      if (!coreFunctions().contains(stringValue.function) &&
+    for (Site &s : found) {
+      if (!coreFunctions().contains(s.function) &&
           !llvm::any_of(config.entries, [&](const MathCostEntry &entryValue) {
-            return entryValue.function == stringValue.function;
+            return entryValue.function == s.function;
           }))
         continue;
       auto fn = op->getParentOfType<func::FuncOp>();
-      stringValue.func = fn.getName().str();
-      stringValue.funcOp = fn.getOperation();
-      sites.push_back(std::move(stringValue));
+      s.func = fn.getName().str();
+      s.funcOp = fn.getOperation();
+      sites.push_back(std::move(s));
     }
   });
 
   LiveValues lv;
   IndexOnlyValues indexValue;
   llvm::DenseMap<Block *, llvm::DenseMap<Operation *, unsigned>> stretchOf;
-  for (Site &stringValue : sites) {
+  for (Site &s : sites) {
     auto isConst = [](Value valueHandle) {
       return matchPattern(valueHandle, m_Constant());
     };
-    stringValue.folded =
-        !stringValue.args.empty() && llvm::all_of(stringValue.args, isConst);
-    if (stringValue.function == "pow" && stringValue.args.size() == 2 &&
-        !stringValue.folded) {
-      if (isConst(stringValue.args[0]))
-        stringValue.argForm = "constant base";
-      else if (isConst(stringValue.args[1]))
-        stringValue.argForm = "constant exponent";
+    s.folded = !s.args.empty() && llvm::all_of(s.args, isConst);
+    if (s.function == "pow" && s.args.size() == 2 && !s.folded) {
+      if (isConst(s.args[0]))
+        s.argForm = "constant base";
+      else if (isConst(s.args[1]))
+        s.argForm = "constant exponent";
     }
-    stringValue.entry = config.lookup(stringValue.function, stringValue.type,
-                                      stringValue.argForm);
-    if (!stringValue.folded &&
+    s.entry = config.lookup(s.function, s.type, s.argForm);
+    if (!s.folded &&
         llvm::all_of(
-            stringValue.args,
+            s.args,
             [&](Value arrayValue) { return indexValue.of(arrayValue); }) &&
-        onlyFillsArrays(stringValue.op, indexValue)) {
-      stringValue.folded = true;
-      stringValue.fillOnly = true;
+        onlyFillsArrays(s.op, indexValue)) {
+      s.folded = true;
+      s.fillOnly = true;
     }
-    stringValue.dead = !stringValue.folded && !siteLive(stringValue, lv);
-    placeSite(stringValue, stretchOf);
+    s.dead = !s.folded && !siteLive(s, lv);
+    placeSite(s, stretchOf);
   }
 
   auto sameRegion = [](const Site &arrayValue, const Site &buildPoint) {
@@ -911,27 +903,22 @@ analyzeMathCores(ModuleOp module, const MathCostConfig &config,
            arrayValue.block == buildPoint.block &&
            arrayValue.stretch == buildPoint.stretch;
   };
-  auto counted = [](const Site &stringValue) {
-    return !stringValue.folded && !stringValue.dead;
-  };
+  auto counted = [](const Site &s) { return !s.folded && !s.dead; };
   for (size_t loopIndex = 0; loopIndex < sites.size(); ++loopIndex) {
-    Site &stringValue = sites[loopIndex];
-    if (!counted(stringValue) || !stringValue.entry ||
-        stringValue.sharedWith >= 0 ||
-        stringValue.entry->sharesInstanceWith.empty() ||
-        stringValue.args.empty())
+    Site &s = sites[loopIndex];
+    if (!counted(s) || !s.entry || s.sharedWith >= 0 ||
+        s.entry->sharesInstanceWith.empty() || s.args.empty())
       continue;
     llvm::StringSet<> taken;
     for (size_t innerIndex = 0; innerIndex < sites.size(); ++innerIndex) {
       Site &typeValue = sites[innerIndex];
       if (innerIndex == loopIndex || !counted(typeValue) ||
-          typeValue.sharedWith >= 0 || typeValue.func != stringValue.func ||
-          typeValue.type != stringValue.type || typeValue.args.empty() ||
+          typeValue.sharedWith >= 0 || typeValue.func != s.func ||
+          typeValue.type != s.type || typeValue.args.empty() ||
           taken.contains(typeValue.function) ||
-          !llvm::is_contained(stringValue.entry->sharesInstanceWith,
+          !llvm::is_contained(s.entry->sharesInstanceWith,
                               typeValue.function) ||
-          !sameRegion(stringValue, typeValue) ||
-          !sameValue(stringValue.args[0], typeValue.args[0]))
+          !sameRegion(s, typeValue) || !sameValue(s.args[0], typeValue.args[0]))
         continue;
 
       if (llvm::any_of(sites, [&](const Site &useValue) {
@@ -946,18 +933,15 @@ analyzeMathCores(ModuleOp module, const MathCostConfig &config,
   std::vector<MathCoreRecord> records;
   std::map<std::string, size_t> recordOf;
   std::vector<std::vector<size_t>> members;
-  auto keyOf = [](const Site &stringValue) {
-    std::string keyValue = stringValue.func + "|";
-    if (stringValue.entry)
-      return keyValue + "#" + std::to_string(stringValue.entry->index);
-    return keyValue + stringValue.function + "|" + stringValue.type + "|" +
-           stringValue.argForm;
+  auto keyOf = [](const Site &s) {
+    std::string keyValue = s.func + "|";
+    if (s.entry)
+      return keyValue + "#" + std::to_string(s.entry->index);
+    return keyValue + s.function + "|" + s.type + "|" + s.argForm;
   };
   for (size_t loopIndex = 0; loopIndex < sites.size(); ++loopIndex) {
-    const Site &stringValue = sites[loopIndex];
-    const Site &owner = stringValue.sharedWith >= 0
-                            ? sites[stringValue.sharedWith]
-                            : stringValue;
+    const Site &s = sites[loopIndex];
+    const Site &owner = s.sharedWith >= 0 ? sites[s.sharedWith] : s;
     std::string key = keyOf(owner);
     auto [it, inserted] = recordOf.try_emplace(key, records.size());
     if (inserted) {
@@ -1006,52 +990,50 @@ analyzeMathCores(ModuleOp module, const MathCostConfig &config,
     unsigned live = 0, folded = 0, dead = 0;
     const Site *firstLive = nullptr;
     for (size_t si : members[ri]) {
-      const Site &stringValue = sites[si];
-      if (!stringValue.folded && !stringValue.dead && !firstLive)
-        firstLive = &stringValue;
+      const Site &s = sites[si];
+      if (!s.folded && !s.dead && !firstLive)
+        firstLive = &s;
       MathSiteRecord sr;
-      sr.op = stringValue.opText;
-      sr.loc = locText(stringValue.op->getLoc());
-      if (stringValue.folded) {
+      sr.op = s.opText;
+      sr.loc = locText(s.op->getLoc());
+      if (s.folded) {
         sr.status = "folded";
-        sr.detail = stringValue.fillOnly
+        sr.detail = s.fillOnly
                         ? "fills an array from loop indices and constants: "
                           "evaluated at compile time"
                         : "every argument is a constant (const_fold)";
         ++folded;
-      } else if (stringValue.dead) {
+      } else if (s.dead) {
         sr.status = "dead";
         sr.detail = "the result reaches no output";
         ++dead;
-      } else if (stringValue.sharedWith >= 0) {
+      } else if (s.sharedWith >= 0) {
         sr.status = "shared";
         sr.detail = "shares the instance of the " +
-                    sites[stringValue.sharedWith].function + " call at " +
-                    locText(sites[stringValue.sharedWith].op->getLoc()) +
+                    sites[s.sharedWith].function + " call at " +
+                    locText(sites[s.sharedWith].op->getLoc()) +
                     " (same argument)";
         ++live;
       } else {
         sr.status = "counted";
         ++live;
-        if (stringValue.pipeline) {
-          if (!perPipe.count(stringValue.pipeline))
-            pipeOrder.push_back(stringValue.pipeline);
-          perPipe[stringValue.pipeline].push_back(&stringValue);
-          sr.detail =
-              "pipelined loop at " + locText(stringValue.pipeline->getLoc());
+        if (s.pipeline) {
+          if (!perPipe.count(s.pipeline))
+            pipeOrder.push_back(s.pipeline);
+          perPipe[s.pipeline].push_back(&s);
+          sr.detail = "pipelined loop at " + locText(s.pipeline->getLoc());
         } else {
-          auto key = std::make_tuple(stringValue.scope, stringValue.block,
-                                     stringValue.stretch);
+          auto key = std::make_tuple(s.scope, s.block, s.stretch);
           if (!perStretch.count(key))
             seqOrder.push_back(key);
-          perStretch[key].push_back(&stringValue);
-          sr.detail = std::string(stringValue.notPipelined
+          perStretch[key].push_back(&s);
+          sr.detail = std::string(s.notPipelined
                                       ? "sequential (a loop Vitis does not "
                                         "pipeline around this core), stretch "
                                       : "sequential, stretch ") +
-                      std::to_string(stringValue.stretch) + " of " +
-                      (stringValue.scope ? locText(stringValue.scope->getLoc())
-                                         : std::string("the function"));
+                      std::to_string(s.stretch) + " of " +
+                      (s.scope ? locText(s.scope->getLoc())
+                               : std::string("the function"));
         }
       }
       resultValue.sites.push_back(std::move(sr));
@@ -1079,8 +1061,8 @@ analyzeMathCores(ModuleOp module, const MathCostConfig &config,
                          !first->userPipeline;
         if (reg.cordicKept) {
           llvm::StringSet<> locs;
-          for (const Site *stringValue : valueHandle)
-            locs.insert(locText(stringValue->op->getLoc()));
+          for (const Site *s : valueHandle)
+            locs.insert(locText(s->op->getLoc()));
           reg.instances = locs.size();
         } else if (entryValue->bramIfUnrolled) {
           reg.bramPerInstance = *entryValue->bramIfUnrolled;
@@ -1112,9 +1094,9 @@ analyzeMathCores(ModuleOp module, const MathCostConfig &config,
         kept.resize(
             std::max<size_t>(1, (valueHandle.size() + copies - 1) / copies));
       }
-      for (const Site *stringValue : kept) {
-        seqOps.push_back(stringValue->op);
-        seqSites.push_back(stringValue);
+      for (const Site *s : kept) {
+        seqOps.push_back(s->op);
+        seqSites.push_back(s);
         seqRegion.push_back(resultValue.regions.size());
       }
       reg.bramPerInstance = perInst;
@@ -1247,11 +1229,11 @@ llvm::json::Object mathCoreJson(const MathCoreRecord &resultValue) {
   }
   opHandle["regions"] = std::move(regions);
   llvm::json::Array sites;
-  for (const MathSiteRecord &stringValue : resultValue.sites)
-    sites.push_back(llvm::json::Object{{"op", stringValue.op},
-                                       {"loc", stringValue.loc},
-                                       {"status", stringValue.status},
-                                       {"detail", stringValue.detail}});
+  for (const MathSiteRecord &s : resultValue.sites)
+    sites.push_back(llvm::json::Object{{"op", s.op},
+                                       {"loc", s.loc},
+                                       {"status", s.status},
+                                       {"detail", s.detail}});
   opHandle["sites"] = std::move(sites);
   return opHandle;
 }
@@ -1298,9 +1280,9 @@ void printMathCoreText(const MathCoreRecord &resultValue,
     os << " -> " << globalOp.instances << " instance(s) x "
        << globalOp.bramPerInstance << "\n";
   }
-  for (const MathSiteRecord &stringValue : resultValue.sites)
-    os << "  call " << stringValue.op << " @ " << stringValue.loc << ": "
-       << stringValue.status << " (" << stringValue.detail << ")\n";
+  for (const MathSiteRecord &s : resultValue.sites)
+    os << "  call " << s.op << " @ " << s.loc << ": " << s.status << " ("
+       << s.detail << ")\n";
   os << "  => " << resultValue.instances << " instance(s), " << resultValue.bram
      << " BRAM: " << resultValue.reason << "\n";
 }

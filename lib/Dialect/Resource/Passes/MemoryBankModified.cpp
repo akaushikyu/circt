@@ -352,11 +352,11 @@ static std::pair<Value, int64_t> residueBase(Value valueHandle,
       exprValue = cast.getIn();
     if (auto apply = exprValue.getDefiningOp<affine::AffineApplyOp>()) {
       SmallVector<Attribute> attrs;
-      for (Value opHandle : apply.getMapOperands()) {
-        std::optional<int64_t> candidateValue = getConstantIndexValue(opHandle);
+      for (Value o : apply.getMapOperands()) {
+        std::optional<int64_t> candidateValue = getConstantIndexValue(o);
         if (!candidateValue)
           return std::nullopt;
-        attrs.push_back(IntegerAttr::get(opHandle.getType(), *candidateValue));
+        attrs.push_back(IntegerAttr::get(o.getType(), *candidateValue));
       }
       SmallVector<Attribute> passResult;
       if (succeeded(apply.getAffineMap().constantFold(attrs, passResult)) &&
@@ -414,8 +414,8 @@ static bool hoistBefore(Value valueHandle, Operation *before, bool dryRun,
     return def != before;
   if (depth > 64 || def->getNumRegions() || !isMemoryEffectFree(def))
     return false;
-  for (Value opHandle : def->getOperands())
-    if (!hoistBefore(opHandle, before, dryRun, depth + 1))
+  for (Value o : def->getOperands())
+    if (!hoistBefore(o, before, dryRun, depth + 1))
       return false;
   if (!dryRun)
     def->moveBefore(before);
@@ -574,7 +574,7 @@ private:
                                const BankLayout &lowerIndex);
   DictionaryAttr bankAttrs(OpBuilder &buildPoint, const BankLayout &lowerIndex,
                            unsigned bankIdx, Operation *from, StringRef bankOf);
-  SmallVector<Value> createAllocaBanks(memref::AllocaOp localAlloca,
+  SmallVector<Value> createAllocaBanks(memref::AllocaOp alloca,
                                        const BankLayout &lowerIndex);
   void createGlobalBanks(memref::GlobalOp globalOp, ArrayRef<Value> sites,
                          const BankLayout &lowerIndex);
@@ -716,9 +716,9 @@ DictionaryAttr BankingPlan::bankAttrs(OpBuilder &buildPoint,
 
   SmallVector<NamedAttribute, 8> attrs;
   if (from)
-    for (StringRef name :
-         {"polygeist.varname", "hls.preserve", "hls.partition_reason",
-          "hls.kept_reason", "hls.const_fill"})
+    for (StringRef name : {"polygeist.varname", "hls.preserve",
+                           "hls.partition_reason", "hls.kept_reason",
+                           "hls.const_fill", "hls.stream", "hls.bind_storage"})
       if (Attribute arrayValue = from->getAttr(name))
         attrs.push_back(buildPoint.getNamedAttr(name, arrayValue));
   if (!bankOf.empty())
@@ -746,8 +746,8 @@ static FileLineColLoc findFileLineColLoc(Location loc) {
     for (Location lowerIndex : fu.getLocations())
       if (auto fieldValue = findFileLineColLoc(lowerIndex))
         return fieldValue;
-  if (auto opHandle = dyn_cast<OpaqueLoc>(loc))
-    return findFileLineColLoc(opHandle.getFallbackLocation());
+  if (auto o = dyn_cast<OpaqueLoc>(loc))
+    return findFileLineColLoc(o.getFallbackLocation());
   return {};
 }
 
@@ -770,20 +770,19 @@ static std::string unnamedBankOf(Value mem) {
 }
 
 SmallVector<Value>
-BankingPlan::createAllocaBanks(memref::AllocaOp localAlloca,
+BankingPlan::createAllocaBanks(memref::AllocaOp alloca,
                                const BankLayout &lowerIndex) {
-  OpBuilder buildPoint(localAlloca->getContext());
-  buildPoint.setInsertionPointAfter(localAlloca);
-  Attribute varName = localAlloca->getAttr("polygeist.varname");
+  OpBuilder buildPoint(alloca->getContext());
+  buildPoint.setInsertionPointAfter(alloca);
+  Attribute varName = alloca->getAttr("polygeist.varname");
   std::string bankOf = varName ? cast<StringAttr>(varName).getValue().str()
-                               : unnamedBankOf(localAlloca.getResult());
+                               : unnamedBankOf(alloca.getResult());
   SmallVector<Value> banks;
   for (int64_t loopIndex = 0; loopIndex < lowerIndex.numBanks; ++loopIndex) {
-    auto bank = memref::AllocaOp::create(buildPoint, localAlloca.getLoc(),
+    auto bank = memref::AllocaOp::create(buildPoint, alloca.getLoc(),
                                          lowerIndex.bankType);
     bank->setAttrs(bankAttrs(buildPoint, lowerIndex,
-                             static_cast<unsigned>(loopIndex), localAlloca,
-                             bankOf));
+                             static_cast<unsigned>(loopIndex), alloca, bankOf));
     banks.push_back(bank.getResult());
   }
   return banks;

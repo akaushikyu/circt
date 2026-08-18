@@ -22,13 +22,13 @@ namespace {
 struct VitisInlinerInterface : public DialectInlinerInterface {
   using DialectInlinerInterface::DialectInlinerInterface;
 
-  bool isLegalToInline(Operation *callSite, Operation *calledFunction,
+  bool isLegalToInline(Operation *call, Operation *calledFunction,
                        bool cloneRequested) const final {
     if (allowInliningKeptCallees)
       return true;
 
     return !circt::hls_analysis::isKeptCallee(calledFunction) &&
-           !callSite->hasAttr(circt::hls_analysis::kInlineAutoOffAttr);
+           !call->hasAttr(circt::hls_analysis::kInlineAutoOffAttr);
   }
   bool isLegalToInline(Region *, Region *, bool, IRMapping &) const final {
     return true;

@@ -19,6 +19,7 @@ add_mlir_library(HLSPasses
         ConstantFills.cpp
         MathCores.cpp
         StreamFifos.cpp
+        DataflowChannels.cpp
 
         DEPENDS
         CIRCTTransformsPassIncGen

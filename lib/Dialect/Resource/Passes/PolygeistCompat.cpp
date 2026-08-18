@@ -143,10 +143,10 @@ static DictionaryAttr shiftPartitionDims(DictionaryAttr argAttrs,
   if (wholeType && wholeType.getRank() >= 1 && wholeType.getShape()[0] == 1)
     return argAttrs;
   SmallVector<Attribute> entries;
-  for (Attribute arrayValue : arr) {
-    auto dimensionIndex = dyn_cast<DictionaryAttr>(arrayValue);
+  for (Attribute a : arr) {
+    auto dimensionIndex = dyn_cast<DictionaryAttr>(a);
     if (!dimensionIndex) {
-      entries.push_back(arrayValue);
+      entries.push_back(a);
       continue;
     }
     SmallVector<NamedAttribute> fields;
@@ -224,19 +224,18 @@ struct LowerSubIndexPass
     SmallVector<DictionaryAttr> attrs;
     unsigned elementCount = callee.getNumArguments();
     for (unsigned loopIndex = 0; loopIndex < elementCount; ++loopIndex) {
-      DictionaryAttr arrayValue = callee.getArgAttrDict(loopIndex);
+      DictionaryAttr a = callee.getArgAttrDict(loopIndex);
       auto it = llvm::find_if(rows, [&](auto &resultValue) {
         return resultValue.first == loopIndex;
       });
       if (it == rows.end()) {
         types.push_back(callee.getArgument(loopIndex).getType());
-        attrs.push_back(arrayValue ? arrayValue
-                                   : DictionaryAttr::get(context, {}));
+        attrs.push_back(a ? a : DictionaryAttr::get(context, {}));
         continue;
       }
       types.push_back(it->second);
-      attrs.push_back(shiftPartitionDims(arrayValue, context,
-                                         dyn_cast<MemRefType>(it->second)));
+      attrs.push_back(
+          shiftPartitionDims(a, context, dyn_cast<MemRefType>(it->second)));
       types.push_back(IndexType::get(context));
       attrs.push_back(DictionaryAttr::get(context, {}));
     }
@@ -269,9 +268,9 @@ struct LowerSubIndexPass
     OpBuilder buildPoint(user);
     Location loc = user->getLoc();
     auto copyAttrs = [&](Operation *from, Operation *to) {
-      for (NamedAttribute arrayValue : from->getDiscardableAttrs())
-        if (arrayValue.getName() != "map")
-          to->setDiscardableAttr(arrayValue.getName(), arrayValue.getValue());
+      for (NamedAttribute a : from->getDiscardableAttrs())
+        if (a.getName() != "map")
+          to->setDiscardableAttr(a.getName(), a.getValue());
     };
     if (auto load = dyn_cast<memref::LoadOp>(user)) {
       SmallVector<Value> indices{indexValue};
@@ -306,16 +305,16 @@ struct LowerSubIndexPass
     SmallVector<Value> operands;
     if (affine::isValidSymbol(indexValue)) {
       results.push_back(getAffineSymbolExpr(0, context));
-      for (AffineExpr entryValue : map.getResults())
-        results.push_back(entryValue.shiftSymbols(ns, 1));
+      for (AffineExpr e : map.getResults())
+        results.push_back(e.shiftSymbols(ns, 1));
       map = AffineMap::get(nd, ns + 1, results, context);
       operands.append(mapOperands.begin(), mapOperands.begin() + nd);
       operands.push_back(indexValue);
       operands.append(mapOperands.begin() + nd, mapOperands.end());
     } else if (affine::isValidDim(indexValue)) {
       results.push_back(getAffineDimExpr(0, context));
-      for (AffineExpr entryValue : map.getResults())
-        results.push_back(entryValue.shiftDims(nd, 1));
+      for (AffineExpr e : map.getResults())
+        results.push_back(e.shiftDims(nd, 1));
       map = AffineMap::get(nd + 1, ns, results, context);
       operands.push_back(indexValue);
       operands.append(mapOperands.begin(), mapOperands.end());
@@ -354,14 +353,14 @@ struct LowerSubIndexPass
     return true;
   }
 
-  bool redirectCall(func::CallOp callSite, SymbolTable &symbols,
+  bool redirectCall(func::CallOp call, SymbolTable &symbols,
                     SmallVectorImpl<SubIndexOp> &worklist) {
-    func::FuncOp callee = resolveDefinedCallee(callSite);
+    func::FuncOp callee = resolveDefinedCallee(call);
     if (!callee)
       return false;
     SmallVector<std::pair<unsigned, Type>> rows;
     for (auto [loopIndex, valueHandle] :
-         llvm::enumerate(callSite.getArgOperands())) {
+         llvm::enumerate(call.getArgOperands())) {
       auto si = valueHandle.getDefiningOp<SubIndexOp>();
       if (!si || !si.isRowSelect())
         continue;
@@ -376,7 +375,7 @@ struct LowerSubIndexPass
     func::FuncOp clone = cloneForRows(callee, rows, symbols, worklist);
     SmallVector<Value> operands;
     for (auto [loopIndex, valueHandle] :
-         llvm::enumerate(callSite.getArgOperands())) {
+         llvm::enumerate(call.getArgOperands())) {
       auto it = llvm::find_if(rows, [&](auto &resultValue) {
         return resultValue.first == loopIndex;
       });
@@ -388,13 +387,12 @@ struct LowerSubIndexPass
       operands.push_back(si.getSource());
       operands.push_back(si.getIndex());
     }
-    OpBuilder buildPoint(callSite);
-    auto nc =
-        func::CallOp::create(buildPoint, callSite.getLoc(), clone, operands);
-    for (NamedAttribute arrayValue : callSite->getDiscardableAttrs())
-      nc->setDiscardableAttr(arrayValue.getName(), arrayValue.getValue());
-    callSite.replaceAllUsesWith(nc.getResults());
-    callSite.erase();
+    OpBuilder buildPoint(call);
+    auto nc = func::CallOp::create(buildPoint, call.getLoc(), clone, operands);
+    for (NamedAttribute a : call->getDiscardableAttrs())
+      nc->setDiscardableAttr(a.getName(), a.getValue());
+    call.replaceAllUsesWith(nc.getResults());
+    call.erase();
     ++redirectedCalls;
     return true;
   }
@@ -446,8 +444,8 @@ struct LowerSubIndexPass
       SmallVector<Operation *> users(si->getUsers().begin(),
                                      si->getUsers().end());
       for (Operation *user : users) {
-        if (auto callSite = dyn_cast<func::CallOp>(user)) {
-          redirectCall(callSite, symbols, worklist);
+        if (auto call = dyn_cast<func::CallOp>(user)) {
+          redirectCall(call, symbols, worklist);
           continue;
         }
         if (rewriteAccess(user, si))
