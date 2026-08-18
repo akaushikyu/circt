@@ -7,6 +7,7 @@
 // RUN: hls-est %s --symbol-privatize=exclude=top_df --symbol-dce --affine-loop-normalize --auto-pipeline-unroll --memory-banking-bram --convert-affine-to-loopschedule --bram-analysis=top=top_df -o /dev/null | FileCheck %s --check-prefix=DF
 // RUN: hls-est %s --affine-loop-normalize --auto-pipeline-unroll --memory-banking-bram --convert-affine-to-loopschedule --bram-analysis=top=top_loop -o /dev/null | FileCheck %s --check-prefix=LOOP
 // RUN: hls-est %s --symbol-privatize=exclude=top_merge --symbol-dce --affine-loop-normalize --auto-pipeline-unroll --memory-banking-bram --convert-affine-to-loopschedule --bram-analysis=top=top_merge --bram-debug -o /dev/null 2>&1 | FileCheck %s --check-prefix=MERGE
+// RUN: hls-est %s --symbol-privatize=exclude=top_copy --symbol-dce --affine-loop-normalize --auto-pipeline-unroll --memory-banking-bram --convert-affine-to-loopschedule --bram-analysis=top=top_copy -o /dev/null | FileCheck %s --check-prefix=COPY
 
 // Dataflow ping-pong channels (--bram-dataflow-channels, on by default;
 // VITIS_NOTES.md N33). In a dataflow region (hls.dataflow on a function or a
@@ -294,6 +295,30 @@ module {
   }
   func.func @top_merge(%p: memref<1024xi32>, %o: memref<1024xi32>) {
     func.call @conv(%p, %o) : (memref<1024xi32>, memref<1024xi32>) -> ()
+    return
+  }
+
+  // One helper is both processes: copy(in, t) then copy(t, out). The store
+  // (producer) and the load (consumer) lie in one pipelined loop of one
+  // function body, but belong to two processes, so no process drives a
+  // second port: one memory, 2 x 512 x 32 = 2 (Vitis: single, 2).
+  // COPY: kind=PIPO  bram=2
+  // COPY-NEXT: dataflow ping-pong channel
+  // COPY-SAME: single
+  // COPY: Total BRAM: 2
+  func.func private @copy(%src: memref<512xi32>, %dst: memref<512xi32>) attributes {hls.inline_off} {
+    %c1 = arith.constant 1 : i32
+    affine.for %i = 0 to 512 {
+      %v = affine.load %src[%i] : memref<512xi32>
+      %w = arith.addi %v, %c1 : i32
+      affine.store %w, %dst[%i] : memref<512xi32>
+    } {hls.pipeline = [{II = 1 : i32}]}
+    return
+  }
+  func.func @top_copy(%in: memref<512xi32>, %out: memref<512xi32>) attributes {hls.dataflow = [{disable_start_propagation = false}]} {
+    %t = memref.alloca() {polygeist.varname = "t"} : memref<512xi32>
+    func.call @copy(%in, %t) : (memref<512xi32>, memref<512xi32>) -> ()
+    func.call @copy(%t, %out) : (memref<512xi32>, memref<512xi32>) -> ()
     return
   }
 }

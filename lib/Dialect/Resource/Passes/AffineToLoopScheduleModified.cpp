@@ -24,6 +24,7 @@
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlow.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/Dialect/LLVMIR/LLVMTypes.h"
 #include "mlir/Dialect/Math/IR/Math.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
@@ -243,9 +244,11 @@ namespace {
 /// access nor a view - a call, an op with regions taking it (scf.for
 /// iter_args), a terminator yielding it, or an op producing a memref we
 /// cannot follow - so the set may be incomplete. `passedToCall`: some member
-/// is an operand of a call that returns no memref. The callee may read and
-/// write the memory while it runs, but cannot hand it back, so the set stays
-/// complete; whether that matters depends on where the call is.
+/// is an operand of a call that returns neither a memref nor a pointer. The
+/// callee may read and write the memory while it runs, and may keep the
+/// address for a later call to use, but cannot hand it back to this
+/// function, so the set stays complete; whether that matters depends on
+/// where the calls are.
 struct MemrefAliasInfo {
   SmallPtrSet<Value, 4> members;
   bool escaped = false;
@@ -279,9 +282,11 @@ static MemrefAliasInfo collectMemrefAliases(Value mem) {
             worklist.push_back(r);
         continue;
       }
+
       if (isa<CallOpInterface>(user) &&
-          llvm::none_of(user->getResultTypes(),
-                        [](Type t) { return isa<BaseMemRefType>(t); })) {
+          llvm::none_of(user->getResultTypes(), [](Type t) {
+            return isa<BaseMemRefType, LLVM::LLVMPointerType>(t);
+          })) {
         info.passedToCall = true;
         continue;
       }
@@ -607,6 +612,20 @@ void AffineToLoopSchedule::cleanupRedundantAccesses() {
         vals.push_back(
             {addr, store.getValueToStore(), store.getOperation(), false});
         continue;
+      }
+
+      bool hasCall = false;
+      op.walk([&](CallOpInterface) {
+        hasCall = true;
+        return WalkResult::interrupt();
+      });
+      if (hasCall) {
+        SmallVector<Value> passed;
+        for (auto &entry : known)
+          if (aliasInfo(entry.first).passedToCall)
+            passed.push_back(entry.first);
+        for (Value root : passed)
+          known.erase(root);
       }
 
       forgetOperands(&op);

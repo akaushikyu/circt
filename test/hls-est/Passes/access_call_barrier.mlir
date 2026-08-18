@@ -17,11 +17,19 @@
 // to one on the other side of a call. The load after the first call is a
 // real read (the callee may have written b[i]); the store before it is not
 // dead (the callee may read it); the call through a view is a barrier too.
+// @captured: `reg(a); a[0] = 7; poke(); x = a[0]`: reg may keep the address
+// and poke may write through it, so a call that does not take the array is
+// a barrier for an array some call received: the load stays.
+// @ptr_result: `p = get(a); a[0] = 7; *p = 9; x = a[0]`: a call returning a
+// pointer may return the array's address, so the array has escaped.
 
 module {
   func.func private @use(memref<64xf32>)
   func.func private @touch(memref<64xi32>)
   func.func private @touch_dyn(memref<?xi32>)
+  func.func private @reg(memref<8xi32>)
+  func.func private @poke()
+  func.func private @get(memref<8xi32>) -> !llvm.ptr
 
   func.func @after_loop(%A: memref<64x2xf32>, %out: memref<64xf32>) {
     %cst = arith.constant 0.000000e+00 : f32
@@ -60,6 +68,31 @@ module {
     }
     return
   }
+
+  func.func @captured(%o: memref<8xi32>) {
+    %v = arith.constant 7 : i32
+    %a = memref.alloca() {hls.preserve} : memref<8xi32>
+    func.call @reg(%a) : (memref<8xi32>) -> ()
+    affine.store %v, %a[0] : memref<8xi32>
+    func.call @poke() : () -> ()
+    %x = affine.load %a[0] : memref<8xi32>
+    affine.store %x, %o[0] : memref<8xi32>
+    return
+  }
+
+  func.func @ptr_result(%o: memref<8xi32>) {
+    %v = arith.constant 7 : i32
+    %w = arith.constant 9 : i32
+    %c0 = arith.constant 0 : index
+    %a = memref.alloca() {hls.preserve} : memref<8xi32>
+    %p = func.call @get(%a) : (memref<8xi32>) -> !llvm.ptr
+    %m = "polygeist.pointer2memref"(%p) : (!llvm.ptr) -> memref<?xi32>
+    affine.store %v, %a[0] : memref<8xi32>
+    memref.store %w, %m[%c0] : memref<?xi32>
+    %x = affine.load %a[0] : memref<8xi32>
+    affine.store %x, %o[0] : memref<8xi32>
+    return
+  }
 }
 
 // CHECK-LABEL: func.func @after_loop
@@ -83,3 +116,12 @@ module {
 // CHECK-NOT:   hls.removed_stores
 // CHECK-NOT:   hls.merged_loads
 // CHECK:       return
+
+// CHECK-LABEL: func.func @captured
+// CHECK:       call @reg(%alloca)
+// CHECK:       memref.store %{{.*}}, %alloca
+// CHECK:       call @poke()
+// CHECK:       memref.load %alloca
+// CHECK-LABEL: func.func @ptr_result
+// CHECK:       memref.store %{{.*}}, %alloca
+// CHECK:       memref.load %alloca

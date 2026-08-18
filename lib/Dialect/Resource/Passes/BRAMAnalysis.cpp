@@ -1528,14 +1528,15 @@ static bool onExclusivePaths(Operation *a, Operation *buildPoint,
 
 static std::string sameCycleAccesses(ArrayRef<AccessSummary> accesses,
                                      SeqScopeIndex *seq) {
-  SmallVector<Operation *> scopes;
+  using ProcessScope = std::pair<Operation *, Operation *>;
+  SmallVector<ProcessScope> scopes;
   for (const AccessSummary &a : accesses)
-    if (!llvm::is_contained(scopes, a.scope))
-      scopes.push_back(a.scope);
-  for (Operation *scope : scopes) {
+    if (!llvm::is_contained(scopes, ProcessScope{a.via, a.scope}))
+      scopes.push_back({a.via, a.scope});
+  for (auto [via, scope] : scopes) {
     SmallVector<const AccessSummary *> group;
     for (const AccessSummary &a : accesses)
-      if (a.scope == scope)
+      if (a.scope == scope && a.via == via)
         group.push_back(&a);
     if (group.size() < 2)
       continue;
@@ -2363,7 +2364,7 @@ static void printDebugText(ArrayRef<MemrefRecord> records,
           os << "member " << *g.member << " ";
         os << "depth " << g.depth << " (" << g.depthSource << ") x " << g.bits
            << " bits (" << g.bitsSource << ") -> " << g.bramEach
-           << " each: " << g.reason << "\n";
+           << " each: " << g.reason << " (count: " << g.countSource << ")\n";
       }
       if (!fieldValue.note.empty())
         os << "  note: " << fieldValue.note << "\n";
@@ -2639,6 +2640,7 @@ static llvm::json::Object toJson(const MemrefRecord &resultValue) {
     for (const FifoGroup &g : fieldValue.groups) {
       llvm::json::Object go;
       go["count"] = g.count;
+      go["count_source"] = g.countSource;
       if (g.member)
         go["member"] = static_cast<int64_t>(*g.member);
       go["depth"] = g.depth;

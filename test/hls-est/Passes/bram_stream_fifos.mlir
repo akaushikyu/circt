@@ -23,6 +23,7 @@ module {
   func.func private @_ZN3hls6streamIiLi0EE5writeERKi(memref<?xi32>, memref<?xi32>)
   func.func private @_ZN3hls6streamIiLi0EE4readEv(memref<?xi32>) -> i32
   func.func private @_ZN3hls6streamIiLi64EE4readEv(memref<?xi32>) -> i32
+  func.func private @_ZN3hls6streamIiLi1024EE4readEv(memref<?xi32>) -> i32
   func.func private @_ZN3hls6streamI7ap_uintILi600EELi2EE4readEv(memref<?xi32>) -> i600
   func.func private @_ZN3hls6streamIbLi0EE4readEv(memref<?xi32>) -> i8
   func.func private @_ZN3hls6streamI1PLi0EE5writeERKS1_(memref<?xi32>, memref<?x!llvm.struct<(i32, i16)>>)
@@ -83,15 +84,50 @@ module {
     %t33c = memref.cast %t33 : memref<1xi32> to memref<?xi32>
     %r5 = func.call @_ZN3hls6streamIiLi0EE4readEv(%t33c) : (memref<?xi32>) -> i32
 
-    // An array of streams: one FIFO per element, all at the pragma depth
-    // (2x2 x 512x36: never x36, so ceil(36/18) = 2 each).
+    // An array of streams: one FIFO per element a read or write reaches,
+    // all at the pragma depth (512x32: never x36, so ceil(32/18) = 2 each).
+    // A dynamic index may reach every element: 2x2 = 4 FIFOs.
     // CHECK: kind=FIFO  bram=8
     // CHECK-NEXT: 4 FIFO(s) = 8 BRAM [4 x 512x32
     %arr = memref.alloca() {hls.preserve, hls.stream = [{depth = 512 : i32, type = "fifo", variable = "arr"}]} : memref<2x2xi32>
     %i1 = arith.constant 1 : index
+    %dyn = arith.index_cast %r1 : i32 to index
     %row = "polygeist.subindex"(%arr, %i1) : (memref<2x2xi32>, index) -> memref<2xi32>
-    %el = "polygeist.subindex"(%row, %i1) : (memref<2xi32>, index) -> memref<?xi32>
+    %el = "polygeist.subindex"(%row, %dyn) : (memref<2xi32>, index) -> memref<?xi32>
     %r6 = func.call @_ZN3hls6streamIiLi0EE4readEv(%el) : (memref<?xi32>) -> i32
+    // Constant indices only: Vitis removes the streams nothing reads or
+    // writes (hls::stream<int> mid[3] with only mid[1] used: one FIFO), so
+    // only arr2[1][1] and arr2[0][1] count; the constructor loop does not.
+    // CHECK: kind=FIFO  bram=4
+    // CHECK-NEXT: 2 FIFO(s) = 4 BRAM [2 x 512x32
+    %arr2 = memref.alloca() {hls.preserve, hls.stream = [{depth = 512 : i32, type = "fifo", variable = "arr2"}]} : memref<2x2xi32>
+    %i0 = arith.constant 0 : index
+    affine.for %k = 0 to 2 {
+      affine.for %l = 0 to 2 {
+        %crow = "polygeist.subindex"(%arr2, %k) : (memref<2x2xi32>, index) -> memref<2xi32>
+        %cel = "polygeist.subindex"(%crow, %l) : (memref<2xi32>, index) -> memref<?xi32>
+        func.call @_ZN3hls6streamIiLi0EEC1Ev(%cel) : (memref<?xi32>) -> ()
+      }
+    }
+    %row2 = "polygeist.subindex"(%arr2, %i1) : (memref<2x2xi32>, index) -> memref<2xi32>
+    %el2 = "polygeist.subindex"(%row2, %i1) : (memref<2xi32>, index) -> memref<?xi32>
+    %r6b = func.call @_ZN3hls6streamIiLi0EE4readEv(%el2) : (memref<?xi32>) -> i32
+    %row3 = "polygeist.subindex"(%arr2, %i0) : (memref<2x2xi32>, index) -> memref<2xi32>
+    %el3 = "polygeist.subindex"(%row3, %i1) : (memref<2xi32>, index) -> memref<?xi32>
+    %el3c = memref.cast %el3 : memref<?xi32> to memref<?xi32>
+    %r6c = func.call @_ZN3hls6streamIiLi0EE4readEv(%el3c) : (memref<?xi32>) -> i32
+    %r6d = func.call @_ZN3hls6streamIiLi0EE4readEv(%el2) : (memref<?xi32>) -> i32
+
+    // A struct whose member is an array of streams (struct P {
+    // hls::stream<int, 1024> s[4]; }): one FIFO per handle of the member
+    // array, 4 x 1024x32 = 4 x 2 (Vitis: p_U .. p_3_U, 8).
+    // CHECK: kind=FIFO  bram=8
+    // CHECK-NEXT: 4 FIFO(s) = 8 BRAM [4 x 1024x32 (depth template
+    %ps = memref.alloca() {polygeist.varname = "ps"} : memref<1x!llvm.struct<(array<4 x i32>)>>
+    %psp = "polygeist.memref2pointer"(%ps) : (memref<1x!llvm.struct<(array<4 x i32>)>>) -> !llvm.ptr
+    %psm = "polygeist.pointer2memref"(%psp) : (!llvm.ptr) -> memref<4xi32>
+    %psel = "polygeist.subindex"(%psm, %dyn) : (memref<4xi32>, index) -> memref<?xi32>
+    %r6e = func.call @_ZN3hls6streamIiLi1024EE4readEv(%psel) : (memref<?xi32>) -> i32
 
     // bool is 1 bit (the IR moves an i8): 2048 x 1 -> 1.
     // CHECK: kind=FIFO  bram=1
@@ -141,13 +177,15 @@ module {
   }
 }
 
-// 2 + 2 + 0 + 0 + 0 + 2 + 8 + 1 + 3 + 0 + 2 + 0 + 2 (ram) = 22.
-// CHECK: Total BRAM: 22
+// 2 + 2 + 0 + 0 + 0 + 2 + 8 + 4 + 8 + 1 + 3 + 0 + 2 + 0 + 2 (ram) = 34.
+// CHECK: Total BRAM: 34
 
 // DBG: [{{.*}}] a (alloca) @
 // DBG: status: fifo
 // DBG: hls::stream storage (not a RAM): 1 FIFO(s); methods: 4readEv 5writeERKi C1Ev
-// DBG: fifo: 1 x depth 1024 (pragma) x 32 bits (mangled i) -> 2 each:
+// DBG: fifo: 1 x depth 1024 (pragma) x 32 bits (mangled i) -> 2 each:{{.*}}(count: every element)
+// DBG: fifo: 2 x depth 512 (pragma) x 32 bits (mangled i) -> 2 each:{{.*}}(count: 2 of 4 elements read or written (constant indices))
+// DBG: fifo: 4 x depth 1024 (template) x 32 bits (mangled i) -> 2 each:{{.*}}(count: every element x 4 handles of the member array)
 
 // JSON: "fifo": {
 // JSON: "bram": 2,
@@ -156,6 +194,7 @@ module {
 // JSON: "bits_source": "mangled i",
 // JSON: "bram_each": 2,
 // JSON: "count": 1,
+// JSON: "count_source": "every element",
 // JSON: "depth": 1024,
 // JSON: "depth_source": "pragma",
 // JSON: "ram_type": "FIFO",

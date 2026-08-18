@@ -10,6 +10,7 @@
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/BuiltinTypes.h"
+#include "mlir/IR/Matchers.h"
 #include "mlir/IR/SymbolTable.h"
 #include "mlir/Interfaces/CallInterfaces.h"
 #include "mlir/Interfaces/ViewLikeInterface.h"
@@ -21,6 +22,7 @@
 
 #include <map>
 #include <set>
+#include <tuple>
 
 using namespace mlir;
 using namespace circt::hls_analysis;
@@ -327,6 +329,9 @@ struct ReachedCall {
   std::optional<unsigned> member;
   Operation *call;
   StreamTemplate tmpl;
+  /// The element of the storage the handle is, when every index on the way
+  /// to the call was a constant (polygeist.subindex); nullopt otherwise.
+  std::optional<SmallVector<int64_t, 2>> element;
 };
 
 bool isPointerCastLike(Operation *op) {
@@ -336,25 +341,59 @@ bool isPointerCastLike(Operation *op) {
          name == "llvm.addrspacecast" || isa<memref::CastOp>(op);
 }
 
+/// The constant index of a polygeist.subindex, if it is one.
+std::optional<int64_t> constantSubindex(Operation *op) {
+  if (op->getName().getStringRef() != "polygeist.subindex" ||
+      op->getNumOperands() != 2)
+    return std::nullopt;
+  APInt valueHandle;
+  if (!matchPattern(op->getOperand(1), m_ConstantInt(&valueHandle)))
+    return std::nullopt;
+  return valueHandle.getSExtValue();
+}
+
+/// The handle path from the storage to a value: the constant element
+/// indices taken so far, `complete` once one index per storage dimension was
+/// taken; `known` is false once a non-constant index or an index the model
+/// does not follow was taken.
+struct ElementPath {
+  SmallVector<int64_t, 2> indices;
+  bool known = true;
+  bool complete(unsigned rank) const { return known && indices.size() == rank; }
+  bool operator<(const ElementPath &opHandle) const {
+    return std::tie(known, indices) <
+           std::tie(opHandle.known, opHandle.indices);
+  }
+};
+
 /// Follows the handle values to the hls::stream methods they reach as the
 /// object argument. `structMembers` says whether a constant member GEP
-/// selects a struct member (the storage holds structs).
-SmallVector<ReachedCall> traceHandles(ArrayRef<Value> roots,
-                                      bool structMembers) {
+/// selects a struct member (the storage holds structs); `rank` is the
+/// storage's rank (how many element indices select one element).
+SmallVector<ReachedCall> traceHandles(ArrayRef<Value> roots, bool structMembers,
+                                      unsigned rank) {
   SmallVector<ReachedCall> out;
-  using Item = std::pair<Value, std::optional<unsigned>>;
+  struct Item {
+    Value value;
+    std::optional<unsigned> member;
+    ElementPath path;
+  };
   SmallVector<Item> work;
-  std::set<std::pair<void *, int64_t>> seen;
-  auto push = [&](Value valueHandle, std::optional<unsigned> member) {
+  std::set<std::tuple<void *, int64_t, ElementPath>> seen;
+  auto push = [&](Value valueHandle, std::optional<unsigned> member,
+                  ElementPath path) {
     if (seen.insert({valueHandle.getAsOpaquePointer(),
-                     member ? int64_t(*member) : -1})
+                     member ? int64_t(*member) : -1, path})
             .second)
-      work.push_back({valueHandle, member});
+      work.push_back({valueHandle, member, std::move(path)});
   };
   for (Value resultValue : roots)
-    push(resultValue, std::nullopt);
+    push(resultValue, std::nullopt, ElementPath{});
   while (!work.empty()) {
-    auto [cur, member] = work.pop_back_val();
+    Item item = work.pop_back_val();
+    Value cur = item.value;
+    std::optional<unsigned> member = item.member;
+    const ElementPath &path = item.path;
     for (OpOperand &use : cur.getUses()) {
       Operation *user = use.getOwner();
       if (auto call = dyn_cast<CallOpInterface>(user)) {
@@ -370,28 +409,35 @@ SmallVector<ReachedCall> traceHandles(ArrayRef<Value> roots,
           if (auto typeValue =
                   parseStreamMethod(symbolName.getLeafReference().getValue())) {
 
-            if (argIndex == 0)
-              out.push_back({member, user, *typeValue});
+            if (argIndex == 0) {
+              ReachedCall rc{member, user, *typeValue, std::nullopt};
+              if (path.complete(rank))
+                rc.element = path.indices;
+              out.push_back(std::move(rc));
+            }
             continue;
           }
         }
         auto callee = dyn_cast_or_null<func::FuncOp>(call.resolveCallable());
         if (callee && !callee.isExternal() &&
             argIndex < callee.getNumArguments())
-          push(callee.getArgument(argIndex), member);
+          push(callee.getArgument(argIndex), member, path);
         continue;
       }
       if (auto gep = dyn_cast<LLVM::GEPOp>(user)) {
         if (gep.getBase() != cur)
           continue;
         std::optional<unsigned> next = member;
-        if (structMembers && !member) {
-          ArrayRef<int32_t> indexValue = gep.getRawConstantIndices();
-          if (indexValue.size() == 2 && indexValue[0] == 0 &&
-              indexValue[1] != LLVM::GEPOp::kDynamicIndex)
-            next = static_cast<unsigned>(indexValue[1]);
-        }
-        push(gep.getResult(), next);
+        ElementPath nextPath = path;
+        ArrayRef<int32_t> indexValue = gep.getRawConstantIndices();
+        bool memberGep = indexValue.size() == 2 && indexValue[0] == 0 &&
+                         indexValue[1] != LLVM::GEPOp::kDynamicIndex;
+        if (structMembers && !member && memberGep)
+          next = static_cast<unsigned>(indexValue[1]);
+
+        if (!(memberGep && path.complete(rank)))
+          nextPath.known = false;
+        push(gep.getResult(), next, std::move(nextPath));
         continue;
       }
       bool view = isPointerCastLike(user);
@@ -399,12 +445,44 @@ SmallVector<ReachedCall> traceHandles(ArrayRef<Value> roots,
         view = view || valueHandle.getViewSource() == cur;
       if (!view)
         continue;
+      ElementPath nextPath = path;
+      if (user->getName().getStringRef() == "polygeist.subindex") {
+
+        std::optional<int64_t> candidateValue = constantSubindex(user);
+        if (candidateValue && path.known && path.indices.size() < rank)
+          nextPath.indices.push_back(*candidateValue);
+        else
+          nextPath.known = false;
+      } else if (!isa<memref::CastOp>(user) && !path.complete(rank)) {
+
+        nextPath.known = false;
+      }
 
       for (Value resultValue : user->getResults())
-        push(resultValue, member);
+        push(resultValue, member, nextPath);
     }
   }
   return out;
+}
+
+/// How many stream handles one struct member holds: a member that is an
+/// array of handles holds one per array element (`hls::stream<T> s[4]` in a
+/// struct is 4 FIFOs). A handle reached without a member index is member 0.
+int64_t handlesPerMember(Type elt, std::optional<unsigned> member) {
+  auto st = dyn_cast<LLVM::LLVMStructType>(elt);
+  if (!st)
+    return 1;
+  unsigned indexValue = member ? *member : 0;
+  ArrayRef<Type> body = st.getBody();
+  if (indexValue >= body.size())
+    return 1;
+  int64_t elementCount = 1;
+  Type typeValue = body[indexValue];
+  while (auto at = dyn_cast<LLVM::LLVMArrayType>(typeValue)) {
+    elementCount *= at.getNumElements();
+    typeValue = at.getElementType();
+  }
+  return elementCount;
 }
 
 /// The data type a read / write call moves, from its IR signature.
@@ -455,7 +533,8 @@ std::optional<StreamHandleRecord> circt::hls_analysis::analyzeStreamHandle(
   if (!structMembers && !isa<IntegerType>(elt))
     return std::nullopt;
 
-  SmallVector<ReachedCall> calls = traceHandles(sites, structMembers);
+  SmallVector<ReachedCall> calls =
+      traceHandles(sites, structMembers, type.getRank());
   if (calls.empty())
     return std::nullopt;
 
@@ -513,9 +592,35 @@ std::optional<StreamHandleRecord> circt::hls_analysis::analyzeStreamHandle(
 
   for (auto &[memberKey, memberCalls] : byMember) {
     FifoGroup globalOp;
-    globalOp.count = elements;
     if (memberKey >= 0)
       globalOp.member = static_cast<unsigned>(memberKey);
+
+    std::set<SmallVector<int64_t, 2>> reachedElements;
+    bool allConstant = true;
+    for (const ReachedCall *candidateValue : memberCalls) {
+      if (isConstructor(candidateValue->tmpl.method))
+        continue;
+      if (candidateValue->element)
+        reachedElements.insert(*candidateValue->element);
+      else
+        allConstant = false;
+    }
+    int64_t perMember = handlesPerMember(elt, globalOp.member);
+    if (allConstant && !reachedElements.empty() &&
+        static_cast<int64_t>(reachedElements.size()) < elements) {
+      globalOp.count = static_cast<int64_t>(reachedElements.size());
+      globalOp.countSource = std::to_string(globalOp.count) + " of " +
+                             std::to_string(elements) +
+                             " elements read or written (constant indices)";
+    } else {
+      globalOp.count = elements;
+      globalOp.countSource = "every element";
+    }
+    if (perMember > 1) {
+      globalOp.count *= perMember;
+      globalOp.countSource +=
+          " x " + std::to_string(perMember) + " handles of the member array";
+    }
 
     std::optional<int64_t> tmplDepth;
     std::string elementMangled;

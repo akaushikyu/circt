@@ -69,6 +69,7 @@ FifoPrice priceFifo(int64_t depth, unsigned bits, llvm::StringRef bindImpl,
 /// FIFOs of one stream handle with the same depth and width.
 struct FifoGroup {
   int64_t count = 0;      ///< FIFOs (elements of the handle's shape)
+  std::string countSource; ///< which elements / member handles count
   std::optional<unsigned> member; ///< struct member index, if any
   int64_t depth = 0;
   std::string depthSource; ///< "pragma" | "template" | "default"
