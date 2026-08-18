@@ -242,10 +242,14 @@ namespace {
 /// transitively. `escaped`: some member has a use that is neither a plain
 /// access nor a view - a call, an op with regions taking it (scf.for
 /// iter_args), a terminator yielding it, or an op producing a memref we
-/// cannot follow - so the set may be incomplete.
+/// cannot follow - so the set may be incomplete. `passedToCall`: some member
+/// is an operand of a call that returns no memref. The callee may read and
+/// write the memory while it runs, but cannot hand it back, so the set stays
+/// complete; whether that matters depends on where the call is.
 struct MemrefAliasInfo {
   SmallPtrSet<Value, 4> members;
   bool escaped = false;
+  bool passedToCall = false;
 };
 } // namespace
 
@@ -275,6 +279,12 @@ static MemrefAliasInfo collectMemrefAliases(Value mem) {
             worklist.push_back(r);
         continue;
       }
+      if (isa<CallOpInterface>(user) &&
+          llvm::none_of(user->getResultTypes(),
+                        [](Type t) { return isa<BaseMemRefType>(t); })) {
+        info.passedToCall = true;
+        continue;
+      }
       if (!isPlainMemrefUse(user))
         info.escaped = true;
     }
@@ -283,10 +293,13 @@ static MemrefAliasInfo collectMemrefAliases(Value mem) {
 }
 
 /// True if some op inside `forOp` may write the memref through any member of
-/// its alias set (or uses one opaquely), or if the memref has escaped.
+/// its alias set (or uses one opaquely), or if the memref has escaped or is
+/// passed to a call anywhere in the function (hoisting keeps that
+/// conservative rule; only the redundant-access cleanup below treats a call
+/// as a barrier at its own position).
 static bool isMemrefWrittenInLoop(const MemrefAliasInfo &alias,
                                   AffineForOp forOp) {
-  if (alias.escaped)
+  if (alias.escaped || alias.passedToCall)
     return true;
   bool written = false;
   forOp.getBody()->walk([&](Operation *op) {
