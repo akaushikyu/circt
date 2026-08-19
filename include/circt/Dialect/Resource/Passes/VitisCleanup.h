@@ -17,6 +17,11 @@
 //   --mark-constant-fills         marks arrays whose every write stores a
 //                                 compile-time constant: Vitis ROMs (N26);
 //                                 runs before the folds (after --inline)
+//   --narrow-ram-widths           marks the element width Vitis stores per
+//                                 word (stored-value ranges, demanded low
+//                                 bits of the loads); runs after
+//                                 --auto-pipeline-unroll, before
+//                                 --memory-banking-bram
 //
 // They are meant to run early, before --auto-pipeline-unroll:
 //   --inline --canonicalize --sccp --vitis-fold --dead-memory-elimination
@@ -36,6 +41,7 @@ std::unique_ptr<mlir::Pass> createPromoteGlobalsToAllocasPass();
 std::unique_ptr<mlir::Pass> createVitisFoldPass();
 std::unique_ptr<mlir::Pass> createDeadMemoryEliminationPass();
 std::unique_ptr<mlir::Pass> createMarkConstantFillsPass();
+std::unique_ptr<mlir::Pass> createNarrowRamWidthsPass();
 void registerVitisCleanupPasses();
 } // namespace circt::hls_analysis
 

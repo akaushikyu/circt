@@ -1322,5 +1322,6 @@ void registerVitisCleanupPasses() {
   registerPass([] { return createVitisFoldPass(); });
   registerPass([] { return createPromoteGlobalsToAllocasPass(); });
   registerPass([] { return createMarkConstantFillsPass(); });
+  registerPass([] { return createNarrowRamWidthsPass(); });
 }
 } // namespace circt::hls_analysis

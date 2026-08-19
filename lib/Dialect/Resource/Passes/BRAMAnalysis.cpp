@@ -159,8 +159,8 @@ struct TopScope {
   bool covers(Operation *op) const {
     if (!active())
       return true;
-    if (auto g = dyn_cast<memref::GlobalOp>(op))
-      return globals.contains(g.getSymName());
+    if (auto globalOp = dyn_cast<memref::GlobalOp>(op))
+      return globals.contains(globalOp.getSymName());
     auto fn = op->getParentOfType<func::FuncOp>();
     return fn && funcs.contains(fn.getOperation());
   }
@@ -284,6 +284,13 @@ struct MemrefRecord {
   std::optional<std::string> structMember;
 
   std::optional<std::string> keptReason;
+
+  struct NarrowRecord {
+    unsigned declaredBits = 0;
+    unsigned bits = 0;
+    std::string reason;
+  };
+  std::optional<NarrowRecord> narrow;
   std::string kind;
   std::optional<std::string> func;
   bool hasLoc = false;
@@ -440,15 +447,16 @@ static std::pair<Value, int64_t> splitConstantOffset(Value valueHandle) {
 
 enum class AddrRelation { Same, Disjoint, Unknown };
 
-static AddrRelation compareAddresses(Operation *a, Operation *buildPoint) {
+static AddrRelation compareAddresses(Operation *arrayValue,
+                                     Operation *buildPoint) {
   auto indices = [](Operation *op) -> std::optional<SmallVector<Value, 4>> {
-    if (auto l = dyn_cast<memref::LoadOp>(op))
-      return SmallVector<Value, 4>(l.getIndices());
+    if (auto lowerIndex = dyn_cast<memref::LoadOp>(op))
+      return SmallVector<Value, 4>(lowerIndex.getIndices());
     if (auto st = dyn_cast<memref::StoreOp>(op))
       return SmallVector<Value, 4>(st.getIndices());
     return std::nullopt;
   };
-  auto ia = indices(a), ib = indices(buildPoint);
+  auto ia = indices(arrayValue), ib = indices(buildPoint);
   if (!ia || !ib || ia->size() != ib->size())
     return AddrRelation::Unknown;
   bool same = true;
@@ -474,8 +482,8 @@ static const void *storageKey(Value valueHandle) {
       break;
     valueHandle = view.getViewSource();
   }
-  if (auto g = valueHandle.getDefiningOp<memref::GetGlobalOp>())
-    return g.getNameAttr().getAttr().getAsOpaquePointer();
+  if (auto globalOp = valueHandle.getDefiningOp<memref::GetGlobalOp>())
+    return globalOp.getNameAttr().getAttr().getAsOpaquePointer();
   if (valueHandle.getDefiningOp<memref::AllocaOp>() ||
       valueHandle.getDefiningOp<memref::AllocOp>())
     return valueHandle.getAsOpaquePointer();
@@ -502,11 +510,11 @@ static void memTouches(Operation *op, SmallVectorImpl<MemTouch> &out) {
   }
   SmallVector<MemoryEffects::EffectInstance, 2> effects;
   iface.getEffects(effects);
-  for (const MemoryEffects::EffectInstance &e : effects) {
-    if (isa<MemoryEffects::Allocate>(e.getEffect()))
+  for (const MemoryEffects::EffectInstance &entryValue : effects) {
+    if (isa<MemoryEffects::Allocate>(entryValue.getEffect()))
       continue;
-    bool write = !isa<MemoryEffects::Read>(e.getEffect());
-    Value valueHandle = e.getValue();
+    bool write = !isa<MemoryEffects::Read>(entryValue.getEffect());
+    Value valueHandle = entryValue.getValue();
     if (!valueHandle || !isa<BaseMemRefType>(valueHandle.getType()))
       out.push_back({nullptr, Value(), write});
     else
@@ -514,14 +522,14 @@ static void memTouches(Operation *op, SmallVectorImpl<MemTouch> &out) {
   }
 }
 
-static bool mayConflict(Operation *a, const MemTouch &ta, Operation *buildPoint,
-                        const MemTouch &tb) {
+static bool mayConflict(Operation *arrayValue, const MemTouch &ta,
+                        Operation *buildPoint, const MemTouch &tb) {
   if (!ta.write && !tb.write)
     return false;
   if (ta.key && tb.key && ta.key != tb.key)
     return false;
   if (ta.memref && ta.memref == tb.memref &&
-      compareAddresses(a, buildPoint) == AddrRelation::Disjoint)
+      compareAddresses(arrayValue, buildPoint) == AddrRelation::Disjoint)
     return false;
   return true;
 }
@@ -534,18 +542,18 @@ static bool inExclusiveArms(const SeqScopeIndex::OpInfo &exprValue,
     for (const auto &ay : rowValue.arms)
       if (ax.first == ay.first && ax.second != ay.second)
         return true;
-  for (size_t a = 0; a + 1 < hoistedX.size(); a += 2)
+  for (size_t arrayValue = 0; arrayValue + 1 < hoistedX.size(); arrayValue += 2)
     for (size_t buildPoint = 0; buildPoint + 1 < hoistedY.size();
          buildPoint += 2)
-      if (hoistedX[a] == hoistedY[buildPoint] &&
-          hoistedX[a + 1] != hoistedY[buildPoint + 1])
+      if (hoistedX[arrayValue] == hoistedY[buildPoint] &&
+          hoistedX[arrayValue + 1] != hoistedY[buildPoint + 1])
         return true;
   return false;
 }
 
 static ArrayRef<int64_t> hoistedArmsOf(Operation *op) {
-  if (auto a = op->getAttrOfType<DenseI64ArrayAttr>(kIfArmsAttr))
-    return a.asArrayRef();
+  if (auto arrayValue = op->getAttrOfType<DenseI64ArrayAttr>(kIfArmsAttr))
+    return arrayValue.asArrayRef();
   return {};
 }
 
@@ -615,26 +623,27 @@ findSameStatePair(ArrayRef<const AccessSummary *> accs,
     if (!touches.empty() && !events.empty()) {
       const SeqScopeIndex::OpInfo &opInfo = stringValue.info.find(op)->second;
       ArrayRef<int64_t> opHoisted = hoistedArmsOf(op);
-      for (const MemEvent &e : events) {
-        if (selfAcc >= 0 && e.acc >= 0)
+      for (const MemEvent &entryValue : events) {
+        if (selfAcc >= 0 && entryValue.acc >= 0)
           continue;
-        const llvm::BitVector &ed = deps[e.pos - lo];
+        const llvm::BitVector &ed = deps[entryValue.pos - lo];
         if (!ed.test(dimensionIndex) &&
-            !(e.acc >= 0 && !dimensionIndex.test(e.acc)))
+            !(entryValue.acc >= 0 && !dimensionIndex.test(entryValue.acc)))
           continue;
-        if (inExclusiveArms(stringValue.info.find(e.op)->second,
-                            hoistedArmsOf(e.op), opInfo, opHoisted))
+        if (inExclusiveArms(stringValue.info.find(entryValue.op)->second,
+                            hoistedArmsOf(entryValue.op), opInfo, opHoisted))
           continue;
-        bool conflict = llvm::any_of(e.touches, [&](const MemTouch &a) {
-          return llvm::any_of(touches, [&](const MemTouch &buildPoint) {
-            return mayConflict(e.op, a, op, buildPoint);
-          });
-        });
+        bool conflict =
+            llvm::any_of(entryValue.touches, [&](const MemTouch &arrayValue) {
+              return llvm::any_of(touches, [&](const MemTouch &buildPoint) {
+                return mayConflict(entryValue.op, arrayValue, op, buildPoint);
+              });
+            });
         if (!conflict)
           continue;
         dimensionIndex |= ed;
-        if (e.acc >= 0)
-          dimensionIndex.set(e.acc);
+        if (entryValue.acc >= 0)
+          dimensionIndex.set(entryValue.acc);
       }
     }
     if (!touches.empty() && (selfAcc >= 0 || dimensionIndex.any()))
@@ -672,11 +681,11 @@ findSameStatePair(ArrayRef<const AccessSummary *> accs,
   return std::nullopt;
 }
 
-static std::string accessText(const AccessSummary *a) {
+static std::string accessText(const AccessSummary *arrayValue) {
   std::string stringValue;
   llvm::raw_string_ostream os(stringValue);
-  os << a->op->getName() << " @ ";
-  a->op->getLoc().print(os);
+  os << arrayValue->op->getName() << " @ ";
+  arrayValue->op->getLoc().print(os);
   return stringValue;
 }
 
@@ -685,8 +694,8 @@ static PortDemand sequentialScopeDemand(ArrayRef<const AccessSummary *> group,
                                         std::string *note) {
   PortDemand dimensionIndex;
   bool anyR = false, anyW = false;
-  for (const auto *a : group)
-    (a->isWrite ? anyW : anyR) = true;
+  for (const auto *arrayValue : group)
+    (arrayValue->isWrite ? anyW : anyR) = true;
   dimensionIndex.reads = anyR ? 1u : 0u;
   dimensionIndex.writes = anyW ? 1u : 0u;
   dimensionIndex.total = (anyR || anyW) ? 1u : 0u;
@@ -695,14 +704,14 @@ static PortDemand sequentialScopeDemand(ArrayRef<const AccessSummary *> group,
     return dimensionIndex;
   const SeqScopeIndex::Scope &stringValue = index.get(scope);
   std::map<unsigned, SmallVector<const AccessSummary *>> byStretch;
-  for (const auto *a : group) {
-    auto it = stringValue.info.find(a->op);
+  for (const auto *arrayValue : group) {
+    auto it = stringValue.info.find(arrayValue->op);
     if (it != stringValue.info.end())
-      byStretch[it->second.stretch].push_back(a);
+      byStretch[it->second.stretch].push_back(arrayValue);
   }
   DenseSet<Value> bankValues;
-  for (const auto *a : group)
-    for (Value valueHandle : a->op->getOperands())
+  for (const auto *arrayValue : group)
+    for (Value valueHandle : arrayValue->op->getOperands())
       if (isa<BaseMemRefType>(valueHandle.getType()))
         bankValues.insert(valueHandle);
   for (auto &[stretch, accs] : byStretch) {
@@ -738,15 +747,16 @@ PortDemand scopeDemand(ArrayRef<const AccessSummary *> group,
     return dimensionIndex;
 
   unsigned ii = group.front()->ii;
-  assert(llvm::all_of(group, [&](auto *a) { return a->ii == ii; }) &&
+  assert(llvm::all_of(group,
+                      [&](auto *arrayValue) { return arrayValue->ii == ii; }) &&
          "scopeDemand requires a single-II group; bucket by scope first");
 
   if (ii == 0 && seq)
     return sequentialScopeDemand(group, *seq, note);
   if (ii == 0) {
     bool anyR = false, anyW = false;
-    for (const auto *a : group)
-      (a->isWrite ? anyW : anyR) = true;
+    for (const auto *arrayValue : group)
+      (arrayValue->isWrite ? anyW : anyR) = true;
     dimensionIndex.reads = anyR ? 1u : 0u;
     dimensionIndex.writes = anyW ? 1u : 0u;
     dimensionIndex.total = (anyR || anyW) ? 1u : 0u;
@@ -754,11 +764,11 @@ PortDemand scopeDemand(ArrayRef<const AccessSummary *> group,
   }
 
   std::vector<std::pair<unsigned, unsigned>> slot(ii, {0u, 0u});
-  for (const auto *a : group) {
-    unsigned occ = std::max(a->latency, 1u);
+  for (const auto *arrayValue : group) {
+    unsigned occ = std::max(arrayValue->latency, 1u);
     for (unsigned candidateValue = 0; candidateValue < occ; ++candidateValue) {
-      unsigned phase = (a->stageStart + candidateValue) % ii;
-      (a->isWrite ? slot[phase].second : slot[phase].first)++;
+      unsigned phase = (arrayValue->stageStart + candidateValue) % ii;
+      (arrayValue->isWrite ? slot[phase].second : slot[phase].first)++;
     }
   }
 
@@ -776,8 +786,8 @@ PortDemand scopeDemand(ArrayRef<const AccessSummary *> group,
 static PortDemand computePortDemand(ArrayRef<AccessSummary> accesses,
                                     SeqScopeIndex *seq) {
   std::map<Operation *, SmallVector<const AccessSummary *>> byScope;
-  for (const auto &a : accesses)
-    byScope[a.scope].push_back(&a);
+  for (const auto &arrayValue : accesses)
+    byScope[arrayValue.scope].push_back(&arrayValue);
 
   PortDemand combined;
   bool anyRead = false, anyWrite = false, anyReadModifyScope = false;
@@ -873,8 +883,8 @@ unsigned blockDataWidth(StorageKind keyValue) {
   return isWideKind(keyValue) ? kMaxPortWidthWide : kMaxPortWidthNarrow;
 }
 
-int64_t ceilDiv(int64_t a, int64_t buildPoint) {
-  return (a + buildPoint - 1) / buildPoint;
+int64_t ceilDiv(int64_t arrayValue, int64_t buildPoint) {
+  return (arrayValue + buildPoint - 1) / buildPoint;
 }
 
 unsigned usedPortWidth(const BankMathRecord &bm, StorageKind keyValue) {
@@ -1000,12 +1010,12 @@ bool classifyAccess(Operation *op, Value mem, bool &isWrite) {
   SmallVector<MemoryEffects::EffectInstance> effects;
   eff.getEffects(effects);
   bool reads = false, writes = false;
-  for (auto &e : effects) {
-    if (e.getValue() && e.getValue() != mem)
+  for (auto &entryValue : effects) {
+    if (entryValue.getValue() && entryValue.getValue() != mem)
       continue;
-    if (isa<MemoryEffects::Read>(e.getEffect()))
+    if (isa<MemoryEffects::Read>(entryValue.getEffect()))
       reads = true;
-    else if (isa<MemoryEffects::Write>(e.getEffect()))
+    else if (isa<MemoryEffects::Write>(entryValue.getEffect()))
       writes = true;
   }
   if (!reads && !writes)
@@ -1029,11 +1039,11 @@ static void collectAccessesFrom(
     DenseSet<Operation *> &seen, SmallVectorImpl<AccessSummary> &out) {
   for (OpOperand &use : mem.getUses()) {
     Operation *user = use.getOwner();
-    if (auto call = dyn_cast<CallOpInterface>(user)) {
-      func::FuncOp callee = resolveDefinedCallee(call);
+    if (auto callSite = dyn_cast<CallOpInterface>(user)) {
+      func::FuncOp callee = resolveDefinedCallee(callSite);
       if (!callee)
         continue;
-      std::optional<unsigned> indexValue = callArgIndex(call, use);
+      std::optional<unsigned> indexValue = callArgIndex(callSite, use);
       if (!indexValue || *indexValue >= callee.getNumArguments())
         continue;
       if (!visitedArgs.insert({callee.getOperation(), *indexValue}).second)
@@ -1057,25 +1067,26 @@ static void collectAccessesFrom(
     if (!seen.insert(user).second)
       continue;
 
-    AccessSummary a;
-    a.op = user;
-    a.isWrite = isWrite;
-    a.latency = portOccupancy(isWrite);
-    a.via = via;
-    a.portBound = portBound;
+    AccessSummary arrayValue;
+    arrayValue.op = user;
+    arrayValue.isWrite = isWrite;
+    arrayValue.latency = portOccupancy(isWrite);
+    arrayValue.via = via;
+    arrayValue.portBound = portBound;
 
     if (auto pipeline = user->getParentOfType<LoopSchedulePipelineOp>()) {
       auto stage = user->getParentOfType<LoopSchedulePipelineStageOp>();
-      a.scope = pipeline.getOperation();
-      a.ii = static_cast<unsigned>(pipeline.getII());
-      a.stageStart = stage ? static_cast<unsigned>(stage.getStart()) : 0u;
+      arrayValue.scope = pipeline.getOperation();
+      arrayValue.ii = static_cast<unsigned>(pipeline.getII());
+      arrayValue.stageStart =
+          stage ? static_cast<unsigned>(stage.getStart()) : 0u;
     } else {
 
-      a.scope = sequentialScope(user);
-      a.ii = 0;
-      a.stageStart = 0;
+      arrayValue.scope = sequentialScope(user);
+      arrayValue.ii = 0;
+      arrayValue.stageStart = 0;
     }
-    out.push_back(a);
+    out.push_back(arrayValue);
   }
 }
 
@@ -1113,11 +1124,12 @@ static bool neverWritten(ArrayRef<Value> sites) {
       SmallVector<MemoryEffects::EffectInstance> effects;
       eff.getEffects(effects);
       bool named = false;
-      for (auto &e : effects) {
-        if (e.getValue() != cur)
+      for (auto &entryValue : effects) {
+        if (entryValue.getValue() != cur)
           continue;
         named = true;
-        if (isa<MemoryEffects::Write, MemoryEffects::Free>(e.getEffect()))
+        if (isa<MemoryEffects::Write, MemoryEffects::Free>(
+                entryValue.getEffect()))
           return false;
       }
       if (!named)
@@ -1130,16 +1142,16 @@ static bool neverWritten(ArrayRef<Value> sites) {
 static FileLineColLoc findFileLoc(Location loc) {
   if (auto fieldValue = dyn_cast<FileLineColLoc>(loc))
     return fieldValue;
-  if (auto n = dyn_cast<NameLoc>(loc))
-    return findFileLoc(n.getChildLoc());
+  if (auto elementCount = dyn_cast<NameLoc>(loc))
+    return findFileLoc(elementCount.getChildLoc());
   if (auto candidateValue = dyn_cast<CallSiteLoc>(loc))
     return findFileLoc(candidateValue.getCallee());
   if (auto fu = dyn_cast<FusedLoc>(loc))
-    for (Location l : fu.getLocations())
-      if (auto fieldValue = findFileLoc(l))
+    for (Location lowerIndex : fu.getLocations())
+      if (auto fieldValue = findFileLoc(lowerIndex))
         return fieldValue;
-  if (auto o = dyn_cast<OpaqueLoc>(loc))
-    return findFileLoc(o.getFallbackLocation());
+  if (auto opHandle = dyn_cast<OpaqueLoc>(loc))
+    return findFileLoc(opHandle.getFallbackLocation());
   return {};
 }
 
@@ -1169,22 +1181,24 @@ static std::string scopeKindName(Operation *scope) {
 }
 
 static bool isStoreEnableOp(Operation *op) {
-  StringRef n = op->getName().getStringRef();
-  return n == "hls.store_enable" || n == "hls.affine.store_enable";
+  StringRef elementCount = op->getName().getStringRef();
+  return elementCount == "hls.store_enable" ||
+         elementCount == "hls.affine.store_enable";
 }
 
 static unsigned counterAttr(Operation *op, StringRef name) {
-  if (auto a = op->getAttrOfType<IntegerAttr>(name))
-    return a.getInt() > 0 ? static_cast<unsigned>(a.getInt()) : 0u;
+  if (auto arrayValue = op->getAttrOfType<IntegerAttr>(name))
+    return arrayValue.getInt() > 0 ? static_cast<unsigned>(arrayValue.getInt())
+                                   : 0u;
   return 0;
 }
 
 static void describeMemref(Operation *op, unsigned index,
                            MemrefRecord &resultValue) {
   StringRef opName = op->getName().getStringRef();
-  if (auto g = dyn_cast<memref::GlobalOp>(op)) {
+  if (auto globalOp = dyn_cast<memref::GlobalOp>(op)) {
     resultValue.kind = "global";
-    resultValue.name = g.getSymName().str();
+    resultValue.name = globalOp.getSymName().str();
     resultValue.id = "global#" + std::to_string(index);
   } else {
     resultValue.kind = opName.starts_with("memref.")
@@ -1200,8 +1214,8 @@ static void describeMemref(Operation *op, unsigned index,
     resultValue.varname = valueHandle.getValue().str();
   else if (auto buildPoint = op->getAttrOfType<StringAttr>("hls.bank_of"))
     resultValue.varname = buildPoint.getValue().str();
-  if (auto g = op->getAttrOfType<StringAttr>("hls.from_global"))
-    resultValue.fromGlobal = g.getValue().str();
+  if (auto globalOp = op->getAttrOfType<StringAttr>("hls.from_global"))
+    resultValue.fromGlobal = globalOp.getValue().str();
   if (auto memoryOp = op->getAttrOfType<StringAttr>("hls.struct_member"))
     resultValue.structMember = memoryOp.getValue().str();
   if (auto keyValue = op->getAttrOfType<StringAttr>("hls.kept_reason"))
@@ -1238,8 +1252,8 @@ static void describeMemref(Operation *op, unsigned index,
     if (auto bc = op->getAttrOfType<IntegerAttr>("hls.bank_count"))
       portValue.bankCount = bc.getInt();
     if (auto all = dimensionIndex.getAs<ArrayAttr>("dims"))
-      for (Attribute a : all)
-        if (auto dd = dyn_cast<DictionaryAttr>(a)) {
+      for (Attribute arrayValue : all)
+        if (auto dd = dyn_cast<DictionaryAttr>(arrayValue)) {
           auto keyValue = dd.getAs<StringAttr>("kind");
           auto fieldValue = dd.getAs<IntegerAttr>("factor");
           auto dm = dd.getAs<IntegerAttr>("dim");
@@ -1266,38 +1280,39 @@ static void recordAccesses(ArrayRef<AccessSummary> accesses,
   resultValue.accesses.clear();
   resultValue.perScope.clear();
   SmallVector<Operation *> scopeOrder;
-  for (const AccessSummary &a : accesses) {
+  for (const AccessSummary &arrayValue : accesses) {
     AccessRecord ar;
-    ar.op = a.op->getName().getStringRef().str();
-    ar.isWrite = a.isWrite;
-    ar.scope = a.scope;
-    ar.scopeKind = scopeKindName(a.scope);
-    ar.scopeLoc = a.scope ? locString(a.scope->getLoc()) : "<none>";
-    ar.ii = a.ii;
-    ar.stageStart = a.stageStart;
-    ar.storeEnable = isStoreEnableOp(a.op);
-    ar.mergedLoads = counterAttr(a.op, "hls.merged_loads");
-    ar.forwardedLoads = counterAttr(a.op, "hls.forwarded_loads");
-    ar.removedStores = counterAttr(a.op, "hls.removed_stores");
-    if (auto fn = a.op->getParentOfType<func::FuncOp>())
+    ar.op = arrayValue.op->getName().getStringRef().str();
+    ar.isWrite = arrayValue.isWrite;
+    ar.scope = arrayValue.scope;
+    ar.scopeKind = scopeKindName(arrayValue.scope);
+    ar.scopeLoc =
+        arrayValue.scope ? locString(arrayValue.scope->getLoc()) : "<none>";
+    ar.ii = arrayValue.ii;
+    ar.stageStart = arrayValue.stageStart;
+    ar.storeEnable = isStoreEnableOp(arrayValue.op);
+    ar.mergedLoads = counterAttr(arrayValue.op, "hls.merged_loads");
+    ar.forwardedLoads = counterAttr(arrayValue.op, "hls.forwarded_loads");
+    ar.removedStores = counterAttr(arrayValue.op, "hls.removed_stores");
+    if (auto fn = arrayValue.op->getParentOfType<func::FuncOp>())
       ar.inFunc = fn.getName().str();
-    if (a.via) {
+    if (arrayValue.via) {
       std::string valueHandle = "call";
-      if (auto call = dyn_cast<CallOpInterface>(a.via))
-        if (auto callee = resolveDefinedCallee(call))
+      if (auto callSite = dyn_cast<CallOpInterface>(arrayValue.via))
+        if (auto callee = resolveDefinedCallee(callSite))
           valueHandle += " @" + callee.getName().str();
-      ar.viaCall = valueHandle + " @ " + locString(a.via->getLoc());
+      ar.viaCall = valueHandle + " @ " + locString(arrayValue.via->getLoc());
     }
-    ar.portBound = a.portBound;
+    ar.portBound = arrayValue.portBound;
     resultValue.accesses.push_back(std::move(ar));
-    if (!llvm::is_contained(scopeOrder, a.scope))
-      scopeOrder.push_back(a.scope);
+    if (!llvm::is_contained(scopeOrder, arrayValue.scope))
+      scopeOrder.push_back(arrayValue.scope);
   }
   for (Operation *scope : scopeOrder) {
     SmallVector<const AccessSummary *> group;
-    for (const AccessSummary &a : accesses)
-      if (a.scope == scope)
-        group.push_back(&a);
+    for (const AccessSummary &arrayValue : accesses)
+      if (arrayValue.scope == scope)
+        group.push_back(&arrayValue);
     ScopeDemandRecord sd;
     sd.scopeKind = scopeKindName(scope);
     sd.scopeLoc = scope ? locString(scope->getLoc()) : "<none>";
@@ -1323,17 +1338,17 @@ static ReplicationRecord analyzeReplication(ArrayRef<AccessSummary> accesses,
     bool portBound = false;
   };
   SmallVector<ScopeStats> scopes;
-  for (const AccessSummary &a : accesses) {
+  for (const AccessSummary &arrayValue : accesses) {
     ScopeStats *st = nullptr;
     for (ScopeStats &stringValue : scopes)
-      if (stringValue.scope == a.scope)
+      if (stringValue.scope == arrayValue.scope)
         st = &stringValue;
     if (!st) {
-      scopes.push_back({a.scope, 0, 0, a.ii, false});
+      scopes.push_back({arrayValue.scope, 0, 0, arrayValue.ii, false});
       st = &scopes.back();
     }
-    (a.isWrite ? st->writes : st->reads)++;
-    st->portBound |= a.portBound;
+    (arrayValue.isWrite ? st->writes : st->reads)++;
+    st->portBound |= arrayValue.portBound;
   }
 
   resultValue.maxStoresPerLoop = 0;
@@ -1390,12 +1405,13 @@ static std::string ramReasonFor(const PortDemand &dimensionIndex,
   if (kr.kind == StorageKind::RAM_1WNR) {
     os << "replicable (no loop body stores to it more than once)";
     if (rep.limitingLoop) {
-      for (const ReplicationLoopRecord &l : rep.loops)
-        if (l.scopeLoc == *rep.limitingLoop) {
-          os << "; pipeline @ " << l.scopeLoc << ": " << l.reads << "R+"
-             << l.writes << "W per iteration at II " << l.ii << " needs ceil("
-             << (l.reads + l.writes) << "/" << l.ii << ")=" << l.need
-             << " port-cycles";
+      for (const ReplicationLoopRecord &lowerIndex : rep.loops)
+        if (lowerIndex.scopeLoc == *rep.limitingLoop) {
+          os << "; pipeline @ " << lowerIndex.scopeLoc << ": "
+             << lowerIndex.reads << "R+" << lowerIndex.writes
+             << "W per iteration at II " << lowerIndex.ii << " needs ceil("
+             << (lowerIndex.reads + lowerIndex.writes) << "/" << lowerIndex.ii
+             << ")=" << lowerIndex.need << " port-cycles";
           break;
         }
     }
@@ -1451,14 +1467,29 @@ static unsigned narrowRomWidth(ArrayRef<APInt> vals) {
       width = std::max(width, valueHandle.getSignificantBits());
     return width;
   }
-  unsigned a = 0;
+  unsigned arrayValue = 0;
   for (const APInt &valueHandle : vals)
-    a = std::max(a, valueHandle.getActiveBits());
-  if (a == 0)
+    arrayValue = std::max(arrayValue, valueHandle.getActiveBits());
+  if (arrayValue == 0)
     return 0;
   for (const APInt &valueHandle : vals)
-    width = std::max(width, valueHandle.trunc(a).getSignificantBits());
+    width = std::max(width, valueHandle.trunc(arrayValue).getSignificantBits());
   return width;
+}
+
+static unsigned applyNarrowWidth(Operation *op, MemrefRecord &rec) {
+  rec.narrow.reset();
+  auto bits = op->getAttrOfType<IntegerAttr>(kNarrowBitsAttrName);
+  if (!bits || bits.getInt() <= 0 ||
+      static_cast<uint64_t>(bits.getInt()) >= rec.elemBits)
+    return rec.elemBits;
+  MemrefRecord::NarrowRecord elementCount;
+  elementCount.declaredBits = rec.elemBits;
+  elementCount.bits = static_cast<unsigned>(bits.getInt());
+  if (auto why = op->getAttrOfType<StringAttr>(kNarrowReasonAttrName))
+    elementCount.reason = why.getValue().str();
+  rec.narrow = std::move(elementCount);
+  return rec.narrow->bits;
 }
 
 static BRAMCost estimateStreamFifos(MemoryResourceOpInterface iface,
@@ -1480,15 +1511,16 @@ static BRAMCost estimateStreamFifos(MemoryResourceOpInterface iface,
   cost.kind = StorageKind::RAM_1P;
   cost.bramCount = fifo.bram;
   std::string groups;
-  for (const FifoGroup &g : fifo.groups) {
+  for (const FifoGroup &globalOp : fifo.groups) {
     if (!groups.empty())
       groups += "; ";
-    groups += std::to_string(g.count) + " x ";
-    if (g.member)
-      groups += "member " + std::to_string(*g.member) + " ";
-    groups += std::to_string(g.depth) + "x" + std::to_string(g.bits) +
-              " (depth " + g.depthSource + ", width " + g.bitsSource +
-              "): " + g.reason;
+    groups += std::to_string(globalOp.count) + " x ";
+    if (globalOp.member)
+      groups += "member " + std::to_string(*globalOp.member) + " ";
+    groups += std::to_string(globalOp.depth) + "x" +
+              std::to_string(globalOp.bits) + " (depth " +
+              globalOp.depthSource + ", width " + globalOp.bitsSource +
+              "): " + globalOp.reason;
   }
   cost.note = "hls::stream storage, not a RAM: " + std::to_string(fifo.fifos) +
               " FIFO(s) = " + std::to_string(fifo.bram) + " BRAM [" + groups +
@@ -1517,12 +1549,12 @@ nestedArms(Operation *op, Operation *scope) {
   return arms;
 }
 
-static bool onExclusivePaths(Operation *a, Operation *buildPoint,
+static bool onExclusivePaths(Operation *arrayValue, Operation *buildPoint,
                              Operation *scope) {
   SeqScopeIndex::OpInfo exprValue, rowValue;
-  exprValue.arms = nestedArms(a, scope);
+  exprValue.arms = nestedArms(arrayValue, scope);
   rowValue.arms = nestedArms(buildPoint, scope);
-  return inExclusiveArms(exprValue, hoistedArmsOf(a), rowValue,
+  return inExclusiveArms(exprValue, hoistedArmsOf(arrayValue), rowValue,
                          hoistedArmsOf(buildPoint));
 }
 
@@ -1530,14 +1562,15 @@ static std::string sameCycleAccesses(ArrayRef<AccessSummary> accesses,
                                      SeqScopeIndex *seq) {
   using ProcessScope = std::pair<Operation *, Operation *>;
   SmallVector<ProcessScope> scopes;
-  for (const AccessSummary &a : accesses)
-    if (!llvm::is_contained(scopes, ProcessScope{a.via, a.scope}))
-      scopes.push_back({a.via, a.scope});
+  for (const AccessSummary &arrayValue : accesses)
+    if (!llvm::is_contained(scopes,
+                            ProcessScope{arrayValue.via, arrayValue.scope}))
+      scopes.push_back({arrayValue.via, arrayValue.scope});
   for (auto [via, scope] : scopes) {
     SmallVector<const AccessSummary *> group;
-    for (const AccessSummary &a : accesses)
-      if (a.scope == scope && a.via == via)
-        group.push_back(&a);
+    for (const AccessSummary &arrayValue : accesses)
+      if (arrayValue.scope == scope && arrayValue.via == via)
+        group.push_back(&arrayValue);
     if (group.size() < 2)
       continue;
     unsigned ii = group.front()->ii;
@@ -1552,17 +1585,18 @@ static std::string sameCycleAccesses(ArrayRef<AccessSummary> accesses,
     for (size_t loopIndex = 0; loopIndex < group.size(); ++loopIndex)
       for (size_t innerIndex = loopIndex + 1; innerIndex < group.size();
            ++innerIndex) {
-        const AccessSummary *a = group[loopIndex],
+        const AccessSummary *arrayValue = group[loopIndex],
                             *buildPoint = group[innerIndex];
-        if (onExclusivePaths(a->op, buildPoint->op, scope))
+        if (onExclusivePaths(arrayValue->op, buildPoint->op, scope))
           continue;
-        if (!a->isWrite && !buildPoint->isWrite &&
-            compareAddresses(a->op, buildPoint->op) == AddrRelation::Same)
+        if (!arrayValue->isWrite && !buildPoint->isWrite &&
+            compareAddresses(arrayValue->op, buildPoint->op) ==
+                AddrRelation::Same)
           continue;
         return "pipelined scope (II " + std::to_string(ii) +
                "), one control "
                "path of one iteration: " +
-               accessText(a) + " + " + accessText(buildPoint);
+               accessText(arrayValue) + " + " + accessText(buildPoint);
       }
   }
   return {};
@@ -1580,6 +1614,7 @@ static BRAMCost estimateChannel(MemoryResourceOpInterface iface,
     elt.print(os);
   }
   rec.elemBits = elt.getIntOrFloatBitWidth();
+  unsigned pricedBits = applyNarrowWidth(iface.getOperation(), rec);
   int64_t words = 1;
   for (int64_t dimensionIndex : rec.shape)
     words *= dimensionIndex;
@@ -1609,7 +1644,7 @@ static BRAMCost estimateChannel(MemoryResourceOpInterface iface,
   }
   bool lutram = ch.bindImpl == "lutram";
   ChannelPrice price = priceChannel(
-      words, rec.elemBits, ch.blocks, twoPorts, bound2p, lutram,
+      words, pricedBits, ch.blocks, twoPorts, bound2p, lutram,
       [&](int64_t widthValue, unsigned bits, bool sdp) {
         return estimateBlocks(widthValue, bits, sdp, formula, &rec.bankMath);
       });
@@ -1721,8 +1756,8 @@ tryDataflowChannel(MemoryResourceOpInterface iface, MemrefRecord &rec,
 
   if (op->hasAttr("hls.const_fill"))
     return std::nullopt;
-  if (auto g = dyn_cast<memref::GlobalOp>(op))
-    if (g.getConstant())
+  if (auto globalOp = dyn_cast<memref::GlobalOp>(op))
+    if (globalOp.getConstant())
       return std::nullopt;
   int64_t words = 1;
   for (int64_t dimensionIndex : iface.getStaticShape()) {
@@ -1735,8 +1770,9 @@ tryDataflowChannel(MemoryResourceOpInterface iface, MemrefRecord &rec,
   SmallVector<AccessSummary> accesses =
       collectAccessSummaries(sites, instances);
   SmallVector<ChannelAccess> anchors;
-  for (const AccessSummary &a : accesses)
-    anchors.push_back({a.via ? a.via : a.op, a.isWrite});
+  for (const AccessSummary &arrayValue : accesses)
+    anchors.push_back(
+        {arrayValue.via ? arrayValue.via : arrayValue.op, arrayValue.isWrite});
   ChannelVerdict valueHandle =
       analyzeDataflowChannel(op, anchors, words, &merges);
   if (valueHandle.channel)
@@ -1767,16 +1803,16 @@ static BRAMCost estimateBRAM(MemoryResourceOpInterface iface, MemrefRecord &rec,
     rec.elemBits = elt.isIntOrFloat()    ? elt.getIntOrFloatBitWidth()
                    : isa<IndexType>(elt) ? 64u
                                          : 0u;
-    int64_t n = 1;
+    int64_t elementCount = 1;
     bool dynamic = false;
     for (int64_t dimensionIndex : rec.shape) {
       if (ShapedType::isDynamic(dimensionIndex))
         dynamic = true;
       else
-        n *= dimensionIndex;
+        elementCount *= dimensionIndex;
     }
     if (!dynamic)
-      rec.words = n;
+      rec.words = elementCount;
     rec.accessesAttributed = attributed;
   }
 
@@ -1817,10 +1853,17 @@ static BRAMCost estimateBRAM(MemoryResourceOpInterface iface, MemrefRecord &rec,
     return cost;
   }
 
-  if (!iface.contributesToBRAMCost()) {
+  unsigned pricedBits = applyNarrowWidth(iface.getOperation(), rec);
+  bool narrowedBelowThreshold =
+      rec.narrow && rec.words &&
+      *rec.words * static_cast<int64_t>(pricedBits) < kBRAMPromotionBits &&
+      iface.contributesToBRAMCost();
+  if (!iface.contributesToBRAMCost() || narrowedBelowThreshold) {
     cost.note = "excluded from BRAM accounting (LUTRAM / stream / zero-size)";
 
-    int64_t bits = iface.getStaticSizeInBits();
+    int64_t bits = narrowedBelowThreshold
+                       ? *rec.words * static_cast<int64_t>(pricedBits)
+                       : iface.getStaticSizeInBits();
     auto pragmaKind = iface.getPragmaStorageKind();
     if (pragmaKind && *pragmaKind == StorageKind::LUTRAM) {
       rec.status = "excluded_small";
@@ -1834,11 +1877,14 @@ static BRAMCost estimateBRAM(MemoryResourceOpInterface iface, MemrefRecord &rec,
       rec.excludeReason = "zero-size array (0 bits)";
     } else {
       rec.status = "excluded_small";
-      rec.excludeReason = "size " + std::to_string(bits) + " bits < " +
-                          std::to_string(kBRAMPromotionBits) +
-                          "-bit BRAM promotion threshold (Words*Bits >= " +
-                          std::to_string(kBRAMPromotionBits) +
-                          " -> BRAM); distributed RAM, 0 BRAM";
+      rec.excludeReason =
+          "size " + std::to_string(bits) + " bits" +
+          std::string(narrowedBelowThreshold ? " (narrowed element width)"
+                                             : "") +
+          " < " + std::to_string(kBRAMPromotionBits) +
+          "-bit BRAM promotion threshold (Words*Bits >= " +
+          std::to_string(kBRAMPromotionBits) +
+          " -> BRAM); distributed RAM, 0 BRAM";
     }
 
     SmallVector<AccessSummary> accesses =
@@ -1866,7 +1912,7 @@ static BRAMCost estimateBRAM(MemoryResourceOpInterface iface, MemrefRecord &rec,
     }
     numElems *= dim;
   }
-  unsigned elemBits = rec.elemBits;
+  unsigned elemBits = pricedBits;
   if (numElems == 0 || elemBits == 0) {
     cost.note = "zero-size";
     rec.status = "zero_size";
@@ -1897,10 +1943,14 @@ static BRAMCost estimateBRAM(MemoryResourceOpInterface iface, MemrefRecord &rec,
       attributed ? accesses : collectAccessSummaries(allSites, instances);
   if (!initRom)
     if (auto mark = iface->getAttrOfType<IntegerAttr>("hls.const_fill")) {
-      bool anyRead = llvm::any_of(
-          romAccesses, [](const AccessSummary &a) { return !a.isWrite; });
-      bool anyWrite = llvm::any_of(
-          romAccesses, [](const AccessSummary &a) { return a.isWrite; });
+      bool anyRead =
+          llvm::any_of(romAccesses, [](const AccessSummary &arrayValue) {
+            return !arrayValue.isWrite;
+          });
+      bool anyWrite =
+          llvm::any_of(romAccesses, [](const AccessSummary &arrayValue) {
+            return arrayValue.isWrite;
+          });
       fillRom = anyRead && anyWrite;
       if (fillRom)
         romBits = static_cast<unsigned>(mark.getInt());
@@ -1917,14 +1967,17 @@ static BRAMCost estimateBRAM(MemoryResourceOpInterface iface, MemrefRecord &rec,
 
     if (fillRom || !attributed) {
       SmallVector<AccessSummary> reads;
-      for (const AccessSummary &a : romAccesses)
-        if (!a.isWrite)
-          reads.push_back(a);
+      for (const AccessSummary &arrayValue : romAccesses)
+        if (!arrayValue.isWrite)
+          reads.push_back(arrayValue);
       accesses = std::move(reads);
       rec.accessesAttributed = true;
       demand = computePortDemand(accesses, seq);
       rep = analyzeReplication(accesses, true);
     }
+
+    rec.narrow.reset();
+    elemBits = rec.elemBits;
     unsigned declaredBits = elemBits;
     std::string widthNote;
     if (romBits) {
@@ -1965,26 +2018,28 @@ static BRAMCost estimateBRAM(MemoryResourceOpInterface iface, MemrefRecord &rec,
         return cost;
       }
     }
-    unsigned n = std::max(demand.total, 1u);
-    for (ReplicationLoopRecord &l : rep.loops) {
-      n = std::max(n, l.need);
+    unsigned elementCount = std::max(demand.total, 1u);
+    for (ReplicationLoopRecord &lowerIndex : rep.loops) {
+      elementCount = std::max(elementCount, lowerIndex.need);
 
-      l.copies =
-          l.need <= 2
+      lowerIndex.copies =
+          lowerIndex.need <= 2
               ? 1u
-              : std::min<unsigned>(static_cast<unsigned>(ceilDiv(l.need, 2)),
-                                   kMaxReplicationCopies);
+              : std::min<unsigned>(
+                    static_cast<unsigned>(ceilDiv(lowerIndex.need, 2)),
+                    kMaxReplicationCopies);
     }
     rep.replicable = true;
     rep.copies = 1;
     rep.limitingLoop.reset();
-    if (n <= 2) {
-      kr.kind = n <= 1 ? StorageKind::ROM_1P : StorageKind::ROM_2P;
+    if (elementCount <= 2) {
+      kr.kind = elementCount <= 1 ? StorageKind::ROM_1P : StorageKind::ROM_2P;
       blocks = estimateBlocks(numElems, elemBits, true, formula, &rec.bankMath);
     } else {
       kr.kind = StorageKind::ROM_NP;
-      rep.copies = std::min<unsigned>(static_cast<unsigned>(ceilDiv(n, 2)),
-                                      kMaxReplicationCopies);
+      rep.copies =
+          std::min<unsigned>(static_cast<unsigned>(ceilDiv(elementCount, 2)),
+                             kMaxReplicationCopies);
       int64_t perCopy =
           estimateBlocks(numElems, elemBits, false, formula, &rec.bankMath);
       blocks = perCopy * rep.copies;
@@ -1998,7 +2053,7 @@ static BRAMCost estimateBRAM(MemoryResourceOpInterface iface, MemrefRecord &rec,
                            ? "b constant global -> "
                            : "b initialised global, never written -> ";
     cost.note = std::to_string(numElems) + "x" + std::to_string(elemBits) +
-                what + kindName(kr.kind) + " (" + std::to_string(n) +
+                what + kindName(kr.kind) + " (" + std::to_string(elementCount) +
                 " read port(s)/cycle) = " + std::to_string(blocks) +
                 " BRAM_18K";
     recordAccesses(accesses, rec, seq);
@@ -2013,13 +2068,14 @@ static BRAMCost estimateBRAM(MemoryResourceOpInterface iface, MemrefRecord &rec,
                         ? "constant-initialised global (ROM, never written)"
                         : "initialised global that no get_global site writes "
                           "(ROM)") +
-        widthNote + ": peak " + std::to_string(n) + " read(s) per cycle -> " +
-        kindName(kr.kind) +
-        (n <= 2 ? std::string(": read-only ports are simple dual port, x36 "
-                              "allowed (N8)")
-                : ", " + std::to_string(rep.copies) +
-                      " copies = ceil(n/2) at x18 (N8 (c) ROM_nP: "
-                      "fr_rom3r / fr_rom4r, aes sbox, gsm bitoff)");
+        widthNote + ": peak " + std::to_string(elementCount) +
+        " read(s) per cycle -> " + kindName(kr.kind) +
+        (elementCount <= 2
+             ? std::string(": read-only ports are simple dual port, x36 "
+                           "allowed (N8)")
+             : ", " + std::to_string(rep.copies) +
+                   " copies = ceil(n/2) at x18 (N8 (c) ROM_nP: "
+                   "fr_rom3r / fr_rom4r, aes sbox, gsm bitoff)");
     rec.bram = cost.bramCount;
     return cost;
   }
@@ -2068,8 +2124,10 @@ static BRAMCost estimateBRAM(MemoryResourceOpInterface iface, MemrefRecord &rec,
   rec.replication = rep;
   rec.status = kr.infeasible ? "infeasible" : "counted";
   rec.ramType = kindName(kr.kind);
-  bool anyStoreEnable = llvm::any_of(
-      rec.accesses, [](const AccessRecord &a) { return a.storeEnable; });
+  bool anyStoreEnable =
+      llvm::any_of(rec.accesses, [](const AccessRecord &arrayValue) {
+        return arrayValue.storeEnable;
+      });
   rec.ramReason = ramReasonFor(demand, kr, rep, rec.accessesAttributed,
                                anyStoreEnable, demandClamped);
   rec.bram = cost.bramCount;
@@ -2090,14 +2148,15 @@ static std::string shapeString(ArrayRef<int64_t> shape) {
 }
 
 static std::string displayName(const MemrefRecord &resultValue) {
-  std::string n = resultValue.varname ? *resultValue.varname
-                  : resultValue.name  ? *resultValue.name
-                                      : std::string("<unnamed>");
+  std::string elementCount = resultValue.varname ? *resultValue.varname
+                             : resultValue.name  ? *resultValue.name
+                                                 : std::string("<unnamed>");
   if (resultValue.partition.applied && resultValue.partition.bankIndex &&
       resultValue.partition.bankCount)
-    n += "[bank " + std::to_string(*resultValue.partition.bankIndex) + "/" +
-         std::to_string(*resultValue.partition.bankCount) + "]";
-  return n;
+    elementCount += "[bank " +
+                    std::to_string(*resultValue.partition.bankIndex) + "/" +
+                    std::to_string(*resultValue.partition.bankCount) + "]";
+  return elementCount;
 }
 
 static SmallVector<const MemrefRecord *>
@@ -2105,12 +2164,12 @@ sortedByBram(ArrayRef<MemrefRecord> records) {
   SmallVector<const MemrefRecord *> order;
   for (const MemrefRecord &resultValue : records)
     order.push_back(&resultValue);
-  llvm::stable_sort(order,
-                    [](const MemrefRecord *a, const MemrefRecord *buildPoint) {
-                      if (a->bram != buildPoint->bram)
-                        return a->bram > buildPoint->bram;
-                      return a->id < buildPoint->id;
-                    });
+  llvm::stable_sort(order, [](const MemrefRecord *arrayValue,
+                              const MemrefRecord *buildPoint) {
+    if (arrayValue->bram != buildPoint->bram)
+      return arrayValue->bram > buildPoint->bram;
+    return arrayValue->id < buildPoint->id;
+  });
   return order;
 }
 
@@ -2163,15 +2222,15 @@ collectPipelineRecords(ModuleOp module, const TopScope &scope) {
             portValue->getAttrOfType<StringAttr>(kLoopSchedulerAttr))
       resultValue.scheduler = stringValue.getValue().str();
     if (auto arr = portValue->getAttrOfType<ArrayAttr>(kLoopAutoUnrolledAttr))
-      for (Attribute a : arr) {
-        auto dict = dyn_cast<DictionaryAttr>(a);
+      for (Attribute arrayValue : arr) {
+        auto dict = dyn_cast<DictionaryAttr>(arrayValue);
         if (!dict)
           continue;
         PipelineRecord::Unrolled useValue;
         if (auto fieldValue = dict.getAs<IntegerAttr>("factor"))
           useValue.factor = fieldValue.getInt();
-        if (auto l = dict.getAs<LocationAttr>("loc"))
-          useValue.loc = locString(l);
+        if (auto lowerIndex = dict.getAs<LocationAttr>("loc"))
+          useValue.loc = locString(lowerIndex);
         resultValue.unrolled.push_back(std::move(useValue));
       }
     out.push_back(std::move(resultValue));
@@ -2217,8 +2276,8 @@ static FoldSummary collectFoldSummary(ModuleOp module, const TopScope &scope) {
         stringValue.counts.push_back({na.getName().str(), loopIndex.getInt()});
   }
   if (auto resultValue = dimensionIndex.getAs<ArrayAttr>("rewrites"))
-    for (Attribute a : resultValue) {
-      auto rd = dyn_cast<DictionaryAttr>(a);
+    for (Attribute arrayValue : resultValue) {
+      auto rd = dyn_cast<DictionaryAttr>(arrayValue);
       if (!rd)
         continue;
       if (scoped) {
@@ -2246,10 +2305,10 @@ static void printFoldSummary(const FoldSummary &fieldValue,
                              llvm::raw_ostream &os) {
   if (!fieldValue.present)
     return;
-  int64_t n = 0;
+  int64_t elementCount = 0;
   for (auto &candidateValue : fieldValue.counts)
-    n += candidateValue.second;
-  os << "--- vitis-fold: " << n
+    elementCount += candidateValue.second;
+  os << "--- vitis-fold: " << elementCount
      << " rewrites of the undefined value of an integer x / 0 "
         "(VITIS_NOTES.md N13) ---\n";
   if (fieldValue.wholeModule)
@@ -2265,8 +2324,9 @@ static void printFoldSummary(const FoldSummary &fieldValue,
       os << " (" << widthValue.detail << ")";
     os << "; undefined value from @ " << widthValue.source << "\n";
   }
-  if (static_cast<int64_t>(fieldValue.rewrites.size()) < n)
-    os << "  ... " << (n - static_cast<int64_t>(fieldValue.rewrites.size()))
+  if (static_cast<int64_t>(fieldValue.rewrites.size()) < elementCount)
+    os << "  ... "
+       << (elementCount - static_cast<int64_t>(fieldValue.rewrites.size()))
        << " more not recorded\n";
 }
 
@@ -2298,30 +2358,32 @@ static void printDebugText(ArrayRef<MemrefRecord> records,
       continue;
     }
     if (resultValue.adapter) {
-      const AdapterRecord &a = *resultValue.adapter;
-      os << "[" << resultValue.id << "] m_axi bundle '" << a.bundle << "' ("
-         << resultValue.kind << ") in @"
+      const AdapterRecord &arrayValue = *resultValue.adapter;
+      os << "[" << resultValue.id << "] m_axi bundle '" << arrayValue.bundle
+         << "' (" << resultValue.kind << ") in @"
          << (resultValue.func ? *resultValue.func : "?") << " @ "
          << resultValue.locText << "\n";
       os << "  ports:";
-      for (const std::string &portValue : a.ports)
+      for (const std::string &portValue : arrayValue.ports)
         os << " " << portValue;
-      os << "; bus width max(32, element bits) = " << a.busBits << "\n";
-      os << "  read FIFO: " << (a.hasRead ? "used" : "no load from the bundle")
-         << ", max_read_burst_length " << a.readBurst
-         << " x num_read_outstanding " << a.readOutstanding << " = depth "
-         << a.readDepth << " -> " << a.readBram << " BRAM (" << a.readRule
-         << ")\n";
+      os << "; bus width max(32, element bits) = " << arrayValue.busBits
+         << "\n";
+      os << "  read FIFO: "
+         << (arrayValue.hasRead ? "used" : "no load from the bundle")
+         << ", max_read_burst_length " << arrayValue.readBurst
+         << " x num_read_outstanding " << arrayValue.readOutstanding
+         << " = depth " << arrayValue.readDepth << " -> " << arrayValue.readBram
+         << " BRAM (" << arrayValue.readRule << ")\n";
       os << "  write buffer: "
-         << (a.hasWrite ? "used" : "no store to the bundle")
-         << ", max_write_burst_length " << a.writeBurst
-         << " (num_write_outstanding " << a.writeOutstanding
-         << " has no effect) -> " << a.writeBram << " BRAM (" << a.writeRule
-         << ")\n";
-      if (a.unresolvedCall)
+         << (arrayValue.hasWrite ? "used" : "no store to the bundle")
+         << ", max_write_burst_length " << arrayValue.writeBurst
+         << " (num_write_outstanding " << arrayValue.writeOutstanding
+         << " has no effect) -> " << arrayValue.writeBram << " BRAM ("
+         << arrayValue.writeRule << ")\n";
+      if (arrayValue.unresolvedCall)
         os << "  note: an argument of the bundle is passed to a call without "
               "a body in the module; assumed read and written\n";
-      else if (a.passedToCall)
+      else if (arrayValue.passedToCall)
         os << "  note: an argument of the bundle is passed to a call; its "
               "accesses in the callee are counted\n";
       os << "  bram: " << resultValue.bram << "\n";
@@ -2343,6 +2405,10 @@ static void printDebugText(ArrayRef<MemrefRecord> records,
     if (resultValue.words)
       os << " = " << *resultValue.words << " words";
     os << "\n";
+    if (resultValue.narrow)
+      os << "  narrowed width: " << resultValue.narrow->bits << " of "
+         << resultValue.narrow->declaredBits << " bits ("
+         << resultValue.narrow->reason << ")\n";
     os << "  status: " << resultValue.status;
     if (resultValue.excludeReason)
       os << " -- " << *resultValue.excludeReason;
@@ -2358,13 +2424,14 @@ static void printDebugText(ArrayRef<MemrefRecord> records,
       for (const std::string &memoryOp : fieldValue.methods)
         os << " " << memoryOp;
       os << "\n";
-      for (const FifoGroup &g : fieldValue.groups) {
-        os << "  fifo: " << g.count << " x ";
-        if (g.member)
-          os << "member " << *g.member << " ";
-        os << "depth " << g.depth << " (" << g.depthSource << ") x " << g.bits
-           << " bits (" << g.bitsSource << ") -> " << g.bramEach
-           << " each: " << g.reason << " (count: " << g.countSource << ")\n";
+      for (const FifoGroup &globalOp : fieldValue.groups) {
+        os << "  fifo: " << globalOp.count << " x ";
+        if (globalOp.member)
+          os << "member " << *globalOp.member << " ";
+        os << "depth " << globalOp.depth << " (" << globalOp.depthSource
+           << ") x " << globalOp.bits << " bits (" << globalOp.bitsSource
+           << ") -> " << globalOp.bramEach << " each: " << globalOp.reason
+           << " (count: " << globalOp.countSource << ")\n";
       }
       if (!fieldValue.note.empty())
         os << "  note: " << fieldValue.note << "\n";
@@ -2432,26 +2499,27 @@ static void printDebugText(ArrayRef<MemrefRecord> records,
       os << "  accesses: not attributed (memref.global has no SSA result)\n";
     } else {
       os << "  accesses (" << resultValue.accesses.size() << "):\n";
-      for (const AccessRecord &a : resultValue.accesses) {
-        os << "    - " << a.op << " " << (a.isWrite ? "write" : "read ")
-           << " in " << a.scopeKind << " @ " << a.scopeLoc;
-        if (a.scopeKind == "pipeline")
-          os << " ii=" << a.ii << " stage=" << a.stageStart;
-        if (a.viaCall)
-          os << " (in @" << a.inFunc << " via " << *a.viaCall
-             << (a.portBound ? ", port-bound" : "") << ")";
-        if (a.storeEnable)
+      for (const AccessRecord &arrayValue : resultValue.accesses) {
+        os << "    - " << arrayValue.op << " "
+           << (arrayValue.isWrite ? "write" : "read ") << " in "
+           << arrayValue.scopeKind << " @ " << arrayValue.scopeLoc;
+        if (arrayValue.scopeKind == "pipeline")
+          os << " ii=" << arrayValue.ii << " stage=" << arrayValue.stageStart;
+        if (arrayValue.viaCall)
+          os << " (in @" << arrayValue.inFunc << " via " << *arrayValue.viaCall
+             << (arrayValue.portBound ? ", port-bound" : "") << ")";
+        if (arrayValue.storeEnable)
           os << " (store_enable: write-only, no read port)";
-        if (a.mergedLoads)
-          os << " (+" << a.mergedLoads
+        if (arrayValue.mergedLoads)
+          os << " (+" << arrayValue.mergedLoads
              << " same-address load(s) merged into it: CSE)";
-        if (a.forwardedLoads || a.removedStores) {
+        if (arrayValue.forwardedLoads || arrayValue.removedStores) {
           os << " (absorbed";
-          if (a.forwardedLoads)
-            os << " " << a.forwardedLoads << " forwarded load(s)";
-          if (a.removedStores)
-            os << (a.forwardedLoads ? "," : "") << " " << a.removedStores
-               << " dead store(s)";
+          if (arrayValue.forwardedLoads)
+            os << " " << arrayValue.forwardedLoads << " forwarded load(s)";
+          if (arrayValue.removedStores)
+            os << (arrayValue.forwardedLoads ? "," : "") << " "
+               << arrayValue.removedStores << " dead store(s)";
           os << ")";
         }
         os << "\n";
@@ -2479,14 +2547,17 @@ static void printDebugText(ArrayRef<MemrefRecord> records,
       if (portValue.limitingLoop)
         os << " set by pipeline @ " << *portValue.limitingLoop;
       os << "\n";
-      for (const ReplicationLoopRecord &l : portValue.loops)
-        os << "    pipeline @ " << l.scopeLoc << " ii=" << l.ii << ": "
-           << l.reads << "R+" << l.writes << "W per iteration -> ceil("
-           << (l.reads + l.writes) << "/" << l.ii << ")=" << l.need
-           << " port-cycles -> copies " << l.copies
-           << (l.portBound ? " (port-bound: a callee instantiated at more "
-                             "than one place, N14 R6)"
-                           : "")
+      for (const ReplicationLoopRecord &lowerIndex : portValue.loops)
+        os << "    pipeline @ " << lowerIndex.scopeLoc
+           << " ii=" << lowerIndex.ii << ": " << lowerIndex.reads << "R+"
+           << lowerIndex.writes << "W per iteration -> ceil("
+           << (lowerIndex.reads + lowerIndex.writes) << "/" << lowerIndex.ii
+           << ")=" << lowerIndex.need << " port-cycles -> copies "
+           << lowerIndex.copies
+           << (lowerIndex.portBound
+                   ? " (port-bound: a callee instantiated at more "
+                     "than one place, N14 R6)"
+                   : "")
            << "\n";
     }
     os << "  ram type: " << resultValue.ramType << " -- "
@@ -2579,21 +2650,21 @@ static llvm::json::Value optInt(const std::optional<int64_t> &valueHandle) {
 }
 
 static llvm::json::Object toJson(const MemrefRecord &resultValue) {
-  llvm::json::Object o;
-  o["id"] = resultValue.id;
-  o["name"] = optStr(resultValue.name);
-  o["varname"] = optStr(resultValue.varname);
-  o["kind"] = resultValue.kind;
-  o["func"] = optStr(resultValue.func);
+  llvm::json::Object opHandle;
+  opHandle["id"] = resultValue.id;
+  opHandle["name"] = optStr(resultValue.name);
+  opHandle["varname"] = optStr(resultValue.varname);
+  opHandle["kind"] = resultValue.kind;
+  opHandle["func"] = optStr(resultValue.func);
 
   if (resultValue.fromGlobal)
-    o["from_global"] = *resultValue.fromGlobal;
+    opHandle["from_global"] = *resultValue.fromGlobal;
   if (resultValue.structMember)
-    o["struct_member"] = *resultValue.structMember;
+    opHandle["struct_member"] = *resultValue.structMember;
   if (resultValue.rom)
-    o["rom"] = true;
+    opHandle["rom"] = true;
   if (resultValue.math)
-    o["math"] = mathCoreJson(*resultValue.math);
+    opHandle["math"] = mathCoreJson(*resultValue.math);
   if (resultValue.pipo) {
     const PipoRecord &pp = *resultValue.pipo;
     llvm::json::Object po;
@@ -2625,7 +2696,7 @@ static llvm::json::Object toJson(const MemrefRecord &resultValue) {
       po["mode_reason"] = pp.modeReason;
       po["rule"] = pp.rule;
     }
-    o["pipo"] = std::move(po);
+    opHandle["pipo"] = std::move(po);
   }
   if (resultValue.fifo) {
     const StreamHandleRecord &fieldValue = *resultValue.fifo;
@@ -2637,71 +2708,79 @@ static llvm::json::Object toJson(const MemrefRecord &resultValue) {
       methods.push_back(memoryOp);
     fo["methods"] = std::move(methods);
     llvm::json::Array groups;
-    for (const FifoGroup &g : fieldValue.groups) {
+    for (const FifoGroup &globalOp : fieldValue.groups) {
       llvm::json::Object go;
-      go["count"] = g.count;
-      go["count_source"] = g.countSource;
-      if (g.member)
-        go["member"] = static_cast<int64_t>(*g.member);
-      go["depth"] = g.depth;
-      go["depth_source"] = g.depthSource;
-      go["bits"] = static_cast<int64_t>(g.bits);
-      go["bits_source"] = g.bitsSource;
-      go["bram_each"] = static_cast<int64_t>(g.bramEach);
-      go["reason"] = g.reason;
+      go["count"] = globalOp.count;
+      go["count_source"] = globalOp.countSource;
+      if (globalOp.member)
+        go["member"] = static_cast<int64_t>(*globalOp.member);
+      go["depth"] = globalOp.depth;
+      go["depth_source"] = globalOp.depthSource;
+      go["bits"] = static_cast<int64_t>(globalOp.bits);
+      go["bits_source"] = globalOp.bitsSource;
+      go["bram_each"] = static_cast<int64_t>(globalOp.bramEach);
+      go["reason"] = globalOp.reason;
       groups.push_back(std::move(go));
     }
     fo["groups"] = std::move(groups);
     if (!fieldValue.note.empty())
       fo["note"] = fieldValue.note;
-    o["fifo"] = std::move(fo);
+    opHandle["fifo"] = std::move(fo);
   }
   if (resultValue.adapter) {
-    const AdapterRecord &a = *resultValue.adapter;
+    const AdapterRecord &arrayValue = *resultValue.adapter;
     llvm::json::Object ad;
-    ad["bundle"] = a.bundle;
+    ad["bundle"] = arrayValue.bundle;
     llvm::json::Array ports;
-    for (const std::string &portValue : a.ports)
+    for (const std::string &portValue : arrayValue.ports)
       ports.push_back(portValue);
     ad["ports"] = std::move(ports);
-    ad["bus_bits"] = static_cast<int64_t>(a.busBits);
-    ad["has_read"] = a.hasRead;
-    ad["has_write"] = a.hasWrite;
-    ad["passed_to_call"] = a.passedToCall;
-    ad["unresolved_call"] = a.unresolvedCall;
-    ad["max_read_burst_length"] = a.readBurst;
-    ad["num_read_outstanding"] = a.readOutstanding;
-    ad["read_depth"] = a.readDepth;
-    ad["read_bram"] = static_cast<int64_t>(a.readBram);
-    ad["read_rule"] = a.readRule;
-    ad["max_write_burst_length"] = a.writeBurst;
-    ad["num_write_outstanding"] = a.writeOutstanding;
-    ad["write_bram"] = static_cast<int64_t>(a.writeBram);
-    ad["write_rule"] = a.writeRule;
-    o["adapter"] = std::move(ad);
+    ad["bus_bits"] = static_cast<int64_t>(arrayValue.busBits);
+    ad["has_read"] = arrayValue.hasRead;
+    ad["has_write"] = arrayValue.hasWrite;
+    ad["passed_to_call"] = arrayValue.passedToCall;
+    ad["unresolved_call"] = arrayValue.unresolvedCall;
+    ad["max_read_burst_length"] = arrayValue.readBurst;
+    ad["num_read_outstanding"] = arrayValue.readOutstanding;
+    ad["read_depth"] = arrayValue.readDepth;
+    ad["read_bram"] = static_cast<int64_t>(arrayValue.readBram);
+    ad["read_rule"] = arrayValue.readRule;
+    ad["max_write_burst_length"] = arrayValue.writeBurst;
+    ad["num_write_outstanding"] = arrayValue.writeOutstanding;
+    ad["write_bram"] = static_cast<int64_t>(arrayValue.writeBram);
+    ad["write_rule"] = arrayValue.writeRule;
+    opHandle["adapter"] = std::move(ad);
   }
   if (resultValue.hasLoc) {
     llvm::json::Object loc;
     loc["file"] = resultValue.locFile;
     loc["line"] = static_cast<int64_t>(resultValue.locLine);
     loc["col"] = static_cast<int64_t>(resultValue.locCol);
-    o["loc"] = std::move(loc);
+    opHandle["loc"] = std::move(loc);
   } else {
-    o["loc"] = nullptr;
+    opHandle["loc"] = nullptr;
   }
   llvm::json::Array shape;
   for (int64_t dimensionIndex : resultValue.shape)
     shape.push_back(ShapedType::isDynamic(dimensionIndex)
                         ? llvm::json::Value(nullptr)
                         : llvm::json::Value(dimensionIndex));
-  o["shape"] = std::move(shape);
-  o["elem_type"] = resultValue.elemType;
-  o["elem_bits"] = static_cast<int64_t>(resultValue.elemBits);
-  o["words"] = optInt(resultValue.words);
-  o["status"] = resultValue.status;
-  o["exclude_reason"] = optStr(resultValue.excludeReason);
+  opHandle["shape"] = std::move(shape);
+  opHandle["elem_type"] = resultValue.elemType;
+  opHandle["elem_bits"] = static_cast<int64_t>(resultValue.elemBits);
+  opHandle["words"] = optInt(resultValue.words);
+  opHandle["status"] = resultValue.status;
+  opHandle["exclude_reason"] = optStr(resultValue.excludeReason);
   if (resultValue.keptReason)
-    o["kept_reason"] = *resultValue.keptReason;
+    opHandle["kept_reason"] = *resultValue.keptReason;
+  if (resultValue.narrow) {
+    llvm::json::Object elementCount;
+    elementCount["declared_bits"] =
+        static_cast<int64_t>(resultValue.narrow->declaredBits);
+    elementCount["bits"] = static_cast<int64_t>(resultValue.narrow->bits);
+    elementCount["reason"] = resultValue.narrow->reason;
+    opHandle["narrow"] = std::move(elementCount);
+  }
 
   if (resultValue.partition.present) {
     const PartitionRecord &portValue = resultValue.partition;
@@ -2723,33 +2802,34 @@ static llvm::json::Object toJson(const MemrefRecord &resultValue) {
     }
     if (portValue.from)
       part["from"] = *portValue.from;
-    o["partition"] = std::move(part);
+    opHandle["partition"] = std::move(part);
   } else {
-    o["partition"] = nullptr;
+    opHandle["partition"] = nullptr;
   }
 
   llvm::json::Array accesses;
-  for (const AccessRecord &a : resultValue.accesses) {
+  for (const AccessRecord &arrayValue : resultValue.accesses) {
     llvm::json::Object ao;
-    ao["op"] = a.op;
-    ao["rw"] = a.isWrite ? "write" : "read";
-    ao["scope"] = a.scopeKind;
-    ao["scope_loc"] = a.scopeLoc;
-    ao["ii"] = static_cast<int64_t>(a.ii);
-    ao["stage_start"] = static_cast<int64_t>(a.stageStart);
-    ao["store_enable"] = a.storeEnable;
-    ao["merged_loads"] = static_cast<int64_t>(a.mergedLoads);
-    ao["forwarded_loads"] = static_cast<int64_t>(a.forwardedLoads);
-    ao["removed_stores"] = static_cast<int64_t>(a.removedStores);
+    ao["op"] = arrayValue.op;
+    ao["rw"] = arrayValue.isWrite ? "write" : "read";
+    ao["scope"] = arrayValue.scopeKind;
+    ao["scope_loc"] = arrayValue.scopeLoc;
+    ao["ii"] = static_cast<int64_t>(arrayValue.ii);
+    ao["stage_start"] = static_cast<int64_t>(arrayValue.stageStart);
+    ao["store_enable"] = arrayValue.storeEnable;
+    ao["merged_loads"] = static_cast<int64_t>(arrayValue.mergedLoads);
+    ao["forwarded_loads"] = static_cast<int64_t>(arrayValue.forwardedLoads);
+    ao["removed_stores"] = static_cast<int64_t>(arrayValue.removedStores);
 
-    ao["in_func"] = a.inFunc.empty() ? llvm::json::Value(nullptr)
-                                     : llvm::json::Value(a.inFunc);
-    ao["via_call"] = optStr(a.viaCall);
+    ao["in_func"] = arrayValue.inFunc.empty()
+                        ? llvm::json::Value(nullptr)
+                        : llvm::json::Value(arrayValue.inFunc);
+    ao["via_call"] = optStr(arrayValue.viaCall);
 
-    ao["port_bound"] = a.portBound;
+    ao["port_bound"] = arrayValue.portBound;
     accesses.push_back(std::move(ao));
   }
-  o["accesses"] = std::move(accesses);
+  opHandle["accesses"] = std::move(accesses);
 
   llvm::json::Object pd;
   pd["reads"] = static_cast<int64_t>(resultValue.demand.reads);
@@ -2769,10 +2849,10 @@ static llvm::json::Object toJson(const MemrefRecord &resultValue) {
     perScope.push_back(std::move(so));
   }
   pd["per_scope"] = std::move(perScope);
-  o["port_demand"] = std::move(pd);
+  opHandle["port_demand"] = std::move(pd);
 
-  o["ram_type"] = resultValue.ramType;
-  o["ram_reason"] = resultValue.ramReason;
+  opHandle["ram_type"] = resultValue.ramType;
+  opHandle["ram_reason"] = resultValue.ramReason;
 
   if (resultValue.replication.present) {
     const ReplicationRecord &portValue = resultValue.replication;
@@ -2783,22 +2863,22 @@ static llvm::json::Object toJson(const MemrefRecord &resultValue) {
     rp["copies"] = static_cast<int64_t>(portValue.copies);
     rp["limiting_loop"] = optStr(portValue.limitingLoop);
     llvm::json::Array loops;
-    for (const ReplicationLoopRecord &l : portValue.loops) {
+    for (const ReplicationLoopRecord &lowerIndex : portValue.loops) {
       llvm::json::Object lo;
-      lo["scope_loc"] = l.scopeLoc;
-      lo["ii"] = static_cast<int64_t>(l.ii);
-      lo["reads"] = static_cast<int64_t>(l.reads);
-      lo["writes"] = static_cast<int64_t>(l.writes);
-      lo["need"] = static_cast<int64_t>(l.need);
-      lo["copies"] = static_cast<int64_t>(l.copies);
+      lo["scope_loc"] = lowerIndex.scopeLoc;
+      lo["ii"] = static_cast<int64_t>(lowerIndex.ii);
+      lo["reads"] = static_cast<int64_t>(lowerIndex.reads);
+      lo["writes"] = static_cast<int64_t>(lowerIndex.writes);
+      lo["need"] = static_cast<int64_t>(lowerIndex.need);
+      lo["copies"] = static_cast<int64_t>(lowerIndex.copies);
 
-      lo["port_bound"] = l.portBound;
+      lo["port_bound"] = lowerIndex.portBound;
       loops.push_back(std::move(lo));
     }
     rp["loops"] = std::move(loops);
-    o["replication"] = std::move(rp);
+    opHandle["replication"] = std::move(rp);
   } else {
-    o["replication"] = nullptr;
+    opHandle["replication"] = nullptr;
   }
 
   if (resultValue.bankMath.present) {
@@ -2818,16 +2898,17 @@ static llvm::json::Object toJson(const MemrefRecord &resultValue) {
 
     bm["formula"] = buildPoint.formula;
     bm["band"] = buildPoint.band;
-    o["bank_math"] = std::move(bm);
+    opHandle["bank_math"] = std::move(bm);
   } else {
-    o["bank_math"] = nullptr;
+    opHandle["bank_math"] = nullptr;
   }
-  o["bram"] = static_cast<int64_t>(resultValue.bram);
+  opHandle["bram"] = static_cast<int64_t>(resultValue.bram);
 
-  o["instances"] = static_cast<int64_t>(resultValue.instances);
-  o["bram_per_instance"] = static_cast<int64_t>(resultValue.bramPerInstance);
-  o["owner_func"] = optStr(resultValue.ownerFunc);
-  return o;
+  opHandle["instances"] = static_cast<int64_t>(resultValue.instances);
+  opHandle["bram_per_instance"] =
+      static_cast<int64_t>(resultValue.bramPerInstance);
+  opHandle["owner_func"] = optStr(resultValue.ownerFunc);
+  return opHandle;
 }
 
 static std::error_code writeDebugJson(ArrayRef<MemrefRecord> records,
@@ -2848,8 +2929,8 @@ static std::error_code writeDebugJson(ArrayRef<MemrefRecord> records,
                                  scope.funcNames.end());
     llvm::sort(names);
     llvm::json::Array fa;
-    for (StringRef n : names)
-      fa.push_back(n.str());
+    for (StringRef elementCount : names)
+      fa.push_back(elementCount.str());
     to["functions"] = std::move(fa);
     to["skipped_memrefs"] = static_cast<int64_t>(scope.skipped);
     root["top"] = std::move(to);
@@ -2972,7 +3053,7 @@ static unsigned fifoBlocksNarrow(unsigned bits, int64_t depth) {
   return static_cast<unsigned>(estimateBlocksBand(depth, bits, false));
 }
 
-static void scanArgUses(Value valueHandle, AdapterRecord &a) {
+static void scanArgUses(Value valueHandle, AdapterRecord &arrayValue) {
   SmallVector<Value> work{valueHandle};
   DenseSet<Value> seen{valueHandle};
   while (!work.empty()) {
@@ -2987,25 +3068,27 @@ static void scanArgUses(Value valueHandle, AdapterRecord &a) {
               work.push_back(resultValue);
           continue;
         }
-      if (auto call = dyn_cast<CallOpInterface>(user)) {
-        a.passedToCall = true;
-        auto callee = dyn_cast_or_null<func::FuncOp>(call.resolveCallable());
-        auto args = call.getArgOperands();
+      if (auto callSite = dyn_cast<CallOpInterface>(user)) {
+        arrayValue.passedToCall = true;
+        auto callee =
+            dyn_cast_or_null<func::FuncOp>(callSite.resolveCallable());
+        auto args = callSite.getArgOperands();
         unsigned first = args.getBeginOperandIndex();
-        unsigned n = use.getOperandNumber();
-        if (callee && !callee.isExternal() && n >= first &&
-            n - first < callee.getNumArguments()) {
-          Value inner = callee.getArgument(n - first);
+        unsigned elementCount = use.getOperandNumber();
+        if (callee && !callee.isExternal() && elementCount >= first &&
+            elementCount - first < callee.getNumArguments()) {
+          Value inner = callee.getArgument(elementCount - first);
           if (seen.insert(inner).second)
             work.push_back(inner);
           continue;
         }
-        a.unresolvedCall = a.hasRead = a.hasWrite = true;
+        arrayValue.unresolvedCall = arrayValue.hasRead = arrayValue.hasWrite =
+            true;
         continue;
       }
       bool isWrite = false;
       if (classifyAccess(user, cur, isWrite))
-        (isWrite ? a.hasWrite : a.hasRead) = true;
+        (isWrite ? arrayValue.hasWrite : arrayValue.hasRead) = true;
     }
   }
 }
@@ -3024,8 +3107,8 @@ collectAdapters(ModuleOp module) {
     if (fn.isPrivate() || fn.isExternal())
       continue;
     SmallVector<AdapterRecord> bundles;
-    for (unsigned loopIndex = 0, e = fn.getNumArguments(); loopIndex < e;
-         ++loopIndex) {
+    for (unsigned loopIndex = 0, entryValue = fn.getNumArguments();
+         loopIndex < entryValue; ++loopIndex) {
       auto ifaces = fn.getArgAttrOfType<ArrayAttr>(loopIndex, "hls.interface");
       if (!ifaces)
         continue;
@@ -3038,19 +3121,19 @@ collectAdapters(ModuleOp module) {
         std::string bundle = "gmem";
         if (auto buildPoint = dimensionIndex.getAs<StringAttr>("bundle"))
           bundle = buildPoint.getValue().str();
-        AdapterRecord *a = nullptr;
+        AdapterRecord *arrayValue = nullptr;
         for (AdapterRecord &exprValue : bundles)
           if (exprValue.bundle == bundle)
-            a = &exprValue;
-        if (!a) {
+            arrayValue = &exprValue;
+        if (!arrayValue) {
           bundles.emplace_back();
-          a = &bundles.back();
-          a->bundle = bundle;
-          a->readBurst = a->readOutstanding = 0;
-          a->writeBurst = a->writeOutstanding = 0;
+          arrayValue = &bundles.back();
+          arrayValue->bundle = bundle;
+          arrayValue->readBurst = arrayValue->readOutstanding = 0;
+          arrayValue->writeBurst = arrayValue->writeOutstanding = 0;
         }
         if (auto portValue = dimensionIndex.getAs<StringAttr>("port"))
-          a->ports.push_back(portValue.getValue().str());
+          arrayValue->ports.push_back(portValue.getValue().str());
         Value arg = fn.getArgument(loopIndex);
         unsigned bits = 32;
         if (auto mt = dyn_cast<BaseMemRefType>(arg.getType())) {
@@ -3061,59 +3144,64 @@ collectAdapters(ModuleOp module) {
         } else if (arg.getType().isIntOrFloat()) {
           bits = arg.getType().getIntOrFloatBitWidth();
         }
-        a->busBits = std::max(a->busBits, std::max(32u, bits));
+        arrayValue->busBits =
+            std::max(arrayValue->busBits, std::max(32u, bits));
 
-        a->readBurst = std::max(
-            a->readBurst, intField(dimensionIndex, "max_read_burst_length", 0));
-        a->readOutstanding =
-            std::max(a->readOutstanding,
+        arrayValue->readBurst =
+            std::max(arrayValue->readBurst,
+                     intField(dimensionIndex, "max_read_burst_length", 0));
+        arrayValue->readOutstanding =
+            std::max(arrayValue->readOutstanding,
                      intField(dimensionIndex, "num_read_outstanding", 0));
-        a->writeBurst =
-            std::max(a->writeBurst,
+        arrayValue->writeBurst =
+            std::max(arrayValue->writeBurst,
                      intField(dimensionIndex, "max_write_burst_length", 0));
-        a->writeOutstanding =
-            std::max(a->writeOutstanding,
+        arrayValue->writeOutstanding =
+            std::max(arrayValue->writeOutstanding,
                      intField(dimensionIndex, "num_write_outstanding", 0));
-        scanArgUses(arg, *a);
+        scanArgUses(arg, *arrayValue);
       }
     }
-    for (AdapterRecord &a : bundles) {
-      if (!a.readBurst)
-        a.readBurst = 16;
-      if (!a.readOutstanding)
-        a.readOutstanding = 16;
-      if (!a.writeBurst)
-        a.writeBurst = 16;
-      if (!a.writeOutstanding)
-        a.writeOutstanding = 16;
-      a.readDepth = a.readBurst * a.readOutstanding;
+    for (AdapterRecord &arrayValue : bundles) {
+      if (!arrayValue.readBurst)
+        arrayValue.readBurst = 16;
+      if (!arrayValue.readOutstanding)
+        arrayValue.readOutstanding = 16;
+      if (!arrayValue.writeBurst)
+        arrayValue.writeBurst = 16;
+      if (!arrayValue.writeOutstanding)
+        arrayValue.writeOutstanding = 16;
+      arrayValue.readDepth = arrayValue.readBurst * arrayValue.readOutstanding;
 
-      if (!a.hasRead) {
-        a.readBram = 0;
-        a.readRule = "no load: no read FIFO cost";
-      } else if (a.readDepth <= 32) {
-        a.readBram = 0;
-        a.readRule = "depth <= 32: shift-register FIFO, 0 BRAM";
+      if (!arrayValue.hasRead) {
+        arrayValue.readBram = 0;
+        arrayValue.readRule = "no load: no read FIFO cost";
+      } else if (arrayValue.readDepth <= 32) {
+        arrayValue.readBram = 0;
+        arrayValue.readRule = "depth <= 32: shift-register FIFO, 0 BRAM";
       } else {
-        a.readBram = fifoBlocksNarrow(a.busBits, a.readDepth);
-        a.readRule = "depth > 32: BRAM FIFO, two ports (x18 bands of N8)";
-        if (a.readDepth > 4096)
-          a.readRule += "; depth > 4096 unconfirmed";
+        arrayValue.readBram =
+            fifoBlocksNarrow(arrayValue.busBits, arrayValue.readDepth);
+        arrayValue.readRule =
+            "depth > 32: BRAM FIFO, two ports (x18 bands of N8)";
+        if (arrayValue.readDepth > 4096)
+          arrayValue.readRule += "; depth > 4096 unconfirmed";
       }
 
-      if (!a.hasWrite) {
-        a.writeBram = 0;
-        a.writeRule = "no store: no write buffer cost";
-      } else if (a.writeBurst <= 16) {
-        a.writeBram = 0;
-        a.writeRule = "max_write_burst_length <= 16: 0 BRAM";
+      if (!arrayValue.hasWrite) {
+        arrayValue.writeBram = 0;
+        arrayValue.writeRule = "no store: no write buffer cost";
+      } else if (arrayValue.writeBurst <= 16) {
+        arrayValue.writeBram = 0;
+        arrayValue.writeRule = "max_write_burst_length <= 16: 0 BRAM";
       } else {
-        a.writeBram = static_cast<unsigned>(ceilDiv(a.busBits, 18));
-        a.writeRule = "max_write_burst_length > 16: ceil(W/18)";
-        if (a.writeBurst < 32)
-          a.writeRule += " (bursts 17..31 unconfirmed)";
+        arrayValue.writeBram =
+            static_cast<unsigned>(ceilDiv(arrayValue.busBits, 18));
+        arrayValue.writeRule = "max_write_burst_length > 16: ceil(W/18)";
+        if (arrayValue.writeBurst < 32)
+          arrayValue.writeRule += " (bursts 17..31 unconfirmed)";
       }
-      out.push_back({fn, std::move(a)});
+      out.push_back({fn, std::move(arrayValue)});
     }
   }
   return out;
@@ -3142,14 +3230,14 @@ static void appendDeadRecords(ModuleOp module, unsigned &index,
     resultValue.fromGlobal = str("from_global");
     resultValue.id = (resultValue.func ? *resultValue.func : std::string("?")) +
                      "#dead" + std::to_string(index++);
-    if (auto l = dimensionIndex.getAs<LocationAttr>("loc")) {
-      if (auto fieldValue = findFileLoc(Location(l))) {
+    if (auto lowerIndex = dimensionIndex.getAs<LocationAttr>("loc")) {
+      if (auto fieldValue = findFileLoc(Location(lowerIndex))) {
         resultValue.hasLoc = true;
         resultValue.locFile = fieldValue.getFilename().str();
         resultValue.locLine = fieldValue.getLine();
         resultValue.locCol = fieldValue.getColumn();
       }
-      resultValue.locText = locString(Location(l));
+      resultValue.locText = locString(Location(lowerIndex));
     }
     if (auto typeValue = dimensionIndex.getAs<TypeAttr>("type"))
       if (auto mt = dyn_cast<MemRefType>(typeValue.getValue())) {
@@ -3189,8 +3277,8 @@ static bool computeTopScope(ModuleOp module, StringRef top, TopScope &scope) {
     fn.walk([&](Operation *op) {
       op->getAttrDictionary().walk<WalkOrder::PreOrder>([&](SymbolRefAttr ref) {
         Operation *symbolName = SymbolTable::lookupNearestSymbolFrom(op, ref);
-        if (auto g = dyn_cast_or_null<memref::GlobalOp>(symbolName))
-          scope.globals.insert(g.getSymName());
+        if (auto globalOp = dyn_cast_or_null<memref::GlobalOp>(symbolName))
+          scope.globals.insert(globalOp.getSymName());
         else if (auto callee = dyn_cast_or_null<func::FuncOp>(symbolName))
           if (!callee.isExternal() &&
               scope.funcs.insert(callee.getOperation()).second)
@@ -3245,16 +3333,16 @@ collectInstanceRecords(const InstanceModel &model) {
       resultValue.parents.push_back(std::move(portValue));
     }
     llvm::sort(resultValue.parents,
-               [](const InstanceRecord::Parent &a,
+               [](const InstanceRecord::Parent &arrayValue,
                   const InstanceRecord::Parent &buildPoint) {
-                 return a.parent < buildPoint.parent;
+                 return arrayValue.parent < buildPoint.parent;
                });
     out.push_back(std::move(resultValue));
   }
-  llvm::sort(out,
-             [](const InstanceRecord &a, const InstanceRecord &buildPoint) {
-               return a.func < buildPoint.func;
-             });
+  llvm::sort(out, [](const InstanceRecord &arrayValue,
+                     const InstanceRecord &buildPoint) {
+    return arrayValue.func < buildPoint.func;
+  });
   return out;
 }
 
@@ -3351,8 +3439,9 @@ struct BRAMAnalysisLoopSchedule
         InFlightDiagnostic widthValue = mlir::emitWarning(module.getLoc())
                                         << "--bram-analysis: " << tops.size()
                                         << " public functions hold memrefs (";
-        llvm::interleaveComma(tops, widthValue,
-                              [&](StringRef n) { widthValue << "@" << n; });
+        llvm::interleaveComma(tops, widthValue, [&](StringRef elementCount) {
+          widthValue << "@" << elementCount;
+        });
         widthValue
             << "); all of them are costed. Give the top function with "
                "--bram-analysis=top=<symbol> (or --symbol-privatize=exclude="
@@ -3392,8 +3481,8 @@ struct BRAMAnalysisLoopSchedule
     });
 
     auto sitesOf = [&](Operation *op) -> SmallVector<Value> {
-      if (auto g = dyn_cast<memref::GlobalOp>(op)) {
-        auto it = globalUseSites.find(g.getSymName());
+      if (auto globalOp = dyn_cast<memref::GlobalOp>(op)) {
+        auto it = globalUseSites.find(globalOp.getSymName());
         return it == globalUseSites.end() ? SmallVector<Value>() : it->second;
       }
       return op->getNumResults() ? SmallVector<Value>{op->getResult(0)}
@@ -3402,9 +3491,10 @@ struct BRAMAnalysisLoopSchedule
     ChannelPorts channelPorts(seq, &instanceModel, sitesOf);
     ProcessMerges processMerges([&](Value valueHandle) {
       SmallVector<ChannelAccess> out;
-      for (const AccessSummary &a :
+      for (const AccessSummary &arrayValue :
            collectAccessSummaries({valueHandle}, &instanceModel))
-        out.push_back({a.via ? a.via : a.op, a.isWrite});
+        out.push_back({arrayValue.via ? arrayValue.via : arrayValue.op,
+                       arrayValue.isWrite});
       return out;
     });
 
@@ -3434,10 +3524,10 @@ struct BRAMAnalysisLoopSchedule
       }
       SmallVector<Value> banks;
       bool attributed;
-      if (auto g = dyn_cast<memref::GlobalOp>(op)) {
+      if (auto globalOp = dyn_cast<memref::GlobalOp>(op)) {
         attributed = bramAttributeGlobalsOpt;
         if (attributed) {
-          auto it = globalSites.find(g.getSymName());
+          auto it = globalSites.find(globalOp.getSymName());
           if (it != globalSites.end())
             banks = it->second;
         }
@@ -3449,8 +3539,8 @@ struct BRAMAnalysisLoopSchedule
       MemrefRecord rec;
       describeMemref(op, index++, rec);
       SmallVector<Value> allSites;
-      if (auto g = dyn_cast<memref::GlobalOp>(op)) {
-        auto it = globalUseSites.find(g.getSymName());
+      if (auto globalOp = dyn_cast<memref::GlobalOp>(op)) {
+        auto it = globalUseSites.find(globalOp.getSymName());
         if (it != globalUseSites.end())
           allSites = it->second;
       } else {
@@ -3477,11 +3567,12 @@ struct BRAMAnalysisLoopSchedule
 
       unsigned instances = 1;
       bool sharedGlobal = false;
-      if (auto g = dyn_cast<memref::GlobalOp>(op)) {
-        auto it = globalUsers.find(g.getSymName());
+      if (auto globalOp = dyn_cast<memref::GlobalOp>(op)) {
+        auto it = globalUsers.find(globalOp.getSymName());
         if (it != globalUsers.end()) {
-          auto sites = globalUseSites.find(g.getSymName());
-          bool written = !g.getConstant() && sites != globalUseSites.end() &&
+          auto sites = globalUseSites.find(globalOp.getSymName());
+          bool written = !globalOp.getConstant() &&
+                         sites != globalUseSites.end() &&
                          !neverWritten(sites->second);
           if (written && instanceModel.ownerInstances(it->second) > 1) {
             sharedGlobal = true;
@@ -3526,21 +3617,22 @@ struct BRAMAnalysisLoopSchedule
     });
 
     if (bramMaxiAdaptersOpt)
-      for (auto &[fn, a] : collectAdapters(module)) {
+      for (auto &[fn, arrayValue] : collectAdapters(module)) {
         if (scope.active() && fn.getName() != scope.symbol)
           continue;
-        unsigned bram = a.readBram + a.writeBram;
-        llvm::outs() << "m_axi.adapter bundle=" << a.bundle << " func=@"
-                     << fn.getName() << " bram=" << bram << " (read FIFO "
-                     << a.readDepth << "x" << a.busBits << "b -> " << a.readBram
-                     << ", write burst " << a.writeBurst << " -> "
-                     << a.writeBram << ")\n";
+        unsigned bram = arrayValue.readBram + arrayValue.writeBram;
+        llvm::outs() << "m_axi.adapter bundle=" << arrayValue.bundle
+                     << " func=@" << fn.getName() << " bram=" << bram
+                     << " (read FIFO " << arrayValue.readDepth << "x"
+                     << arrayValue.busBits << "b -> " << arrayValue.readBram
+                     << ", write burst " << arrayValue.writeBurst << " -> "
+                     << arrayValue.writeBram << ")\n";
         total += bram;
         MemrefRecord rec;
-        rec.id = fn.getName().str() + "#m_axi:" + a.bundle;
+        rec.id = fn.getName().str() + "#m_axi:" + arrayValue.bundle;
         rec.kind = "m_axi_adapter";
-        rec.name = a.bundle;
-        rec.varname = a.bundle + "_m_axi";
+        rec.name = arrayValue.bundle;
+        rec.varname = arrayValue.bundle + "_m_axi";
         rec.func = fn.getName().str();
         rec.locText = locString(fn.getLoc());
         if (auto fieldValue = findFileLoc(fn.getLoc())) {
@@ -3549,16 +3641,16 @@ struct BRAMAnalysisLoopSchedule
           rec.locLine = fieldValue.getLine();
           rec.locCol = fieldValue.getColumn();
         }
-        rec.shape = {a.readDepth};
-        rec.elemType = "i" + std::to_string(a.busBits);
-        rec.elemBits = a.busBits;
-        rec.words = a.readDepth;
+        rec.shape = {arrayValue.readDepth};
+        rec.elemType = "i" + std::to_string(arrayValue.busBits);
+        rec.elemBits = arrayValue.busBits;
+        rec.words = arrayValue.readDepth;
         rec.status = "counted";
         rec.ramType = "M_AXI_ADAPTER";
-        rec.ramReason =
-            "read FIFO: " + a.readRule + "; write buffer: " + a.writeRule;
+        rec.ramReason = "read FIFO: " + arrayValue.readRule +
+                        "; write buffer: " + arrayValue.writeRule;
         rec.bram = bram;
-        rec.adapter = std::move(a);
+        rec.adapter = std::move(arrayValue);
         records.push_back(std::move(rec));
       }
 

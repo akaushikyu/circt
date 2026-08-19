@@ -103,7 +103,10 @@ HLS_EST = os.environ.get("HLS_EST_BIN") or HLS_EST_DEFAULT
 # memref, as Vitis disaggregates it (VITIS_NOTES N29); it is a no-op on modules without such arrays.
 DME_FRONT = ("--lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills "
              "--canonicalize --sccp --vitis-fold --dead-memory-elimination")
-NO_FRONT_PIPELINE = ("--affine-loop-normalize --auto-pipeline-unroll "
+# --narrow-ram-widths (W9r2-impl, MEMOS.md #57) marks the element width Vitis stores per word
+# (stored-value ranges, low bits the loads' users demand; VITIS_NOTES N35) before banking, so
+# the LUTRAM test, the BRAM formula and the PIPO price see the narrowed width.
+NO_FRONT_PIPELINE = ("--affine-loop-normalize --auto-pipeline-unroll --narrow-ram-widths "
                      "--memory-banking-bram --convert-affine-to-loopschedule --bram-analysis")
 DEFAULT_PIPELINE = DME_FRONT + " " + NO_FRONT_PIPELINE
 SPLIT_PIPELINE = ("--affine-loop-normalize --auto-pipeline-unroll --infer-vitis-split-array "

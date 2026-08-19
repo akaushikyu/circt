@@ -20,6 +20,7 @@ add_mlir_library(HLSPasses
         MathCores.cpp
         StreamFifos.cpp
         DataflowChannels.cpp
+        RamWidthNarrowing.cpp
 
         DEPENDS
         CIRCTTransformsPassIncGen

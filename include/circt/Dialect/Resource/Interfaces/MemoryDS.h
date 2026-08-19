@@ -36,6 +36,12 @@ namespace circt::hls_analysis {
     inline constexpr llvm::StringLiteral kRegistersAttrName = "hls.registers";
     inline constexpr llvm::StringLiteral kRegistersReasonAttrName =
         "hls.registers_reason";
+    /// The element width an array is priced with when Vitis stores fewer bits
+    /// than its declared type (--narrow-ram-widths), and why.
+    inline constexpr llvm::StringLiteral kNarrowBitsAttrName =
+        "hls.narrow_bits";
+    inline constexpr llvm::StringLiteral kNarrowReasonAttrName =
+        "hls.narrow_reason";
 
     enum class StorageKind {
       RAM_1P,
