@@ -401,3 +401,132 @@ func.func @bank_copy(%in: memref<64xi32>, %v: memref<64xi32>, %out: memref<8x64x
   }
   return
 }
+
+// Bounds from `&&` / `||` guards. The front end lowers `x >= 0 && x < 300`
+// to an scf.if yielding the second comparison or false: under it the stored
+// x is [0, 299], 9 bits (Vitis td=off, w9rv_ifg: `b` 1024 x 9). The else arm
+// of `x < 0 || x >= 300` (an scf.if yielding true or the second comparison)
+// and an `arith.andi` of two comparisons bound the same way.
+// CHECK-LABEL: func.func @guards
+// CHECK:  hls.narrow_bits = 9 : i32{{.*}}stored values [0, 299]{{.*}}polygeist.varname = "b"
+// CHECK:  hls.narrow_bits = 9 : i32{{.*}}stored values [0, 299]{{.*}}polygeist.varname = "c"
+// CHECK:  hls.narrow_bits = 10 : i32{{.*}}stored values [0, 1023]{{.*}}polygeist.varname = "d"
+func.func @guards(%in: memref<1024xi32>, %o1: memref<1024xi32>, %o2: memref<1024xi32>, %o3: memref<1024xi32>) {
+  %c0 = arith.constant 0 : i32
+  %c7 = arith.constant 7 : i32
+  %c300 = arith.constant 300 : i32
+  %c1024 = arith.constant 1024 : i32
+  %false = arith.constant false
+  %true = arith.constant true
+  %b = memref.alloca() {polygeist.varname = "b"} : memref<1024xi32>
+  %c = memref.alloca() {polygeist.varname = "c"} : memref<1024xi32>
+  %d = memref.alloca() {polygeist.varname = "d"} : memref<1024xi32>
+  affine.for %i = 0 to 1024 {
+    %x = affine.load %in[%i] : memref<1024xi32>
+    %ge = arith.cmpi sge, %x, %c0 : i32
+    %and = scf.if %ge -> (i1) {
+      %lt = arith.cmpi slt, %x, %c300 : i32
+      scf.yield %lt : i1
+    } else {
+      scf.yield %false : i1
+    }
+    scf.if %and {
+      affine.store %x, %b[%i] : memref<1024xi32>
+    } else {
+      affine.store %c7, %b[%i] : memref<1024xi32>
+    }
+    %neg = arith.cmpi slt, %x, %c0 : i32
+    %or = scf.if %neg -> (i1) {
+      scf.yield %true : i1
+    } else {
+      %big = arith.cmpi sge, %x, %c300 : i32
+      scf.yield %big : i1
+    }
+    scf.if %or {
+      affine.store %c7, %c[%i] : memref<1024xi32>
+    } else {
+      affine.store %x, %c[%i] : memref<1024xi32>
+    }
+    %lt2 = arith.cmpi slt, %x, %c1024 : i32
+    %both = arith.andi %ge, %lt2 : i1
+    scf.if %both {
+      affine.store %x, %d[%i] : memref<1024xi32>
+    }
+  }
+  affine.for %i = 0 to 1024 {
+    %0 = affine.load %b[%i] : memref<1024xi32>
+    affine.store %0, %o1[%i] : memref<1024xi32>
+    %1 = affine.load %c[%i] : memref<1024xi32>
+    affine.store %1, %o2[%i] : memref<1024xi32>
+    %2 = affine.load %d[%i] : memref<1024xi32>
+    affine.store %2, %o3[%i] : memref<1024xi32>
+  }
+  return
+}
+
+// Sixteen unrolled stores `a[16i + k] = (x & 15) + 16k`: each one widens the
+// range, but they are one pass over straight-line code, not a recurrence;
+// [0, 255] is 8 bits (Vitis td=off, w9rv_wid: 1024 x 8).
+// CHECK-LABEL: func.func @unrolled_stores
+// CHECK:  hls.narrow_bits = 8 : i32{{.*}}stored values [0, 255]{{.*}}polygeist.varname = "a"
+func.func @unrolled_stores(%in: memref<1024xi32>, %out: memref<1024xi32>) {
+  %c0 = arith.constant 0 : i32
+  %c15 = arith.constant 15 : i32
+  %c16 = arith.constant 16 : i32
+  %c32 = arith.constant 32 : i32
+  %c48 = arith.constant 48 : i32
+  %c64 = arith.constant 64 : i32
+  %c80 = arith.constant 80 : i32
+  %c96 = arith.constant 96 : i32
+  %c112 = arith.constant 112 : i32
+  %c128 = arith.constant 128 : i32
+  %c144 = arith.constant 144 : i32
+  %c160 = arith.constant 160 : i32
+  %c176 = arith.constant 176 : i32
+  %c192 = arith.constant 192 : i32
+  %c208 = arith.constant 208 : i32
+  %c224 = arith.constant 224 : i32
+  %c240 = arith.constant 240 : i32
+  %a = memref.alloca() {polygeist.varname = "a"} : memref<1024xi32>
+  affine.for %i = 0 to 64 {
+    %l = affine.load %in[%i] : memref<1024xi32>
+    %x = arith.andi %l, %c15 : i32
+    %v0 = arith.addi %x, %c0 : i32
+    affine.store %v0, %a[%i * 16 + 0] : memref<1024xi32>
+    %v1 = arith.addi %x, %c16 : i32
+    affine.store %v1, %a[%i * 16 + 1] : memref<1024xi32>
+    %v2 = arith.addi %x, %c32 : i32
+    affine.store %v2, %a[%i * 16 + 2] : memref<1024xi32>
+    %v3 = arith.addi %x, %c48 : i32
+    affine.store %v3, %a[%i * 16 + 3] : memref<1024xi32>
+    %v4 = arith.addi %x, %c64 : i32
+    affine.store %v4, %a[%i * 16 + 4] : memref<1024xi32>
+    %v5 = arith.addi %x, %c80 : i32
+    affine.store %v5, %a[%i * 16 + 5] : memref<1024xi32>
+    %v6 = arith.addi %x, %c96 : i32
+    affine.store %v6, %a[%i * 16 + 6] : memref<1024xi32>
+    %v7 = arith.addi %x, %c112 : i32
+    affine.store %v7, %a[%i * 16 + 7] : memref<1024xi32>
+    %v8 = arith.addi %x, %c128 : i32
+    affine.store %v8, %a[%i * 16 + 8] : memref<1024xi32>
+    %v9 = arith.addi %x, %c144 : i32
+    affine.store %v9, %a[%i * 16 + 9] : memref<1024xi32>
+    %v10 = arith.addi %x, %c160 : i32
+    affine.store %v10, %a[%i * 16 + 10] : memref<1024xi32>
+    %v11 = arith.addi %x, %c176 : i32
+    affine.store %v11, %a[%i * 16 + 11] : memref<1024xi32>
+    %v12 = arith.addi %x, %c192 : i32
+    affine.store %v12, %a[%i * 16 + 12] : memref<1024xi32>
+    %v13 = arith.addi %x, %c208 : i32
+    affine.store %v13, %a[%i * 16 + 13] : memref<1024xi32>
+    %v14 = arith.addi %x, %c224 : i32
+    affine.store %v14, %a[%i * 16 + 14] : memref<1024xi32>
+    %v15 = arith.addi %x, %c240 : i32
+    affine.store %v15, %a[%i * 16 + 15] : memref<1024xi32>
+  }
+  affine.for %i = 0 to 1024 {
+    %0 = affine.load %a[%i] : memref<1024xi32>
+    affine.store %0, %out[%i] : memref<1024xi32>
+  }
+  return
+}

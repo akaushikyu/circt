@@ -33,10 +33,15 @@ using namespace circt::hls_analysis;
 
 namespace {
 
-/// Times the stored range of an array (or the range of a callee parameter)
-/// may grow before it is set to the full range: a recurrence through memory
-/// (`a[i] = a[i - 1] + 1`) would grow forever.
-constexpr unsigned kWidenAfterChanges = 8;
+/// Fixpoint rounds in which the stored range of an array (or the range of a
+/// callee parameter) may still grow before it is set to the full range. It
+/// counts rounds, not stores: any number of stores in one pass over
+/// straight-line code (an unrolled loop) is one change. A recurrence through
+/// memory never reaches this, its loads are full range (`cyclic`); the cap
+/// only bounds the work.
+constexpr unsigned kWidenAfterRounds = 8;
+/// Nesting of `&&` / `||` conditions a bound is read through.
+constexpr unsigned kMaxConditionDepth = 8;
 /// Rounds of the demanded-bits fixpoint (it grows at most to the widths, so
 /// it ends; the cap only bounds the work).
 constexpr unsigned kMaxDemandRounds = 128;
@@ -160,7 +165,9 @@ struct MemClass {
 
   IntegerValueRange stored;
   unsigned rangeChanges = 0;
+  bool grewThisRound = false;
   bool rangePinned = false;
+  std::string pinReason;
 
   bool cyclic = false;
   int scc = -1;
@@ -197,13 +204,16 @@ private:
   const SmallVector<unsigned, 2> &loadClassesOf(Value valueHandle);
   IntegerValueRange rangeOf(Value valueHandle);
   IntegerValueRange operandRange(OpOperand &use);
-  std::optional<ConstantIntRanges> conditionBound(Value valueHandle, Value cond,
-                                                  bool holds);
+  std::optional<ConstantIntRanges>
+  conditionBound(Value valueHandle, Value cond, bool holds, unsigned depth = 0);
+  std::optional<ConstantIntRanges> compareBound(Value valueHandle,
+                                                arith::CmpIOp cmp, bool holds);
   std::optional<APInt> constantOf(Value valueHandle);
   std::optional<std::pair<uint64_t, uint64_t>>
   smallUnsignedRange(Value valueHandle);
   IntegerValueRange blockArgRange(BlockArgument arg);
   void forwardOp(Operation *op);
+  void endRound();
   std::optional<std::pair<int64_t, int64_t>>
   affineRange(AffineExpr entryValue, ValueRange dims, ValueRange syms);
 
@@ -244,6 +254,7 @@ private:
   DenseMap<Value, IntegerValueRange> ranges;
   DenseMap<Value, IntegerValueRange> paramRange;
   DenseMap<Value, unsigned> paramRangeChanges;
+  DenseSet<Value> paramGrewThisRound;
   DenseSet<Value> paramRangePinned;
   bool rangesChanged = false;
   DenseMap<Value, SmallVector<unsigned, 2>> loadClasses;
@@ -718,13 +729,92 @@ Narrowing::smallUnsignedRange(Value valueHandle) {
                         resultValue->umax().getZExtValue());
 }
 
-/// What `cond` being `holds` says about `v`: a bound when cond compares v (or
-/// v sign / zero extended) with a constant; nullopt when it says nothing.
-std::optional<ConstantIntRanges>
-Narrowing::conditionBound(Value valueHandle, Value cond, bool holds) {
-  auto cmp = cond.getDefiningOp<arith::CmpIOp>();
-  if (!cmp)
+/// Both bounds at once; nullopt when they contradict (no value satisfies
+/// both, so the code is dead and the bound is not used).
+static std::optional<ConstantIntRanges>
+meetBounds(std::optional<ConstantIntRanges> arrayValue,
+           std::optional<ConstantIntRanges> buildPoint) {
+  if (!arrayValue)
+    return buildPoint;
+  if (!buildPoint)
+    return arrayValue;
+  ConstantIntRanges exprValue = arrayValue->intersection(*buildPoint);
+  if (exprValue.smin().sgt(exprValue.smax()) ||
+      exprValue.umin().ugt(exprValue.umax()))
     return std::nullopt;
+
+  APInt smin = exprValue.smin(), smax = exprValue.smax(),
+        umin = exprValue.umin(), umax = exprValue.umax();
+  if (!smin.isNegative()) {
+    umin = llvm::APIntOps::umax(umin, smin);
+    umax = llvm::APIntOps::umin(umax, smax);
+  }
+  if (!umax.isNegative()) {
+    smin = llvm::APIntOps::smax(smin, umin);
+    smax = llvm::APIntOps::smin(smax, umax);
+  }
+  if (smin.sgt(smax) || umin.ugt(umax))
+    return std::nullopt;
+  return ConstantIntRanges(umin, umax, smin, smax);
+}
+
+/// Either bound: a bound only when both sides give one.
+static std::optional<ConstantIntRanges>
+joinBounds(std::optional<ConstantIntRanges> arrayValue,
+           std::optional<ConstantIntRanges> buildPoint) {
+  if (!arrayValue || !buildPoint)
+    return std::nullopt;
+  return arrayValue->rangeUnion(*buildPoint);
+}
+
+/// What `cond` being `holds` says about `v`: a bound when cond compares v (or
+/// v sign / zero extended) with a constant, or combines such comparisons with
+/// `&&` / `||`. The front end lowers `p && q` to `scf.if p { yield q } else
+/// { yield false }` and `p || q` to `scf.if p { yield true } else { yield q }`;
+/// an `arith.andi` / `arith.ori` of i1s is the same. When the conjunction
+/// holds, both bounds hold (Vitis narrows `x >= 0 && x < 300` to 9 bits);
+/// when a disjunction holds, one of them does. nullopt: it says nothing.
+std::optional<ConstantIntRanges> Narrowing::conditionBound(Value valueHandle,
+                                                           Value cond,
+                                                           bool holds,
+                                                           unsigned depth) {
+  if (depth > kMaxConditionDepth)
+    return std::nullopt;
+  if (auto cmp = cond.getDefiningOp<arith::CmpIOp>())
+    return compareBound(valueHandle, cmp, holds);
+  auto bound = [&](Value candidateValue, bool h) {
+    return conditionBound(valueHandle, candidateValue, h, depth + 1);
+  };
+
+  auto combine = [&](Value lhs, Value rhs, bool isAnd) {
+    if (isAnd == holds)
+      return meetBounds(bound(lhs, holds), bound(rhs, holds));
+    return joinBounds(bound(lhs, holds), bound(rhs, holds));
+  };
+  if (auto arrayValue = cond.getDefiningOp<arith::AndIOp>();
+      arrayValue && arrayValue.getType().isInteger(1))
+    return combine(arrayValue.getLhs(), arrayValue.getRhs(), true);
+  if (auto o = cond.getDefiningOp<arith::OrIOp>();
+      o && o.getType().isInteger(1))
+    return combine(o.getLhs(), o.getRhs(), false);
+  auto ifOp = cond.getDefiningOp<scf::IfOp>();
+  if (!ifOp || ifOp.getNumResults() != 1 || ifOp.getElseRegion().empty() ||
+      !cond.getType().isInteger(1))
+    return std::nullopt;
+  Value yThen = ifOp.thenYield().getOperand(0);
+  Value yElse = ifOp.elseYield().getOperand(0);
+  APInt keyValue;
+  if (matchPattern(yElse, m_ConstantInt(&keyValue)) && keyValue.isZero())
+    return combine(ifOp.getCondition(), yThen, true);
+  if (matchPattern(yThen, m_ConstantInt(&keyValue)) && keyValue.isOne())
+    return combine(ifOp.getCondition(), yElse, false);
+  return std::nullopt;
+}
+
+/// What the comparison `cmp` being `holds` says about `v` (see
+/// conditionBound).
+std::optional<ConstantIntRanges>
+Narrowing::compareBound(Value valueHandle, arith::CmpIOp cmp, bool holds) {
   using P = arith::CmpIPredicate;
   P pred = cmp.getPredicate();
   Value side = cmp.getLhs();
@@ -872,10 +962,8 @@ void Narrowing::forwardOp(Operation *op) {
               IntegerValueRange::join(candidateValue->stored, resultValue);
           if (!(joined == candidateValue->stored)) {
             rangesChanged = true;
-            if (++candidateValue->rangeChanges > kWidenAfterChanges)
-              candidateValue->rangePinned = true;
-            else
-              candidateValue->stored = joined;
+            candidateValue->grewThisRound = true;
+            candidateValue->stored = joined;
           }
           unsigned bits = bitsForRange(resultValue.getValue());
           if (!candidateValue->widestStore ||
@@ -919,10 +1007,8 @@ void Narrowing::forwardOp(Operation *op) {
           if (joined == cur)
             continue;
           rangesChanged = true;
-          if (++paramRangeChanges[portValue] > kWidenAfterChanges)
-            paramRangePinned.insert(portValue);
-          else
-            cur = joined;
+          paramGrewThisRound.insert(portValue);
+          cur = joined;
         }
     return setMax();
   }
@@ -1133,6 +1219,29 @@ void Narrowing::markCyclicClasses() {
   }
 }
 
+/// Counts the rounds in which each range grew, and sets a range that grew in
+/// more than kWidenAfterRounds rounds to the full range (pinning changes the
+/// loads' ranges, so it asks for one more round).
+void Narrowing::endRound() {
+  for (MemClass &candidateValue : classes) {
+    if (!candidateValue.grewThisRound)
+      continue;
+    candidateValue.grewThisRound = false;
+    if (++candidateValue.rangeChanges > kWidenAfterRounds &&
+        !candidateValue.rangePinned) {
+      candidateValue.rangePinned = true;
+      candidateValue.pinReason = "still growing after " +
+                                 std::to_string(kWidenAfterRounds) + " rounds";
+      rangesChanged = true;
+    }
+  }
+  for (Value portValue : paramGrewThisRound)
+    if (++paramRangeChanges[portValue] > kWidenAfterRounds &&
+        paramRangePinned.insert(portValue).second)
+      rangesChanged = true;
+  paramGrewThisRound.clear();
+}
+
 void Narrowing::solveRanges() {
   markCyclicClasses();
   for (MemClass &candidateValue : classes) {
@@ -1140,8 +1249,10 @@ void Narrowing::solveRanges() {
       continue;
     if (candidateValue.initRange)
       candidateValue.stored = IntegerValueRange(*candidateValue.initRange);
-    else if (candidateValue.stores.empty())
+    else if (candidateValue.stores.empty()) {
       candidateValue.rangePinned = true;
+      candidateValue.pinReason = "never written";
+    }
   }
 
   for (bool again = true; again;) {
@@ -1152,11 +1263,13 @@ void Narrowing::solveRanges() {
         candidateValue.unknownStore = false;
       for (Operation *op : ops)
         forwardOp(op);
+      endRound();
     } while (rangesChanged);
     again = false;
     for (MemClass &candidateValue : classes)
       if (candidateValue.unknownStore && !candidateValue.rangePinned) {
         candidateValue.rangePinned = true;
+        candidateValue.pinReason = "a stored value has no known range";
         again = true;
       }
   }
@@ -1580,11 +1693,7 @@ void Narrowing::annotate() {
     std::string wr = "stored values: none reach it";
     if (rangesOn) {
       if (candidateValue.rangePinned) {
-        wr = "stored values: full range (" +
-             std::string(candidateValue.stores.empty()
-                             ? "never written"
-                             : "still growing: a recurrence") +
-             ")";
+        wr = "stored values: full range (" + candidateValue.pinReason + ")";
       } else if (!candidateValue.stored.isUninitialized()) {
         unsigned bits = bitsForRange(candidateValue.stored.getValue());
         wr = "stored values " + rangeText(candidateValue.stored.getValue()) +
