@@ -137,6 +137,12 @@ private:
                      "deterministic functions of these inputs, so the result "
                      "is the same."),
       llvm::cl::init(true)};
+  Option<bool> hoistConditional{
+      *this, "hoist-conditional-invariant",
+      llvm::cl::desc("With hoist-invariant: also hoist a loop-invariant "
+                     "affine.load nested in an if of the loop body (Vitis' "
+                     "LICM speculates guarded invariant loads)."),
+      llvm::cl::init(true)};
   Option<bool> mergeIfElse{
       *this, "merge-if-else-accesses",
       llvm::cl::desc("Before the redundant-access cleanup, hoist a load both "
@@ -404,6 +410,26 @@ void AffineToLoopSchedule::hoistInvariantLoads() {
       for (Value r : op.getResults())
         invariant.insert(r);
     }
+
+    if (hoistConditional)
+      forOp.getBody()->walk([&](AffineLoadOp load) {
+        Operation *parent = load->getParentOp();
+        if (parent == forOp.getOperation())
+          return;
+        for (Operation *portValue = parent; portValue != forOp.getOperation();
+             portValue = portValue->getParentOp())
+          if (!isa<scf::IfOp, AffineIfOp>(portValue))
+            return;
+        if (!llvm::all_of(load.getMapOperands(), isInvariantValue) ||
+            !isInvariantValue(load.getMemRef()) ||
+            writtenInLoop(load.getMemRef()))
+          return;
+        load->setAttr("hls.hoisted_conditional",
+                      UnitAttr::get(load->getContext()));
+        toHoist.push_back(load);
+        invariant.insert(load.getResult());
+        ++hoistedLoads;
+      });
 
     for (Operation *op : toHoist)
       op->moveBefore(forOp);

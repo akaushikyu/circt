@@ -3,6 +3,14 @@
 Newest entry first. One entry per logical change, including changes that were
 tried and reverted. Branch: `hls-est-vitis-match` in `~/circt`.
 
+## 2026-10-14 — loop-invariant loads under an if are hoisted (N38-impl 2/5, VITIS_NOTES N38 R-hoist-cond)
+- **Commit:** this entry's commit (branch `hls-est-vitis-match`)
+- **Files:** `lib/Dialect/Resource/Passes/AffineToLoopScheduleModified.cpp` (`hoistInvariantLoads`: an affine.load nested only in scf.if / affine.if regions of the loop body, with loop-invariant address and memref, is hoisted like a top-level one and marked `hls.hoisted_conditional`; option `hoist-conditional-invariant`, default on), `BRAMAnalysis.cpp` (access record `hoisted_conditional`, debug text and JSON, additive), new lit `test/hls-est/Passes/bram_repl_hoist_conditional.mlir`.
+- **What:** the LICM before scheduling only hoisted top-level loads of the pipelined loop's body; a load guarded by an if (unrolled compares with an early `break`, a guarded read) stayed in the pipeline and counted toward R. It is now hoisted when its memref is not written in the loop.
+- **Why:** VITIS_NOTES N38 R-hoist-cond (kernel `w9r_b9condinv`: 32 `rb[l]` loads under a break-guarded compare at II 2: the pipeline takes 32 scalar `rb_load_*` arguments, `rb` a plain RAM, total 4; hls-est 32); OPEN_ISSUES O51 (d).
+- **Effect:** measured together with the other N38-impl mechanisms (see the "user II target" entry). Kernel `w9r_b9condinv` 32 -> **4 = Vitis**. Catalogue (with `hoist-past-calls`, the next entry; each one alone leaves these designs unchanged): class_ece8893_2023_spring Analog-CIM on-board 258 -> **202 = Vitis** (`v_ref_buf` RAM_1WNR 60 -> 4 = Vitis; newly exact); Analog-CIM hls/optimized 76 -> 114 (Vitis 32; not in band before or after): its pipeline goes from II 16 to II 10 once `v_ref_buf` leaves it, and `weight2d_cond_buf`, which Vitis partitions completely into 168 LUTRAM banks (0 BRAM) and hls-est keeps whole (OPEN_ISSUES O53), needs 16 copies instead of 10; `input_buf` 2 -> 4 (Vitis 20).
+- **Reverted?:** no
+
 ## 2026-10-14 — same-address accesses in the two arms of an if/else count once: hoisted load, sunk store (N38-impl 1/5, VITIS_NOTES N38 R-ifelse)
 - **Commit:** this entry's commit (branch `hls-est-vitis-match`)
 - **Files:** `lib/Dialect/Resource/Passes/AffineToLoopScheduleModified.cpp` (new `mergeIfElseAccesses` with `movableAccesses`, `mayConflict`, `pairSameAddress`, `addIfResults`; option `merge-if-else-accesses`, default on; runs before `cleanupRedundantAccesses`), `BRAMAnalysis.cpp` (access record `merged_if_else_stores`, debug text and JSON, additive), new lit `test/hls-est/Passes/bram_repl_if_else.mlir`.

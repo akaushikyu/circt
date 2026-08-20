@@ -180,6 +180,8 @@ struct AccessRecord {
   unsigned removedStores = 0;
 
   unsigned mergedIfElseStores = 0;
+
+  bool hoistedConditional = false;
   Operation *scope = nullptr;
 
   std::string inFunc;
@@ -1289,6 +1291,7 @@ static void recordAccesses(ArrayRef<AccessSummary> accesses,
     ar.forwardedLoads = counterAttr(a.op, "hls.forwarded_loads");
     ar.removedStores = counterAttr(a.op, "hls.removed_stores");
     ar.mergedIfElseStores = counterAttr(a.op, "hls.merged_if_else_stores");
+    ar.hoistedConditional = a.op->hasAttr("hls.hoisted_conditional");
     if (auto fn = a.op->getParentOfType<func::FuncOp>())
       ar.inFunc = fn.getName().str();
     if (a.via) {
@@ -2504,6 +2507,9 @@ static void printDebugText(ArrayRef<MemrefRecord> records,
         if (a.mergedIfElseStores)
           os << " (stands for the same-address stores of both arms of an "
                 "if/else: one store)";
+        if (a.hoistedConditional)
+          os << " (loop-invariant load hoisted out of an if of the loop "
+                "body)";
         os << "\n";
       }
       os << "  port demand: reads=" << resultValue.demand.reads
@@ -2804,6 +2810,7 @@ static llvm::json::Object toJson(const MemrefRecord &resultValue) {
     ao["removed_stores"] = static_cast<int64_t>(a.removedStores);
 
     ao["merged_if_else_stores"] = static_cast<int64_t>(a.mergedIfElseStores);
+    ao["hoisted_conditional"] = a.hoistedConditional;
 
     ao["in_func"] = a.inFunc.empty() ? llvm::json::Value(nullptr)
                                      : llvm::json::Value(a.inFunc);
