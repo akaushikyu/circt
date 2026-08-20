@@ -15,6 +15,7 @@
 #define BRAMOPT_ANALYSIS_BRAMCLASSIFICATION_H
 
 #include "circt/Dialect/Resource/Interfaces/MemoryDS.h"
+#include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/Operation.h"
 #include "mlir/IR/Value.h"
 #include "llvm/ADT/DenseMap.h"
@@ -60,6 +61,20 @@ unsigned storageModeSlots(StorageMode mode);
 ///   maxStoresPerLoop >= 2 -> TDP            (no replication; 2 slots)
 ///   otherwise             -> OneWriteNRead  (replicable; 17 slots)
 StorageMode classifyMode(unsigned maxStoresPerLoop);
+
+/// Set on an alloca, or as an argument attribute on a memref parameter: the
+/// most stores one loop body of a callee makes to the memref it is passed as
+/// (transitively, only when > 1). Written by annotateCalleeStoresPerLoop,
+/// read by BRAMClassification, which runs per function.
+constexpr llvm::StringLiteral kCalleeStoresPerLoopAttr =
+    "hls.callee_stores_per_loop";
+
+/// Annotates every alloca and memref parameter passed to a defined callee
+/// whose loops store it more than once per iteration.
+void annotateCalleeStoresPerLoop(mlir::ModuleOp module);
+
+/// The annotation of `bank` (0 when absent).
+unsigned calleeStoresPerLoop(mlir::Value bank);
 
 struct BankProfile {
   mlir::Value memref;          // The bank itself (alloca result).

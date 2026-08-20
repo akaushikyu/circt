@@ -6,7 +6,11 @@
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
+#include "mlir/Dialect/SCF/IR/SCF.h"
+#include "mlir/IR/Builders.h"
+#include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/BuiltinTypes.h"
+#include "mlir/Interfaces/CallInterfaces.h"
 #include "mlir/Interfaces/LoopLikeInterface.h"
 #include "llvm/Support/Debug.h"
 
@@ -98,6 +102,132 @@ static Value getAccessedMemRef(Operation *op, bool &isLoad, bool &isStore) {
       .Default(Value{});
 }
 
+/// The memref operands of an access op that writes, else null.
+static Value storedMemRef(Operation *op) {
+  bool isLoad = false, isStore = false;
+  Value mem = getAccessedMemRef(op, isLoad, isStore);
+  return isStore ? mem : Value();
+}
+
+/// A store in the else block of an if whose then block, at top level, stores
+/// the same memref through the same map and operands: the two arms are one
+/// store after convert-affine-to-loopschedule's if/else merge.
+static bool pairedWithThenArmStore(Operation *store) {
+  Operation *parent = store->getParentOp();
+  if (!isa_and_present<scf::IfOp, affine::AffineIfOp>(parent))
+    return false;
+  if (parent->getNumRegions() < 2 ||
+      store->getParentRegion() != &parent->getRegion(1) ||
+      parent->getRegion(0).empty())
+    return false;
+  for (Operation &op : parent->getRegion(0).front()) {
+    if (op.getName() != store->getName() ||
+        !llvm::equal(op.getOperands().drop_front(),
+                     store->getOperands().drop_front()) ||
+        storedMemRef(&op) != storedMemRef(store))
+      continue;
+
+    if (auto arrayValue = dyn_cast<affine::AffineStoreOp>(op)) {
+      auto buildPoint = cast<affine::AffineStoreOp>(store);
+      if (arrayValue.getAffineMap() != buildPoint.getAffineMap())
+        continue;
+    }
+    return true;
+  }
+  return false;
+}
+
+/// Max stores of `mem` per body of one loop of its own function (a store
+/// outside every loop does not count), not following calls.
+static unsigned localStoresPerLoop(Value mem) {
+  DenseMap<Operation *, unsigned> perLoop;
+  unsigned best = 0;
+  for (Operation *user : mem.getUsers()) {
+    if (storedMemRef(user) != mem || pairedWithThenArmStore(user))
+      continue;
+    Operation *loop = user->getParentOfType<LoopLikeOpInterface>();
+    if (!loop)
+      continue;
+    best = std::max(best, ++perLoop[loop]);
+  }
+  return best;
+}
+
+namespace {
+class CalleeStores {
+public:
+  /// Max stores per loop body of the memref parameter `idx` of `fn`, in `fn`
+  /// and, transitively, in the callees it is passed on to.
+  unsigned ofParameter(func::FuncOp fn, unsigned indexValue) {
+    auto key = std::make_pair(fn.getOperation(), indexValue);
+    if (auto it = memo.find(key); it != memo.end())
+      return it->second;
+    memo[key] = 0;
+    BlockArgument arg = fn.getArgument(indexValue);
+    unsigned elementCount =
+        std::max(localStoresPerLoop(arg), throughCalls(arg));
+    memo[key] = elementCount;
+    return elementCount;
+  }
+
+  /// Max over the defined callees `mem` is passed to directly.
+  unsigned throughCalls(Value mem) {
+    unsigned best = 0;
+    for (OpOperand &use : mem.getUses()) {
+      auto callSite = dyn_cast<CallOpInterface>(use.getOwner());
+      if (!callSite)
+        continue;
+      func::FuncOp callee = resolveDefinedCallee(callSite);
+      if (!callee || callee.isExternal())
+        continue;
+      std::optional<unsigned> indexValue = callArgIndex(callSite, use);
+      if (!indexValue || *indexValue >= callee.getNumArguments())
+        continue;
+      best = std::max(best, ofParameter(callee, *indexValue));
+    }
+    return best;
+  }
+
+private:
+  DenseMap<std::pair<Operation *, unsigned>, unsigned> memo;
+};
+} // namespace
+
+void annotateCalleeStoresPerLoop(ModuleOp module) {
+  CalleeStores stores;
+  OpBuilder buildPoint(module.getContext());
+  module.walk([&](memref::AllocaOp localAlloca) {
+    unsigned elementCount = stores.throughCalls(localAlloca.getResult());
+    if (elementCount > 1)
+      localAlloca->setAttr(kCalleeStoresPerLoopAttr,
+                           buildPoint.getI64IntegerAttr(elementCount));
+  });
+  module.walk([&](func::FuncOp fn) {
+    if (fn.isExternal())
+      return;
+    for (BlockArgument arg : fn.getArguments()) {
+      if (!isa<MemRefType>(arg.getType()))
+        continue;
+      unsigned elementCount = stores.throughCalls(arg);
+      if (elementCount > 1)
+        fn.setArgAttr(arg.getArgNumber(), kCalleeStoresPerLoopAttr,
+                      buildPoint.getI64IntegerAttr(elementCount));
+    }
+  });
+}
+
+unsigned calleeStoresPerLoop(Value bank) {
+  IntegerAttr arrayValue;
+  if (auto arg = dyn_cast<BlockArgument>(bank)) {
+    if (auto fn = dyn_cast<func::FuncOp>(arg.getOwner()->getParentOp()))
+      arrayValue = fn.getArgAttrOfType<IntegerAttr>(arg.getArgNumber(),
+                                                    kCalleeStoresPerLoopAttr);
+  } else if (Operation *def = bank.getDefiningOp()) {
+    arrayValue = def->getAttrOfType<IntegerAttr>(kCalleeStoresPerLoopAttr);
+  }
+  return arrayValue ? static_cast<unsigned>(arrayValue.getInt()) : 0u;
+}
+
 BRAMClassification::BRAMClassification(Operation *op) {
   enumerateBanks(op);
   profileAccesses(op);
@@ -184,6 +314,8 @@ void BRAMClassification::profileAccesses(Operation *root) {
       if (loop)
         maxStoresPerLoop = std::max(maxStoresPerLoop, writes);
     }
+
+    maxStoresPerLoop = std::max(maxStoresPerLoop, calleeStoresPerLoop(bank));
     prof.replicable = maxStoresPerLoop <= 1;
     prof.mode = prof.registers ? StorageMode::Registers
                                : classifyMode(maxStoresPerLoop);

@@ -6,6 +6,7 @@
 #include "circt/Dialect/Resource/Interfaces/MemoryDS.h"
 #include "circt/Dialect/Resource/Passes/CallInstances.h"
 #include "circt/Dialect/Resource/Passes/ConstantIndex.h"
+#include "circt/Dialect/Resource/Passes/MemrefBankClassification.h"
 #include "circt/Dialect/Resource/Passes/PartitionLayout.h"
 #include "circt/Support/LLVM.h"
 #include "circt/Transforms/Passes.h"
@@ -1086,7 +1087,25 @@ void BankingPlan::bank() {
 
 struct MemoryBankingPass
     : public hls_analysis::impl::MemoryBankingBase<MemoryBankingPass> {
-  void runOnOperation() override { BankingPlan(getOperation()).run(); }
+  MemoryBankingPass() = default;
+  MemoryBankingPass(const MemoryBankingPass &other)
+      : hls_analysis::impl::MemoryBankingBase<MemoryBankingPass>(other) {}
+
+  Option<bool> annotateCalleeStores{
+      *this, "callee-stores-per-loop",
+      llvm::cl::desc("After banking, record on each bank (alloca or memref "
+                     "parameter) the most stores one loop body of a callee "
+                     "it is passed to makes (hls.callee_stores_per_loop), so "
+                     "that the per-function scheduler does not give a bank "
+                     "Vitis keeps a 2-port RAM the replicated read slots."),
+      llvm::cl::init(true)};
+
+  void runOnOperation() override {
+    BankingPlan(getOperation()).run();
+
+    if (annotateCalleeStores)
+      hls_analysis::annotateCalleeStoresPerLoop(getOperation());
+  }
 };
 
 } // namespace
