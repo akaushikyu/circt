@@ -135,7 +135,8 @@ module {
     // CHECK: kind=PIPO  bram=2
     // CHECK-NEXT: single (every process uses one port of the bank)
     %x = memref.alloca() {polygeist.varname = "x"} : memref<256xi32>
-    // The consumer writes it too: not a channel, an ordinary memory.
+    // The consumer writes it too: both writers are merged into one process
+    // that holds every access, so not a channel, an ordinary memory.
     // CHECK: kind=RAM_2P  bram=2
     %rw = memref.alloca() {polygeist.varname = "rw"} : memref<256xi32>
     // 2 x 8 x 32 = 512 bits < 1024: distributed RAM.
@@ -216,7 +217,7 @@ module {
   // DBG-NEXT: blocks: 2: the region of the top function
   // DBG-NEXT: mode: single (every process uses one port of the bank)
   // DBG-NEXT: pipo price: single memory of all 2 blocks: F(2048x32) at x18 (true dual port, one port per side) = 4
-  // DBG: dataflow region array, not a ping-pong channel: 2 processes write it
+  // DBG: dataflow region array, not a ping-pong channel: every process that accesses it is merged into one process (call @prod256 @ {{.*}}: writes on 'rw'): an ordinary memory
 
   // JSON: "pipo": {
   // JSON-NEXT: "blocks": 2,
@@ -225,7 +226,7 @@ module {
   // JSON-NEXT: "mode": "single",
   // JSON: "ram_type": "PIPO",
   // JSON: "status": "pipo",
-  // JSON: "not_channel_reason": "2 processes write it
+  // JSON: "not_channel_reason": "every process that accesses it is merged into one process (call @prod256 @
 
   // A dataflow function called once from a sequential top: one block, an
   // ordinary memory (x36 with one port per process: 256x32 = 1).
@@ -275,7 +276,7 @@ module {
   // Two processes of the dataflow loop of a non-top function read the same
   // parameter: Vitis merges them into one process, so the array between them
   // is an ordinary memory of that process (1024x32 = 2), not a channel.
-  // MERGE: dataflow region array, not a ping-pong channel: its producer and a consumer are merged into one process (both access parameter 0 of @conv
+  // MERGE: dataflow region array, not a ping-pong channel: every process that accesses it is merged into one process ({{.*}}: both access parameter 0 of @conv
   // MERGE: Total BRAM: 2
   func.func private @conv(%p: memref<1024xi32>, %o: memref<1024xi32>) attributes {hls.inline_off} {
     %t = memref.alloca() {polygeist.varname = "t"} : memref<1024xi32>

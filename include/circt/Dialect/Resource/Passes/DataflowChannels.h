@@ -57,6 +57,9 @@ struct DataflowProcess {
   std::string name;              ///< "call @f" / the loop kind, and its loc
   unsigned position = 0;         ///< its position in the region body
   bool reads = false, writes = false;
+  /// The process Vitis merges it into (named by the group's first process
+  /// in program order), and why; empty when it stays a process of its own.
+  std::string group, mergeReason;
 };
 
 /// A ping-pong channel and the facts its price depends on.
@@ -80,10 +83,14 @@ struct ChannelVerdict {
   std::string notChannelReason;
 };
 
-/// The processes of each dataflow region that Vitis merges into one process
-/// because they access the same array the region receives from its caller (a
-/// memref parameter of a region function that is not the top; a top-level
-/// argument is a port, which two processes share).
+/// The processes of each dataflow region that Vitis merges into one process:
+///   - every process that writes one region-local array or stream (a local
+///     of the region, not a scalar), together with every process on a
+///     dependence path from one process of the merged group to another
+///     (through region-local arrays and streams), until nothing changes;
+///   - the processes that access one array a non-top region function
+///     receives from its caller (a top-level argument is a port, which two
+///     processes share).
 class ProcessMerges {
 public:
   /// Every access of a memref value, seen from its function.
@@ -97,13 +104,24 @@ public:
   std::pair<mlir::Operation *, std::string>
   groupOf(mlir::Operation *region, mlir::Operation *process);
 
+  /// The first process in program order of the group of `process`.
+  mlir::Operation *groupLeader(mlir::Operation *region,
+                               mlir::Operation *process);
+
+  /// Whether `process` shares its group with another process.
+  bool isMerged(mlir::Operation *region, mlir::Operation *process);
+
 private:
   struct RegionMerges {
     llvm::DenseMap<mlir::Operation *, mlir::Operation *> parent;
     llvm::DenseMap<mlir::Operation *, std::string> reason;
+    llvm::DenseMap<mlir::Operation *, unsigned> position;
   };
   RegionMerges &compute(mlir::Operation *region);
   mlir::Operation *find(RegionMerges &m, mlir::Operation *p);
+  bool unite(RegionMerges &m, mlir::Operation *a, mlir::Operation *b);
+  void mergeOnParameters(mlir::Operation *region, RegionMerges &m);
+  void mergeWritersAndPaths(mlir::Operation *region, RegionMerges &m);
 
   AccessesFn accessesOf;
   llvm::DenseMap<mlir::Operation *, std::unique_ptr<RegionMerges>> regions;

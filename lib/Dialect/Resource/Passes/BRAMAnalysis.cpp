@@ -2422,12 +2422,16 @@ static void printDebugText(ArrayRef<MemrefRecord> records,
       } else {
         os << "  dataflow ping-pong channel of " << pp.regionKind << " "
            << pp.region << "\n";
-        for (const DataflowProcess &dp : pp.processes)
+        for (const DataflowProcess &dp : pp.processes) {
           os << "    process " << dp.position << " ("
              << (dp.writes && dp.reads ? "writes, reads"
                  : dp.writes           ? "writes"
                                        : "reads")
              << "): " << dp.name << "\n";
+          if (!dp.group.empty())
+            os << "      merged into the process of " << dp.group << " ("
+               << dp.mergeReason << ")\n";
+        }
         os << "  blocks: " << pp.blocksSource << "\n";
         if (!pp.bindType.empty() || !pp.bindImpl.empty())
           os << "  bind_storage: type=" << pp.bindType
@@ -2650,6 +2654,10 @@ static llvm::json::Object toJson(const MemrefRecord &resultValue) {
         pr["position"] = static_cast<int64_t>(dp.position);
         pr["reads"] = dp.reads;
         pr["writes"] = dp.writes;
+        if (!dp.group.empty()) { // additive: the process Vitis merges it into
+          pr["merge_group"] = dp.group;
+          pr["merge_reason"] = dp.mergeReason;
+        }
         procs.push_back(std::move(pr));
       }
       po["processes"] = std::move(procs);
