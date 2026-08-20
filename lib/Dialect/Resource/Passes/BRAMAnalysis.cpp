@@ -178,6 +178,8 @@ struct AccessRecord {
   unsigned mergedLoads = 0;
   unsigned forwardedLoads = 0;
   unsigned removedStores = 0;
+
+  unsigned mergedIfElseStores = 0;
   Operation *scope = nullptr;
 
   std::string inFunc;
@@ -1286,6 +1288,7 @@ static void recordAccesses(ArrayRef<AccessSummary> accesses,
     ar.mergedLoads = counterAttr(a.op, "hls.merged_loads");
     ar.forwardedLoads = counterAttr(a.op, "hls.forwarded_loads");
     ar.removedStores = counterAttr(a.op, "hls.removed_stores");
+    ar.mergedIfElseStores = counterAttr(a.op, "hls.merged_if_else_stores");
     if (auto fn = a.op->getParentOfType<func::FuncOp>())
       ar.inFunc = fn.getName().str();
     if (a.via) {
@@ -2498,6 +2501,9 @@ static void printDebugText(ArrayRef<MemrefRecord> records,
                << " dead store(s)";
           os << ")";
         }
+        if (a.mergedIfElseStores)
+          os << " (stands for the same-address stores of both arms of an "
+                "if/else: one store)";
         os << "\n";
       }
       os << "  port demand: reads=" << resultValue.demand.reads
@@ -2654,7 +2660,7 @@ static llvm::json::Object toJson(const MemrefRecord &resultValue) {
         pr["position"] = static_cast<int64_t>(dp.position);
         pr["reads"] = dp.reads;
         pr["writes"] = dp.writes;
-        if (!dp.group.empty()) { // additive: the process Vitis merges it into
+        if (!dp.group.empty()) {
           pr["merge_group"] = dp.group;
           pr["merge_reason"] = dp.mergeReason;
         }
@@ -2796,6 +2802,8 @@ static llvm::json::Object toJson(const MemrefRecord &resultValue) {
     ao["merged_loads"] = static_cast<int64_t>(a.mergedLoads);
     ao["forwarded_loads"] = static_cast<int64_t>(a.forwardedLoads);
     ao["removed_stores"] = static_cast<int64_t>(a.removedStores);
+
+    ao["merged_if_else_stores"] = static_cast<int64_t>(a.mergedIfElseStores);
 
     ao["in_func"] = a.inFunc.empty() ? llvm::json::Value(nullptr)
                                      : llvm::json::Value(a.inFunc);

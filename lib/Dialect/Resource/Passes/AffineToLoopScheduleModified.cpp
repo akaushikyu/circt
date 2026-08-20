@@ -116,6 +116,7 @@ private:
 
   void hoistInvariantLoads();
   void cleanupRedundantAccesses();
+  void mergeIfElseAccesses();
 
   CyclicSchedulingAnalysis *schedulingAnalysis;
 
@@ -135,6 +136,15 @@ private:
                      "times instead of solving it again. Both schedulers are "
                      "deterministic functions of these inputs, so the result "
                      "is the same."),
+      llvm::cl::init(true)};
+  Option<bool> mergeIfElse{
+      *this, "merge-if-else-accesses",
+      llvm::cl::desc("Before the redundant-access cleanup, hoist a load both "
+                     "arms of an if/else make of one address above the if, "
+                     "and sink a store both arms make to one address below "
+                     "it as one store of the value the if yields (Vitis "
+                     "SimplifyCFG / InstCombine): the pair counts as one "
+                     "access per iteration for ports and replication."),
       llvm::cl::init(true)};
   Option<bool> verifyScheduleReuse{
       *this, "verify-schedule-reuse",
@@ -637,6 +647,247 @@ void AffineToLoopSchedule::cleanupRedundantAccesses() {
                           << " loads, forwarded " << forwarded
                           << " loads from stores, removed " << removed
                           << " dead stores\n");
+}
+
+namespace {
+/// One arm of an if/else: its block, and the region that holds it.
+struct IfArm {
+  Block *block;
+  Region *region;
+};
+} // namespace
+
+static Value accessMemref(Operation *op) {
+  if (auto lowerIndex = dyn_cast<AffineLoadOp>(op))
+    return lowerIndex.getMemRef();
+  if (auto stringValue = dyn_cast<AffineStoreOp>(op))
+    return stringValue.getMemRef();
+  return {};
+}
+
+static AccessAddr accessAddr(Operation *op) {
+  if (auto lowerIndex = dyn_cast<AffineLoadOp>(op))
+    return AccessAddr(lowerIndex.getAffineMap(), lowerIndex.getMapOperands());
+  auto stringValue = cast<AffineStoreOp>(op);
+  return AccessAddr(stringValue.getAffineMap(), stringValue.getMapOperands());
+}
+
+/// True when `other` (an op of an arm, or nested in one) may conflict with an
+/// access to `addr` of the memref whose alias set is `alias`: a write that
+/// may alias the address (or, with `readsConflict`, any access that may alias
+/// it), or any other use of a member of the alias set. A call conflicts when
+/// the memref was passed to some call.
+static bool mayConflict(Operation *other, Value mem,
+                        const MemrefAliasInfo &alias, const AccessAddr &addr,
+                        bool readsConflict) {
+  bool conflict = false;
+  other->walk([&](Operation *op) {
+    if (alias.passedToCall && isa<CallOpInterface>(op)) {
+      conflict = true;
+      return WalkResult::interrupt();
+    }
+    bool touches = llvm::any_of(op->getOperands(), [&](Value valueHandle) {
+      return alias.members.contains(valueHandle);
+    });
+    if (!touches)
+      return WalkResult::advance();
+    if (isa<ViewLikeOpInterface>(op))
+      return WalkResult::advance();
+    bool isLoad = isa<AffineLoadOp>(op), isStore = isa<AffineStoreOp>(op);
+    if ((isLoad || isStore) && accessMemref(op) == mem) {
+      if (isLoad && !readsConflict)
+        return WalkResult::advance();
+      if (compareAddresses(accessAddr(op), addr) == AddrRelation::Disjoint)
+        return WalkResult::advance();
+    }
+    conflict = true;
+    return WalkResult::interrupt();
+  });
+  return conflict;
+}
+
+static bool definedOutside(ValueRange values, Operation *ifOp) {
+  return llvm::all_of(values, [&](Value valueHandle) {
+    return !ifOp->isAncestor(valueHandle.getParentRegion()->getParentOp());
+  });
+}
+
+/// The loads of `arm` that no earlier op of the arm may overwrite, and the
+/// stores of `arm` that no later op of the arm may read or overwrite, whose
+/// memref is tracked and whose address operands are defined outside `ifOp`.
+static void
+movableAccesses(IfArm arm, Operation *ifOp,
+                function_ref<const MemrefAliasInfo *(Value)> tracked,
+                SmallVectorImpl<AffineLoadOp> &loads,
+                SmallVectorImpl<AffineStoreOp> &stores) {
+  for (Operation &op : arm.block->without_terminator()) {
+    auto load = dyn_cast<AffineLoadOp>(op);
+    if (!load || !definedOutside(load.getMapOperands(), ifOp))
+      continue;
+    const MemrefAliasInfo *alias = tracked(load.getMemRef());
+    if (!alias)
+      continue;
+    AccessAddr addr = accessAddr(load);
+    bool clobbered = false;
+    for (Operation &before : *arm.block) {
+      if (&before == &op)
+        break;
+      if (mayConflict(&before, load.getMemRef(), *alias, addr, false)) {
+        clobbered = true;
+        break;
+      }
+    }
+    if (!clobbered)
+      loads.push_back(load);
+  }
+  for (Operation &op : arm.block->without_terminator()) {
+    auto store = dyn_cast<AffineStoreOp>(op);
+    if (!store || !definedOutside(store.getMapOperands(), ifOp))
+      continue;
+    const MemrefAliasInfo *alias = tracked(store.getMemRef());
+    if (!alias)
+      continue;
+    AccessAddr addr = accessAddr(store);
+    bool used = false;
+    for (Operation *after = op.getNextNode(); after;
+         after = after->getNextNode())
+      if (mayConflict(after, store.getMemRef(), *alias, addr, true)) {
+        used = true;
+        break;
+      }
+    if (!used)
+      stores.push_back(store);
+  }
+}
+
+template <typename AccessOp>
+static SmallVector<std::pair<AccessOp, AccessOp>>
+pairSameAddress(ArrayRef<AccessOp> thenOps, ArrayRef<AccessOp> elseOps) {
+  SmallVector<std::pair<AccessOp, AccessOp>> pairs;
+  DenseSet<Operation *> used;
+  for (AccessOp t : thenOps)
+    for (AccessOp e : elseOps) {
+      if (used.contains(e) || t.getMemRef() != e.getMemRef())
+        continue;
+      if (compareAddresses(accessAddr(t), accessAddr(e)) != AddrRelation::Same)
+        continue;
+      used.insert(e);
+      pairs.push_back({t, e});
+      break;
+    }
+  return pairs;
+}
+
+/// Rebuilds `ifOp` with one more result per stored value pair and returns the
+/// new op; the old one is erased.
+static Operation *addIfResults(Operation *ifOp,
+                               ArrayRef<std::pair<Value, Value>> yielded) {
+  OpBuilder buildPoint(ifOp);
+  SmallVector<Type> types(ifOp->getResultTypes());
+  for (auto [t, e] : yielded)
+    types.push_back(t.getType());
+  Operation *newIf;
+  if (auto sIf = dyn_cast<scf::IfOp>(ifOp)) {
+    auto elementCount =
+        scf::IfOp::create(buildPoint, sIf.getLoc(), types, sIf.getCondition());
+    elementCount.getThenRegion().takeBody(sIf.getThenRegion());
+    elementCount.getElseRegion().takeBody(sIf.getElseRegion());
+    newIf = elementCount;
+  } else {
+    auto aIf = cast<AffineIfOp>(ifOp);
+    auto elementCount =
+        AffineIfOp::create(buildPoint, aIf.getLoc(), types, aIf.getIntegerSet(),
+                           aIf.getOperands(), true);
+    elementCount.getThenRegion().takeBody(aIf.getThenRegion());
+    elementCount.getElseRegion().takeBody(aIf.getElseRegion());
+    newIf = elementCount;
+  }
+  for (unsigned armIdx = 0; armIdx < 2; ++armIdx) {
+    Operation *term = newIf->getRegion(armIdx).front().getTerminator();
+    SmallVector<Value> operands(term->getOperands());
+    for (auto [t, e] : yielded)
+      operands.push_back(armIdx == 0 ? t : e);
+    term->setOperands(operands);
+  }
+  for (auto [oldRes, newRes] :
+       llvm::zip(ifOp->getResults(), newIf->getResults()))
+    oldRes.replaceAllUsesWith(newRes);
+  ifOp->erase();
+  return newIf;
+}
+
+void AffineToLoopSchedule::mergeIfElseAccesses() {
+  SmallVector<Operation *> ifs;
+  getOperation().walk([&](Operation *op) {
+    if (auto sIf = dyn_cast<scf::IfOp>(op)) {
+      if (!sIf.getElseRegion().empty())
+        ifs.push_back(op);
+    } else if (auto aIf = dyn_cast<AffineIfOp>(op)) {
+      if (aIf.hasElse())
+        ifs.push_back(op);
+    }
+  });
+
+  DenseMap<Value, MemrefAliasInfo> aliasCache;
+  auto tracked = [&](Value mem) -> const MemrefAliasInfo * {
+    if (!isRootMemref(mem))
+      return nullptr;
+    auto it = aliasCache.find(mem);
+    if (it == aliasCache.end())
+      it = aliasCache.try_emplace(mem, collectMemrefAliases(mem)).first;
+    return it->second.escaped ? nullptr : &it->second;
+  };
+
+  unsigned hoisted = 0, sunk = 0;
+  for (Operation *ifOp : ifs) {
+    IfArm thenArm{&ifOp->getRegion(0).front(), &ifOp->getRegion(0)};
+    IfArm elseArm{&ifOp->getRegion(1).front(), &ifOp->getRegion(1)};
+
+    SmallVector<AffineLoadOp> thenLoads, elseLoads;
+    SmallVector<AffineStoreOp> thenStores, elseStores;
+    movableAccesses(thenArm, ifOp, tracked, thenLoads, thenStores);
+    movableAccesses(elseArm, ifOp, tracked, elseLoads, elseStores);
+
+    for (auto [t, e] : pairSameAddress<AffineLoadOp>(thenLoads, elseLoads)) {
+      t->moveBefore(ifOp);
+      addCounterAttr(t, "hls.merged_loads",
+                     1 + counterAttr(e, "hls.merged_loads"));
+      e.getResult().replaceAllUsesWith(t.getResult());
+      e.erase();
+      ++hoisted;
+    }
+
+    auto storePairs = pairSameAddress<AffineStoreOp>(thenStores, elseStores);
+    if (storePairs.empty())
+      continue;
+    SmallVector<std::pair<Value, Value>> yielded;
+    for (auto [t, e] : storePairs)
+      yielded.push_back({t.getValueToStore(), e.getValueToStore()});
+    unsigned firstNew = ifOp->getNumResults();
+
+    SmallVector<AffineStoreOp> kept;
+    for (auto [t, e] : storePairs) {
+      addCounterAttr(t, "hls.merged_if_else_stores",
+                     1 + counterAttr(e, "hls.merged_if_else_stores"));
+      addCounterAttr(t, "hls.removed_stores",
+                     counterAttr(e, "hls.removed_stores"));
+      addCounterAttr(t, "hls.forwarded_loads",
+                     counterAttr(e, "hls.forwarded_loads"));
+      kept.push_back(t);
+      e.erase();
+    }
+    Operation *newIf = addIfResults(ifOp, yielded);
+    for (auto [loopIndex, store] : llvm::enumerate(kept)) {
+      store->moveAfter(newIf);
+      store.getValueMutable().assign(newIf->getResult(firstNew + loopIndex));
+      ++sunk;
+    }
+
+    for (unsigned loopIndex = 1; loopIndex < kept.size(); ++loopIndex)
+      kept[loopIndex]->moveAfter(kept[loopIndex - 1]);
+  }
+  LLVM_DEBUG(llvm::dbgs() << "if/else merge: hoisted " << hoisted
+                          << " loads, sank " << sunk << " stores\n");
 }
 
 /// Returns true if `forOp` contains no loop of any kind anywhere in its body
@@ -1288,6 +1539,8 @@ void AffineToLoopSchedule::runOnOperation() {
 
   coalescePerfectNests();
 
+  if (mergeIfElse)
+    mergeIfElseAccesses();
   if (cseLoads || forwardStores)
     cleanupRedundantAccesses();
   if (hoistInvariant)
