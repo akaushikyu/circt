@@ -3,6 +3,14 @@
 Newest entry first. One entry per logical change, including changes that were
 tried and reverted. Branch: `hls-est-vitis-match` in `~/circt`.
 
+## 2026-10-14 — an array passed to a call before a loop is still hoisted from inside the loop (N38-impl 3/5)
+- **Commit:** this entry's commit (branch `hls-est-vitis-match`)
+- **Files:** `lib/Dialect/Resource/Passes/AffineToLoopScheduleModified.cpp` (`isMemrefWrittenInLoop` takes `callsOnlyInLoop`: a memref passed to some call counts as written in the loop only when the loop contains a call; option `hoist-past-calls`, default on), new lit `test/hls-est/Passes/bram_repl_hoist_past_calls.mlir`.
+- **What:** the invariant-load hoist refused every memref that any call in the function receives (the conservative rule O47-fix kept for hoisting). A callee can write an array it received only while a call runs (during that call or, keeping the address, during a later one), so only a call inside the loop can write it while the loop runs; the same reasoning as O47-fix's position-wise barrier for the redundant-access cleanup.
+- **Why:** class_ece8893_2023_spring Analog-CIM on-board: `v_ref_buf` is filled by `load_v_ref_from_DRAM` and read 32 times per iteration under a break-guarded compare; Vitis 4 BRAM (plain RAM, the loads hoisted as in `w9r_b9condinv`), hls-est 60 (15 copies). Corpus evidence only, no kernel with a call (the hoist itself is the kernel-backed R-hoist-cond).
+- **Effect:** see the previous entry (Analog-CIM on-board 258 -> 202 = Vitis needs both options; Analog-CIM optimized 76 -> 114). No other design changes with this option alone.
+- **Reverted?:** no
+
 ## 2026-10-14 — loop-invariant loads under an if are hoisted (N38-impl 2/5, VITIS_NOTES N38 R-hoist-cond)
 - **Commit:** this entry's commit (branch `hls-est-vitis-match`)
 - **Files:** `lib/Dialect/Resource/Passes/AffineToLoopScheduleModified.cpp` (`hoistInvariantLoads`: an affine.load nested only in scf.if / affine.if regions of the loop body, with loop-invariant address and memref, is hoisted like a top-level one and marked `hls.hoisted_conditional`; option `hoist-conditional-invariant`, default on), `BRAMAnalysis.cpp` (access record `hoisted_conditional`, debug text and JSON, additive), new lit `test/hls-est/Passes/bram_repl_hoist_conditional.mlir`.

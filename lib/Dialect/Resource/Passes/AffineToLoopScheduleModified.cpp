@@ -137,6 +137,14 @@ private:
                      "deterministic functions of these inputs, so the result "
                      "is the same."),
       llvm::cl::init(true)};
+  Option<bool> hoistPastCalls{
+      *this, "hoist-past-calls",
+      llvm::cl::desc("With hoist-invariant: a memref passed to some call is "
+                     "still hoisted from when the loop contains no call (a "
+                     "callee can write it only while a call runs); off: any "
+                     "call taking it anywhere in the function pins its "
+                     "loads."),
+      llvm::cl::init(true)};
   Option<bool> hoistConditional{
       *this, "hoist-conditional-invariant",
       llvm::cl::desc("With hoist-invariant: also hoist a loop-invariant "
@@ -314,14 +322,29 @@ static MemrefAliasInfo collectMemrefAliases(Value mem) {
 }
 
 /// True if some op inside `forOp` may write the memref through any member of
-/// its alias set (or uses one opaquely), or if the memref has escaped or is
-/// passed to a call anywhere in the function (hoisting keeps that
-/// conservative rule; only the redundant-access cleanup below treats a call
-/// as a barrier at its own position).
+/// its alias set (or uses one opaquely), or if the memref has escaped. A
+/// memref passed to a call counts as written when `callsOnlyInLoop` is false
+/// (the old conservative rule), else only when the loop contains a call
+/// (hoist-past-calls: an array filled by a call before the loop, Analog-CIM
+/// on-board `v_ref_buf`, is read through hoisted loads in Vitis: a plain
+/// RAM of 4 BRAM, not 15 copies).
 static bool isMemrefWrittenInLoop(const MemrefAliasInfo &alias,
-                                  AffineForOp forOp) {
-  if (alias.escaped || alias.passedToCall)
+                                  AffineForOp forOp,
+                                  bool callsOnlyInLoop = false) {
+  if (alias.escaped)
     return true;
+  if (alias.passedToCall) {
+    if (!callsOnlyInLoop)
+      return true;
+
+    bool hasCall = false;
+    forOp.getBody()->walk([&](CallOpInterface) {
+      hasCall = true;
+      return WalkResult::interrupt();
+    });
+    if (hasCall)
+      return true;
+  }
   bool written = false;
   forOp.getBody()->walk([&](Operation *op) {
     if (isa<ViewLikeOpInterface>(op))
@@ -382,7 +405,8 @@ void AffineToLoopSchedule::hoistInvariantLoads() {
       auto it = writtenCache.find(mem);
       if (it != writtenCache.end())
         return it->second;
-      bool widthValue = isMemrefWrittenInLoop(aliasInfo(mem), root);
+      bool widthValue =
+          isMemrefWrittenInLoop(aliasInfo(mem), root, hoistPastCalls);
       writtenCache[mem] = widthValue;
       return widthValue;
     };
