@@ -287,6 +287,8 @@ struct MemrefRecord {
 
   std::optional<std::string> structMember;
 
+  std::optional<std::string> aggregated;
+
   std::optional<std::string> keptReason;
 
   struct NarrowRecord {
@@ -1215,6 +1217,8 @@ static void describeMemref(Operation *op, unsigned index,
     resultValue.fromGlobal = g.getValue().str();
   if (auto memoryOp = op->getAttrOfType<StringAttr>("hls.struct_member"))
     resultValue.structMember = memoryOp.getValue().str();
+  if (auto memoryOp = op->getAttrOfType<StringAttr>("hls.aggregated"))
+    resultValue.aggregated = memoryOp.getValue().str();
   if (auto keyValue = op->getAttrOfType<StringAttr>("hls.kept_reason"))
     resultValue.keptReason = keyValue.getValue().str();
 
@@ -2380,6 +2384,9 @@ static void printDebugText(ArrayRef<MemrefRecord> records,
     if (resultValue.structMember)
       os << "  struct array split: " << *resultValue.structMember
          << " (--split-struct-memrefs)\n";
+    if (resultValue.aggregated)
+      os << "  struct variable " << *resultValue.aggregated
+         << " (--split-struct-memrefs)\n";
     os << "  shape " << shapeString(resultValue.shape) << " x "
        << resultValue.elemType << " (" << resultValue.elemBits << " bits)";
     if (resultValue.words)
@@ -2646,6 +2653,8 @@ static llvm::json::Object toJson(const MemrefRecord &resultValue) {
     o["from_global"] = *resultValue.fromGlobal;
   if (resultValue.structMember)
     o["struct_member"] = *resultValue.structMember;
+  if (resultValue.aggregated)
+    o["aggregated"] = *resultValue.aggregated;
   if (resultValue.rom)
     o["rom"] = true;
   if (resultValue.math)

@@ -39,6 +39,7 @@
 #include "mlir/Pass/Pass.h"
 
 #include <memory>
+#include <optional>
 
 namespace circt::hls_analysis {
 
@@ -168,8 +169,16 @@ void registerPolygeistMemRefElementTypes(mlir::DialectRegistry &registry);
 /// of a struct array: one memory per member (VITIS_NOTES.md N29).
 unsigned aggregateElementBits(mlir::Type type);
 
+/// Bits of the C storage of `type` (x86-64 data layout with natural
+/// alignment: struct padding included, an iN rounded up to its storage
+/// size), or nullopt for a type without a layout. An m_axi port of struct
+/// elements is that wide (VITIS_NOTES.md N37 S5).
+std::optional<int64_t> llvmStorageBits(mlir::Type type);
+
 /// --split-struct-memrefs (SplitStructMemrefs.cpp): one memref per member of
-/// a local array of structs, as Vitis disaggregates it (VITIS_NOTES.md N29).
+/// a struct-typed variable, as Vitis disaggregates it, or one memref of
+/// packed words when an AGGREGATE pragma reaches it (VITIS_NOTES.md N29,
+/// N37).
 std::unique_ptr<mlir::Pass> createSplitStructMemrefsPass();
 void registerSplitStructMemrefsPass();
 
