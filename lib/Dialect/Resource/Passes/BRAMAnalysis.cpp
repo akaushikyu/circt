@@ -7,10 +7,12 @@
 #include "circt/Dialect/Resource/Passes/DataflowChannels.h"
 #include "circt/Dialect/Resource/Passes/LoopPragmas.h"
 #include "circt/Dialect/Resource/Passes/MathCores.h"
+#include "circt/Dialect/Resource/Passes/PolygeistCompat.h"
 #include "circt/Dialect/Resource/Passes/StreamFifos.h"
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/Dialect/Utils/StaticValueUtils.h"
@@ -3058,6 +3060,22 @@ static void scanArgUses(Value valueHandle, AdapterRecord &a) {
     Value cur = work.pop_back_val();
     for (OpOperand &use : cur.getUses()) {
       Operation *user = use.getOwner();
+
+      if (isa<Memref2PointerOp, Pointer2MemrefOp, LLVM::GEPOp>(user)) {
+        if (user->getOperand(0) == cur &&
+            seen.insert(user->getResult(0)).second)
+          work.push_back(user->getResult(0));
+        continue;
+      }
+      if (auto ld = dyn_cast<LLVM::LoadOp>(user)) {
+        a.hasRead = true;
+        continue;
+      }
+      if (auto st = dyn_cast<LLVM::StoreOp>(user)) {
+        if (st.getAddr() == cur)
+          a.hasWrite = true;
+        continue;
+      }
       if (auto view = dyn_cast<ViewLikeOpInterface>(user))
         if (view.getViewSource() == cur) {
           for (Value resultValue : user->getResults())
@@ -3137,6 +3155,10 @@ collectAdapters(ModuleOp module) {
           bits = elt.isIntOrFloat()    ? elt.getIntOrFloatBitWidth()
                  : isa<IndexType>(elt) ? 64u
                                        : 32u;
+
+          if (isa<LLVM::LLVMStructType>(elt))
+            if (auto storage = llvmStorageBits(elt))
+              bits = static_cast<unsigned>(*storage);
         } else if (arg.getType().isIntOrFloat()) {
           bits = arg.getType().getIntOrFloatBitWidth();
         }
