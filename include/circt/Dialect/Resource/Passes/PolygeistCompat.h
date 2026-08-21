@@ -172,13 +172,12 @@ unsigned aggregateElementBits(mlir::Type type);
 /// Bits of the C storage of `type` (x86-64 data layout with natural
 /// alignment: struct padding included, an iN rounded up to its storage
 /// size), or nullopt for a type without a layout. An m_axi port of struct
-/// elements is that wide (VITIS_NOTES.md N37 S5).
+/// elements is that wide (Vitis aggregates such a port with compact=none).
 std::optional<int64_t> llvmStorageBits(mlir::Type type);
 
 /// --split-struct-memrefs (SplitStructMemrefs.cpp): one memref per member of
 /// a struct-typed variable, as Vitis disaggregates it, or one memref of
-/// packed words when an AGGREGATE pragma reaches it (VITIS_NOTES.md N29,
-/// N37).
+/// packed words when an AGGREGATE pragma reaches it.
 std::unique_ptr<mlir::Pass> createSplitStructMemrefsPass();
 void registerSplitStructMemrefsPass();
 

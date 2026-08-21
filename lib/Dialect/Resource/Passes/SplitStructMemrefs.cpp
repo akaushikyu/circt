@@ -11,14 +11,16 @@
 // Vitis disaggregates a struct-typed variable into one memory per leaf by
 // default: `struct P { int a; short b; }; P s[1024];` becomes the two
 // memories s_a (1024 x 32 bits, 2 BRAM_18K) and s_b (1024 x 16 bits, 1
-// BRAM_18K), each priced on its own (VITIS_NOTES.md N29, N37 S1); a struct
+// BRAM_18K), each priced on its own (Vitis 2025.1 kernels w8b3_st1, w9s_a); a struct
 // with one array member (std::array, hls::vector, `struct R { short d[8]; }`)
 // becomes one memory named after the variable, the member's dimensions after
 // the variable's. When an AGGREGATE pragma reaches the variable (cgeist's
 // `hls.aggregate`, on the variable itself or carried there from a callee
-// parameter or an hls::vector member, N37 S2) Vitis instead builds one memory
+// parameter or an hls::vector member: `[HLS 214-241] Aggregating bram
+// variable`) Vitis instead builds one memory
 // of (product of the variable's dimensions) x (sum of the leaf widths, no
-// padding) bits and accesses it one word at a time (N37 S3): a member read is
+// padding) bits and accesses it one word at a time (its IR then holds
+// `load i58` / `store i58`, kernels w9s_a, w9s_c): a member read is
 // a word read and a shift, an iteration that writes every leaf of an element
 // stores one word, and one that writes only some leaves reads the word,
 // merges and writes it back.
@@ -1353,7 +1355,7 @@ void StructSplitter::rewriteAggregated(ArrayRef<SmallVector<Value>> mems) {
   // Stores: the stores of one block to the same element with no other access
   // to the variable between them form one word write. When they write every
   // bit of the word it is a plain word store; otherwise the word is read
-  // first (read-modify-write, VITIS_NOTES N37 S3).
+  // first (read-modify-write; Vitis binds such a memory ram_2p).
   SmallVector<Access *> stores;
   for (Access &acc : accesses)
     if (acc.isStore())
@@ -1870,27 +1872,27 @@ struct SplitStructMemrefsPass
       *this, "aggregate",
       llvm::cl::desc("A variable that carries hls.aggregate (an AGGREGATE "
                      "pragma reached it) becomes one memory of packed words "
-                     "instead of one memory per leaf (VITIS_NOTES.md N37 "
-                     "S2 / S3)"),
+                     "instead of one memory per leaf, accessed one word at "
+                     "a time, as Vitis aggregates it"),
       llvm::cl::init(true)};
   Option<bool> globals{
       *this, "globals",
       llvm::cl::desc("Also split / aggregate struct-typed memref.globals "
-                     "(VITIS_NOTES.md N37 S1)"),
+                     "(Vitis disaggregates a global like a local)"),
       llvm::cl::init(true)};
   Option<bool> throughCalls{
       *this, "through-calls",
       llvm::cl::desc("Split / aggregate a variable passed whole to kept "
                      "calls together with the callees' parameters (one "
                      "variable, as Vitis sees it across `inline off` and "
-                     "dataflow processes, VITIS_NOTES.md N37 S2 (b), S7)"),
+                     "dataflow processes)"),
       llvm::cl::init(true)};
 
   StringRef getArgument() const final { return "split-struct-memrefs"; }
   StringRef getDescription() const final {
     return "Split each struct-typed variable into one memref per member, as "
            "Vitis disaggregates it, or pack it into one word memref when an "
-           "AGGREGATE pragma reaches it (VITIS_NOTES.md N29, N37)";
+           "AGGREGATE pragma reaches it";
   }
   void getDependentDialects(DialectRegistry &registry) const override {
     registry.insert<arith::ArithDialect, memref::MemRefDialect,

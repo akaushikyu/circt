@@ -3,6 +3,14 @@
 Newest entry first. One entry per logical change, including changes that were
 tried and reverted. Branch: `hls-est-vitis-match` in `~/circt`.
 
+## 2026-10-14 — cgeist: AGGREGATE reaches the variable a call passes to the annotated parameter; `variable=this` names a member function's object (N37-impl, MEMOS #57; private binary, not installed)
+- **Commit:** Polygeist `36cc8374` (branch `hls-est-vitis-match`); this entry's commit records it and the notes (VITIS_NOTES N37 status line, MEMOS #57, OPEN_ISSUES O54 (a)).
+- **Files (Polygeist):** `tools/cgeist/Lib/HLSPragmaSema.cc` (`resolveVariable`: `this` in an instance member function is parameter 0, aggregate / disaggregate only), `Lib/HLSPragma.{h,cc}` (`propagateAggregate`, `createPropagateAggregatePass`, option `--hls-propagate-aggregate`, on), `driver.cc` (the pass before cgeist's inliner, the function again before materialization), `docs/hls-pragmas.md`, new lit `Test/HLS/aggregate/propagate.cpp`.
+- **What:** an `hls.aggregate` on a function argument is copied to the alloca, memref.global or caller argument every call passes as a whole-element view (memref.cast / element-type-preserving polygeist.subindex), transitively, with `from = <callee>`; `#pragma HLS aggregate variable=this` (Vitis's `hls_vector.h` form) no longer errors.
+- **Why:** VITIS_NOTES N37 S2 (b) (`w9s_b` `gs` / `la`, `w9v_s_inl`) and S2 (c); MEMOS #57.
+- **Effect:** private binary `~/hls-est-work/coord/scratch/n37impl/cgeist.n37` (md5 d104d556, linked from `36cc8374` against the ext4 archive copy). cgeist HLS lit (`Test/HLS`, 933 tests): identical to the installed binary except the new `aggregate/propagate.cpp` (passes; it fails on the installed binary); the 5 other failures are the same on both (consumer / lowering tests). Control run (harness subset + auto_ntt, soda, flowgnn, accelerators: 152 designs, private HOME, the same frozen `hls-est.v8` for both): 134 MLIR files from both binaries are **identical once `hls.aggregate` attributes are removed** (only flowgnn pna gains marks: `messages_ping` / `messages_pong` through `compute_CONV_layer` / `scatter`); status, totals and per-memref results identical on every design (pna 20,744 both) except forgebench mlp, an `-j 4` timeout (1030 at lower load, unchanged). Kernels `w9s_b`: `la`, `gs` marked as in Vitis.
+- **Reverted?:** no
+
 ## 2026-10-14 — the lanes of an aggregated element read in a loop are one word read before the loop (N37-impl follow-up, VITIS_NOTES N37 S3)
 - **Commit:** this entry's commit (branch `hls-est-vitis-match`)
 - **Files:** `lib/Dialect/Resource/Passes/SplitStructMemrefs.cpp` (`rewriteAggregated`: a word read whose element index does not change in an enclosing loop without a store to the variable or a call is placed before the outermost such loop, its pure index arithmetic with it (`wordReadInvariant`); one read per loop and element); new lit `test/hls-est/Passes/struct_aggregate_lanes.mlir`.
