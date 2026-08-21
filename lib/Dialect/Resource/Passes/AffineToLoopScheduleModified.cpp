@@ -137,6 +137,13 @@ private:
                      "deterministic functions of these inputs, so the result "
                      "is the same."),
       llvm::cl::init(true)};
+  Option<bool> userIITarget{
+      *this, "user-ii-target",
+      llvm::cl::desc("Schedule a loop with a user `pipeline II=N` (N > 1) at "
+                     "N when it could start more often: N is Vitis' target "
+                     "II, and the RAM_1WNR copies are sized at the final "
+                     "II."),
+      llvm::cl::init(true)};
   Option<bool> hoistPastCalls{
       *this, "hoist-past-calls",
       llvm::cl::desc("With hoist-invariant: a memref passed to some call is "
@@ -500,17 +507,17 @@ static std::pair<AffineExpr, int64_t> splitConstantTerm(AffineExpr e) {
   return {e, 0};
 }
 
-static AddrRelation compareAddresses(const AccessAddr &arrayValue,
+static AddrRelation compareAddresses(const AccessAddr &a,
                                      const AccessAddr &buildPoint) {
-  if (arrayValue.map.getNumResults() != buildPoint.map.getNumResults())
+  if (a.map.getNumResults() != buildPoint.map.getNumResults())
     return AddrRelation::MayAlias;
 
-  if (arrayValue.operands == buildPoint.operands &&
-      arrayValue.map.getNumDims() == buildPoint.map.getNumDims() &&
-      arrayValue.map.getNumSymbols() == buildPoint.map.getNumSymbols()) {
+  if (a.operands == buildPoint.operands &&
+      a.map.getNumDims() == buildPoint.map.getNumDims() &&
+      a.map.getNumSymbols() == buildPoint.map.getNumSymbols()) {
     bool allEqualParts = true;
     for (auto [ea, eb] :
-         llvm::zip(arrayValue.map.getResults(), buildPoint.map.getResults())) {
+         llvm::zip(a.map.getResults(), buildPoint.map.getResults())) {
       auto [va, ca] = splitConstantTerm(ea);
       auto [vb, callback] = splitConstantTerm(eb);
       if (va != vb) {
@@ -523,8 +530,8 @@ static AddrRelation compareAddresses(const AccessAddr &arrayValue,
     if (allEqualParts)
       return AddrRelation::Same;
   }
-  AffineValueMap va(arrayValue.map, arrayValue.operands),
-      vb(buildPoint.map, buildPoint.operands), diff;
+  AffineValueMap va(a.map, a.operands), vb(buildPoint.map, buildPoint.operands),
+      diff;
   AffineValueMap::difference(va, vb, &diff);
   bool allZero = true;
   for (unsigned dimensionIndex = 0, elementCount = diff.getNumResults();
@@ -540,8 +547,8 @@ static AddrRelation compareAddresses(const AccessAddr &arrayValue,
 }
 
 static int64_t counterAttr(Operation *op, StringRef name) {
-  if (auto arrayValue = op->getAttrOfType<IntegerAttr>(name))
-    return arrayValue.getInt();
+  if (auto a = op->getAttrOfType<IntegerAttr>(name))
+    return a.getInt();
   return 0;
 }
 
@@ -1307,7 +1314,7 @@ public:
   /// Returns the number of operations linked to a resource with a limit.
   static unsigned countLimitedOps(ModuloProblem &prob);
 
-  LogicalResult schedule(unsigned maxIIBumps);
+  LogicalResult schedule(unsigned maxIIBumps, unsigned minII = 1);
 
 private:
   struct Edge {
@@ -1560,10 +1567,11 @@ bool FastModuloScheduler::tryII(unsigned ii, SmallVectorImpl<unsigned> &start) {
   return true;
 }
 
-LogicalResult FastModuloScheduler::schedule(unsigned maxIIBumps) {
+LogicalResult FastModuloScheduler::schedule(unsigned maxIIBumps,
+                                            unsigned minII) {
   if (failed(build()))
     return failure();
-  unsigned resII = resMinII();
+  unsigned resII = std::max(resMinII(), minII);
   unsigned ii = recMinII(resII);
   if (ii == 0)
     return failure();
@@ -1667,15 +1675,15 @@ void AffineToLoopSchedule::runOnOperation() {
 /// --bram-debug can still report them.
 static SmallVector<NamedAttribute> hlsAttrsOf(Operation *op) {
   SmallVector<NamedAttribute> out;
-  for (NamedAttribute arrayValue : op->getDiscardableAttrs())
-    if (arrayValue.getName().strref().starts_with("hls."))
-      out.push_back(arrayValue);
+  for (NamedAttribute a : op->getDiscardableAttrs())
+    if (a.getName().strref().starts_with("hls."))
+      out.push_back(a);
   return out;
 }
 
 static void setAttrs(Operation *op, ArrayRef<NamedAttribute> attrs) {
-  for (const NamedAttribute &arrayValue : attrs)
-    op->setAttr(arrayValue.getName(), arrayValue.getValue());
+  for (const NamedAttribute &a : attrs)
+    op->setAttr(a.getName(), a.getValue());
 }
 
 /// Also replaces the affine load with the memref load in dependenceAnalysis.
@@ -2119,6 +2127,20 @@ LogicalResult AffineToLoopSchedule::populateOperatorTypes(
   return success();
 }
 
+/// The II a user `#pragma HLS pipeline II=N` asks for on `forOp` (N > 1),
+/// else 0. --auto-pipeline-unroll's own tag (source "auto") asks for none.
+static unsigned userTargetII(AffineForOp forOp) {
+  auto arr =
+      forOp->getAttrOfType<ArrayAttr>(circt::hls_analysis::kLoopPipelineAttr);
+  if (!arr || arr.empty())
+    return 0;
+  auto dict = dyn_cast<DictionaryAttr>(arr[0]);
+  if (!dict || dict.get("source"))
+    return 0;
+  auto ii = dict.getAs<IntegerAttr>("II");
+  return ii && ii.getInt() > 1 ? static_cast<unsigned>(ii.getInt()) : 0u;
+}
+
 /// Solve the pre-computed scheduling problem.
 LogicalResult
 AffineToLoopSchedule::solveSchedulingProblem(AffineForOp forOp,
@@ -2140,12 +2162,14 @@ AffineToLoopSchedule::solveSchedulingProblem(AffineForOp forOp,
     return failure();
 
   auto *anchor = forOp.getBody()->getTerminator();
+  unsigned targetII = userIITarget ? userTargetII(forOp) : 0u;
 
   SmallVector<int64_t> signature;
   size_t signatureHash = 0;
   const CachedSchedule *reused = nullptr;
   if (reuseSchedules) {
     signature = scheduleSignature(problem, anchor);
+    signature.push_back(targetII);
     signatureHash =
         llvm::hash_combine_range(signature.begin(), signature.end());
     auto it = scheduleCache.find(signatureHash);
@@ -2209,6 +2233,12 @@ AffineToLoopSchedule::solveSchedulingProblem(AffineForOp forOp,
     scheduled = succeeded(fast.schedule(4096));
     if (scheduled)
       scheduler = "greedy (simplex failed)";
+  }
+
+  if (scheduled && targetII > *problem.getInitiationInterval()) {
+    FastModuloScheduler fast(problem);
+    if (succeeded(fast.schedule(4096, targetII)))
+      scheduler = "greedy (user II target)";
   }
   if (!scheduled)
     return failure();
@@ -2299,8 +2329,8 @@ AffineToLoopSchedule::createLoopSchedulePipeline(AffineForOp forOp,
                          circt::hls_analysis::kLoopAutoUnrolledAttr,
                          circt::hls_analysis::kLoopUnrollPartialAttr,
                          circt::hls_analysis::kLoopSchedulerAttr})
-    if (Attribute arrayValue = forOp->getAttr(name))
-      pipeline->setAttr(name, arrayValue);
+    if (Attribute a = forOp->getAttr(name))
+      pipeline->setAttr(name, a);
 
   Block &condBlock = pipeline.getCondBlock();
   builder.setInsertionPointToStart(&condBlock);
@@ -2416,8 +2446,8 @@ AffineToLoopSchedule::createLoopSchedulePipeline(AffineForOp forOp,
 
   for (auto startTime : startTimes) {
     auto group = startGroups[startTime];
-    llvm::sort(group, [&](Operation *arrayValue, Operation *buildPoint) {
-      return dom.properlyDominates(arrayValue, buildPoint);
+    llvm::sort(group, [&](Operation *a, Operation *buildPoint) {
+      return dom.properlyDominates(a, buildPoint);
     });
     auto stageTypes = registerTypes[startTime];
 
