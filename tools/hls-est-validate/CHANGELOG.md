@@ -3,6 +3,14 @@
 Newest entry first. One entry per logical change, including changes that were
 tried and reverted. Branch: `hls-est-vitis-match` in `~/circt`.
 
+## 2026-10-14 — the lanes of an aggregated element read in a loop are one word read before the loop (N37-impl follow-up, VITIS_NOTES N37 S3)
+- **Commit:** this entry's commit (branch `hls-est-vitis-match`)
+- **Files:** `lib/Dialect/Resource/Passes/SplitStructMemrefs.cpp` (`rewriteAggregated`: a word read whose element index does not change in an enclosing loop without a store to the variable or a call is placed before the outermost such loop, its pure index arithmetic with it (`wordReadInvariant`); one read per loop and element); new lit `test/hls-est/Passes/struct_aggregate_lanes.mlir`.
+- **What:** `for (l...) s += v[e][l]` on an aggregated element made one word read per lane once the lane loop is unrolled under a pipeline (eight reads of one word per iteration); Vitis reads the word once and shifts each lane out (N37 S3), its identical word loads being one load. The read now precedes the lane loop.
+- **Why:** VITIS_NOTES N37 S3; kernel `n37i_lanes` (`~/hls-est-work/experiments/n37i_lanes/`): v 256x128 8 BRAM_18K, read loop II 1 = hls-est.
+- **Effect:** none on the v2 catalogue (frozen `hls-est.v10`, md5 0b7a9d59, same MLIR and pipeline as the previous entries: all 812 totals equal the `v8` run; with the installed cgeist no catalogue variable is aggregated except one-word temporaries). It matters once AGGREGATE reaches hls::vector arrays (OPEN_ISSUES O54 (a)): with the private shim experiment, zihan_qi lab2 2,499 -> 614. Lit 142 pass, 1 unresolved (sha), 1 xfail.
+- **Reverted?:** no
+
 ## 2026-10-14 — m_axi ports of structs are as wide as the struct's C storage; accesses through cgeist's pointer casts count (N37-impl 2/2, VITIS_NOTES N37 S5)
 - **Commit:** this entry's commit (branch `hls-est-vitis-match`)
 - **Files:** `lib/Dialect/Resource/Passes/BRAMAnalysis.cpp` (`collectAdapters`: an m_axi argument of `!llvm.struct` elements has the bus width `llvmStorageBits` = the x86-64 storage size x 8, padding included, instead of 32; `scanArgUses` follows `polygeist.memref2pointer` / `pointer2memref` / `llvm.getelementptr` to `llvm.load` / `llvm.store`, which it did not see, so a struct port read only through member pointers had no read FIFO); new lit `test/hls-est/Passes/maxi_struct_ports.mlir`.

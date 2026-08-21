@@ -69,6 +69,8 @@
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/Matchers.h"
+#include "mlir/Interfaces/CallInterfaces.h"
+#include "mlir/Interfaces/LoopLikeInterface.h"
 #include "mlir/Interfaces/SideEffectInterfaces.h"
 #include "llvm/ADT/BitVector.h"
 #include "llvm/ADT/DenseSet.h"
@@ -1318,6 +1320,34 @@ struct WordBuilder {
 };
 } // namespace
 
+/// Whether every value of `indices` is computed outside `loop`, or by pure
+/// operations inside it whose operands are; the latter go to `moves` in an
+/// order that keeps definitions before uses.
+static bool wordReadInvariant(ArrayRef<Value> indices, Operation *loop,
+                              SmallVectorImpl<Operation *> &moves) {
+  DenseSet<Operation *> seen;
+  std::function<bool(Value)> visit = [&](Value v) {
+    Operation *def = v.getDefiningOp();
+    if (!def) {
+      auto arg = cast<BlockArgument>(v);
+      return !loop->isAncestor(arg.getOwner()->getParentOp());
+    }
+    if (!loop->isProperAncestor(def))
+      return true;
+    if (seen.contains(def))
+      return true;
+    if (def->getNumRegions() != 0 || !isPure(def))
+      return false;
+    for (Value o : def->getOperands())
+      if (!visit(o))
+        return false;
+    seen.insert(def);
+    moves.push_back(def);
+    return true;
+  };
+  return llvm::all_of(indices, visit);
+}
+
 void StructSplitter::rewriteAggregated(ArrayRef<SmallVector<Value>> mems) {
   auto word = IntegerType::get(type.getContext(), wordBits);
   // Stores: the stores of one block to the same element with no other access
@@ -1399,6 +1429,7 @@ void StructSplitter::rewriteAggregated(ArrayRef<SmallVector<Value>> mems) {
     return false;
   };
   SmallVector<std::pair<Access *, Value>> wordReads;
+  SmallVector<std::tuple<Access *, Operation *, Value>> hoistedReads;
   for (Access *accp : loads) {
     Access &acc = *accp;
     Operation *op = acc.op;
@@ -1416,8 +1447,47 @@ void StructSplitter::rewriteAggregated(ArrayRef<SmallVector<Value>> mems) {
       }
     }
     if (!w) {
-      w = ob.create<memref::LoadOp>(l, mems[acc.root][0], acc.element);
-      wordReads.push_back({&acc, w});
+      // A member read inside a loop whose element does not change in the
+      // loop (`for (l...) s += v[l]`, the lanes of one hls::vector) reads
+      // the word once before the loop, as Vitis does (one wide read, then
+      // shifts): the outermost such loop without a store to the variable
+      // or a call.
+      Operation *before = op;
+      SmallVector<Operation *> toMove;
+      for (Operation *loop = op->getParentOp();
+           loop && !isa<func::FuncOp>(loop); loop = loop->getParentOp()) {
+        if (!isa<LoopLikeOpInterface>(loop))
+          continue;
+        SmallVector<Operation *> moves;
+        if (!wordReadInvariant(acc.element, loop, moves))
+          break;
+        bool blocked = false;
+        loop->walk([&](Operation *inner) {
+          if (storeOps.contains(inner) || isa<CallOpInterface>(inner))
+            blocked = true;
+        });
+        if (blocked)
+          break;
+        before = loop;
+        toMove = std::move(moves);
+      }
+      if (before != op) {
+        for (Operation *m : toMove)
+          m->moveBefore(before);
+        for (auto &[prev, at, pw] : hoistedReads)
+          if (at == before && sameElement(prev, &acc)) {
+            w = pw;
+            break;
+          }
+        if (!w) {
+          OpBuilder hb(before);
+          w = hb.create<memref::LoadOp>(l, mems[acc.root][0], acc.element);
+          hoistedReads.push_back({&acc, before, w});
+        }
+      } else {
+        w = ob.create<memref::LoadOp>(l, mems[acc.root][0], acc.element);
+        wordReads.push_back({&acc, w});
+      }
     }
     Value result;
     if (acc.leaf >= 0) {
