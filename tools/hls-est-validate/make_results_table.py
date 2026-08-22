@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Write the hls-est vs Vitis results table in Peter's format.
 
-    python3 make_results_table.py --hlsest <run .json> [--out-dir ../../hls-doc]
+    python3 make_results_table.py --hlsest <run .json> [--out-dir results]
 
 One row per design that has a Vitis td=off result AND an hls-est total; columns:
   dataset | benchmark | BRAM | DSP | FF | LUT | BRAM_util_pct | DSP_util_pct | FF_util_pct | LUT_util_pct |
@@ -31,7 +31,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--vitis", default=str(C.RESULTS_DIR / "vitis.json"))
     ap.add_argument("--hlsest", required=True)
-    ap.add_argument("--out-dir", default=str(C.HERE.parent.parent / "hls-doc"))
+    # results/, not hls-doc/: hls-doc holds no CSV / TSV files (MEMOS decision #47)
+    ap.add_argument("--out-dir", default=str(C.RESULTS_DIR))
     a = ap.parse_args()
     V = C.load_json(a.vitis, {}) or {}
     H = C.load_json(a.hlsest, {}) or {}

@@ -656,7 +656,9 @@ def main():
     ap.add_argument("--sweep", default=str(C.RESULTS_DIR / "hlsfactory-v2-sweep.json"))
     ap.add_argument("--vitis", default=str(C.RESULTS_DIR / "vitis.json"))
     ap.add_argument("--out", default=str(here.parent.parent / "hls-doc" / "hlsfactory-v2.md"))
-    ap.add_argument("--csv", default=None, help="per-design CSV (default: --out with .csv)")
+    ap.add_argument("--csv", default=str(here / "results" / "hlsfactory-v2.csv"),
+                    help="per-design CSV (default results/hlsfactory-v2.csv: hls-doc holds no CSV files, "
+                         "MEMOS decision #47)")
     ap.add_argument("--reclassify", action="store_true",
                     help="re-read the logs, classify again and write the classes into --sweep")
     ap.add_argument("--semantics", default=None,

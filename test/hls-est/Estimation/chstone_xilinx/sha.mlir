@@ -1,4 +1,6 @@
 // Not run by lit: hls-est fails on this input under the default pipeline (top sha_stream): fail exit 1: expected non-function type
+// UNSUPPORTED: true
+// RUN: true
 // Vitis 2025.1 td=off: 7 (results/vitis.json chstone/sha; compared by the harness, not by lit)
 
 #map = affine_map<()[s0] -> (s0 + 1)>

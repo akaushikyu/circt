@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Write the hls-est vs Vitis comparison as CSV files into hls-doc/.
 
-    python3 make_compare_csv.py --hlsest <run .json> [--out-dir ../../hls-doc]
+    python3 make_compare_csv.py --hlsest <run .json> [--out-dir results]
 
 Writes comparison.csv (one row per design) and comparison-summary.csv (one row per dataset plus
 ALL, followed by key/value rows describing the run). Every number is read from results/vitis.json
@@ -51,7 +51,9 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--vitis", default=str(C.RESULTS_DIR / "vitis.json"))
     ap.add_argument("--hlsest", required=True, help="hls-est run JSON (run_hlsest.py --out)")
-    ap.add_argument("--out-dir", default=str(C.HERE.parent.parent / "hls-doc"))
+    # results/, not hls-doc/: hls-doc holds no CSV / TSV files (MEMOS decision #47); its Markdown
+    # results pages come from make_test_results.py (CMake target hls-est-results).
+    ap.add_argument("--out-dir", default=str(C.RESULTS_DIR))
     a = ap.parse_args()
     V = C.load_json(a.vitis, {}) or {}
     H = C.load_json(a.hlsest, {}) or {}

@@ -113,8 +113,10 @@ def main():
             header = (f"// RUN: hls-est %s {run} -o /dev/null | FileCheck %s\n"
                       f"// CHECK: Total BRAM: {status.split()[1]}{{{{$}}}}\n")
         else:
+            # UNSUPPORTED, with a RUN line lit never runs: lit reports a test without any RUN
+            # line as UNRESOLVED, which fails the check-hls-est target
             header = (f"// Not run by lit: hls-est fails on this input under the default pipeline "
-                      f"(top {top}): {status}\n")
+                      f"(top {top}): {status}\n// UNSUPPORTED: true\n// RUN: true\n")
         header += f"// Vitis 2025.1 td=off: {truth}\n"
         header += "".join(kept) + "\n"
         print(f"{str(f.relative_to(EST)):45s} top={top} ({how}) {status:30s} vitis={vitis}")

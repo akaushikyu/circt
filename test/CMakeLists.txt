@@ -1,5 +1,6 @@
 add_subdirectory(lib)
 add_subdirectory(CAPI)
+add_subdirectory(hls-est)
 
 configure_lit_site_cfg(
   ${CMAKE_CURRENT_SOURCE_DIR}/lit.site.cfg.py.in
