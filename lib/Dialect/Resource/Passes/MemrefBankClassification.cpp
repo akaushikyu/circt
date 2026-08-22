@@ -3,6 +3,7 @@
 #include "circt/Dialect/Resource/Passes/MemrefBankClassification.h"
 #include "circt/Dialect/Resource/HLS/HLSOps.h"
 #include "circt/Dialect/Resource/Passes/CallInstances.h"
+#include "circt/Dialect/Resource/Passes/LoopPragmas.h"
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
@@ -12,6 +13,8 @@
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/Interfaces/CallInterfaces.h"
 #include "mlir/Interfaces/LoopLikeInterface.h"
+#include "llvm/ADT/MapVector.h"
+#include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Debug.h"
 
 #include <llvm/ADT/TypeSwitch.h>
@@ -111,7 +114,8 @@ static Value storedMemRef(Operation *op) {
 
 /// A store in the else block of an if whose then block, at top level, stores
 /// the same memref through the same map and operands: the two arms are one
-/// store after convert-affine-to-loopschedule's if/else merge.
+/// store after convert-affine-to-loopschedule's if/else merge. (The rule with
+/// --hls-exclusive-arm-stores=false.)
 static bool pairedWithThenArmStore(Operation *store) {
   Operation *parent = store->getParentOp();
   if (!isa_and_present<scf::IfOp, affine::AffineIfOp>(parent))
@@ -137,19 +141,114 @@ static bool pairedWithThenArmStore(Operation *store) {
   return false;
 }
 
+static llvm::cl::opt<bool> clExclusiveArmStores(
+    "hls-exclusive-arm-stores",
+    llvm::cl::desc("Count the stores the two arms of one if make to an array "
+                   "once per loop iteration, whatever their addresses, for "
+                   "RAM_1WNR replicability (--memory-banking-bram, "
+                   "--convert-affine-to-loopschedule, --bram-analysis); off: "
+                   "only a same-address pair in the then / else blocks "
+                   "counts once"),
+    llvm::cl::init(true));
+
+namespace {
+/// One arm of one if: the if (an op, or an `hls.if_arms` id) and the arm.
+struct IfArm {
+  const void *ifOp = nullptr;
+  int64_t hoistedId = 0;
+  int64_t arm = 0;
+  bool sameIf(const IfArm &opHandle) const {
+    return ifOp == opHandle.ifOp && hoistedId == opHandle.hoistedId;
+  }
+};
+using ArmPath = SmallVector<IfArm, 4>;
+} // namespace
+
+/// The if arms `op` runs under inside `scope`, outermost first.
+static ArmPath armPathOf(Operation *op, Operation *scope) {
+  ArmPath nested;
+  for (Operation *cur = op; cur && cur != scope;) {
+    Region *region = cur->getParentRegion();
+    Operation *parent = cur->getParentOp();
+    if (!region || !parent)
+      break;
+    if (isa<scf::IfOp, affine::AffineIfOp>(parent))
+      nested.push_back({parent, 0, region->getRegionNumber()});
+    cur = parent;
+  }
+  ArmPath path(nested.rbegin(), nested.rend());
+
+  if (auto arms = op->getAttrOfType<DenseI64ArrayAttr>(kIfArmsAttr)) {
+    ArrayRef<int64_t> arrayValue = arms.asArrayRef();
+    for (size_t loopIndex = arrayValue.size(); loopIndex >= 2; loopIndex -= 2)
+      path.push_back(
+          {nullptr, arrayValue[loopIndex - 2], arrayValue[loopIndex - 1]});
+  }
+  return path;
+}
+
+/// Stores under no if of level `depth` all run; each if of that level runs
+/// one arm, so it adds the most any one of its arms runs.
+static unsigned maxConcurrent(ArrayRef<const ArmPath *> paths, unsigned depth) {
+  unsigned total = 0;
+  SmallVector<const ArmPath *> rest;
+  for (const ArmPath *portValue : paths) {
+    if (portValue->size() <= depth)
+      ++total;
+    else
+      rest.push_back(portValue);
+  }
+  while (!rest.empty()) {
+    IfArm theIf = (*rest.front())[depth];
+    SmallVector<const ArmPath *> sameIf, other;
+    for (const ArmPath *portValue : rest)
+      ((*portValue)[depth].sameIf(theIf) ? sameIf : other).push_back(portValue);
+    unsigned best = 0;
+    while (!sameIf.empty()) {
+      int64_t arm = (*sameIf.front())[depth].arm;
+      SmallVector<const ArmPath *> inArm, otherArms;
+      for (const ArmPath *portValue : sameIf)
+        ((*portValue)[depth].arm == arm ? inArm : otherArms)
+            .push_back(portValue);
+      best = std::max(best, maxConcurrent(inArm, depth + 1));
+      sameIf = std::move(otherArms);
+    }
+    total += best;
+    rest = std::move(other);
+  }
+  return total;
+}
+
+unsigned maxStoresInOneIteration(ArrayRef<Operation *> stores,
+                                 Operation *scope) {
+  if (!clExclusiveArmStores)
+    return stores.size();
+  SmallVector<ArmPath> paths;
+  paths.reserve(stores.size());
+  for (Operation *store : stores)
+    paths.push_back(armPathOf(store, scope));
+  SmallVector<const ArmPath *> refs;
+  for (const ArmPath &portValue : paths)
+    refs.push_back(&portValue);
+  return maxConcurrent(refs, 0);
+}
+
 /// Max stores of `mem` per body of one loop of its own function (a store
 /// outside every loop does not count), not following calls.
 static unsigned localStoresPerLoop(Value mem) {
-  DenseMap<Operation *, unsigned> perLoop;
-  unsigned best = 0;
+  llvm::MapVector<Operation *, SmallVector<Operation *>> perLoop;
   for (Operation *user : mem.getUsers()) {
-    if (storedMemRef(user) != mem || pairedWithThenArmStore(user))
+    if (storedMemRef(user) != mem ||
+        (!clExclusiveArmStores && pairedWithThenArmStore(user)))
       continue;
     Operation *loop = user->getParentOfType<LoopLikeOpInterface>();
     if (!loop)
       continue;
-    best = std::max(best, ++perLoop[loop]);
+    perLoop[loop].push_back(user);
   }
+  unsigned best = 0;
+  for (auto &[loop, stores] : perLoop)
+    best = std::max(best, maxStoresInOneIteration(stores, loop));
   return best;
 }
 
@@ -287,6 +386,9 @@ void BRAMClassification::profileAccesses(Operation *root) {
   using LoopCounts = llvm::DenseMap<Operation *, std::pair<unsigned, unsigned>>;
   llvm::DenseMap<Value, LoopCounts> perLoop;
 
+  llvm::DenseMap<Value, llvm::MapVector<Operation *, SmallVector<Operation *>>>
+      storesPerLoop;
+
   root->walk([&](Operation *op) {
     bool isLoad = false, isStore = false;
     Value bank = getAccessedMemRef(op, isLoad, isStore);
@@ -300,8 +402,10 @@ void BRAMClassification::profileAccesses(Operation *root) {
     auto &counts = perLoop[bank][loop];
     if (isLoad)
       ++counts.first;
-    if (isStore)
+    if (isStore) {
       ++counts.second;
+      storesPerLoop[bank][loop].push_back(op);
+    }
   });
 
   for (auto &[bank, loopCounts] : perLoop) {
@@ -311,8 +415,10 @@ void BRAMClassification::profileAccesses(Operation *root) {
       unsigned reads = rw.first, writes = rw.second;
       prof.maxReads = std::max(prof.maxReads, reads);
       prof.maxWrites = std::max(prof.maxWrites, writes);
-      if (loop)
-        maxStoresPerLoop = std::max(maxStoresPerLoop, writes);
+      if (loop && writes)
+        maxStoresPerLoop =
+            std::max(maxStoresPerLoop, hls_analysis::maxStoresInOneIteration(
+                                           storesPerLoop[bank][loop], loop));
     }
 
     maxStoresPerLoop = std::max(maxStoresPerLoop, calleeStoresPerLoop(bank));

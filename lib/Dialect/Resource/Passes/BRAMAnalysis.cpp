@@ -7,6 +7,7 @@
 #include "circt/Dialect/Resource/Passes/DataflowChannels.h"
 #include "circt/Dialect/Resource/Passes/LoopPragmas.h"
 #include "circt/Dialect/Resource/Passes/MathCores.h"
+#include "circt/Dialect/Resource/Passes/MemrefBankClassification.h"
 #include "circt/Dialect/Resource/Passes/PolygeistCompat.h"
 #include "circt/Dialect/Resource/Passes/StreamFifos.h"
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
@@ -1340,6 +1341,7 @@ static ReplicationRecord analyzeReplication(ArrayRef<AccessSummary> accesses,
     Operation *scope = nullptr;
     unsigned reads = 0, writes = 0, ii = 0;
     bool portBound = false;
+    SmallVector<Operation *> stores;
   };
   SmallVector<ScopeStats> scopes;
   for (const AccessSummary &a : accesses) {
@@ -1352,8 +1354,16 @@ static ReplicationRecord analyzeReplication(ArrayRef<AccessSummary> accesses,
       st = &scopes.back();
     }
     (a.isWrite ? st->writes : st->reads)++;
+    if (a.isWrite && a.op)
+      st->stores.push_back(a.op);
     st->portBound |= a.portBound;
   }
+
+  for (ScopeStats &stringValue : scopes)
+    if (stringValue.scope && stringValue.stores.size() == stringValue.writes &&
+        stringValue.writes > 1)
+      stringValue.writes = circt::hls_analysis::maxStoresInOneIteration(
+          stringValue.stores, stringValue.scope);
 
   resultValue.maxStoresPerLoop = 0;
   for (const ScopeStats &stringValue : scopes) {

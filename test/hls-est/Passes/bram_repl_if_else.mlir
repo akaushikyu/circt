@@ -13,16 +13,18 @@
 // and a read-modify-write made in both arms as one load and one store.
 // - top_ifelse: `if (c) A[i] = x; else A[i] = 0;` is one store (the arms'
 //   stores are sunk below the if), so A stays replicable: 8 reads at II 1 ->
-//   7 copies, 14 BRAM (Vitis 14, kernel w9r_e1ifelse; with the merge off:
-//   two stores, one 2-port RAM). top_affif: the same through an affine.if.
+//   7 copies, 14 BRAM (Vitis 14, kernel w9r_e1ifelse). With the merge off
+//   the two stores stay, but stores in the two arms of one if count once for
+//   replicability whatever their addresses (bram_repl_exclusive_stores.mlir),
+//   so A is still replicated. top_affif: the same through an affine.if.
 // - top_rmw: a read-modify-write of Y[c] in both arms of an if/else,
 //   unrolled 4 times: the arms' load is hoisted and their store sunk, so
 //   store forwarding leaves one load and one store: Y is a 1-port RAM.
 
 // IFELSE: kind=RAM_1WNR  bram=14
 // IFELSE: Total BRAM: 14
-// IFELSE-OFF: kind=RAM_T2P  bram=2
-// IFELSE-OFF: Total BRAM: 2
+// IFELSE-OFF: kind=RAM_1WNR  bram=14
+// IFELSE-OFF: Total BRAM: 14
 // JSON: "merged_if_else_stores": 1
 // AFFIF: kind=RAM_1WNR  bram=14
 // AFFIF: Total BRAM: 14

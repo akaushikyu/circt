@@ -282,6 +282,9 @@ SmallVector<ChannelAccess> streamAccesses(ArrayRef<Value> roots) {
 struct StorageUse {
   std::string name;
   bool stream = false;
+  /// A one-word variable: it orders the processes that touch it, but only
+  /// arrays and streams are known to merge their writers.
+  bool scalar = false;
   struct Use {
     Operation *process;
     bool reads = false, writes = false;
@@ -368,6 +371,36 @@ void ProcessMerges::mergeOnParameters(Operation *region, RegionMerges &m) {
 // Not modelled, because no kernel decides them: a scalar passed between
 // processes (cgeist's one-word memref) as a merge or path carrier, and the
 // region's own arguments as path carriers.
+// The processes of `region` (other than `consumer`) whose results the ops of
+// `consumer` read, following the operands of the straight-line ops of the
+// region body back to the processes that produce them.
+static SmallVector<Operation *> producerProcesses(Operation &consumer,
+                                                  Operation *region) {
+  SmallVector<Operation *> producers;
+  llvm::DenseSet<Operation *> seen;
+  SmallVector<Value> work;
+  auto addOperandsFrom = [&](Operation *op) {
+    for (Value v : op->getOperands())
+      work.push_back(v);
+  };
+  consumer.walk([&](Operation *op) { addOperandsFrom(op); });
+  while (!work.empty()) {
+    Operation *def = work.pop_back_val().getDefiningOp();
+    if (!def || consumer.isAncestor(def))
+      continue;
+    Operation *top = def;
+    while (top && top->getParentOp() != region)
+      top = top->getParentOp();
+    if (!top || top == &consumer || !seen.insert(top).second)
+      continue;
+    if (isProcessOp(*top))
+      producers.push_back(top);
+    else
+      addOperandsFrom(top);
+  }
+  return producers;
+}
+
 void ProcessMerges::mergeWritersAndPaths(Operation *region, RegionMerges &m) {
   func::FuncOp fn = regionFunction(region);
   if (!fn || fn.isExternal())
@@ -409,8 +442,9 @@ void ProcessMerges::mergeWritersAndPaths(Operation *region, RegionMerges &m) {
     su.stream = !accesses.empty();
     if (!su.stream) {
       auto type = dyn_cast<MemRefType>(sites.front().getType());
-      if (!type || !type.hasStaticShape() || type.getNumElements() <= 1)
-        continue; // a scalar, or an array of unknown size
+      if (!type || !type.hasStaticShape())
+        continue; // an array of unknown size
+      su.scalar = type.getNumElements() <= 1;
       for (Value v : sites)
         llvm::append_range(accesses, accessesOf(v));
     }
@@ -439,6 +473,8 @@ void ProcessMerges::mergeWritersAndPaths(Operation *region, RegionMerges &m) {
 
   // The writers of one storage become one process.
   for (const StorageUse &su : used) {
+    if (su.scalar)
+      continue;
     Operation *first = nullptr;
     for (const StorageUse::Use &u : su.uses) {
       if (!u.writes)
@@ -472,6 +508,16 @@ void ProcessMerges::mergeWritersAndPaths(Operation *region, RegionMerges &m) {
         if (dep)
           edges.push_back({a.process, b.process});
       }
+  // A value one process yields (a loop result, a call result) that a later
+  // process reads, directly or through straight-line ops of the region body,
+  // is a dependence too: Vitis merges A, X and B when A's loop result is the
+  // only thing X reads from A on the path A -> X -> B.
+  for (Region &r : region->getRegions())
+    for (Block &b : r)
+      for (Operation &q : b)
+        if (isProcessOp(q) && !q.hasTrait<OpTrait::IsTerminator>())
+          for (Operation *p : producerProcesses(q, region))
+            edges.push_back({p, &q});
 
   // Contract the merged groups and pull in every process that lies on a
   // path from a group back to itself, until no group changes.

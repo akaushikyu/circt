@@ -90,6 +90,11 @@ public:
   /// True iff the result has one dimension fewer than the source and the
   /// trailing dimensions agree (the row form this pass lowers).
   bool isRowSelect();
+  /// True iff source and result have the same rank, static shapes and
+  /// identity layouts, agree in every dimension but the first, and the
+  /// result's first dimension is no longer than the source's: `a + k`, the
+  /// elements from k on, passed as an array (`f(M + N)`).
+  bool isOffsetView();
 };
 
 /// `"polygeist.pointer2memref"(%p) : (!llvm.ptr) -> memref<...>`: Polygeist's

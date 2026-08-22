@@ -130,6 +130,21 @@ bool SubIndexOp::isRowSelect() {
   return src.getShape().drop_front() == passResult.getShape();
 }
 
+bool SubIndexOp::isOffsetView() {
+  auto src = dyn_cast<MemRefType>(getSource().getType());
+  auto passResult = dyn_cast<MemRefType>(getResult().getType());
+  if (!src || !passResult || src.getRank() < 1 ||
+      passResult.getRank() != src.getRank() || !src.hasStaticShape() ||
+      !passResult.hasStaticShape())
+    return false;
+  if (!src.getLayout().isIdentity() || !passResult.getLayout().isIdentity())
+    return false;
+  if (src.getElementType() != passResult.getElementType())
+    return false;
+  return src.getShape().drop_front() == passResult.getShape().drop_front() &&
+         passResult.getShape()[0] <= src.getShape()[0];
+}
+
 namespace {
 
 static DictionaryAttr shiftPartitionDims(DictionaryAttr argAttrs,
@@ -181,8 +196,9 @@ struct LowerSubIndexPass
   StringRef getArgument() const final { return "lower-polygeist-subindex"; }
   StringRef getDescription() const final {
     return "Replace polygeist.subindex (a row of an array passed by "
-           "reference) by indexed accesses of the whole array, cloning a "
-           "callee per array-argument form as Vitis does (N14 R4)";
+           "reference, or the elements from an offset on) by indexed "
+           "accesses of the whole array, cloning a callee per array-argument "
+           "form as Vitis does (N14 R4)";
   }
   void getDependentDialects(DialectRegistry &targetRegistry) const override {
     targetRegistry.insert<affine::AffineDialect, memref::MemRefDialect,
@@ -214,7 +230,16 @@ struct LowerSubIndexPass
 
     clone.walk(
         [&](SubIndexOp stringValue) { worklist.push_back(stringValue); });
-    std::string name = callee.getName().str() + "_row";
+
+    auto isRow = [&](unsigned portValue, Type whole) {
+      auto widthValue = dyn_cast<MemRefType>(whole);
+      auto old = dyn_cast<MemRefType>(callee.getArgument(portValue).getType());
+      return widthValue && old && widthValue.getRank() == old.getRank() + 1;
+    };
+    bool anyOffset = llvm::any_of(rows, [&](auto &resultValue) {
+      return !isRow(resultValue.first, resultValue.second);
+    });
+    std::string name = callee.getName().str() + (anyOffset ? "_off" : "_row");
     for (auto &[portValue, memRefType] : rows)
       name += "_" + std::to_string(portValue);
     clone.setName(name);
@@ -235,7 +260,9 @@ struct LowerSubIndexPass
       }
       types.push_back(it->second);
       attrs.push_back(
-          shiftPartitionDims(a, context, dyn_cast<MemRefType>(it->second)));
+          isRow(loopIndex, it->second)
+              ? shiftPartitionDims(a, context, dyn_cast<MemRefType>(it->second))
+              : (a ? a : DictionaryAttr::get(context, {})));
       types.push_back(IndexType::get(context));
       attrs.push_back(DictionaryAttr::get(context, {}));
     }
@@ -262,7 +289,99 @@ struct LowerSubIndexPass
     return clone;
   }
 
+  bool rewriteOffsetAccess(Operation *user, SubIndexOp si) {
+    Value src = si.getSource();
+    Value off = si.getIndex();
+    OpBuilder buildPoint(user);
+    Location loc = user->getLoc();
+    auto copyAttrs = [&](Operation *from, Operation *to) {
+      for (NamedAttribute a : from->getDiscardableAttrs())
+        if (a.getName() != "map")
+          to->setDiscardableAttr(a.getName(), a.getValue());
+    };
+    auto shifted = [&](ValueRange indices) {
+      SmallVector<Value> out(indices.begin(), indices.end());
+      out[0] = arith::AddIOp::create(buildPoint, loc, out[0], off);
+      return out;
+    };
+    if (auto load = dyn_cast<memref::LoadOp>(user)) {
+      auto nl = memref::LoadOp::create(buildPoint, loc, src,
+                                       shifted(load.getIndices()));
+      copyAttrs(user, nl);
+      load.replaceAllUsesWith(nl.getResult());
+      load.erase();
+      return true;
+    }
+    if (auto store = dyn_cast<memref::StoreOp>(user)) {
+      auto ns = memref::StoreOp::create(buildPoint, loc, store.getValue(), src,
+                                        shifted(store.getIndices()));
+      copyAttrs(user, ns);
+      store.erase();
+      return true;
+    }
+    bool isLoad = isa<affine::AffineLoadOp>(user);
+    bool isStore = isa<affine::AffineStoreOp>(user);
+    if (!isLoad && !isStore)
+      return false;
+    AffineMap map = isLoad ? cast<affine::AffineLoadOp>(user).getAffineMap()
+                           : cast<affine::AffineStoreOp>(user).getAffineMap();
+    ValueRange mapOperands =
+        isLoad ? cast<affine::AffineLoadOp>(user).getMapOperands()
+               : cast<affine::AffineStoreOp>(user).getMapOperands();
+    unsigned nd = map.getNumDims(), ns = map.getNumSymbols();
+    MLIRContext *context = user->getContext();
+    SmallVector<AffineExpr> results(map.getResults().begin(),
+                                    map.getResults().end());
+    SmallVector<Value> operands;
+    if (affine::isValidSymbol(off)) {
+      results[0] = results[0] + getAffineSymbolExpr(ns, context);
+      map = AffineMap::get(nd, ns + 1, results, context);
+      operands.append(mapOperands.begin(), mapOperands.end());
+      operands.push_back(off);
+    } else if (affine::isValidDim(off)) {
+      results[0] = results[0] + getAffineDimExpr(nd, context);
+      map = AffineMap::get(nd + 1, ns, results, context);
+      operands.append(mapOperands.begin(), mapOperands.begin() + nd);
+      operands.push_back(off);
+      operands.append(mapOperands.begin() + nd, mapOperands.end());
+    } else {
+      SmallVector<Value> indices;
+      for (unsigned resultValue = 0; resultValue < map.getNumResults();
+           ++resultValue)
+        indices.push_back(affine::AffineApplyOp::create(
+            buildPoint, loc, map.getSubMap({resultValue}), mapOperands));
+      indices = shifted(indices);
+      if (isLoad) {
+        auto nl = memref::LoadOp::create(buildPoint, loc, src, indices);
+        copyAttrs(user, nl);
+        user->getResult(0).replaceAllUsesWith(nl.getResult());
+      } else {
+        auto ns2 = memref::StoreOp::create(
+            buildPoint, loc, cast<affine::AffineStoreOp>(user).getValue(), src,
+            indices);
+        copyAttrs(user, ns2);
+      }
+      user->erase();
+      return true;
+    }
+    if (isLoad) {
+      auto nl =
+          affine::AffineLoadOp::create(buildPoint, loc, src, map, operands);
+      copyAttrs(user, nl);
+      user->getResult(0).replaceAllUsesWith(nl.getResult());
+    } else {
+      auto ns2 = affine::AffineStoreOp::create(
+          buildPoint, loc, cast<affine::AffineStoreOp>(user).getValue(), src,
+          map, operands);
+      copyAttrs(user, ns2);
+    }
+    user->erase();
+    return true;
+  }
+
   bool rewriteAccess(Operation *user, SubIndexOp si) {
+    if (si.isOffsetView())
+      return rewriteOffsetAccess(user, si);
     Value src = si.getSource();
     Value indexValue = si.getIndex();
     OpBuilder buildPoint(user);
@@ -362,7 +481,7 @@ struct LowerSubIndexPass
     for (auto [loopIndex, valueHandle] :
          llvm::enumerate(call.getArgOperands())) {
       auto si = valueHandle.getDefiningOp<SubIndexOp>();
-      if (!si || !si.isRowSelect())
+      if (!si || !(si.isRowSelect() || si.isOffsetView()))
         continue;
       if (loopIndex >= callee.getNumArguments() ||
           callee.getArgument(loopIndex).getType() != valueHandle.getType())
@@ -439,7 +558,7 @@ struct LowerSubIndexPass
       SubIndexOp si = worklist[elementCount];
       if (!si)
         continue;
-      if (!si.isRowSelect())
+      if (!si.isRowSelect() && !si.isOffsetView())
         continue;
       SmallVector<Operation *> users(si->getUsers().begin(),
                                      si->getUsers().end());
@@ -463,9 +582,11 @@ struct LowerSubIndexPass
       }
       ++left;
       si->emitWarning("polygeist.subindex not lowered: ")
-          << (si.isRowSelect() ? "a use that is neither a load/store nor a "
-                                 "call to a function of the module"
-                               : "not a row of a static-shape array");
+          << (si.isRowSelect() || si.isOffsetView()
+                  ? "a use that is neither a load/store nor a call to a "
+                    "function of the module"
+                  : "not a row of a static-shape array (nor an offset view of "
+                    "one)");
     });
 
     SmallVector<func::FuncOp> candidates(clonedFrom.begin(), clonedFrom.end());

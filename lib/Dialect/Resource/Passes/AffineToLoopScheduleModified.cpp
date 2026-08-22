@@ -895,7 +895,52 @@ void AffineToLoopSchedule::mergeIfElseAccesses() {
     return it->second.escaped ? nullptr : &it->second;
   };
 
-  unsigned hoisted = 0, sunk = 0;
+  unsigned hoisted = 0, sunk = 0, forwarded = 0;
+
+  SmallVector<AffineLoadOp> armLoads;
+  getOperation().walk([&](AffineLoadOp load) {
+    if (isa_and_present<scf::IfOp, AffineIfOp>(load->getParentOp()))
+      armLoads.push_back(load);
+  });
+  for (AffineLoadOp load : armLoads) {
+    const MemrefAliasInfo *alias = tracked(load.getMemRef());
+    if (!alias)
+      continue;
+    AccessAddr addr = accessAddr(load);
+    auto conflicts = [&](Operation *op) {
+      return mayConflict(op, load.getMemRef(), *alias, addr, false);
+    };
+    AffineLoadOp earlier;
+    bool blocked = false;
+    for (Operation *cur = load; cur && !earlier && !blocked;) {
+      for (Operation *op = cur->getPrevNode(); op; op = op->getPrevNode()) {
+        if (auto lowerIndex = dyn_cast<AffineLoadOp>(op);
+            lowerIndex && lowerIndex != load &&
+            lowerIndex.getMemRef() == load.getMemRef() &&
+            compareAddresses(accessAddr(lowerIndex), addr) ==
+                AddrRelation::Same) {
+          earlier = lowerIndex;
+          break;
+        }
+        if (conflicts(op)) {
+          blocked = true;
+          break;
+        }
+      }
+      Operation *parent = cur->getParentOp();
+      if (!isa_and_present<scf::IfOp, AffineIfOp>(parent))
+        break;
+      cur = parent;
+    }
+    if (!earlier || blocked)
+      continue;
+    addCounterAttr(earlier, "hls.merged_loads",
+                   1 + counterAttr(load, "hls.merged_loads"));
+    load.getResult().replaceAllUsesWith(earlier.getResult());
+    load.erase();
+    ++forwarded;
+  }
+
   for (Operation *ifOp : ifs) {
     IfArm thenArm{&ifOp->getRegion(0).front(), &ifOp->getRegion(0)};
     IfArm elseArm{&ifOp->getRegion(1).front(), &ifOp->getRegion(1)};
@@ -943,7 +988,8 @@ void AffineToLoopSchedule::mergeIfElseAccesses() {
     for (unsigned loopIndex = 1; loopIndex < kept.size(); ++loopIndex)
       kept[loopIndex]->moveAfter(kept[loopIndex - 1]);
   }
-  LLVM_DEBUG(llvm::dbgs() << "if/else merge: hoisted " << hoisted
+  LLVM_DEBUG(llvm::dbgs() << "if/else merge: forwarded " << forwarded
+                          << " arm loads, hoisted " << hoisted
                           << " loads, sank " << sunk << " stores\n");
 }
 

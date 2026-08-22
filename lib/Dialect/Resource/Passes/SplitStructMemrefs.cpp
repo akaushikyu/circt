@@ -40,10 +40,16 @@
 // constructors and assignments) are inlined first, as Vitis inlines them; a
 // member function that only copies one whole element into another, member by
 // member or byte by byte in one loop (the implicit copy of a trivially
-// copyable struct), becomes one whole-element copy. A variable it does not
-// fully understand (a pointer passed to a kept call, compared, stored, an
-// array of structs inside the struct, ...) is left unchanged, with a warning;
-// its accesses then stay invisible as before.
+// copyable struct), becomes one whole-element copy. A member that is an
+// array of structs is a leaf too: one more dimension when the struct's
+// members have one scalar type without padding (cgeist's own layout of such
+// an array), else one strided leaf per member. A member view passed whole to
+// a kept call whose parameter has the member's type gets the member's
+// memory. A variable it does not fully understand (a pointer passed to a kept
+// call, compared, stored, ...) is left unchanged, with a warning; its
+// accesses then stay invisible as before. Last, an AGGREGATE pragma on a
+// plain memref (a struct cgeist lays out as an array) packs the last
+// dimension into one word (ArrayStructPacker).
 //
 // Address arithmetic. An address derived from the array is tracked as
 //   (leading indices from row selects, a linear element offset over the
@@ -56,6 +62,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "circt/Dialect/Resource/Interfaces/MemoryDS.h"
 #include "circt/Dialect/Resource/Passes/CallInstances.h"
 #include "circt/Dialect/Resource/Passes/PolygeistCompat.h"
 #include "circt/Dialect/Resource/Passes/StreamFifos.h"
@@ -78,6 +85,7 @@
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SetVector.h"
+#include "llvm/ADT/SmallBitVector.h"
 #include "llvm/Support/MathExtras.h"
 
 #include <functional>
@@ -156,9 +164,19 @@ struct Leaf {
   Type scalar;                     // element type of the leaf memory
   int64_t scalarSize = 0;          // bytes per scalar
   SmallVector<int64_t> dims;       // array member dimensions (empty: scalar)
+  /// Bytes from one scalar of the leaf to the next: 0 when they are
+  /// contiguous, else the size of the struct of an array of structs the leaf
+  /// is one member of (`struct In { short a; int b; } arr[N]`: arr.a at
+  /// offset 0, arr.b at offset 4, both every 8 bytes).
+  int64_t stride = 0;
+  /// For such a member: its llvm.extractvalue position inside the struct.
+  SmallVector<int64_t> innerPath;
   SmallVector<int64_t> path;       // llvm.extractvalue position
   Type member;                     // the member's type (at `path`)
   int64_t bitOffset = 0;           // first bit in the aggregated word
+  /// Bits per scalar in the aggregated word: the scalar's width, or 1 for a
+  /// leaf that only ever holds 0 or 1 (a C++ bool, stored as i8).
+  unsigned packedBits = 0;
   int64_t count() const {
     int64_t n = 1;
     for (int64_t d : dims)
@@ -166,7 +184,13 @@ struct Leaf {
     return n;
   }
   int64_t bytes() const { return scalarSize * count(); }
+  int64_t step() const { return stride ? stride : scalarSize; }
+  /// Bytes from the first scalar of the leaf to the end of the last.
+  int64_t span() const { return step() * (count() - 1) + scalarSize; }
   unsigned scalarBits() const { return scalar.getIntOrFloatBitWidth(); }
+  unsigned wordScalarBits() const {
+    return packedBits ? packedBits : scalarBits();
+  }
   int64_t bits() const { return scalarBits() * count(); }
 };
 
@@ -203,11 +227,40 @@ bool collectLeaves(Type t, int64_t base, SmallVectorImpl<int64_t> &path,
         SmallVector<Leaf> inner;
         SmallVector<int64_t> innerPath;
         auto size = layoutOf(st);
-        if (!collectLeaves(st, 0, innerPath, inner) || inner.size() != 1 ||
-            !size || inner[0].bytes() != size->size)
+        if (!collectLeaves(st, 0, innerPath, inner) || !size)
           return false;
-        dims.append(inner[0].dims.begin(), inner[0].dims.end());
-        e = inner[0].scalar;
+        if (inner.size() == 1 && inner[0].bytes() == size->size) {
+          dims.append(inner[0].dims.begin(), inner[0].dims.end());
+          e = inner[0].scalar;
+          break;
+        }
+        // Members of one scalar type without padding (`struct In { short
+        // a, b; }`): contiguous scalars, one more dimension, as cgeist
+        // itself lays out an array of such structs (memref<N x 2 x i16>).
+        bool homogeneous = llvm::all_of(inner, [&](const Leaf &l) {
+          return l.dims.empty() && l.scalar == inner[0].scalar;
+        });
+        if (homogeneous &&
+            inner[0].scalarSize * static_cast<int64_t>(inner.size()) ==
+                size->size) {
+          dims.push_back(inner.size());
+          e = inner[0].scalar;
+          break;
+        }
+        // Other structs of scalars: one strided leaf per member.
+        if (!llvm::all_of(inner, [](const Leaf &l) { return l.dims.empty(); }))
+          return false;
+        for (const Leaf &in : inner) {
+          Leaf l = in;
+          l.offset = base + in.offset;
+          l.dims = dims;
+          l.stride = size->size;
+          l.innerPath = in.path;
+          l.path.assign(path.begin(), path.end());
+          l.member = t;
+          out.push_back(l);
+        }
+        return true;
       }
       break;
     }
@@ -264,11 +317,21 @@ SmallVector<int64_t> valuePath(const Leaf &leaf, int64_t flat) {
       p.push_back(pos[k++]);
       t = a.getElementType();
     } else if (auto st = dyn_cast<LLVM::LLVMStructType>(t)) {
-      // A one-leaf struct (collectLeaves): the field that holds the leaf.
-      unsigned f = 0;
+      // A member of an array of structs of scalars (strided leaf).
+      if (!leaf.innerPath.empty()) {
+        p.append(leaf.innerPath.begin(), leaf.innerPath.end());
+        break;
+      }
+      unsigned sized = 0, f = 0;
       for (auto [i, m] : llvm::enumerate(st.getBody()))
-        if (layoutOf(m) && layoutOf(m)->size)
+        if (layoutOf(m) && layoutOf(m)->size) {
           f = i;
+          ++sized;
+        }
+      // A struct of several scalars of one type: its field is the next
+      // position; a one-leaf struct (collectLeaves): the field holding it.
+      if (sized > 1)
+        f = pos[k++];
       p.push_back(f);
       t = st.getBody()[f];
     } else {
@@ -340,6 +403,9 @@ struct NewMemory {
   MemRefType type;
   std::string name;
   std::string note; // hls.struct_member / hls.aggregated text
+  /// Every access is at a constant position of a single struct variable
+  /// (not an array of them): Vitis keeps it in registers.
+  bool registers = false;
 };
 
 /// How an hls::stream method moves the struct its data argument refers to:
@@ -374,6 +440,14 @@ public:
   /// Rewrites the accesses onto `mems[root][i]` (newMemories() order).
   void rewrite(ArrayRef<SmallVector<Value>> mems);
   void setAggregate(bool a) { aggregate = a; }
+  /// The leaves (after analyse()) whose every store writes 0 or 1.
+  llvm::BitVector zeroOneLeaves() const;
+  /// Packs the leaves of `oneBit` as 1 bit each in the aggregated word.
+  void setOneBitLeaves(const llvm::BitVector &oneBit) {
+    for (auto [i, leaf] : llvm::enumerate(leaves))
+      leaf.packedBits = oneBit.test(i) ? 1 : 0;
+    layoutWord();
+  }
   MemRefType getType() const { return type; }
   std::string reason;
 
@@ -396,7 +470,19 @@ public:
     StreamData kind;
   };
   SmallVector<StreamUse> streamUses;
+  /// An array member passed whole to a kept call whose parameter has the
+  /// member's own type (`fill(o.arr)`): the call receives the member's new
+  /// memory (the row of it for element `element`).
+  struct MemberCall {
+    func::CallOp call;
+    unsigned operand;
+    unsigned root;
+    unsigned leaf;
+    SmallVector<Value> element;
+  };
+  SmallVector<MemberCall> memberCalls;
   /// Whether the call rewrite selects rows of the new memories.
+  bool hasMemberCalls() const { return !memberCalls.empty(); }
   bool selectsRows() const {
     return llvm::any_of(edges, [](const CallEdge &e) { return !e.lead.empty(); });
   }
@@ -436,11 +522,19 @@ private:
                     ArrayRef<int64_t> part = {});
   bool recordComposite(Operation *op, Type valueType, const Addr &a);
   bool recordWhole(Operation *op, const Addr &a);
+  bool recordMemberCall(func::CallOp call, Value view, const Addr &a);
   SmallVector<Value> accessIndices(OpBuilder &b, Operation *user);
   SmallVector<Value> elementIndices(OpBuilder &b, Location loc, const Addr &a);
   SmallVector<Value> leafIndices(OpBuilder &b, Location loc, const Leaf &l,
                                  const Access &acc);
   void rollback();
+  void layoutWord() {
+    wordBits = 0;
+    for (Leaf &leaf : leaves) {
+      leaf.bitOffset = wordBits;
+      wordBits += static_cast<int64_t>(leaf.wordScalarBits()) * leaf.count();
+    }
+  }
   void rewriteSplit(ArrayRef<SmallVector<Value>> mems);
   Value addPart(Operation *op, ArrayRef<int64_t> part, Value scalar);
   void finishComposites();
@@ -833,8 +927,48 @@ bool StructSplitter::visitMemberView(Value v, Addr a) {
         return false;
       continue;
     }
+    if (auto call = dyn_cast<func::CallOp>(user)) {
+      if (!recordMemberCall(call, v, a))
+        return false;
+      continue;
+    }
     return fail(Twine("member view used by ") +
                 user->getName().getStringRef());
+  }
+  return true;
+}
+
+bool StructSplitter::recordMemberCall(func::CallOp call, Value view,
+                                      const Addr &a) {
+  auto refuse = [&] {
+    return fail(Twine("member view passed to the kept call @") +
+                call.getCallee());
+  };
+  auto callee = SymbolTable::lookupNearestSymbolFrom<func::FuncOp>(
+      call, call.getCalleeAttr());
+  auto vt = cast<MemRefType>(view.getType());
+  if (!callee || callee.isExternal() || a.byteDyn || !vt.hasStaticShape())
+    return refuse();
+  // The leaf the view starts at and covers exactly.
+  int found = -1;
+  for (auto [i, l] : llvm::enumerate(leaves))
+    if (l.offset == a.byteConst && !l.stride &&
+        l.scalar == vt.getElementType() &&
+        ArrayRef<int64_t>(l.dims) == vt.getShape())
+      found = i;
+  if (found < 0)
+    return refuse();
+  for (OpOperand &use : call->getOpOperands()) {
+    if (use.get() != view)
+      continue;
+    unsigned n = use.getOperandNumber();
+    if (n >= callee.getNumArguments() ||
+        callee.getArgument(n).getType() != vt)
+      return refuse();
+    OpBuilder b(call);
+    memberCalls.push_back(MemberCall{call, n, curRoot,
+                                     static_cast<unsigned>(found),
+                                     elementIndices(b, call.getLoc(), a)});
   }
   return true;
 }
@@ -941,18 +1075,20 @@ SmallVector<Value> StructSplitter::elementIndices(OpBuilder &b, Location loc,
 bool StructSplitter::recordScalar(Operation *op, Type valueType,
                                   const Addr &a, ArrayRef<int64_t> part) {
   int found = -1;
-  for (auto [i, l] : llvm::enumerate(leaves))
-    if (a.byteConst >= l.offset && a.byteConst < l.offset + l.bytes()) {
+  for (auto [i, l] : llvm::enumerate(leaves)) {
+    int64_t rel = a.byteConst - l.offset;
+    if (rel >= 0 && rel < l.span() && rel % l.step() < l.scalarSize) {
       found = i;
       break;
     }
+  }
   if (found < 0)
     return fail("access to struct padding");
   const Leaf &l = leaves[found];
   if (valueType != l.scalar)
     return fail("access type differs from the member type");
   int64_t inner = a.byteConst - l.offset;
-  if (inner % l.scalarSize)
+  if (inner % l.step())
     return fail("misaligned member access");
   if (l.dims.empty() && a.byteDyn)
     return fail("dynamic offset into a scalar member");
@@ -962,18 +1098,18 @@ bool StructSplitter::recordScalar(Operation *op, Type valueType,
              std::nullopt};
   if (!l.dims.empty()) {
     // The scalar index inside the array member.
-    Value lin = inner ? constIndex(b, loc, inner / l.scalarSize) : Value();
+    Value lin = inner ? constIndex(b, loc, inner / l.step()) : Value();
     if (a.byteDyn) {
       Value dyn = a.byteDyn;
-      if (l.scalarSize != 1) {
+      if (l.step() != 1) {
         auto div = b.create<arith::DivUIOp>(loc, dyn,
-                                            constIndex(b, loc, l.scalarSize));
+                                            constIndex(b, loc, l.step()));
         created.push_back(div);
         dyn = div;
       }
       lin = add(b, loc, lin, dyn);
     } else {
-      acc.innerConst = inner / l.scalarSize;
+      acc.innerConst = inner / l.step();
     }
     if (!lin)
       lin = constIndex(b, loc, 0);
@@ -1095,10 +1231,7 @@ bool StructSplitter::analyse() {
       return fail("dynamic inner dimension");
   if (type.getRank() == 0)
     return fail("rank-0 struct memref");
-  for (Leaf &leaf : leaves) {
-    leaf.bitOffset = wordBits;
-    wordBits += leaf.bits();
-  }
+  layoutWord();
   for (unsigned r = 0; r < roots.size(); ++r) {
     curRoot = r;
     if (!visitMemref(roots[r], Addr{})) {
@@ -1107,6 +1240,75 @@ bool StructSplitter::analyse() {
     }
   }
   return true;
+}
+
+/// Whether `v` is 0 or 1: a zero-extended i1 (how C++ stores a bool), a
+/// constant 0 or 1, or a select of such values; `loadedOneBit` says it for a
+/// value loaded from the variable itself.
+static bool isZeroOne(Value v, llvm::function_ref<bool(Value)> loadedOneBit,
+                      unsigned depth = 0) {
+  if (depth > 8)
+    return false;
+  if (auto ext = v.getDefiningOp<arith::ExtUIOp>())
+    return ext.getIn().getType().isInteger(1);
+  if (auto sel = v.getDefiningOp<arith::SelectOp>())
+    return isZeroOne(sel.getTrueValue(), loadedOneBit, depth + 1) &&
+           isZeroOne(sel.getFalseValue(), loadedOneBit, depth + 1);
+  APInt c;
+  if (matchPattern(v, m_ConstantInt(&c)))
+    return c.ule(1);
+  return loadedOneBit(v);
+}
+
+llvm::BitVector StructSplitter::zeroOneLeaves() const {
+  llvm::BitVector oneBit(leaves.size());
+  for (auto [i, leaf] : llvm::enumerate(leaves))
+    oneBit[i] = leaf.scalar.isInteger(8);
+  // Loads of the variable: a load of leaf i yields 0/1 when leaf i does; a
+  // whole-element load yields 0/1 in every 0/1 leaf.
+  DenseMap<Value, int> loadedLeaf;
+  for (const Access &acc : accesses)
+    if (!acc.isStore() && acc.part.empty() && acc.op->getNumResults() == 1)
+      loadedLeaf[acc.op->getResult(0)] = acc.leaf;
+  for (bool changed = true; changed;) {
+    changed = false;
+    for (const Access &acc : accesses) {
+      if (!acc.isStore())
+        continue;
+      Value v = acc.op->getOperand(0);
+      auto it = loadedLeaf.find(v);
+      bool ok;
+      if (acc.leaf < 0) {
+        // A whole element: only a copy of another element keeps the leaves.
+        ok = it != loadedLeaf.end() && it->second < 0;
+        if (ok)
+          continue;
+        for (unsigned i = 0; i < leaves.size(); ++i)
+          if (oneBit.test(i)) {
+            oneBit.reset(i);
+            changed = true;
+          }
+        continue;
+      }
+      if (!oneBit.test(acc.leaf))
+        continue;
+      ok = acc.part.empty() &&
+           isZeroOne(v, [&](Value x) {
+             auto l = loadedLeaf.find(x);
+             return l != loadedLeaf.end() && l->second == acc.leaf;
+           });
+      if (!ok) {
+        oneBit.reset(acc.leaf);
+        changed = true;
+      }
+    }
+  }
+  // An element a stream read writes holds values this pass cannot see.
+  if (llvm::any_of(streamUses, [](const StreamUse &u) {
+        return u.kind == StreamData::WritesElement;
+      }))
+    oneBit.reset();
+  return oneBit;
 }
 
 SmallVector<NewMemory> StructSplitter::newMemories() const {
@@ -1144,6 +1346,20 @@ SmallVector<NewMemory> StructSplitter::newMemories() const {
         name + " member " +
             std::to_string(leaf.path.empty() ? 0 : leaf.path.front())});
   }
+  // A single struct (every dimension 1) that no call receives: a leaf read
+  // and written only at constant positions is registers (Vitis' SROA of a
+  // struct local and complete partitioning of a constant-index array; a
+  // `P e = arr[j]` temporary is no memory in Vitis and does not hold the
+  // loop's II, kernel r4s_aggb).
+  bool single = llvm::all_of(shape, [](int64_t d) { return d == 1; });
+  if (single && edges.empty() && memberCalls.empty())
+    for (auto [i, mem] : llvm::enumerate(out)) {
+      unsigned leaf = static_cast<unsigned>(i);
+      mem.registers = llvm::all_of(accesses, [&](const Access &acc) {
+        return acc.leaf < 0 || static_cast<unsigned>(acc.leaf) != leaf ||
+               acc.innerConst.has_value();
+      });
+    }
   return out;
 }
 
@@ -1181,6 +1397,18 @@ void StructSplitter::rewrite(ArrayRef<SmallVector<Value>> mems) {
     rewriteAggregated(mems);
   else
     rewriteSplit(mems);
+  // A member passed to a kept call: the row of its memory for the element.
+  for (MemberCall &mc : memberCalls) {
+    OpBuilder b(mc.call);
+    Value v = mems[mc.root][mc.leaf];
+    for (Value idx : mc.element) {
+      auto mt = cast<MemRefType>(v.getType());
+      auto row = MemRefType::get(mt.getShape().drop_front(),
+                                 mt.getElementType());
+      v = SubIndexOp::create(b, mc.call.getLoc(), row, v, idx);
+    }
+    mc.call->setOperand(mc.operand, v);
+  }
   cleanup();
 }
 
@@ -1284,9 +1512,9 @@ struct WordBuilder {
     if (innerConst || !inner)
       return constant(APInt(word.getWidth(),
                             leaf.bitOffset +
-                                leaf.scalarBits() * innerConst.value_or(0)));
+                                leaf.wordScalarBits() * innerConst.value_or(0)));
     Value i = b.create<arith::IndexCastOp>(loc, word, inner);
-    Value w = constant(APInt(word.getWidth(), leaf.scalarBits()));
+    Value w = constant(APInt(word.getWidth(), leaf.wordScalarBits()));
     Value off = constant(APInt(word.getWidth(), leaf.bitOffset));
     return b.create<arith::AddIOp>(loc, b.create<arith::MulIOp>(loc, i, w),
                                    off);
@@ -1294,9 +1522,12 @@ struct WordBuilder {
   /// The scalar of `leaf` at bit `sh` of `w`.
   Value extract(Value w, const Leaf &leaf, Value sh) {
     Value v = b.create<arith::ShRUIOp>(loc, w, sh);
+    auto packed = b.getIntegerType(leaf.wordScalarBits());
     auto bits = b.getIntegerType(leaf.scalarBits());
-    if (bits != word)
-      v = b.create<arith::TruncIOp>(loc, bits, v);
+    if (packed != word)
+      v = b.create<arith::TruncIOp>(loc, packed, v);
+    if (packed != bits)
+      v = b.create<arith::ExtUIOp>(loc, bits, v);
     if (leaf.scalar != bits)
       v = b.create<arith::BitcastOp>(loc, leaf.scalar, v);
     return v;
@@ -1304,15 +1535,18 @@ struct WordBuilder {
   /// `w` with the scalar `v` of `leaf` put at bit `sh`.
   Value insert(Value w, const Leaf &leaf, Value sh, Value v) {
     auto bits = b.getIntegerType(leaf.scalarBits());
+    auto packed = b.getIntegerType(leaf.wordScalarBits());
     if (v.getType() != bits)
       v = b.create<arith::BitcastOp>(loc, bits, v);
-    if (bits != word)
+    if (packed != bits)
+      v = b.create<arith::TruncIOp>(loc, packed, v);
+    if (packed != word)
       v = b.create<arith::ExtUIOp>(loc, word, v);
     v = b.create<arith::ShLIOp>(loc, v, sh);
     if (!w)
       return v;
     Value ones = constant(APInt::getLowBitsSet(word.getWidth(),
-                                               leaf.scalarBits()));
+                                               leaf.wordScalarBits()));
     Value mask = b.create<arith::ShLIOp>(loc, ones, sh);
     Value keep = b.create<arith::XOrIOp>(
         loc, mask, constant(APInt::getAllOnes(word.getWidth())));
@@ -1524,8 +1758,8 @@ void StructSplitter::rewriteAggregated(ArrayRef<SmallVector<Value>> mems) {
       const Leaf &leaf = leaves[acc->leaf];
       if (!acc->innerConst)
         continue;
-      int64_t lo = leaf.bitOffset + leaf.scalarBits() * *acc->innerConst;
-      written.set(lo, lo + leaf.scalarBits());
+      int64_t lo = leaf.bitOffset + leaf.wordScalarBits() * *acc->innerConst;
+      written.set(lo, lo + leaf.wordScalarBits());
     }
     Operation *first = group.front()->op, *last = group.back()->op;
     Value w;
@@ -1626,11 +1860,15 @@ static bool affineOperandsStayValid(func::FuncOp callee) {
 }
 
 /// When `callee` copies the whole element its argument `src` points to into
-/// the one `dst` points to, in one loop of scalar loads and stores at the
-/// same position that covers the element exactly (the implicit copy / move
-/// constructor or assignment of a trivially copyable struct, which cgeist
-/// emits as a byte or member loop; clang emits a memcpy, which Vitis turns
-/// into one aggregate copy), returns {dst, src}.
+/// the one `dst` points to, returns {dst, src}: every scalar byte of the
+/// element is copied exactly once, by scalar loads and stores at the same
+/// position, straight-line (one per member) or in a constant loop over a
+/// contiguous range (a byte or scalar loop over the element or over an array
+/// member). These are the implicit copy / move constructor and assignment of
+/// a trivially copyable struct, which cgeist emits member by member, an
+/// array member as a byte loop (`{int x; short y[4];}`: an i32 copy, then 8
+/// i8 copies); clang emits one memcpy, which Vitis turns into one aggregate
+/// copy.
 static std::optional<std::pair<unsigned, unsigned>>
 wholeElementCopy(func::FuncOp callee) {
   if (callee.isExternal() || !llvm::hasSingleElement(callee.getBody()) ||
@@ -1648,20 +1886,162 @@ wholeElementCopy(func::FuncOp callee) {
   if (!size)
     return std::nullopt;
   Block &body = callee.getBody().front();
-  DenseMap<Value, unsigned> argOfPointer;
-  affine::AffineForOp loop;
-  for (Operation &op : body) {
+
+  // A pointer at a constant byte offset into one argument's element.
+  struct Place {
+    unsigned arg;
+    int64_t offset;
+  };
+  DenseMap<Value, Place> places;
+  // The byte offset a getelementptr with constant indices adds.
+  auto constOffset = [](LLVM::GEPOp gep) -> std::optional<int64_t> {
+    Type cur = gep.getElemType();
+    int64_t off = 0;
+    for (auto [pos, idx] : llvm::enumerate(gep.getIndices())) {
+      auto attr = idx.dyn_cast<IntegerAttr>();
+      if (!attr)
+        return std::nullopt;
+      int64_t k = attr.getInt();
+      if (pos == 0) {
+        auto l = layoutOf(cur);
+        if (!l)
+          return std::nullopt;
+        off += k * l->size;
+      } else if (auto s2 = dyn_cast<LLVM::LLVMStructType>(cur)) {
+        if (k < 0 || k >= static_cast<int64_t>(s2.getBody().size()))
+          return std::nullopt;
+        off += fieldOffset(s2, k);
+        cur = s2.getBody()[k];
+      } else if (auto at = dyn_cast<LLVM::LLVMArrayType>(cur)) {
+        cur = at.getElementType();
+        auto l = layoutOf(cur);
+        if (!l)
+          return std::nullopt;
+        off += k * l->size;
+      } else {
+        return std::nullopt;
+      }
+    }
+    return off;
+  };
+  auto placeOf = [&](Value ptr) -> std::optional<Place> {
+    auto it = places.find(ptr);
+    if (it == places.end())
+      return std::nullopt;
+    return it->second;
+  };
+  // Records the pointers of `op` (a cast of an argument or a constant
+  // getelementptr of a known pointer); false for any other op.
+  auto addPlace = [&](Operation &op) {
     if (auto m2p = dyn_cast<Memref2PointerOp>(op)) {
       auto arg = dyn_cast<BlockArgument>(m2p.getSource());
       if (!arg || arg.getOwner() != &body)
+        return false;
+      places[m2p.getResult()] = {arg.getArgNumber(), 0};
+      return true;
+    }
+    if (auto gep = dyn_cast<LLVM::GEPOp>(op)) {
+      auto base = placeOf(gep.getBase());
+      auto off = constOffset(gep);
+      if (!base || !off)
+        return false;
+      places[gep.getResult()] = {base->arg, base->offset + *off};
+      return true;
+    }
+    return false;
+  };
+
+  std::optional<unsigned> dst, src;
+  SmallVector<std::pair<int64_t, int64_t>> copied; // [begin, end) bytes
+  // One copy of `bytes` bytes from `from` to `to`, at the same offset.
+  auto addCopy = [&](Place from, Place to, int64_t bytes) {
+    if (from.arg == to.arg || from.offset != to.offset)
+      return false;
+    if ((dst && *dst != to.arg) || (src && *src != from.arg))
+      return false;
+    dst = to.arg;
+    src = from.arg;
+    copied.push_back({from.offset, from.offset + bytes});
+    return true;
+  };
+  // A copy loop: `for iv in [0, trips) to[iv] = from[iv]` over one scalar type.
+  auto addLoopCopy = [&](affine::AffineForOp loop) {
+    if (!loop.hasConstantBounds() || loop.getConstantLowerBound() != 0 ||
+        loop.getStepAsInt() != 1 || loop.getNumIterOperands() != 0)
+      return false;
+    int64_t trips = loop.getConstantUpperBound();
+    Value iv = loop.getInductionVar();
+    auto isIv = [&](Value v) {
+      while (auto c = v.getDefiningOp<arith::IndexCastOp>())
+        v = c.getIn();
+      return v == iv;
+    };
+    // gep(p)[iv] of one scalar type: the place p points to.
+    auto scalarAt = [&](Value ptr, Type &elem) -> std::optional<Place> {
+      auto gep = ptr.getDefiningOp<LLVM::GEPOp>();
+      if (!gep || gep.getIndices().size() != 1)
         return std::nullopt;
-      argOfPointer[m2p.getResult()] = arg.getArgNumber();
+      auto idx = gep.getIndices()[0];
+      if (!idx.is<Value>() || !isIv(idx.get<Value>()))
+        return std::nullopt;
+      elem = gep.getElemType();
+      return placeOf(gep.getBase());
+    };
+    LLVM::LoadOp load;
+    LLVM::StoreOp store;
+    for (Operation &op : loop.getBody()->without_terminator()) {
+      if (isa<arith::IndexCastOp, LLVM::GEPOp>(op))
+        continue;
+      if (auto l = dyn_cast<LLVM::LoadOp>(op)) {
+        if (load)
+          return false;
+        load = l;
+        continue;
+      }
+      if (auto s2 = dyn_cast<LLVM::StoreOp>(op)) {
+        if (store)
+          return false;
+        store = s2;
+        continue;
+      }
+      return false;
+    }
+    if (!load || !store || store.getValue() != load.getResult())
+      return false;
+    Type loadElem, storeElem;
+    auto from = scalarAt(load.getAddr(), loadElem);
+    auto to = scalarAt(store.getAddr(), storeElem);
+    if (!from || !to || loadElem != storeElem || loadElem != load.getType() ||
+        !isScalar(loadElem))
+      return false;
+    return addCopy(*from, *to, layoutOf(loadElem)->size * trips);
+  };
+
+  DenseMap<Value, Place> loadedFrom; // straight-line scalar loads
+  for (Operation &op : body) {
+    if (isa<Memref2PointerOp, LLVM::GEPOp>(op)) {
+      if (!addPlace(op))
+        return std::nullopt;
+      continue;
+    }
+    if (auto l = dyn_cast<LLVM::LoadOp>(op)) {
+      auto from = placeOf(l.getAddr());
+      if (!from || !isScalar(l.getType()))
+        return std::nullopt;
+      loadedFrom[l.getResult()] = *from;
+      continue;
+    }
+    if (auto s2 = dyn_cast<LLVM::StoreOp>(op)) {
+      auto to = placeOf(s2.getAddr());
+      auto it = loadedFrom.find(s2.getValue());
+      if (!to || it == loadedFrom.end() ||
+          !addCopy(it->second, *to, layoutOf(s2.getValue().getType())->size))
+        return std::nullopt;
       continue;
     }
     if (auto f = dyn_cast<affine::AffineForOp>(op)) {
-      if (loop)
+      if (!addLoopCopy(f))
         return std::nullopt;
-      loop = f;
       continue;
     }
     if (auto ret = dyn_cast<func::ReturnOp>(op)) {
@@ -1671,59 +2051,25 @@ wholeElementCopy(func::FuncOp callee) {
     }
     return std::nullopt;
   }
-  if (!loop || !loop.hasConstantBounds() || loop.getConstantLowerBound() != 0 ||
-      loop.getStepAsInt() != 1 || loop.getNumIterOperands() != 0)
+  if (!dst || !src)
     return std::nullopt;
-  int64_t trips = loop.getConstantUpperBound();
-  Value iv = loop.getInductionVar();
-  auto isIv = [&](Value v) {
-    while (auto c = v.getDefiningOp<arith::IndexCastOp>())
-      v = c.getIn();
-    return v == iv;
-  };
-  // gep(p)[iv] of one scalar type: the argument p belongs to.
-  auto scalarAt = [&](Value ptr, Type &elem) -> std::optional<unsigned> {
-    auto gep = ptr.getDefiningOp<LLVM::GEPOp>();
-    if (!gep || gep.getIndices().size() != 1)
+  // Every scalar byte copied exactly once, nothing outside the element.
+  llvm::sort(copied);
+  for (size_t i = 0; i < copied.size(); ++i) {
+    if (copied[i].first < 0 || copied[i].second > size->size)
       return std::nullopt;
-    auto idx = gep.getIndices()[0];
-    if (!idx.is<Value>() || !isIv(idx.get<Value>()))
+    if (i && copied[i].first < copied[i - 1].second)
       return std::nullopt;
-    auto it = argOfPointer.find(gep.getBase());
-    if (it == argOfPointer.end())
-      return std::nullopt;
-    elem = gep.getElemType();
-    return it->second;
-  };
-  LLVM::LoadOp load;
-  LLVM::StoreOp store;
-  for (Operation &op : loop.getBody()->without_terminator()) {
-    if (isa<arith::IndexCastOp, LLVM::GEPOp>(op))
-      continue;
-    if (auto l = dyn_cast<LLVM::LoadOp>(op)) {
-      if (load)
-        return std::nullopt;
-      load = l;
-      continue;
-    }
-    if (auto s = dyn_cast<LLVM::StoreOp>(op)) {
-      if (store)
-        return std::nullopt;
-      store = s;
-      continue;
-    }
-    return std::nullopt;
   }
-  if (!load || !store || store.getValue() != load.getResult())
-    return std::nullopt;
-  Type loadElem, storeElem;
-  auto src = scalarAt(load.getAddr(), loadElem);
-  auto dst = scalarAt(store.getAddr(), storeElem);
-  if (!src || !dst || *src == *dst || loadElem != storeElem ||
-      loadElem != load.getType())
-    return std::nullopt;
-  auto scalar = layoutOf(loadElem);
-  if (!scalar || scalar->size * trips != size->size)
+  SmallVector<int64_t> path;
+  bool covered = forEachScalar(
+      st, 0, path, [&](int64_t off, Type scalar, ArrayRef<int64_t>) {
+        int64_t end = off + layoutOf(scalar)->size;
+        return llvm::any_of(copied, [&](const std::pair<int64_t, int64_t> &r) {
+          return r.first <= off && end <= r.second;
+        });
+      });
+  if (!covered)
     return std::nullopt;
   if (auto ret = cast<func::ReturnOp>(body.getTerminator());
       ret.getNumOperands() == 1 && ret.getOperand(0) != callee.getArgument(*dst))
@@ -1829,6 +2175,503 @@ static bool inlineCallsOnStruct(Value root) {
 
 } // namespace
 
+//===----------------------------------------------------------------------===//
+// AGGREGATE on a struct cgeist lays out as an array
+//===----------------------------------------------------------------------===//
+// cgeist lays out a struct whose members all have one scalar type as one more
+// array dimension (`struct In { short a, b; } p[N]` is memref<N x 2 x i16>,
+// not a memref of structs), and so does this pass for an array of them
+// inside a struct. When an AGGREGATE pragma reaches such a variable
+// (hls.aggregate on it, or on a parameter it is passed to), Vitis builds one
+// memory of N words of (members x width) bits: `o.arr` of `struct Outer {
+// In arr[512]; int x[512]; }` passed to `fill(In p[N])` with `aggregate
+// variable=p` is 512 x 32, 2 BRAM_18K (kernel r4s_fld). Only a struct can be
+// aggregated, so on a plain memref the pragma names exactly this layout. The
+// last dimension is packed into one word, accessed as for a struct: a member
+// read is a word read and a shift, the stores of every member of one element
+// in a row are one word store, fewer read, merge and write the word back.
+
+namespace {
+class ArrayStructPacker {
+public:
+  explicit ArrayStructPacker(ModuleOp module) : module(module) {}
+  /// Packs every group of variables and parameters the pragma reaches.
+  void run();
+
+private:
+  /// A variable or parameter: an alloca / alloc, a global, or a parameter.
+  struct Node {
+    Operation *alloc = nullptr;
+    mutable memref::GlobalOp global;
+    BlockArgument arg;
+    const void *key() const {
+      if (alloc)
+        return alloc;
+      if (global)
+        return global.getOperation();
+      return arg.getAsOpaquePointer();
+    }
+  };
+  struct Group {
+    SmallVector<Node> nodes;
+    DenseSet<const void *> keys;
+    SmallVector<Value> values; // every value of the memory, casts included
+    SmallVector<Operation *> accesses;
+    SmallVector<Operation *> calls;
+    std::string why; // non-empty: not packed
+  };
+
+  ModuleOp module;
+  DenseSet<const void *> done;
+
+  static bool hasAggregate(const Node &n);
+  SmallVector<Value> rootValues(const Node &n);
+  std::optional<Node> rootOf(Value v);
+  void collect(Group &g, Node seed);
+  void pack(Group &g);
+};
+} // namespace
+
+bool ArrayStructPacker::hasAggregate(const Node &n) {
+  if (n.alloc)
+    return n.alloc->hasAttr("hls.aggregate");
+  if (n.global)
+    return n.global->hasAttr("hls.aggregate");
+  auto fn = cast<func::FuncOp>(n.arg.getOwner()->getParentOp());
+  return fn.getArgAttr(n.arg.getArgNumber(), "hls.aggregate") != nullptr;
+}
+
+SmallVector<Value> ArrayStructPacker::rootValues(const Node &n) {
+  if (n.alloc)
+    return {n.alloc->getResult(0)};
+  if (n.arg)
+    return {n.arg};
+  SmallVector<Value> out;
+  if (auto uses = SymbolTable::getSymbolUses(n.global, module))
+    for (const SymbolTable::SymbolUse &u : *uses)
+      if (auto get = dyn_cast<memref::GetGlobalOp>(u.getUser()))
+        out.push_back(get.getResult());
+  return out;
+}
+
+std::optional<ArrayStructPacker::Node> ArrayStructPacker::rootOf(Value v) {
+  while (auto c = v.getDefiningOp<memref::CastOp>())
+    v = c.getSource();
+  Node n;
+  if (auto arg = dyn_cast<BlockArgument>(v)) {
+    if (!isa_and_present<func::FuncOp>(arg.getOwner()->getParentOp()) ||
+        !arg.getOwner()->isEntryBlock())
+      return std::nullopt;
+    n.arg = arg;
+    return n;
+  }
+  Operation *def = v.getDefiningOp();
+  if (isa_and_present<memref::AllocaOp, memref::AllocOp>(def)) {
+    n.alloc = def;
+    return n;
+  }
+  if (auto get = dyn_cast_or_null<memref::GetGlobalOp>(def)) {
+    n.global = SymbolTable::lookupNearestSymbolFrom<memref::GlobalOp>(
+        get, get.getNameAttr());
+    if (n.global)
+      return n;
+  }
+  return std::nullopt;
+}
+
+void ArrayStructPacker::collect(Group &g, Node seed) {
+  SmallVector<Node> work{seed};
+  auto add = [&](Node n) {
+    if (g.keys.insert(n.key()).second) {
+      g.nodes.push_back(n);
+      work.push_back(n);
+    }
+  };
+  g.keys.insert(seed.key());
+  g.nodes.push_back(seed);
+  while (!work.empty() && g.why.empty()) {
+    Node n = work.pop_back_val();
+    if (n.global) {
+      auto init = n.global.getInitialValue();
+      if (n.global.getConstant() || (init && !isa<UnitAttr>(*init))) {
+        g.why = "a global with an initial value";
+        return;
+      }
+    }
+    if (n.arg) {
+      // Every call of the function passes a variable of the group.
+      auto fn = cast<func::FuncOp>(n.arg.getOwner()->getParentOp());
+      auto uses = SymbolTable::getSymbolUses(fn, module);
+      if (fn.isPublic() || !uses) {
+        g.why = "a parameter of a public function";
+        return;
+      }
+      for (const SymbolTable::SymbolUse &u : *uses) {
+        auto call = dyn_cast<func::CallOp>(u.getUser());
+        std::optional<Node> r =
+            call ? rootOf(call.getOperand(n.arg.getArgNumber()))
+                 : std::nullopt;
+        if (!r) {
+          g.why = "a parameter passed something other than a variable";
+          return;
+        }
+        add(*r);
+      }
+    }
+    SmallVector<Value> values = rootValues(n);
+    for (unsigned i = 0; i < values.size(); ++i) {
+      Value v = values[i];
+      if (llvm::is_contained(g.values, v))
+        continue;
+      g.values.push_back(v);
+      for (OpOperand &use : v.getUses()) {
+        Operation *user = use.getOwner();
+        if (auto c = dyn_cast<memref::CastOp>(user)) {
+          values.push_back(c.getResult());
+          continue;
+        }
+        if (isa<memref::LoadOp, affine::AffineLoadOp>(user)) {
+          g.accesses.push_back(user);
+          continue;
+        }
+        if (isa<memref::StoreOp, affine::AffineStoreOp>(user) &&
+            use.getOperandNumber() != 0) {
+          g.accesses.push_back(user);
+          continue;
+        }
+        if (isa<memref::DeallocOp>(user))
+          continue;
+        if (auto call = dyn_cast<func::CallOp>(user)) {
+          auto callee = SymbolTable::lookupNearestSymbolFrom<func::FuncOp>(
+              call, call.getCalleeAttr());
+          unsigned idx = use.getOperandNumber();
+          if (!callee || callee.isExternal() ||
+              idx >= callee.getNumArguments()) {
+            g.why = "passed to an external call";
+            return;
+          }
+          Node a;
+          a.arg = callee.getArgument(idx);
+          add(a);
+          if (!llvm::is_contained(g.calls, user))
+            g.calls.push_back(user);
+          continue;
+        }
+        g.why = ("used by " + user->getName().getStringRef()).str();
+        return;
+      }
+    }
+  }
+}
+
+/// The packed type of `t` (memref<D x K x T> -> memref<D x i(K*bits(T))>),
+/// or null.
+static MemRefType packedType(Type t) {
+  auto mt = dyn_cast<MemRefType>(t);
+  if (!mt || mt.getRank() < 2 || !mt.getLayout().isIdentity())
+    return {};
+  Type e = mt.getElementType();
+  int64_t k = mt.getShape().back();
+  if (!e.isIntOrFloat() || ShapedType::isDynamic(k) || k < 2)
+    return {};
+  auto word = IntegerType::get(t.getContext(), k * e.getIntOrFloatBitWidth());
+  return MemRefType::get(mt.getShape().drop_back(), word,
+                         MemRefLayoutAttrInterface(), mt.getMemorySpace());
+}
+
+namespace {
+/// One access of a packed memory: its word address and member position.
+struct PackedAccess {
+  Operation *op;
+  Value mem;
+  AffineMap leadMap;          // affine: the map without its last result
+  SmallVector<Value> operands; // affine: map operands; memref: lead indices
+  std::optional<int64_t> member;
+  bool isAffine;
+  bool isStore() const {
+    return isa<memref::StoreOp, affine::AffineStoreOp>(op);
+  }
+  bool sameWord(const PackedAccess &o) const {
+    return mem == o.mem && isAffine == o.isAffine && leadMap == o.leadMap &&
+           operands == o.operands;
+  }
+};
+} // namespace
+
+static PackedAccess describePacked(Operation *op) {
+  PackedAccess a;
+  a.op = op;
+  a.isAffine = isa<affine::AffineLoadOp, affine::AffineStoreOp>(op);
+  if (a.isAffine) {
+    AffineMap map;
+    if (auto l = dyn_cast<affine::AffineLoadOp>(op)) {
+      a.mem = l.getMemRef();
+      map = l.getAffineMap();
+      a.operands.assign(l.getMapOperands().begin(), l.getMapOperands().end());
+    } else {
+      auto s2 = cast<affine::AffineStoreOp>(op);
+      a.mem = s2.getMemRef();
+      map = s2.getAffineMap();
+      a.operands.assign(s2.getMapOperands().begin(),
+                        s2.getMapOperands().end());
+    }
+    unsigned last = map.getNumResults() - 1;
+    if (auto c = dyn_cast<AffineConstantExpr>(map.getResult(last)))
+      a.member = c.getValue();
+    a.leadMap = map.dropResult(last);
+    return a;
+  }
+  ValueRange idx;
+  if (auto l = dyn_cast<memref::LoadOp>(op)) {
+    a.mem = l.getMemRef();
+    idx = l.getIndices();
+  } else {
+    auto s2 = cast<memref::StoreOp>(op);
+    a.mem = s2.getMemRef();
+    idx = s2.getIndices();
+  }
+  a.operands.assign(idx.begin(), std::prev(idx.end()));
+  a.member = getConstantIntValue(idx.back());
+  return a;
+}
+
+void ArrayStructPacker::pack(Group &g) {
+  // Old types, before the values are retyped.
+  auto oldType = cast<MemRefType>(g.values.front().getType());
+  Type scalar = oldType.getElementType();
+  unsigned w = scalar.getIntOrFloatBitWidth();
+  int64_t members = oldType.getShape().back();
+  auto word = IntegerType::get(module.getContext(), members * w);
+  auto scalarBits = IntegerType::get(module.getContext(), w);
+  // The last index of each access, before the ops are rewritten.
+  DenseMap<Operation *, Value> dynMember;
+  SmallVector<PackedAccess> accs;
+  for (Operation *op : g.accesses) {
+    PackedAccess a = describePacked(op);
+    if (!a.member) {
+      OpBuilder b(op);
+      if (a.isAffine) {
+        AffineMap map = isa<affine::AffineLoadOp>(op)
+                            ? cast<affine::AffineLoadOp>(op).getAffineMap()
+                            : cast<affine::AffineStoreOp>(op).getAffineMap();
+        dynMember[op] = b.create<affine::AffineApplyOp>(
+            op->getLoc(), map.getSubMap({map.getNumResults() - 1}),
+            a.operands);
+      } else {
+        dynMember[op] = op->getOperands().back();
+      }
+    }
+    accs.push_back(std::move(a));
+  }
+
+  // Retype the memories.
+  for (Value v : g.values)
+    v.setType(packedType(v.getType()));
+  for (const Node &n : g.nodes) {
+    if (n.global)
+      n.global.setType(packedType(n.global.getType()));
+    if (n.arg) {
+      auto fn = cast<func::FuncOp>(n.arg.getOwner()->getParentOp());
+      fn.setFunctionType(FunctionType::get(
+          fn.getContext(), fn.getBody().front().getArgumentTypes(),
+          fn.getFunctionType().getResults()));
+    }
+    std::string note = "aggregated (AGGREGATE pragma): " +
+                       std::to_string(members) + " members of one type, " +
+                       "which cgeist lays out as the last array dimension, " +
+                       "packed into one " + std::to_string(members * w) +
+                       "-bit word per element";
+    if (n.alloc)
+      n.alloc->setAttr("hls.aggregated",
+                       StringAttr::get(module.getContext(), note));
+    if (n.global)
+      n.global->setAttr("hls.aggregated",
+                        StringAttr::get(module.getContext(), note));
+  }
+
+  auto loadWord = [&](OpBuilder &b, Location loc, const PackedAccess &a) {
+    if (a.isAffine)
+      return b.create<affine::AffineLoadOp>(loc, a.mem, a.leadMap, a.operands)
+          .getResult();
+    return b.create<memref::LoadOp>(loc, a.mem, a.operands).getResult();
+  };
+  auto storeWord = [&](OpBuilder &b, Location loc, const PackedAccess &a,
+                       Value v) {
+    if (a.isAffine)
+      b.create<affine::AffineStoreOp>(loc, v, a.mem, a.leadMap, a.operands);
+    else
+      b.create<memref::StoreOp>(loc, v, a.mem, a.operands);
+  };
+  auto shiftOf = [&](OpBuilder &b, Location loc, const PackedAccess &a) {
+    if (a.member)
+      return b.create<arith::ConstantOp>(
+                  loc, word, b.getIntegerAttr(word, *a.member * w))
+          .getResult();
+    Value i = b.create<arith::IndexCastOp>(loc, word, dynMember[a.op]);
+    Value width =
+        b.create<arith::ConstantOp>(loc, word, b.getIntegerAttr(word, w));
+    return b.create<arith::MulIOp>(loc, i, width).getResult();
+  };
+  auto insert = [&](OpBuilder &b, Location loc, Value wv, const PackedAccess &a,
+                    Value v) {
+    if (v.getType() != scalarBits)
+      v = b.create<arith::BitcastOp>(loc, scalarBits, v);
+    if (scalarBits != word)
+      v = b.create<arith::ExtUIOp>(loc, word, v);
+    Value sh = shiftOf(b, loc, a);
+    v = b.create<arith::ShLIOp>(loc, v, sh);
+    if (!wv)
+      return v;
+    Value ones = b.create<arith::ConstantOp>(
+        loc, word,
+        b.getIntegerAttr(word, APInt::getLowBitsSet(members * w, w)));
+    Value mask = b.create<arith::ShLIOp>(loc, ones, sh);
+    Value all = b.create<arith::ConstantOp>(
+        loc, word, b.getIntegerAttr(word, APInt::getAllOnes(members * w)));
+    Value keep = b.create<arith::XOrIOp>(loc, mask, all);
+    return b
+        .create<arith::OrIOp>(loc, b.create<arith::AndIOp>(loc, wv, keep), v)
+        .getResult();
+  };
+
+  // Loads: one word read and a shift each.
+  for (const PackedAccess &a : accs) {
+    if (a.isStore())
+      continue;
+    OpBuilder b(a.op);
+    Location loc = a.op->getLoc();
+    Value v = b.create<arith::ShRUIOp>(loc, loadWord(b, loc, a),
+                                       shiftOf(b, loc, a));
+    if (scalarBits != word)
+      v = b.create<arith::TruncIOp>(loc, scalarBits, v);
+    if (scalar != scalarBits)
+      v = b.create<arith::BitcastOp>(loc, scalar, v);
+    a.op->getResult(0).replaceAllUsesWith(v);
+  }
+
+  // Stores: the stores of one word that follow each other in a block, with
+  // no other access of the group between them, are one word store when they
+  // write every member, else one read-modify-write.
+  DenseSet<Operation *> touching; // an access or call, or an op holding one
+  for (Operation *op : g.accesses)
+    for (Operation *p = op; p && !isa<func::FuncOp>(p); p = p->getParentOp())
+      touching.insert(p);
+  for (Operation *op : g.calls)
+    for (Operation *p = op; p && !isa<func::FuncOp>(p); p = p->getParentOp())
+      touching.insert(p);
+  DenseMap<Operation *, const PackedAccess *> storeOf;
+  for (const PackedAccess &a : accs)
+    if (a.isStore())
+      storeOf[a.op] = &a;
+  DenseSet<Block *> blocks;
+  for (const PackedAccess &a : accs)
+    if (a.isStore())
+      blocks.insert(a.op->getBlock());
+  for (Block *blk : blocks) {
+    SmallVector<const PackedAccess *> run;
+    auto flush = [&] {
+      if (run.empty())
+        return;
+      const PackedAccess &last = *run.back();
+      OpBuilder b(last.op);
+      Location loc = last.op->getLoc();
+      llvm::SmallBitVector written(members);
+      bool constant = true;
+      for (const PackedAccess *a : run) {
+        if (a->member)
+          written.set(*a->member);
+        else
+          constant = false;
+      }
+      Value wv;
+      if (!constant || !written.all())
+        wv = loadWord(b, loc, last);
+      for (const PackedAccess *a : run)
+        wv = insert(b, loc, wv, *a, a->op->getOperand(0));
+      storeWord(b, loc, last, wv);
+      run.clear();
+    };
+    for (Operation &op : *blk) {
+      auto it = storeOf.find(&op);
+      if (it != storeOf.end()) {
+        if (!run.empty() && !run.front()->sameWord(*it->second))
+          flush();
+        run.push_back(it->second);
+        continue;
+      }
+      if (touching.contains(&op))
+        flush();
+    }
+    flush();
+  }
+  for (Operation *op : g.accesses)
+    op->erase();
+}
+
+void ArrayStructPacker::run() {
+  SmallVector<Node> seeds;
+  module.walk([&](Operation *op) {
+    Node n;
+    if (isa<memref::AllocaOp, memref::AllocOp>(op))
+      n.alloc = op;
+    else if (auto g = dyn_cast<memref::GlobalOp>(op))
+      n.global = g;
+    if ((n.alloc || n.global) && hasAggregate(n)) {
+      seeds.push_back(n);
+      return;
+    }
+    if (auto fn = dyn_cast<func::FuncOp>(op))
+      if (!fn.isExternal())
+        for (BlockArgument a : fn.getArguments()) {
+          Node an;
+          an.arg = a;
+          if (hasAggregate(an))
+            seeds.push_back(an);
+        }
+  });
+  for (const Node &seed : seeds) {
+    if (done.contains(seed.key()))
+      continue;
+    Type t = seed.alloc    ? seed.alloc->getResult(0).getType()
+             : seed.global ? Type(seed.global.getType())
+                           : seed.arg.getType();
+    if (!packedType(t))
+      continue; // a memref of structs (the struct path), or not an array
+    Group g;
+    collect(g, seed);
+    for (const void *k : g.keys)
+      done.insert(k);
+    // A word memory the struct path already built (an AGGREGATE that reached
+    // a struct variable) is not packed again.
+    if (g.why.empty() && llvm::any_of(g.nodes, [](const Node &n) {
+          Operation *op = n.alloc ? n.alloc : n.global.getOperation();
+          return op && op->hasAttr("hls.aggregated");
+        }))
+      continue;
+    // Every memory of the group must be the same struct.
+    if (g.why.empty())
+      for (Value v : g.values) {
+        auto mt = cast<MemRefType>(v.getType());
+        if (!packedType(mt) ||
+            mt.getElementType() !=
+                cast<MemRefType>(t).getElementType() ||
+            mt.getShape().back() != cast<MemRefType>(t).getShape().back()) {
+          g.why = "memories of different layouts";
+          break;
+        }
+      }
+    if (!g.why.empty()) {
+      Operation *where = seed.alloc    ? seed.alloc
+                         : seed.global ? seed.global.getOperation()
+                                       : seed.arg.getOwner()->getParentOp();
+      where->emitWarning("AGGREGATE on an array-laid-out struct not applied: ")
+          << g.why;
+      continue;
+    }
+    pack(g);
+  }
+}
+
 std::optional<int64_t> circt::hls_analysis::llvmStorageBits(Type type) {
   if (auto l = layoutOf(type))
     return l->size * 8;
@@ -1880,6 +2723,12 @@ struct SplitStructMemrefsPass
       llvm::cl::desc("Also split / aggregate struct-typed memref.globals "
                      "(Vitis disaggregates a global like a local)"),
       llvm::cl::init(true)};
+  Option<bool> scalarRegisters{
+      *this, "scalar-registers",
+      llvm::cl::desc("Keep a member of a single struct variable (not an array "
+                     "of structs) that is read and written only at constant "
+                     "positions in registers (hls.registers), as Vitis does"),
+      llvm::cl::init(true)};
   Option<bool> throughCalls{
       *this, "through-calls",
       llvm::cl::desc("Split / aggregate a variable passed whole to kept "
@@ -1910,12 +2759,14 @@ struct SplitStructMemrefsPass
     return fallback.str();
   }
 
-  static void annotate(Operation *m, const NewMemory &mem, bool aggregate) {
+  void annotate(Operation *m, const NewMemory &mem, bool aggregate) {
     OpBuilder b(m->getContext());
     if (aggregate)
       m->setAttr("hls.aggregated", b.getStringAttr(mem.note));
     else
       m->setAttr("hls.struct_member", b.getStringAttr(mem.note));
+    if (mem.registers && scalarRegisters)
+      m->setAttr(kRegistersAttrName, b.getUnitAttr());
   }
 
   /// The memref.globals of struct type whose every use is a get_global
@@ -2116,6 +2967,11 @@ struct SplitStructMemrefsPass
         aggregate |= honorAggregate && n->attr("hls.aggregate") != nullptr;
         disaggregate |= n->attr("hls.disaggregate") != nullptr;
       }
+      if (why.empty() && aggregate)
+        for (VariableNode *n : group)
+          if (n->splitter->hasMemberCalls())
+            why = "a member passed to a kept call cannot be part of one "
+                  "aggregated word";
       if (!why.empty()) {
         for (VariableNode *n : group)
           if (n->kind != VariableNode::Argument)
@@ -2144,14 +3000,34 @@ struct SplitStructMemrefsPass
       if (failed(runPipeline(pm, module)))
         return signalPassFailure();
     }
+    if (honorAggregate)
+      ArrayStructPacker(module).run();
   }
 
   /// Creates the new memories of every storage of one variable and
   /// rewrites its accesses (the calls that pass it: rewriteCalls).
   void rewriteVariable(ArrayRef<VariableNode *> group, bool aggregate) {
+    // Vitis packs a bool member as 1 bit ("compact=bit"); cgeist stores it
+    // as an i8 that only ever holds 0 or 1. Every storage of the variable
+    // must agree, as they share one word layout.
+    if (aggregate) {
+      llvm::BitVector oneBit;
+      for (VariableNode *n : group) {
+        llvm::BitVector b = n->splitter->zeroOneLeaves();
+        if (oneBit.empty())
+          oneBit = b;
+        else if (oneBit.size() == b.size())
+          oneBit &= b;
+        else
+          oneBit.reset();
+      }
+      for (VariableNode *n : group)
+        n->splitter->setOneBitLeaves(oneBit);
+    }
     for (VariableNode *n : group) {
       StructSplitter &s = *n->splitter;
       s.setAggregate(aggregate);
+      rowsSelected |= s.hasMemberCalls();
       SmallVector<NewMemory> news = s.newMemories();
       SmallVector<SmallVector<Value>> mems;
       switch (n->kind) {

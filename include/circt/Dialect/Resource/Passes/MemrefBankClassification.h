@@ -76,6 +76,16 @@ void annotateCalleeStoresPerLoop(mlir::ModuleOp module);
 /// The annotation of `bank` (0 when absent).
 unsigned calleeStoresPerLoop(mlir::Value bank);
 
+/// The most of `stores` (accesses of one memref inside one loop body) that
+/// can run in one iteration: the stores in the two arms of one if never run
+/// together, so they count once, whatever their addresses (Vitis builds
+/// `if (c) B[i] = v; else B[N-1-i] = w;` read 8 times at II 1 as a RAM_1WNR
+/// with 7 copies, both stores sharing the one write port). The arms are the
+/// if/else regions the stores are nested in below `scope`, and the arms
+/// --convert-affine-to-loopschedule hoisted them out of (`hls.if_arms`).
+unsigned maxStoresInOneIteration(llvm::ArrayRef<mlir::Operation *> stores,
+                                 mlir::Operation *scope);
+
 struct BankProfile {
   mlir::Value memref;          // The bank itself (alloca result).
   unsigned width = 0;          // Element bit width.

@@ -6,6 +6,7 @@
 // RUN: hls-est %s --symbol-privatize=exclude=top_trans --symbol-dce --affine-loop-normalize --auto-pipeline-unroll --memory-banking-bram --convert-affine-to-loopschedule --bram-analysis=top=top_trans -o /dev/null | FileCheck %s --check-prefix=TRANS
 // RUN: hls-est %s --symbol-privatize=exclude=top_inner --symbol-dce --affine-loop-normalize --auto-pipeline-unroll --memory-banking-bram --convert-affine-to-loopschedule --bram-analysis=top=top_inner --bram-debug -o /dev/null 2>&1 | FileCheck %s --check-prefix=INNER
 // RUN: hls-est %s --symbol-privatize=exclude=top_strm --symbol-dce --affine-loop-normalize --auto-pipeline-unroll --memory-banking-bram --convert-affine-to-loopschedule --bram-analysis=top=top_strm --bram-debug -o /dev/null 2>&1 | FileCheck %s --check-prefix=STRM
+// RUN: hls-est %s --symbol-privatize=exclude=top_scal --symbol-dce --affine-loop-normalize --auto-pipeline-unroll --memory-banking-bram --convert-affine-to-loopschedule --bram-analysis=top=top_scal --bram-debug -o /dev/null 2>&1 | FileCheck %s --check-prefix=SCAL
 
 // Dataflow process merges (VITIS_NOTES.md N36). Vitis merges every process of
 // a dataflow region that writes one local array (or stream) into one process,
@@ -238,6 +239,43 @@ module {
     affine.for %i = 0 to 512 {
       %v = affine.load %buf[511 - %i] : memref<512xi32>
       affine.store %v, %out[%i] : memref<512xi32>
+    } {hls.pipeline = [{II = 1 : i32}]}
+    return
+  }
+  // r4m_scal: A writes buf and computes the scalar s (its loop result), X
+  // reads s and writes t, B reads t and writes buf, C reads buf. The only
+  // path A -> X -> B goes through the scalar: Vitis still merges all three
+  // ([HLS 214-475]), so t is an ordinary memory of 1 and buf a single PIPO
+  // of 2 (Vitis 3). Without the scalar edge t was a PIPO of 2 (4).
+  // SCAL: t (alloca)
+  // SCAL: not a ping-pong channel: every process that accesses it is merged into one process
+  // SCAL: kind=RAM_1P  bram=1
+  // SCAL: kind=PIPO  bram=2
+  // SCAL: Total BRAM: 3
+  func.func @top_scal(%in: memref<512xi32>, %in2: memref<512xi32>, %out: memref<512xi32>) attributes {hls.dataflow = [{disable_start_propagation = false}]} {
+    %c0 = arith.constant 0 : i32
+    %c3 = arith.constant 3 : i32
+    %t = memref.alloca() {polygeist.varname = "t"} : memref<512xi32>
+    %buf = memref.alloca() {polygeist.varname = "buf"} : memref<512xi32>
+    %s = affine.for %i = 0 to 512 iter_args(%acc = %c0) -> (i32) {
+      %v = affine.load %in[%i] : memref<512xi32>
+      affine.store %v, %buf[%i] : memref<512xi32>
+      %x = arith.xori %acc, %v : i32
+      affine.yield %x : i32
+    } {hls.pipeline = [{II = 1 : i32}]}
+    affine.for %i = 0 to 512 {
+      %v = affine.load %in2[%i] : memref<512xi32>
+      %w = arith.addi %v, %s : i32
+      affine.store %w, %t[%i] : memref<512xi32>
+    } {hls.pipeline = [{II = 1 : i32}]}
+    affine.for %i = 0 to 256 {
+      %v = affine.load %t[511 - %i] : memref<512xi32>
+      affine.store %v, %buf[2 * %i] : memref<512xi32>
+    } {hls.pipeline = [{II = 1 : i32}]}
+    affine.for %i = 0 to 512 {
+      %v = affine.load %buf[511 - %i] : memref<512xi32>
+      %w = arith.muli %v, %c3 : i32
+      affine.store %w, %out[%i] : memref<512xi32>
     } {hls.pipeline = [{II = 1 : i32}]}
     return
   }

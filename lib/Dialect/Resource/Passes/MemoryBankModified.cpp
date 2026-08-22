@@ -423,8 +423,111 @@ static bool hoistBefore(Value valueHandle, Operation *before, bool dryRun,
   return true;
 }
 
+/// One group of loads whose indices on the partitioned dimension are one
+/// runtime base plus constants distinct modulo the factor: rewritten as one
+/// load per bank, at the offset of the copy that addresses it.
+static void steerGroup(SmallVector<std::pair<memref::LoadOp, int64_t>> members,
+                       ArrayRef<Value> banks, const BankLayout &lowerIndex) {
+  int64_t fieldValue = lowerIndex.dims.front().factor;
+  llvm::sort(members, [](auto &arrayValue, auto &buildPoint) {
+    return arrayValue.first->isBeforeInBlock(buildPoint.first);
+  });
+  Operation *first = members.front().first;
+  bool movable = llvm::all_of(members, [&](auto &memoryOp) {
+    return llvm::all_of(memoryOp.first.getIndices(), [&](Value loopIndex) {
+      return hoistBefore(loopIndex, first, true);
+    });
+  });
+  if (!movable)
+    return;
+  for (auto &memoryOp : members)
+    for (Value loopIndex : memoryOp.first.getIndices())
+      hoistBefore(loopIndex, first, false);
+  OpBuilder buildPoint(first);
+  Location loc = first->getLoc();
+
+  SmallVector<MemrefBanking> mbs;
+  for (auto &memoryOp : members)
+    mbs.push_back(resolveMemref(buildPoint, loc, memoryOp.first.getIndices(),
+                                lowerIndex));
+
+  unsigned pdim = lowerIndex.dims.front().dim;
+  if (lowerIndex.bankType && lowerIndex.bankType.getShape()[pdim] == 1) {
+    Value zero = arith::ConstantIndexOp::create(buildPoint, loc, 0);
+    for (MemrefBanking &mb : mbs)
+      mb.bankedIndices[pdim] = zero;
+  }
+
+  SmallVector<Value> hit0;
+  for (int64_t keyValue = 0; keyValue < fieldValue; ++keyValue)
+    hit0.push_back(arith::CmpIOp::create(
+        buildPoint, loc, arith::CmpIPredicate::eq, mbs.front().rotIdx,
+        arith::ConstantIndexOp::create(buildPoint, loc, keyValue)));
+  SmallVector<SmallVector<Value>> hit(members.size());
+  for (size_t innerIndex = 0; innerIndex < members.size(); ++innerIndex)
+    for (int64_t keyValue = 0; keyValue < fieldValue; ++keyValue) {
+      int64_t k0 =
+          ((keyValue - members[innerIndex].second + members.front().second) %
+               fieldValue +
+           fieldValue) %
+          fieldValue;
+      hit[innerIndex].push_back(hit0[k0]);
+    }
+  SmallVector<Value> bankVals;
+  for (int64_t keyValue = 0; keyValue < fieldValue; ++keyValue) {
+    SmallVector<Value> indexValue(mbs.back().bankedIndices.begin(),
+                                  mbs.back().bankedIndices.end());
+    for (unsigned dimensionIndex = 0; dimensionIndex < indexValue.size();
+         ++dimensionIndex)
+      for (size_t innerIndex = mbs.size() - 1; innerIndex-- > 0;)
+        if (mbs[innerIndex].bankedIndices[dimensionIndex] !=
+            indexValue[dimensionIndex])
+          indexValue[dimensionIndex] = arith::SelectOp::create(
+              buildPoint, loc, hit[innerIndex][keyValue],
+              mbs[innerIndex].bankedIndices[dimensionIndex],
+              indexValue[dimensionIndex]);
+    bankVals.push_back(
+        memref::LoadOp::create(buildPoint, loc, banks[keyValue], indexValue));
+  }
+  SmallVector<Value> results;
+  for (size_t innerIndex = 0; innerIndex < members.size(); ++innerIndex) {
+    Value resultValue = bankVals[fieldValue - 1];
+    for (int64_t keyValue = fieldValue - 1; keyValue-- > 0;)
+      resultValue =
+          arith::SelectOp::create(buildPoint, loc, hit[innerIndex][keyValue],
+                                  bankVals[keyValue], resultValue);
+    results.push_back(resultValue);
+  }
+  for (auto [memoryOp, resultValue] : llvm::zip(members, results)) {
+    memoryOp.first.replaceAllUsesWith(resultValue);
+    memoryOp.first.erase();
+  }
+}
+
+/// Whether the residues of `members` modulo `f` are pairwise distinct.
+template <typename T>
+static bool distinctResidues(ArrayRef<std::pair<T, int64_t>> members,
+                             int64_t fieldValue) {
+  llvm::SmallDenseSet<int64_t> residues;
+  for (auto &memoryOp : members)
+    residues.insert(((memoryOp.second % fieldValue) + fieldValue) % fieldValue);
+  return residues.size() == members.size();
+}
+
+/// `e` as `base + c` with a constant c (0 when there is none).
+static std::pair<AffineExpr, int64_t> splitConstant(AffineExpr entryValue) {
+  if (auto add = dyn_cast<AffineBinaryOpExpr>(entryValue);
+      add && add.getKind() == AffineExprKind::Add) {
+    if (auto candidateValue = dyn_cast<AffineConstantExpr>(add.getRHS()))
+      return {add.getLHS(), candidateValue.getValue()};
+    if (auto candidateValue = dyn_cast<AffineConstantExpr>(add.getLHS()))
+      return {add.getRHS(), candidateValue.getValue()};
+  }
+  return {entryValue, 0};
+}
+
 static void steerLoadGroups(Value site, ArrayRef<Value> banks,
-                            const BankLayout &lowerIndex) {
+                            const BankLayout &lowerIndex, bool affineLoads) {
   if (lowerIndex.dims.size() != 1 ||
       lowerIndex.dims.front().kind == PartitionSpec::Block)
     return;
@@ -432,6 +535,102 @@ static void steerLoadGroups(Value site, ArrayRef<Value> banks,
   int64_t fieldValue = portValue.factor;
   if (static_cast<int64_t>(banks.size()) != fieldValue || fieldValue < 2)
     return;
+
+  if (affineLoads) {
+    struct AffineGroup {
+      Block *block;
+      AffineMap base;
+      SmallVector<Value> operands;
+      SmallVector<std::pair<affine::AffineLoadOp, int64_t>> members;
+    };
+    SmallVector<AffineGroup> agroups;
+    for (Operation *user : site.getUsers()) {
+      auto ld = dyn_cast<affine::AffineLoadOp>(user);
+      if (!ld || ld.getMemRef() != site)
+        continue;
+      {
+
+        SmallVector<Value, 4> operands(ld.getMapOperands());
+        AffineMap accessMap = canonicalAccess(ld.getAffineMap(), operands);
+        if (resolveAffine(accessMap, operands, lowerIndex)
+                .choice.rotating.empty())
+          continue;
+      }
+
+      AffineMap map = ld.getAffineMap().getSubMap({portValue.dim});
+      SmallVector<Value> ops(ld.getMapOperands());
+      affine::fullyComposeAffineMapAndOperands(&map, &ops);
+      affine::canonicalizeMapAndOperands(&map, &ops);
+      AffineExpr entryValue = map.getResult(0);
+      if (isa<AffineConstantExpr>(entryValue))
+        continue;
+      auto [baseExpr, candidateValue] = splitConstant(entryValue);
+      AffineMap base = AffineMap::get(map.getNumDims(), map.getNumSymbols(),
+                                      baseExpr, map.getContext());
+      auto it = llvm::find_if(agroups, [&](const AffineGroup &globalOp) {
+        return globalOp.block == ld->getBlock() && globalOp.base == base &&
+               globalOp.operands == ops;
+      });
+      if (it == agroups.end()) {
+        agroups.push_back({ld->getBlock(), base, ops, {}});
+        it = std::prev(agroups.end());
+      }
+      it->members.push_back({ld, candidateValue});
+    }
+    for (AffineGroup &globalOp : agroups) {
+      if (globalOp.members.size() < 2 ||
+          !distinctResidues<affine::AffineLoadOp>(globalOp.members, fieldValue))
+        continue;
+      SmallVector<std::pair<memref::LoadOp, int64_t>> members;
+
+      SmallVector<std::tuple<AffineMap, SmallVector<Value>, Value>> applied;
+      Operation *firstLoad = globalOp.members.front().first;
+      for (auto &memoryOp : globalOp.members)
+        if (memoryOp.first->isBeforeInBlock(firstLoad))
+          firstLoad = memoryOp.first;
+      for (auto &[ld, candidateValue] : globalOp.members) {
+        OpBuilder buildPoint(ld);
+        SmallVector<Value> indexValue;
+        AffineMap map = ld.getAffineMap();
+        for (unsigned resultValue = 0; resultValue < map.getNumResults();
+             ++resultValue) {
+          AffineMap sub = map.getSubMap({resultValue});
+          SmallVector<Value> ops(ld.getMapOperands());
+          affine::fullyComposeAffineMapAndOperands(&sub, &ops);
+          affine::canonicalizeMapAndOperands(&sub, &ops);
+          auto it = llvm::find_if(applied, [&](auto &arrayValue) {
+            return std::get<0>(arrayValue) == sub &&
+                   std::get<1>(arrayValue) == ops;
+          });
+          if (it != applied.end()) {
+            indexValue.push_back(std::get<2>(*it));
+            continue;
+          }
+
+          bool early = llvm::all_of(ops, [&](Value valueHandle) {
+            Operation *dimensionIndex = valueHandle.getDefiningOp();
+            return !dimensionIndex ||
+                   dimensionIndex->getBlock() != firstLoad->getBlock() ||
+                   dimensionIndex->isBeforeInBlock(firstLoad);
+          });
+          OpBuilder ab(early ? firstLoad : ld.getOperation());
+          Value valueHandle =
+              affine::AffineApplyOp::create(ab, ld.getLoc(), sub, ops);
+          applied.push_back({sub, ops, valueHandle});
+          indexValue.push_back(valueHandle);
+        }
+        auto ml =
+            memref::LoadOp::create(buildPoint, ld.getLoc(), site, indexValue);
+        for (NamedAttribute arrayValue : ld->getDiscardableAttrs())
+          if (arrayValue.getName() != "map")
+            ml->setDiscardableAttr(arrayValue.getName(), arrayValue.getValue());
+        ld.getResult().replaceAllUsesWith(ml.getResult());
+        ld.erase();
+        members.push_back({ml, candidateValue});
+      }
+      steerGroup(std::move(members), banks, lowerIndex);
+    }
+  }
 
   llvm::MapVector<std::pair<Block *, Value>,
                   SmallVector<std::pair<memref::LoadOp, int64_t>>>
@@ -448,69 +647,9 @@ static void steerLoadGroups(Value site, ArrayRef<Value> banks,
   for (auto &[key, members] : groups) {
     if (members.size() < 2)
       continue;
-    llvm::SmallDenseSet<int64_t> residues;
-    for (auto &memoryOp : members)
-      residues.insert(((memoryOp.second % fieldValue) + fieldValue) %
-                      fieldValue);
-    if (residues.size() != members.size())
+    if (!distinctResidues<memref::LoadOp>(members, fieldValue))
       continue;
-    llvm::sort(members, [](auto &arrayValue, auto &buildPoint) {
-      return arrayValue.first->isBeforeInBlock(buildPoint.first);
-    });
-    Operation *first = members.front().first;
-    bool movable = llvm::all_of(members, [&](auto &memoryOp) {
-      return llvm::all_of(memoryOp.first.getIndices(), [&](Value loopIndex) {
-        return hoistBefore(loopIndex, first, true);
-      });
-    });
-    if (!movable)
-      continue;
-    for (auto &memoryOp : members)
-      for (Value loopIndex : memoryOp.first.getIndices())
-        hoistBefore(loopIndex, first, false);
-    OpBuilder buildPoint(first);
-    Location loc = first->getLoc();
-
-    SmallVector<MemrefBanking> mbs;
-    for (auto &memoryOp : members)
-      mbs.push_back(resolveMemref(buildPoint, loc, memoryOp.first.getIndices(),
-                                  lowerIndex));
-
-    SmallVector<SmallVector<Value>> hit(members.size());
-    for (auto [innerIndex, mb] : llvm::enumerate(mbs))
-      for (int64_t keyValue = 0; keyValue < fieldValue; ++keyValue)
-        hit[innerIndex].push_back(arith::CmpIOp::create(
-            buildPoint, loc, arith::CmpIPredicate::eq, mb.rotIdx,
-            arith::ConstantIndexOp::create(buildPoint, loc, keyValue)));
-    SmallVector<Value> bankVals;
-    for (int64_t keyValue = 0; keyValue < fieldValue; ++keyValue) {
-      SmallVector<Value> indexValue(mbs.back().bankedIndices.begin(),
-                                    mbs.back().bankedIndices.end());
-      for (unsigned dimensionIndex = 0; dimensionIndex < indexValue.size();
-           ++dimensionIndex)
-        for (size_t innerIndex = mbs.size() - 1; innerIndex-- > 0;)
-          if (mbs[innerIndex].bankedIndices[dimensionIndex] !=
-              indexValue[dimensionIndex])
-            indexValue[dimensionIndex] = arith::SelectOp::create(
-                buildPoint, loc, hit[innerIndex][keyValue],
-                mbs[innerIndex].bankedIndices[dimensionIndex],
-                indexValue[dimensionIndex]);
-      bankVals.push_back(
-          memref::LoadOp::create(buildPoint, loc, banks[keyValue], indexValue));
-    }
-    SmallVector<Value> results;
-    for (size_t innerIndex = 0; innerIndex < members.size(); ++innerIndex) {
-      Value resultValue = bankVals[fieldValue - 1];
-      for (int64_t keyValue = fieldValue - 1; keyValue-- > 0;)
-        resultValue =
-            arith::SelectOp::create(buildPoint, loc, hit[innerIndex][keyValue],
-                                    bankVals[keyValue], resultValue);
-      results.push_back(resultValue);
-    }
-    for (auto [memoryOp, resultValue] : llvm::zip(members, results)) {
-      memoryOp.first.replaceAllUsesWith(resultValue);
-      memoryOp.first.erase();
-    }
+    steerGroup(members, banks, lowerIndex);
   }
 }
 
@@ -542,7 +681,8 @@ static void rewriteMemrefStore(memref::StoreOp storeOp, ArrayRef<Value> banks,
 
 class BankingPlan {
 public:
-  explicit BankingPlan(ModuleOp module) : module(module), symbols(module) {}
+  BankingPlan(ModuleOp module, bool steerAffineLoads)
+      : module(module), symbols(module), steerAffineLoads(steerAffineLoads) {}
 
   void run() {
     partitions.emplace(module, true);
@@ -553,6 +693,7 @@ public:
 private:
   ModuleOp module;
   SymbolTable symbols;
+  bool steerAffineLoads = true;
 
   std::optional<PartitionRoots> partitions;
 
@@ -882,7 +1023,7 @@ void BankingPlan::createGlobalBanks(memref::GlobalOp globalOp,
 
 void BankingPlan::rewriteAccesses(Value site, const BankLayout &lowerIndex) {
   SmallVector<Value> banks = banksOf[site];
-  steerLoadGroups(site, banks, lowerIndex);
+  steerLoadGroups(site, banks, lowerIndex, steerAffineLoads);
   SmallVector<Operation *> users(site.getUsers().begin(),
                                  site.getUsers().end());
   for (Operation *user : users) {
@@ -1100,8 +1241,18 @@ struct MemoryBankingPass
                      "Vitis keeps a 2-port RAM the replicated read slots."),
       llvm::cl::init(true)};
 
+  Option<bool> steerAffineLoads{
+      *this, "steer-affine-loads",
+      llvm::cl::desc("Unrolled affine.load copies of a cyclic / complete "
+                     "partitioned array whose partitioned index is one "
+                     "runtime expression plus constants distinct modulo the "
+                     "factor read each bank once per iteration (as the "
+                     "memref.load copies already did), instead of every "
+                     "candidate bank per copy."),
+      llvm::cl::init(true)};
+
   void runOnOperation() override {
-    BankingPlan(getOperation()).run();
+    BankingPlan(getOperation(), steerAffineLoads).run();
 
     if (annotateCalleeStores)
       hls_analysis::annotateCalleeStoresPerLoop(getOperation());
