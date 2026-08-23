@@ -1,6 +1,7 @@
 
 
 #include "circt/Dialect/Resource/Passes/MemrefBankClassification.h"
+#include "circt/Dialect/Resource/Config/ConfigUtils.h"
 #include "circt/Dialect/Resource/HLS/HLSOps.h"
 #include "circt/Dialect/Resource/Passes/CallInstances.h"
 #include "circt/Dialect/Resource/Passes/LoopPragmas.h"
@@ -43,19 +44,36 @@ StringRef stringifyStorageMode(StorageMode mode) {
   return "?";
 }
 
+/// Ports of one block RAM in the configuration a non-replicable bank is
+/// priced at (the device's `tdp`: 2).
+static unsigned blockRamPorts() {
+  const circt::hlsest::Config &cfg = circt::hlsest::Config::get();
+  const circt::hlsest::MemoryArchitectureConfig &ma =
+      cfg.tool.hls.memoryArchitecture;
+  if (const circt::hlsest::DeviceMemory *memoryOp =
+          cfg.device.memory(cfg.tool.backend.memoryMapper.primitive))
+    if (const circt::hlsest::PortConfig *pc =
+            memoryOp->portConfig(ma.pricedNarrow))
+      return static_cast<unsigned>(pc->ports.size());
+  return kDualPortSlots;
+}
+
 unsigned storageModeSlots(StorageMode mode) {
   switch (mode) {
   case StorageMode::OnePort:
     return 1;
   case StorageMode::SDP:
   case StorageMode::TDP:
-    return kDualPortSlots;
+    return blockRamPorts();
   case StorageMode::OneWriteNRead:
-    return kReplicatedPortSlots;
+
+    return static_cast<unsigned>(
+        circt::hlsest::Config::get()
+            .tool.hls.memoryArchitecture.replicatedSlots());
   case StorageMode::Registers:
     return std::numeric_limits<unsigned>::max();
   }
-  return kDualPortSlots;
+  return blockRamPorts();
 }
 
 StringRef stringifyStorageKind(StorageKind mode) {
@@ -80,7 +98,10 @@ StorageKind classifyStorageKind(unsigned reads, unsigned writes) {
 }
 
 StorageMode classifyMode(unsigned maxStoresPerLoop) {
-  if (maxStoresPerLoop >= 2)
+
+  if (static_cast<int64_t>(maxStoresPerLoop) >
+      circt::hlsest::Config::get()
+          .tool.hls.memoryArchitecture.replication.maxStoresPerIteration)
     return StorageMode::TDP;
   return StorageMode::OneWriteNRead;
 }
@@ -219,9 +240,18 @@ static unsigned maxConcurrent(ArrayRef<const ArmPath *> paths, unsigned depth) {
   return total;
 }
 
+/// --hls-exclusive-arm-stores when given, else
+/// tool.hls.memory_architecture.replication.exclusive_arm_stores_once.
+static bool exclusiveArmStores() {
+  return circt::hlsest::resolveGlobalOption(
+      clExclusiveArmStores,
+      circt::hlsest::Config::get()
+          .tool.hls.memoryArchitecture.replication.exclusiveArmStoresOnce);
+}
+
 unsigned maxStoresInOneIteration(ArrayRef<Operation *> stores,
                                  Operation *scope) {
-  if (!clExclusiveArmStores)
+  if (!exclusiveArmStores())
     return stores.size();
   SmallVector<ArmPath> paths;
   paths.reserve(stores.size());
@@ -239,7 +269,7 @@ static unsigned localStoresPerLoop(Value mem) {
   llvm::MapVector<Operation *, SmallVector<Operation *>> perLoop;
   for (Operation *user : mem.getUsers()) {
     if (storedMemRef(user) != mem ||
-        (!clExclusiveArmStores && pairedWithThenArmStore(user)))
+        (!exclusiveArmStores() && pairedWithThenArmStore(user)))
       continue;
     Operation *loop = user->getParentOfType<LoopLikeOpInterface>();
     if (!loop)
@@ -355,7 +385,10 @@ void BRAMClassification::enumerateBanks(Operation *root) {
           continue;
         BankProfile prof;
         prof.memref = arg;
-        prof.width = elt.isIntOrFloat() ? elt.getIntOrFloatBitWidth() : 64u;
+        prof.width = elt.isIntOrFloat()
+                         ? elt.getIntOrFloatBitWidth()
+                         : static_cast<unsigned>(
+                               circt::hlsest::Config::get().frontend.indexBits);
         prof.depth = static_cast<unsigned>(memTy.getNumElements());
         banks.try_emplace(arg, prof);
       }
@@ -372,7 +405,10 @@ void BRAMClassification::enumerateBanks(Operation *root) {
 
     BankProfile prof;
     prof.memref = bank;
-    prof.width = elt.isIntOrFloat() ? elt.getIntOrFloatBitWidth() : 64u;
+    prof.width = elt.isIntOrFloat()
+                     ? elt.getIntOrFloatBitWidth()
+                     : static_cast<unsigned>(
+                           circt::hlsest::Config::get().frontend.indexBits);
     prof.depth = static_cast<unsigned>(memTy.getNumElements());
     prof.registers = localAlloca->hasAttr(kRegistersAttrName);
     if (prof.registers)

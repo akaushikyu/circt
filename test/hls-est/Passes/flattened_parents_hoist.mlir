@@ -1,5 +1,5 @@
 // RUN: hls-est %s --memory-banking-bram --convert-affine-to-loopschedule -o - | FileCheck %s --check-prefix=SCHED
-// RUN: hls-est %s --infer-vitis-split-array -o - | FileCheck %s --check-prefix=SPLIT
+// RUN: hls-est %s --infer-vitis-split-array=td=auto -o - | FileCheck %s --check-prefix=SPLIT
 //
 // `hls.flattened_parents = N` (written by --auto-pipeline-unroll) says Vitis
 // flattens the N enclosing loops into the tagged loop's pipeline

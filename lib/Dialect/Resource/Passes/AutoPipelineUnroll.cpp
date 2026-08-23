@@ -3,8 +3,12 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 #include "circt/Dialect/Resource/Passes/AutoPipelineUnroll.h"
+#include "../Plugins/Builtin/Builtins.h"
+#include "circt/Dialect/Resource/Config/ConfigUtils.h"
 #include "circt/Dialect/Resource/Passes/CallInstances.h"
 #include "circt/Dialect/Resource/Passes/LoopPragmas.h"
+#include "circt/Dialect/Resource/Plugins/PassPolicies.h"
+#include "circt/Dialect/Resource/Plugins/Registry.h"
 #include "mlir/Dialect/Affine/Analysis/LoopAnalysis.h"
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
 #include "mlir/Dialect/Affine/LoopUtils.h"
@@ -752,52 +756,8 @@ static std::string locString(Location loc) {
 
 namespace call_depth {
 
-constexpr double kLoadDataNs = 3.25;
-constexpr double kLogicNs = 0.99;
-constexpr double kSelectNs = 0.69;
-constexpr double kVariableShiftNs = 4.42;
-constexpr double kConstantMultiplierNs = 5.58;
-constexpr unsigned kNarrowMultiplyCycles = 2;
-constexpr unsigned kMultiCycleOpCycles = 3;
-constexpr unsigned kPortsPerMemory = 2;
-
-/// Carry-chain delay (adder, subtractor, comparator) of a `bits`-wide op.
-inline double carryChainNs(unsigned bits) {
-  if (bits <= 10)
-    return 1.91;
-  if (bits <= 16)
-    return 2.07;
-  if (bits <= 32)
-    return 2.55;
-  return 3.52;
-}
-
-/// Delay of a three-input adder (`TernaryAdder`) of a `bits`-wide result:
-/// Vitis groups an add / sub whose only use is another add / sub into one
-/// three-input operator that starts when its three inputs are ready (W3
-/// review 2 D3, w3r2_k8 `a[i] + a[1023 - i] + a[(i * 7) & 1023]`: the third
-/// load arrives 3.25 ns into cycle 2, 3.25 + 4.37 > 7.3 ns, the root add in
-/// cycle 3, latency 3, II 16 = 4 calls x depth 4). Values: the mode per width
-/// of the `root node of TernaryAdder` delays in the verbose schedule reports
-/// of the ground-truth cache and the experiments (i4 3.31 ... i10 3.72, i16
-/// 3.90, i32 4.37, i34 4.42 ns), taken at the top of each band.
-inline double ternaryAdderNs(unsigned bits) {
-  if (bits <= 10)
-    return 3.72;
-  if (bits <= 16)
-    return 3.90;
-  if (bits <= 32)
-    return 4.37;
-  return 4.42;
-}
-
-/// Data width of a value for the delay table: an index is an address, which
-/// Vitis narrows (w3rev_k2: `i10`); treat it as 32 bits.
-inline unsigned bitsOf(Type typeValue) {
-  if (typeValue.isIntOrFloat())
-    return typeValue.getIntOrFloatBitWidth();
-  return 32;
-}
+using circt::hlsest::CallDepthConfig;
+using circt::hlsest::SchedulingConfig;
 
 /// When a value is ready: the cycle and the nanoseconds used in it.
 struct Ready {
@@ -810,7 +770,8 @@ struct Ready {
 
 class Model {
 public:
-  explicit Model(double budgetNs) : budgetNs(budgetNs) {}
+  Model(double budgetNs, const SchedulingConfig &sched)
+      : budgetNs(budgetNs), delays(sched.callDepth), sched(sched) {}
 
   /// Depth (latency + 1) of one call of `fn`, or nullopt when `fn` (or a
   /// function it calls) still has loops, calls itself or calls a function
@@ -830,6 +791,8 @@ public:
 
 private:
   double budgetNs;
+  const CallDepthConfig &delays;
+  const SchedulingConfig &sched;
   DenseMap<Operation *, std::optional<unsigned>> memo;
   SmallPtrSet<Operation *, 4> onStack;
 
@@ -850,6 +813,14 @@ private:
     return std::nullopt;
   }
 
+  /// Data width of a value for the delay table: an index is an address, which
+  /// Vitis narrows (w3rev_k2: `i10`); it is timed at `index_bits` (32).
+  unsigned bitsOf(Type typeValue) const {
+    if (typeValue.isIntOrFloat())
+      return typeValue.getIntOrFloatBitWidth();
+    return static_cast<unsigned>(delays.indexBits);
+  }
+
   /// Ready time of a multiply: a constant factor is shifts and adds, two
   /// variables a pipelined multiplier.
   Ready multiply(arith::MulIOp mul, Ready start) const {
@@ -865,37 +836,42 @@ private:
       if (setBits <= 1)
         return start;
       if (setBits == 2)
-        return chain(start, carryChainNs(bits));
-      return chain(start, kConstantMultiplierNs);
+        return chain(start, delays.carryChain(bits));
+      return chain(start, delays.constantMultiplierNs);
     }
-    unsigned cycles = bits <= 32 ? kNarrowMultiplyCycles : kMultiCycleOpCycles;
+    unsigned cycles = static_cast<int64_t>(bits) <= delays.narrowMultiplyMaxBits
+                          ? static_cast<unsigned>(delays.narrowMultiplyCycles)
+                          : static_cast<unsigned>(sched.latency("multicycle"));
     return {start.cycle + cycles, 0.0};
   }
 
   /// Latency in whole cycles of a floating-point or math op (the operator
   /// table of --convert-affine-to-loopschedule), 0 for a combinational one.
-  static unsigned floatCycles(Operation *op) {
+  unsigned floatCycles(Operation *op) const {
+    auto lat = [&](llvm::StringRef cls) {
+      return static_cast<unsigned>(sched.latency(cls));
+    };
     if (isa<arith::MulFOp>(op))
-      return 4;
+      return lat("fpmul");
     if (isa<arith::AddFOp, arith::SubFOp, arith::MaximumFOp, arith::MinimumFOp,
             arith::MaxNumFOp, arith::MinNumFOp, math::FmaOp, math::FloorOp,
             math::CeilOp, math::RoundOp, math::RoundEvenOp, math::TruncOp>(op))
-      return 5;
+      return lat("fpaddsub");
     if (isa<arith::DivFOp, arith::RemFOp>(op))
-      return 12;
+      return lat("fpdiv");
     if (isa<math::SqrtOp, math::RsqrtOp>(op))
-      return 16;
+      return lat("fpsqrt");
     if (isa<math::AbsFOp, math::AbsIOp, math::CopySignOp>(op))
       return 0;
     if (isa_and_nonnull<math::MathDialect>(op->getDialect()))
-      return 20;
+      return lat("fptrans");
     return 0;
   }
 
   /// For an integer add / sub `op`, the add / sub of the same type that is
   /// only used by `op` and is not itself the root of a three-input adder:
-  /// the two form one TernaryAdder (ternaryAdderNs). Null otherwise; index
-  /// arithmetic (addresses) is never grouped.
+  /// the two form one TernaryAdder (scheduling.call_depth.ternary_adder_ns).
+  /// Null otherwise; index arithmetic (addresses) is never grouped.
   static Operation *ternaryInner(Operation *op,
                                  const SmallPtrSetImpl<Operation *> &roots) {
     if (!isa<arith::AddIOp, arith::SubIOp>(op) ||
@@ -945,7 +921,8 @@ private:
       const void *valueKey =
           root.value ? root.value.getAsOpaquePointer() : nullptr;
       const void *globalKey = root.global;
-      while (ports[{valueKey, globalKey, cycle}] >= kPortsPerMemory)
+      while (ports[{valueKey, globalKey, cycle}] >=
+             static_cast<unsigned>(delays.portsPerMemory))
         ++cycle;
       ++ports[{valueKey, globalKey, cycle}];
       return cycle;
@@ -980,7 +957,7 @@ private:
       }
       if (isLoad) {
         unsigned candidateValue = issue(mem, latestCycle(indices));
-        done = {candidateValue + 1, kLoadDataNs};
+        done = {candidateValue + 1, delays.loadDataNs};
       } else if (isStore) {
         unsigned candidateValue =
             issue(mem, std::max(latestCycle(indices),
@@ -1003,7 +980,9 @@ private:
       } else if (isa<arith::DivSIOp, arith::DivUIOp, arith::RemSIOp,
                      arith::RemUIOp, arith::CeilDivSIOp, arith::CeilDivUIOp,
                      arith::FloorDivSIOp>(op)) {
-        done = {start.cycle + kMultiCycleOpCycles, 0.0};
+        done = {start.cycle +
+                    static_cast<unsigned>(sched.latency("multicycle")),
+                0.0};
       } else if (Operation *inner = ternaryInner(op, ternaryRoots)) {
 
         SmallVector<Value, 3> leaves(inner->getOperands());
@@ -1011,17 +990,18 @@ private:
           if (valueHandle.getDefiningOp() != inner)
             leaves.push_back(valueHandle);
         done = chain(latest(leaves),
-                     ternaryAdderNs(bitsOf(op->getResult(0).getType())));
+                     delays.ternaryAdder(bitsOf(op->getResult(0).getType())));
         ternaryRoots.insert(op);
       } else if (isa<arith::AddIOp, arith::SubIOp, arith::CmpIOp>(op)) {
-        done = chain(start, carryChainNs(bitsOf(op->getOperand(0).getType())));
+        done = chain(start,
+                     delays.carryChain(bitsOf(op->getOperand(0).getType())));
       } else if (isa<arith::AndIOp, arith::OrIOp, arith::XOrIOp>(op)) {
-        done = chain(start, kLogicNs);
+        done = chain(start, delays.logicNs);
       } else if (isa<arith::SelectOp>(op)) {
-        done = chain(start, kSelectNs);
+        done = chain(start, delays.selectNs);
       } else if (isa<arith::ShLIOp, arith::ShRSIOp, arith::ShRUIOp>(op)) {
         if (!constantInt(op->getOperand(1)))
-          done = chain(start, kVariableShiftNs);
+          done = chain(start, delays.variableShiftNs);
       } else if (unsigned candidateValue = floatCycles(op)) {
         done = {start.cycle + candidateValue, 0.0};
       } else if (isa<func::ReturnOp>(op)) {
@@ -1109,9 +1089,30 @@ struct AutoPipelineUnrollPass
     targetRegistry.insert<arith::ArithDialect, memref::MemRefDialect>();
   }
 
+  unsigned pipelineLoopsValue = 64;
+  bool promotePipelinedValue = true;
+  bool floatLoadsPerfectValue = true;
+
+  /// The cycle budget of the call-depth model: the clock period less the
+  /// clock uncertainty.
+  double callDepthBudgetNs(const circt::hlsest::Config &cfg) const {
+    double period =
+        circt::hlsest::resolveOption(clockPeriodNs, cfg.run.clockNs);
+    if (clockUncertaintyPct.hasValue())
+      return period * (1.0 - clockUncertaintyPct / 100.0);
+    const circt::hlsest::TimingMargin &memoryOp = cfg.tool.hls.timingMargin;
+    if (memoryOp.fraction)
+      return period * (1.0 - *memoryOp.fraction);
+    if (memoryOp.ns)
+      return period - *memoryOp.ns;
+    return period;
+  }
+
+  std::function<void(Location, const Twine &)> remarkFn;
+
   void remark(Location loc, const Twine &msg) {
-    if (emitRemarks)
-      mlir::emitRemark(loc) << msg;
+    if (remarkFn)
+      remarkFn(loc, msg);
     LLVM_DEBUG(llvm::dbgs() << msg << " @ " << loc << "\n");
   }
 
@@ -1289,7 +1290,7 @@ struct AutoPipelineUnrollPass
   void decide(Node &n, SymbolTableCollection &symbolTable) {
     if (n.chain.empty())
       return;
-    unsigned T = pipelineLoops;
+    unsigned T = pipelineLoopsValue;
     if (n.userPipelineIdx >= 0) {
       AffineForOp useValue = n.chain[n.userPipelineIdx];
       n.tagged = useValue;
@@ -1299,7 +1300,8 @@ struct AutoPipelineUnrollPass
                                     " perfect parent(s) flattened into it");
       unrollInside(useValue, symbolTable);
 
-      n.tagged = promotePipelined ? promoteOutOfPipeline(useValue) : useValue;
+      n.tagged =
+          promotePipelinedValue ? promoteOutOfPipeline(useValue) : useValue;
       n.chain[n.userPipelineIdx] = n.tagged;
       return;
     }
@@ -1319,7 +1321,8 @@ struct AutoPipelineUnrollPass
                  Twine(n.chain.size() - 1) + " perfect parent(s) flattened, " +
                  Twine(n.children.size()) + " inner loop(s) to unroll)");
       unrollInside(portValue, symbolTable);
-      n.tagged = promotePipelined ? promoteOutOfPipeline(portValue) : portValue;
+      n.tagged =
+          promotePipelinedValue ? promoteOutOfPipeline(portValue) : portValue;
       n.chain.back() = n.tagged;
       return;
     }
@@ -1505,7 +1508,56 @@ struct AutoPipelineUnrollPass
 
   void runOnOperation() override {
     ModuleOp module = getOperation();
+    const circt::hlsest::Config &cfg = circt::hlsest::Config::get();
+    const circt::hlsest::PipelineDecisionConfig &pd =
+        cfg.tool.hls.pipelineDecision;
+    if (pd.flattenAcrossCalls) {
+
+      module.emitError("--auto-pipeline-unroll: "
+                       "tool.hls.pipeline_decision.flatten_across_calls = true "
+                       "is not implemented");
+      return signalPassFailure();
+    }
+
+    circt::hlsest::PipelineDecisionOptions options;
+    options.pipelineLoops = circt::hlsest::resolveOption<unsigned>(
+        pipelineLoops,
+        static_cast<unsigned>(cfg.tool.hls.options.pipelineLoops));
+    options.promotePipelined =
+        circt::hlsest::resolveOption(promotePipelined, pd.promotePipelined);
+    options.floatLoadsPerfect =
+        circt::hlsest::resolveOption(floatLoadsPerfect, pd.floatLoadsPerfect);
+    options.callDepthBudgetNs = callDepthBudgetNs(cfg);
+    if (emitRemarks)
+      options.remark = [](Location loc, const Twine &msg) {
+        mlir::emitRemark(loc) << msg;
+      };
+
+    circt::hlsest::ConfigDiagnostics diag;
+    std::unique_ptr<circt::hlsest::PipelinePolicy> policy =
+        circt::hlsest::PluginRegistry<circt::hlsest::PipelinePolicy>::instance()
+            .create(pd.policy, cfg, diag);
+    if (!policy) {
+      InFlightDiagnostic dimensionIndex =
+          module.emitError("--auto-pipeline-unroll: ");
+      llvm::interleave(diag.errors, dimensionIndex, "; ");
+      return signalPassFailure();
+    }
+    if (failed(policy->decide(module, options)))
+      return signalPassFailure();
+  }
+
+  /// The Vitis decision procedure (the builtin PipelinePolicy
+  /// vitis-pipeline-loops): user unrolls, then per function the pipelined
+  /// loops, the unrolled and the flattened ones, then the call boundaries
+  /// and the port-bound arguments.
+  LogicalResult runDecision(ModuleOp module,
+                            const circt::hlsest::PipelineDecisionOptions &o) {
     SymbolTableCollection symbolTable;
+    pipelineLoopsValue = o.pipelineLoops;
+    promotePipelinedValue = o.promotePipelined;
+    floatLoadsPerfectValue = o.floatLoadsPerfect;
+    remarkFn = o.remark;
 
     module.walk([&](AffineForOp loop) {
       if (isAutoPipelineTag(loop->getAttr(kLoopPipelineAttr)))
@@ -1526,7 +1578,7 @@ struct AutoPipelineUnrollPass
         applyUserUnrolls(func);
 
     for (func::FuncOp func : callersFirst(module, symbolTable)) {
-      LicmModel licm(floatLoadsPerfect);
+      LicmModel licm(floatLoadsPerfectValue);
       Forest forest(licm);
 
       SmallVector<AffineForOp, 8> roots;
@@ -1542,10 +1594,11 @@ struct AutoPipelineUnrollPass
       for (auto &node : nodes)
         decide(*node, symbolTable);
     }
-    call_depth::Model depthModel(clockPeriodNs *
-                                 (1.0 - clockUncertaintyPct / 100.0));
+    call_depth::Model depthModel(o.callDepthBudgetNs,
+                                 circt::hlsest::Config::get().scheduling);
     markCallBoundaries(module, symbolTable, depthModel);
     markPortBoundArgs(module);
+    return success();
   }
 
   /// `hls.port_bound_args` on every function whose memref arguments name an
@@ -1573,7 +1626,29 @@ struct AutoPipelineUnrollPass
   }
 };
 
+/// vitis-pipeline-loops: Vitis' config_compile -pipeline_loops decision
+/// (VITIS_NOTES N3), the code of this pass.
+class VitisPipelineLoops : public circt::hlsest::PipelinePolicy {
+public:
+  StringRef name() const override { return "vitis-pipeline-loops"; }
+  LogicalResult
+  decide(ModuleOp module,
+         const circt::hlsest::PipelineDecisionOptions &options) const override {
+    AutoPipelineUnrollPass impl;
+    return impl.runDecision(module, options);
+  }
+};
+
 } // namespace
+
+void circt::hlsest::builtin::registerPipelinePolicies() {
+  circt::hlsest::PluginRegistry<circt::hlsest::PipelinePolicy>::instance().add(
+      "vitis-pipeline-loops",
+      "Vitis config_compile -pipeline_loops: pipeline a loop whose nested "
+      "trip-count products are all <= pipeline_loops, unroll inside, flatten "
+      "perfect parents (VITIS_NOTES N3)",
+      [] { return std::make_unique<VitisPipelineLoops>(); }, "builtin");
+}
 
 namespace circt::hls_analysis {
 

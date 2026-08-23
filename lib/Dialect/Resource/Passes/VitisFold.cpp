@@ -1,6 +1,10 @@
 
 
+#include "../Plugins/Builtin/Builtins.h"
+#include "circt/Dialect/Resource/Config/ConfigUtils.h"
 #include "circt/Dialect/Resource/Passes/VitisCleanup.h"
+#include "circt/Dialect/Resource/Plugins/PassPolicies.h"
+#include "circt/Dialect/Resource/Plugins/Registry.h"
 
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
@@ -47,13 +51,7 @@ struct FoldIntDivByZero : OpRewritePattern<OpTy> {
   bool undefRules;
 };
 
-struct FoldNote {
-  std::string rule;
-  Location loc;
-  Location source;
-  std::string detail;
-  std::string func;
-};
+using circt::hlsest::FoldNote;
 
 /// divsi / divui / remsi of an integer by a constant 0.
 static bool isUndefSource(Operation *op) {
@@ -522,18 +520,34 @@ struct VitisFoldPass : PassWrapper<VitisFoldPass, OperationPass<>> {
 
   void runOnOperation() override {
     MLIRContext *context = &getContext();
+
+    const circt::hlsest::Config &cfg = circt::hlsest::Config::get();
+    const circt::hlsest::FoldingConfig &fc = cfg.tool.hls.folding;
+    std::string ruleSetName = fc.ruleSet;
+    if (undefRules.hasValue())
+      ruleSetName = undefRules ? "vitis-undef" : "zero";
+    circt::hlsest::ConfigDiagnostics diag;
+    std::unique_ptr<circt::hlsest::FoldRuleSet> rules =
+        circt::hlsest::PluginRegistry<circt::hlsest::FoldRuleSet>::instance()
+            .create(ruleSetName, cfg, diag);
+    if (!rules) {
+      InFlightDiagnostic dimensionIndex =
+          getOperation()->emitError("--vitis-fold: ");
+      llvm::interleave(diag.errors, dimensionIndex, "; ");
+      return signalPassFailure();
+    }
+    const bool canon =
+        circt::hlsest::resolveOption(canonicalize, fc.canonicalize);
+    const unsigned maxRounds = static_cast<unsigned>(fc.maxRounds);
     RewritePatternSet patterns(context);
-    patterns
-        .add<FoldIntDivByZero<arith::DivSIOp>, FoldIntDivByZero<arith::DivUIOp>,
-             FoldIntDivByZero<arith::RemSIOp>,
-             FoldIntDivByZero<arith::RemUIOp>>(context, undefRules);
-    if (canonicalize) {
+    rules->populate(patterns, context);
+    if (canon) {
       for (Dialect *targetDialect : context->getLoadedDialects())
         targetDialect->getCanonicalizationPatterns(patterns);
       for (RegisteredOperationName op : context->getRegisteredOperations())
         op.getCanonicalizationPatterns(patterns, context);
 
-      if (undefRules)
+      if (rules->keepSelectCompare())
         llvm::erase_if(patterns.getNativePatterns(),
                        [](const std::unique_ptr<RewritePattern> &portValue) {
                          return isSelectToMinMax(*portValue);
@@ -542,15 +556,16 @@ struct VitisFoldPass : PassWrapper<VitisFoldPass, OperationPass<>> {
     FrozenRewritePatternSet frozen(std::move(patterns));
 
     GreedyRewriteConfig config;
-    config.enableFolding(canonicalize);
+    config.enableFolding(canon);
     SmallVector<FoldNote> notes;
-    UndefFolder folder(getOperation());
+    std::unique_ptr<circt::hlsest::RuleFolder> folder =
+        rules->createFolder(getOperation());
 
-    if (undefRules)
-      (void)folder.run(notes);
-    for (unsigned round = 0; round < 16; ++round) {
+    if (folder)
+      (void)folder->run(notes);
+    for (unsigned round = 0; round < maxRounds; ++round) {
       (void)applyPatternsGreedily(getOperation(), frozen, config);
-      if (!undefRules || !folder.run(notes))
+      if (!folder || !folder->run(notes))
         break;
     }
     recordNotes(notes);
@@ -630,7 +645,62 @@ struct VitisFoldPass : PassWrapper<VitisFoldPass, OperationPass<>> {
   }
 };
 
+/// vitis-undef: Vitis' undefined value for an integer division / remainder
+/// by a constant 0 and its propagation (VITIS_NOTES N13).
+class VitisUndefRules : public circt::hlsest::FoldRuleSet {
+public:
+  StringRef name() const override { return "vitis-undef"; }
+  void populate(RewritePatternSet &patterns,
+                MLIRContext *context) const override {
+    patterns
+        .add<FoldIntDivByZero<arith::DivSIOp>, FoldIntDivByZero<arith::DivUIOp>,
+             FoldIntDivByZero<arith::RemSIOp>,
+             FoldIntDivByZero<arith::RemUIOp>>(context, true);
+  }
+  bool keepSelectCompare() const override { return true; }
+  std::unique_ptr<circt::hlsest::RuleFolder>
+  createFolder(Operation *root) const override {
+    return std::make_unique<UndefRuleFolder>(root);
+  }
+
+private:
+  struct UndefRuleFolder : circt::hlsest::RuleFolder {
+    explicit UndefRuleFolder(Operation *root) : folder(root) {}
+    bool run(SmallVectorImpl<FoldNote> &notes) override {
+      return folder.run(notes);
+    }
+    UndefFolder folder;
+  };
+};
+
+/// zero: an integer x / 0 and x % 0 fold to 0 (exact for ap_fixed and for
+/// an unsigned remainder; the T4 rule).
+class ZeroRules : public circt::hlsest::FoldRuleSet {
+public:
+  StringRef name() const override { return "zero"; }
+  void populate(RewritePatternSet &patterns,
+                MLIRContext *context) const override {
+    patterns
+        .add<FoldIntDivByZero<arith::DivSIOp>, FoldIntDivByZero<arith::DivUIOp>,
+             FoldIntDivByZero<arith::RemSIOp>,
+             FoldIntDivByZero<arith::RemUIOp>>(context, false);
+  }
+};
+
 } // namespace
+
+void circt::hlsest::builtin::registerFoldRuleSets() {
+  auto &resultValue =
+      circt::hlsest::PluginRegistry<circt::hlsest::FoldRuleSet>::instance();
+  resultValue.add(
+      "vitis-undef",
+      "Vitis' undefined value of an integer x / 0 and its propagation "
+      "(VITIS_NOTES N13)",
+      [] { return std::make_unique<VitisUndefRules>(); }, "builtin");
+  resultValue.add(
+      "zero", "integer x / 0 and x % 0 fold to 0",
+      [] { return std::make_unique<ZeroRules>(); }, "builtin");
+}
 
 namespace circt::hls_analysis {
 std::unique_ptr<Pass> createVitisFoldPass() {

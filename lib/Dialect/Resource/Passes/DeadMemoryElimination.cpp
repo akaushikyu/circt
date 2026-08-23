@@ -1,5 +1,6 @@
 
 
+#include "circt/Dialect/Resource/Config/ConfigUtils.h"
 #include "circt/Dialect/Resource/Passes/CallInstances.h"
 #include "circt/Dialect/Resource/Passes/PartitionLayout.h"
 #include "circt/Dialect/Resource/Passes/VitisCleanup.h"
@@ -203,10 +204,18 @@ void ObjectTable::close(unsigned id) {
     }
   }
   o.writers.assign(writers.begin(), writers.end());
-  if (isa<memref::GlobalOp>(o.def) && o.functions.size() > 1 && !o.escaping) {
+  const circt::hlsest::DeadMemoryConfig &dm =
+      circt::hlsest::Config::get().tool.hls.middleEnd.deadMemory;
+  if (dm.globalSharedByFunctionsEscapes && isa<memref::GlobalOp>(o.def) &&
+      o.functions.size() > 1 && !o.escaping) {
     o.escaping = true;
     o.escapeReason =
         "global used by " + std::to_string(o.functions.size()) + " functions";
+  }
+
+  if (dm.honourPreserve && o.def->hasAttr("hls.preserve") && !o.escaping) {
+    o.escaping = true;
+    o.escapeReason = "hls.preserve (honour_preserve)";
   }
 }
 
@@ -1289,6 +1298,12 @@ bool DeadMemoryEliminationPass::eliminateOnce(
 
 void DeadMemoryEliminationPass::runOnOperation() {
   ModuleOp module = getOperation();
+
+  const circt::hlsest::DeadMemoryConfig &dm =
+      circt::hlsest::Config::get().tool.hls.middleEnd.deadMemory;
+  const bool killOverwritten =
+      circt::hlsest::resolveOption(overwrittenStores, dm.overwrittenStores);
+  const bool eraseCalls = circt::hlsest::resolveOption(deadCalls, dm.deadCalls);
   notes = DeathNotes();
   SmallVector<Attribute> records;
   if (auto prev = module->getAttrOfType<ArrayAttr>("hls.dead_memrefs"))
@@ -1296,10 +1311,10 @@ void DeadMemoryEliminationPass::runOnOperation() {
 
   for (unsigned round = 0; round < 16; ++round) {
     bool changed = false;
-    if (overwrittenStores)
+    if (killOverwritten)
       changed |= killOverwrittenStores(module, remarks, notes) > 0;
     changed |= dropUnusedMemrefParams(module, remarks) > 0;
-    if (deadCalls)
+    if (eraseCalls)
       changed |= eraseDeadCalls(module, remarks, notes) > 0;
     changed |= eliminateOnce(module, records);
     if (!changed)

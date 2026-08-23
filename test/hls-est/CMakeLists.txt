@@ -18,9 +18,16 @@ set(HLS_EST_RESULTS_JOBS 4 CACHE STRING
     "Parallel hls-est runs of the hls-est-results and debug-invariance targets")
 set(HLS_EST_VALIDATE_DIR ${CIRCT_SOURCE_DIR}/tools/hls-est-validate)
 
+add_subdirectory(Plugins)
+
+# The plugins test/hls-est/Plugins loads (--load-plugin): the test plugin and
+# the in-tree copies of the examples under tools/hls-est-plugins.
+set(HLS_EST_TEST_PLUGINS
+  HlsEstTestPlugin HlsEstExamplePlugin HlsEstPolarFirePlugin)
+
 add_lit_testsuite(check-hls-est "Running the hls-est regression tests"
   ${CMAKE_CURRENT_BINARY_DIR}
-  DEPENDS hls-est FileCheck not count
+  DEPENDS hls-est FileCheck not count ${HLS_EST_TEST_PLUGINS}
   )
 set_target_properties(check-hls-est PROPERTIES FOLDER "Tests")
 

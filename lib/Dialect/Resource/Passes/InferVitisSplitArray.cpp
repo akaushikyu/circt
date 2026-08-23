@@ -68,7 +68,11 @@
 //   user pragma already describes is left alone.
 //
 //===----------------------------------------------------------------------===//
+#include "../Plugins/Builtin/Builtins.h"
+#include "circt/Dialect/Resource/Plugins/PassPolicies.h"
+#include "circt/Dialect/Resource/Plugins/Registry.h"
 #include "circt/Dialect/Resource/Passes/InferVitisSplitArray.h"
+#include "circt/Dialect/Resource/Config/ConfigUtils.h"
 #include "circt/Dialect/Resource/Passes/ConstantIndex.h"
 #include "circt/Dialect/Resource/Passes/LoopPragmas.h"
 #include "mlir/Dialect/Affine/Analysis/LoopAnalysis.h"
@@ -125,13 +129,13 @@ constexpr StringLiteral kSourcePressure = "infer-from-design";
 constexpr StringLiteral kSourceConstantIndex = "constant-index";
 /// Pragmas that already decide how an array is stored; such an array is left
 /// to them by the automatic partitions (a)-(c).
-constexpr StringLiteral kUserStoragePragmas[] = {
-    "hls.array_partition", "hls.array_reshape", "hls.bind_storage",
-    "hls.stream"};
+// The attributes by which the user decided an array's storage
+// (frontend.user_storage_pragmas: hls.array_partition, hls.array_reshape,
+// hls.bind_storage, hls.stream).
 
-// Factors above this are never scanned one by one. Purely a guard against
-// degenerate inputs (a[i] next to a[i + 2^40]); real factors are tiny.
-constexpr int64_t kMaxScannedFactor = 1 << 16;
+// Factors above tool.hls.partitioning.inference.max_scanned_factor (65536)
+// are never scanned one by one. Purely a guard against degenerate inputs
+// (a[i] next to a[i + 2^40]); real factors are tiny.
 
 //===----------------------------------------------------------------------===//
 // Access model
@@ -604,7 +608,8 @@ struct PartitionPlan {
 static PartitionPlan inferPartition(ArrayRef<PipelineRegion> regions,
                                     ArrayRef<int64_t> shape,
                                     const PortModel &pm, bool rotatingAware,
-                                    int64_t maxFactor, unsigned maxDims) {
+                                    int64_t maxFactor, unsigned maxDims,
+                                    int64_t maxScannedFactor) {
   PartitionPlan plan;
   plan.before = plan.after = portLimit(regions, {}, pm, rotatingAware);
 
@@ -622,7 +627,7 @@ static PartitionPlan inferPartition(ArrayRef<PipelineRegion> regions,
 
       int64_t limit = maxFactor > 0 ? std::min(extent, maxFactor) : extent;
       int64_t scanTo = std::min(
-          {limit, stableFactorBound(regions, dim) + 1, kMaxScannedFactor});
+          {limit, stableFactorBound(regions, dim) + 1, maxScannedFactor});
       for (int64_t factor = 2; factor <= scanTo; ++factor) {
         SmallVector<PartitionChoice, 2> trial(plan.parts);
         trial.push_back({dim, factor});
@@ -854,8 +859,16 @@ struct AutomaticPartition {
   bool unbankable = false;
 };
 
+/// The inputs of the automatic rules (a)-(c).
+struct AutomaticRules {
+  int64_t completeThreshold = 4;           ///< (a), elements
+  int64_t constantIndexMinExtent = 2;      ///< (b), elements
+  ArrayRef<std::string> userStoragePragmas; ///< arrays the user decided
+};
+
 static AutomaticPartition decideAutomaticPartition(memref::AllocaOp alloca,
-                                                   int64_t completeThreshold) {
+                                                   const AutomaticRules &rules) {
+  int64_t completeThreshold = rules.completeThreshold;
   AutomaticPartition decision;
   MemRefType ty = alloca.getType();
   if (!ty.hasStaticShape())
@@ -864,7 +877,7 @@ static AutomaticPartition decideAutomaticPartition(memref::AllocaOp alloca,
   if (!elt.isIntOrFloat() && !isa<IndexType>(elt))
     return decision; // pointer variables, structs: not an array of words
   Operation *def = alloca.getOperation();
-  for (StringRef pragma : kUserStoragePragmas)
+  for (StringRef pragma : rules.userStoragePragmas)
     if (def->hasAttr(pragma))
       return decision; // the user decided
 
@@ -898,9 +911,9 @@ static AutomaticPartition decideAutomaticPartition(memref::AllocaOp alloca,
     return decision;
   }
 
-  // (b) Dimensions that only ever see constants, extent >= 2.
+  // (b) Dimensions that only ever see constants, extent >= min_extent (2).
   for (unsigned d = 0; d < rank; ++d)
-    if (info.constantDim[d] && ty.getDimSize(d) >= 2)
+    if (info.constantDim[d] && ty.getDimSize(d) >= rules.constantIndexMinExtent)
       decision.parts.push_back({d, ty.getDimSize(d)});
   if (decision.parts.empty())
     return decision;
@@ -1004,8 +1017,10 @@ struct InferVitisSplitArray
       llvm::cl::init(false)};
   Option<std::string> throughputDriven{
       *this, "td",
-      llvm::cl::desc("Vitis syn.array_partition.throughput_driven. 'auto' "
-                     "(default): partitions from port pressure. 'off': only "
+      llvm::cl::desc("Vitis syn.array_partition.throughput_driven. 'auto': "
+                     "partitions from port pressure. 'off' (the default of "
+                     "the configuration, tool.hls.options.array_partition."
+                     "throughput_driven, the ground truth): only "
                      "the automatic partitions Vitis still makes with "
                      "throughput_driven=off - arrays of at most "
                      "complete-threshold elements and arrays indexed only by "
@@ -1058,8 +1073,12 @@ struct InferVitisSplitArray
   /// Rules (a)-(c) on every local array of `func`. Returns the arrays they
   /// decided, which the port-pressure inference then leaves alone.
   DenseSet<Value> applyAutomaticPartitions(func::FuncOp func) {
+    AutomaticRules rules;
+    rules.completeThreshold = completeThresholdValue;
+    rules.constantIndexMinExtent = cfgPartitioning->constantIndexMinExtent;
+    rules.userStoragePragmas = userStoragePragmas;
     DenseSet<Value> decided;
-    Builder builder(&getContext());
+    Builder builder(func.getContext());
     func.walk([&](memref::AllocaOp alloca) {
       Operation *def = alloca.getOperation();
       if (def->hasAttr(kRegistersAttrName)) {
@@ -1067,12 +1086,12 @@ struct InferVitisSplitArray
         return;
       }
       AutomaticPartition decision =
-          decideAutomaticPartition(alloca, completeThreshold);
+          decideAutomaticPartition(alloca, rules);
       auto varName = def->getAttrOfType<StringAttr>(kVarNameAttr);
       std::string name =
           varName ? varName.getValue().str() : std::string("<unnamed>");
       if (decision.unbankable) {
-        ++numUnbankable;
+        ++runStats.unbankable;
         LLVM_DEBUG(llvm::dbgs() << "array '" << name << "': "
                                 << decision.reason << "\n");
         if (emitRemarks)
@@ -1086,7 +1105,7 @@ struct InferVitisSplitArray
         def->setAttr(kRegistersAttrName, builder.getUnitAttr());
         def->setAttr(kRegistersReasonAttrName,
                      builder.getStringAttr(decision.reason));
-        ++numRegisters;
+        ++runStats.registers;
         LLVM_DEBUG(llvm::dbgs() << "array '" << name
                                 << "': registers (" << decision.reason
                                 << ")\n");
@@ -1100,9 +1119,9 @@ struct InferVitisSplitArray
                    buildPartitionAttr(builder, decision.parts, shape, varName,
                                       kSourceConstantIndex));
       def->setAttr(kReasonAttr, builder.getStringAttr(decision.reason));
-      ++numConstantDims;
+      ++runStats.constantDims;
       if (decision.parts.size() > 1)
-        ++numMultiConstantDims;
+        ++runStats.multiConstantDims;
       LLVM_DEBUG(llvm::dbgs() << "array '" << name << "': "
                               << decision.reason << "\n");
       if (emitRemarks)
@@ -1151,27 +1170,144 @@ struct InferVitisSplitArray
                "before infer-vitis-split-array; nothing is inferred from it";
       return std::nullopt;
     }
-    return getUserTargetII(loop).value_or(targetII);
+    return getUserTargetII(loop).value_or(targetIIValue);
   }
+
+  // The values the run uses: an option given explicitly, else the
+  // configuration (tool.hls.options.array_partition.*,
+  // tool.hls.partitioning.*, frontend.user_storage_pragmas). With the
+  // configuration a bare --infer-vitis-split-array is td=off (the ground
+  // truth, design memo decision 5); td=auto must be asked for.
+  unsigned targetIIValue = 1, portsValue = 2, readPortsValue = 1,
+           writePortsValue = 1, maxDimsValue = 1;
+  int64_t maxFactorValue = 0, completeThresholdValue = 4;
+  bool rotatingBanksValue = false, includePortsValue = false;
+  std::string throughputDrivenValue = "off";
+  std::vector<std::string> userStoragePragmas;
+  const circt::hlsest::PartitioningConfig *cfgPartitioning = nullptr;
+
+  void resolveConfiguration() {
+    using circt::hlsest::resolveOption;
+    const circt::hlsest::Config &cfg = circt::hlsest::Config::get();
+    const circt::hlsest::PartitioningConfig &pc = cfg.tool.hls.partitioning;
+    const circt::hlsest::PartitionInferenceConfig &inf = pc.inference;
+    cfgPartitioning = &pc;
+    targetIIValue =
+        resolveOption<unsigned>(targetII, static_cast<unsigned>(inf.targetII));
+    portsValue =
+        resolveOption<unsigned>(ports, static_cast<unsigned>(inf.portsAny));
+    readPortsValue = resolveOption<unsigned>(
+        readPorts, static_cast<unsigned>(inf.portsRead));
+    writePortsValue = resolveOption<unsigned>(
+        writePorts, static_cast<unsigned>(inf.portsWrite));
+    maxDimsValue =
+        resolveOption<unsigned>(maxDims, static_cast<unsigned>(inf.maxDims));
+    maxFactorValue = maxFactor.hasValue() ? static_cast<int64_t>(maxFactor)
+                                          : inf.maxFactor;
+    rotatingBanksValue = resolveOption(rotatingBanks, inf.rotatingBanks);
+    const circt::hlsest::ArrayPartitionOptions &ap =
+        cfg.tool.hls.options.arrayPartition;
+    includePortsValue = resolveOption(includePorts, ap.includePorts);
+    completeThresholdValue = completeThreshold.hasValue()
+                                 ? static_cast<int64_t>(completeThreshold)
+                                 : ap.completeThreshold;
+    throughputDrivenValue =
+        throughputDriven.hasValue() ? std::string(throughputDriven)
+                                    : ap.throughputDriven;
+    userStoragePragmas = cfg.frontend.userStoragePragmas;
+  }
+
+  /// The counters of the current run (the pass adds them to its
+  /// statistics).
+  circt::hlsest::PartitionStatistics runStats;
 
   void runOnOperation() override {
     func::FuncOp func = getOperation();
     if (func.isExternal())
       return;
-    if (targetII == 0 || ports == 0 || readPorts == 0 || writePorts == 0 ||
-        maxDims == 0) {
-      func.emitError("infer-vitis-split-array: target-ii, ports, read-ports, "
-                     "write-ports and max-dims must be positive");
-      return signalPassFailure();
-    }
-    if (throughputDriven != "auto" && throughputDriven != "off") {
+    resolveConfiguration();
+    circt::hlsest::PartitionOptions o;
+    o.targetII = targetIIValue;
+    o.ports = portsValue;
+    o.readPorts = readPortsValue;
+    o.writePorts = writePortsValue;
+    o.maxDims = maxDimsValue;
+    o.maxFactor = maxFactorValue;
+    o.completeThreshold = completeThresholdValue;
+    o.rotatingBanks = rotatingBanksValue;
+    o.includePorts = includePortsValue;
+    o.throughputDrivenOff = throughputDrivenValue == "off";
+    o.autoPartitions = autoPartitions;
+    o.annotatePressure = annotatePressure;
+    o.emitRemarks = emitRemarks;
+    o.autoPipeline = autoPipeline;
+    if (throughputDrivenValue != "auto" && throughputDrivenValue != "off") {
       func.emitError("infer-vitis-split-array: td must be 'auto' or 'off', "
                      "got '")
-          << throughputDriven << "'";
+          << throughputDrivenValue << "'";
       return signalPassFailure();
     }
-    bool tdOff = throughputDriven == "off";
-    PortModel pm{ports, readPorts, writePorts};
+    // The decision is the configuration's PartitionPolicy (builtin vitis-td:
+    // runInference below).
+    const circt::hlsest::Config &cfg = circt::hlsest::Config::get();
+    circt::hlsest::ConfigDiagnostics diag;
+    std::unique_ptr<circt::hlsest::PartitionPolicy> policy =
+        circt::hlsest::PluginRegistry<circt::hlsest::PartitionPolicy>::instance()
+            .create(cfg.tool.hls.partitioning.policy, cfg, diag);
+    if (!policy) {
+      InFlightDiagnostic d = func.emitError("infer-vitis-split-array: ");
+      llvm::interleave(diag.errors, d, "; ");
+      return signalPassFailure();
+    }
+    circt::hlsest::PartitionStatistics stats;
+    if (failed(policy->run(func, o, stats)))
+      return signalPassFailure();
+    numRegions += stats.regions;
+    numPartitioned += stats.partitioned;
+    numUnresolved += stats.unresolved;
+    numRegisters += stats.registers;
+    numConstantDims += stats.constantDims;
+    numMultiConstantDims += stats.multiConstantDims;
+    numUnbankable += stats.unbankable;
+  }
+
+  /// Vitis' automatic partitions and, with td=auto, the port-pressure
+  /// inference (the builtin PartitionPolicy vitis-td).
+  LogicalResult runInference(func::FuncOp func,
+                             const circt::hlsest::PartitionOptions &o,
+                             circt::hlsest::PartitionStatistics &stats) {
+    const circt::hlsest::Config &cfg = circt::hlsest::Config::get();
+    targetIIValue = o.targetII;
+    portsValue = o.ports;
+    readPortsValue = o.readPorts;
+    writePortsValue = o.writePorts;
+    maxDimsValue = o.maxDims;
+    maxFactorValue = o.maxFactor;
+    completeThresholdValue = o.completeThreshold;
+    rotatingBanksValue = o.rotatingBanks;
+    includePortsValue = o.includePorts;
+    throughputDrivenValue = o.throughputDrivenOff ? "off" : "auto";
+    userStoragePragmas = cfg.frontend.userStoragePragmas;
+    cfgPartitioning = &cfg.tool.hls.partitioning;
+    autoPartitions = o.autoPartitions;
+    annotatePressure = o.annotatePressure;
+    emitRemarks = o.emitRemarks;
+    autoPipeline = o.autoPipeline;
+    runStats = circt::hlsest::PartitionStatistics();
+    if (targetIIValue == 0 || portsValue == 0 || readPortsValue == 0 ||
+        writePortsValue == 0 || maxDimsValue == 0) {
+      func.emitError("infer-vitis-split-array: target-ii, ports, read-ports, "
+                     "write-ports and max-dims must be positive");
+      return failure();
+    }
+    if (throughputDrivenValue != "auto" && throughputDrivenValue != "off") {
+      func.emitError("infer-vitis-split-array: td must be 'auto' or 'off', "
+                     "got '")
+          << throughputDrivenValue << "'";
+      return failure();
+    }
+    bool tdOff = throughputDrivenValue == "off";
+    PortModel pm{portsValue, readPortsValue, writePortsValue};
 
     // 0. Vitis' automatic partitions that do not depend on throughput.
     DenseSet<Value> decided;
@@ -1183,13 +1319,13 @@ struct InferVitisSplitArray
     llvm::MapVector<Value, SmallVector<PipelineRegion, 2>> pressure;
     func.walk([&](AffineForOp loop) {
       if (std::optional<unsigned> ii = getPipelineII(loop)) {
-        ++numRegions;
+        ++runStats.regions;
         collectRegions(loop, *ii, terms, pressure);
       }
     });
 
     // 2. One decision per memory, over all the loops that touch it.
-    Builder builder(&getContext());
+    Builder builder(func.getContext());
     for (auto &entry : pressure) {
       Value mem = entry.first;
       ArrayRef<PipelineRegion> regions = entry.second;
@@ -1214,12 +1350,12 @@ struct InferVitisSplitArray
       if (!memTy || memTy.getRank() == 0)
         continue;
       ArrayRef<int64_t> shape = memTy.getShape();
-      if (portLimit(regions, {}, pm, rotatingBanks).excess == 0)
+      if (portLimit(regions, {}, pm, rotatingBanksValue).excess == 0)
         continue; // the ports keep up with every loop as it is
 
       // Where the spec lives, and whether a user already wrote one.
       auto iface = dyn_cast_or_null<MemoryResourceOpInterface>(def);
-      bool canAnnotate = iface || (isFuncArg && includePorts);
+      bool canAnnotate = iface || (isFuncArg && includePortsValue);
       bool hasUserSpec =
           iface ? (iface.getPartitionSpec().has_value() ||
                    def->hasAttr(kPartitionAttr))
@@ -1246,7 +1382,7 @@ struct InferVitisSplitArray
                }))
         obstacle = "no dimension of known extent to split";
       if (!obstacle.empty()) {
-        ++numUnresolved;
+        ++runStats.unresolved;
         if (emitRemarks)
           mlir::emitRemark(loc)
               << "array '" << name
@@ -1255,7 +1391,9 @@ struct InferVitisSplitArray
       }
 
       PartitionPlan plan =
-          inferPartition(regions, shape, pm, rotatingBanks, maxFactor, maxDims);
+          inferPartition(regions, shape, pm, rotatingBanksValue,
+                         maxFactorValue, maxDimsValue,
+                         cfgPartitioning->inference.maxScannedFactor);
 
       if (!plan.parts.empty()) {
         ArrayAttr spec =
@@ -1264,7 +1402,7 @@ struct InferVitisSplitArray
           def->setAttr(kPartitionAttr, spec);
         else
           func.setArgAttr(arg.getArgNumber(), kPartitionAttr, spec);
-        ++numPartitioned;
+        ++runStats.partitioned;
 
         // Record why, for the debug report: the loop the ports held back the
         // most before partitioning is the one that drove the factor.
@@ -1293,7 +1431,7 @@ struct InferVitisSplitArray
       }
 
       if (plan.after.excess > 0) {
-        ++numUnresolved;
+        ++runStats.unresolved;
         if (emitRemarks) {
           const PipelineRegion &worst = *plan.after.region;
           AffineForOp worstLoop = worst.loop; // getLoc() is non-const
@@ -1310,10 +1448,34 @@ struct InferVitisSplitArray
         }
       }
     }
+    stats = runStats;
+    return success();
+  }
+};
+
+/// vitis-td: the automatic partitions Vitis makes whatever
+/// syn.array_partition.throughput_driven says (small arrays, constant
+/// indices; VITIS_NOTES N7) and, with td=auto, the port-pressure inference
+/// (N2): the code of this pass.
+class VitisTdPartitions : public circt::hlsest::PartitionPolicy {
+public:
+  StringRef name() const override { return "vitis-td"; }
+  LogicalResult run(func::FuncOp func, const circt::hlsest::PartitionOptions &o,
+                    circt::hlsest::PartitionStatistics &stats) const override {
+    InferVitisSplitArray impl;
+    return impl.runInference(func, o, stats);
   }
 };
 
 } // namespace
+
+void circt::hlsest::builtin::registerPartitionPolicies() {
+  circt::hlsest::PluginRegistry<circt::hlsest::PartitionPolicy>::instance()
+      .add("vitis-td",
+           "Vitis automatic partitions (td=off) and the port-pressure "
+           "inference (td=auto)",
+           [] { return std::make_unique<VitisTdPartitions>(); }, "builtin");
+}
 
 namespace circt::hls_analysis {
 

@@ -13,6 +13,12 @@ codes; the JSON's total_bram must equal the report's total.
     FAIL  any of the above differs
     ERR   hls-est failed or timed out in both runs with identical outputs (reported, not a mismatch)
 
+With --config-leg (the configuration's byte-identity check, design memo section 8.6) every case
+also runs with the dumped default configuration (`--hls-config=<hls-est --dump-default-config>`)
+and with every default re-stated through `--config-set`: the stdout and the debug JSON must equal
+the plain debug run's, apart from the `config` object's `files` and `sets` lists (its hash is the
+same, nothing differs from the defaults).
+
 Exits 1 when any case FAILs. (This replaces check_debug_invariance.sh, MEMOS decision #47.)
 """
 import argparse
@@ -36,6 +42,35 @@ def run(cmd, timeout):
         return 124, ""
 
 
+def default_sets(hls_est):
+    """--config-set arguments re-stating every leaf of the compiled-in configuration."""
+    doc = json.loads(subprocess.run([hls_est, "--dump-default-config"], capture_output=True,
+                                    text=True, check=True).stdout)
+    out = []
+
+    def walk(v, path):
+        if isinstance(v, dict):
+            for k, x in v.items():
+                if not k.startswith("_"):
+                    walk(x, f"{path}.{k}" if path else k)
+        elif path not in ("run.device", "run.tool"):  # those reload whole sections
+            out.append(f"--config-set={path}={json.dumps(v, separators=(',', ':'))}")
+    walk(doc, "")
+    return out
+
+
+def debug_json_without_provenance(path):
+    try:
+        d = json.loads(Path(path).read_text())
+    except (OSError, ValueError):
+        return None
+    c = d.get("config")
+    if isinstance(c, dict):
+        c.pop("files", None)
+        c.pop("sets", None)
+    return json.dumps(d, sort_keys=True)
+
+
 def check(f, a, tmp):
     base = [a.hls_est, str(f), *a.pipeline.split()]
     js = Path(tmp) / (f.name + f".{abs(hash(str(f)))}.json")
@@ -49,6 +84,15 @@ def check(f, a, tmp):
         except (ValueError, KeyError):
             jtotal = "?"
     msg = ""
+    if a.config_leg and rc1 == 0:
+        for name, extra in (("dumped default config", [f"--hls-config={a.default_config}"]),
+                            ("defaults re-stated by --config-set", a.default_sets)):
+            js3 = Path(tmp) / (f.name + f".{abs(hash(str(f) + name))}.json")
+            rc3, out3 = run(base + extra + ["--bram-debug", f"--bram-debug-json={js3}"], a.timeout)
+            if out3 != out1 or rc3 != rc1:
+                return "FAIL", total, jtotal, f"{name}: stdout or exit code differs"
+            if debug_json_without_provenance(js3) != debug_json_without_provenance(js):
+                return "FAIL", total, jtotal, f"{name}: debug JSON differs"
     if out1 != out2:
         status = "FAIL"
         msg = "".join(list(difflib.unified_diff(out1.splitlines(True), out2.splitlines(True)))[:20])
@@ -70,12 +114,21 @@ def main():
     ap.add_argument("--tests", default=str(C.CIRCT / "test" / "hls-est" / "Estimation"))
     ap.add_argument("--timeout", type=int, default=60)
     ap.add_argument("-j", type=int, default=4)
+    ap.add_argument("--config-leg", action="store_true",
+                    help="also run with the dumped default configuration and with every default "
+                         "re-stated by --config-set (outputs must be identical)")
     a = ap.parse_args()
     files = sorted(Path(a.tests).rglob("*.mlir"))
     print(f"hls-est : {a.hls_est}\npipeline: {a.pipeline}\ntests   : {a.tests} (timeout {a.timeout}s each)\n")
     print(f"{'STATUS':<6}{'TOTAL':<11}{'JSON':<11}CASE")
     counts = {"PASS": 0, "FAIL": 0, "ERR": 0}
     with tempfile.TemporaryDirectory() as tmp, cf.ThreadPoolExecutor(a.j) as ex:
+        if a.config_leg:
+            a.default_config = str(Path(tmp) / "default-config.json")
+            Path(a.default_config).write_text(subprocess.run(
+                [a.hls_est, "--dump-default-config"], capture_output=True, text=True,
+                check=True).stdout)
+            a.default_sets = default_sets(a.hls_est)
         for f, (status, total, jtotal, msg) in zip(files, ex.map(lambda f: check(f, a, tmp), files)):
             counts[status] += 1
             if msg:

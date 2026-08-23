@@ -13,13 +13,16 @@
 #include "circt/Dialect/Resource/Passes/MergeConditionalStores.h"
 #include "circt/Dialect/Resource/Passes/PolygeistCompat.h"
 #include "circt/Dialect/Resource/Passes/VitisCleanup.h"
+#include "circt/Dialect/Resource/Plugins/Registry.h"
 #include "mlir/IR/DialectRegistry.h"
 #include "mlir/Pass/PassManager.h"
 #include "mlir/Pass/PassRegistry.h"
 #include "mlir/Support/FileUtilities.h"
+#include "mlir/Tools/Plugins/PassPlugin.h"
 #include "mlir/Tools/mlir-opt/MlirOptMain.h"
 #include "mlir/Transforms/Passes.h"
 #include "llvm/Support/CommandLine.h"
+#include "llvm/Support/DynamicLibrary.h"
 #include "llvm/Support/InitLLVM.h"
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/ToolOutputFile.h"
@@ -77,6 +80,54 @@ static llvm::cl::opt<bool> dumpConfigSchemaOpt(
                    "range, description, inventory rows, readers) as JSON and "
                    "exit"),
     llvm::cl::init(false), llvm::cl::cat(configCategory));
+/// Loads one hls-est plugin library (--load-plugin): MLIR's pass-plugin
+/// loader (entry point mlirGetPassPluginInfo, MLIR_PLUGIN_API_VERSION) plus
+/// hls-est's own optional entry point hlsEstGetPluginInfo, whose
+/// HLS_EST_PLUGIN_API_VERSION must match; the plugin's static registrars
+/// registered its implementations when the library was opened.
+static bool pluginLoadFailed = false;
+static void loadHlsEstPlugin(const std::string &path) {
+  llvm::Expected<mlir::PassPlugin> plugin = mlir::PassPlugin::load(path);
+  if (!plugin) {
+    llvm::errs() << "error: --load-plugin: " << path << ": "
+                 << llvm::toString(plugin.takeError()) << "\n";
+    pluginLoadFailed = true;
+    return;
+  }
+  std::string err;
+  llvm::sys::DynamicLibrary lib =
+      llvm::sys::DynamicLibrary::getPermanentLibrary(path.c_str(), &err);
+  auto *infoFn = reinterpret_cast<circt::hlsest::HlsEstPluginInfo (*)()>(
+      lib.getAddressOfSymbol("hlsEstGetPluginInfo"));
+  if (!infoFn) {
+    llvm::errs() << "warning: --load-plugin: " << path
+                 << " has no hlsEstGetPluginInfo entry point; its interface "
+                    "version is not checked\n";
+  } else if (infoFn().apiVersion != HLS_EST_PLUGIN_API_VERSION) {
+    llvm::errs() << "error: --load-plugin: " << path << " (" << infoFn().name
+                 << ") was built for hls-est plugin API " << infoFn().apiVersion
+                 << ", this hls-est has " << HLS_EST_PLUGIN_API_VERSION << "\n";
+    pluginLoadFailed = true;
+    return;
+  }
+  plugin->registerPassRegistryCallbacks();
+}
+
+static llvm::cl::list<std::string> loadPlugins(
+    "load-plugin",
+    llvm::cl::desc("Load an hls-est plugin library (its implementations of "
+                   "the plugin interfaces become selectable by name in the "
+                   "configuration); repeatable"),
+    llvm::cl::value_desc("library"), llvm::cl::cat(configCategory),
+    llvm::cl::callback([](const std::string &path) {
+      loadHlsEstPlugin(path);
+    }));
+
+static llvm::cl::opt<bool> listPluginsOpt(
+    "list-plugins",
+    llvm::cl::desc("Print every registered plugin per interface (builtins and "
+                   "the ones --load-plugin loaded) and exit"),
+    llvm::cl::init(false), llvm::cl::cat(configCategory));
 static llvm::cl::opt<bool> defaultPipeline(
     "default-pipeline",
     llvm::cl::desc("Run the configuration's default pipeline (tool.pipeline) "
@@ -121,6 +172,17 @@ static std::optional<int> setUpConfiguration() {
     llvm::outs() << circt::hlsest::dumpConfigSchema();
     return 0;
   }
+  if (pluginLoadFailed || circt::hlsest::pluginRegistrationFailed())
+    return 1;
+  if (listPluginsOpt) {
+    for (const auto &[key, entries] : listPlugins()) {
+      llvm::outs() << key << ":\n";
+      for (const PluginEntry &entryValue : entries)
+        llvm::outs() << "  " << entryValue.name << " [" << entryValue.origin
+                     << "] " << entryValue.description << "\n";
+    }
+    return 0;
+  }
   ConfigDiagnostics diag;
   std::vector<std::string> files(configFiles.begin(), configFiles.end());
   std::vector<std::string> sets(configSets.begin(), configSets.end());
@@ -139,6 +201,8 @@ static std::optional<int> setUpConfiguration() {
 }
 
 int main(int argc, char **argv) {
+
+  circt::hlsest::registerBuiltinPlugins();
   mlir::DialectRegistry targetRegistry;
 
   targetRegistry.insert<

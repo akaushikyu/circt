@@ -317,9 +317,10 @@ public:
     }
     json::Value value = nullptr;
     llvm::Expected<json::Value> parsed = json::parse(text);
-    if (parsed)
+    if (parsed) {
       value = std::move(*parsed);
-    else {
+      stripDocKeys(value);
+    } else {
       llvm::consumeError(parsed.takeError());
       value = text.str(); // a bare word is a string
     }
@@ -356,7 +357,7 @@ public:
       }
       bool last = i + 1 == parts.size();
       if (last && !index) {
-        (*o)[part] = value;
+        (*o)[part.str()] = value;
         sources[path.str()] = origin;
         return;
       }
@@ -366,7 +367,7 @@ public:
           diag.errors.push_back(origin + ": " + done + " is not an array");
           return;
         }
-        (*o)[part] = json::Object{};
+        (*o)[part.str()] = json::Object{};
         next = o->get(part);
       }
       if (index) {
@@ -1230,6 +1231,14 @@ void diff(const json::Value *dflt, const json::Value &now,
       break;
     p.resize(dot);
   }
+  // A free-form value (plugins.<name>) set key by key: the assignment of one
+  // of its keys.
+  if (origin == "--config-set")
+    for (const auto &[setPath, setOrigin] : src)
+      if (StringRef(setPath).starts_with(path + ".")) {
+        origin = setOrigin;
+        break;
+      }
   out.push_back({path, now, origin});
 }
 
@@ -1502,6 +1511,11 @@ Config circt::hlsest::buildConfig(llvm::ArrayRef<std::string> files,
   fill(b.doc, c);
   crossCheck(c, diag);
   attribute(0);
+  // Every plugin the configuration names reads its parameters and checks the
+  // device (a builtin refuses a device it cannot price), also when a cross-key
+  // check failed, so that a refusal names everything the device lacks.
+  if (const PluginConfigCheck &check = getPluginConfigCheck())
+    check(c, diag);
   if (!diag.ok())
     return c;
   checkMathTable(c, diag);
@@ -1563,7 +1577,7 @@ std::string circt::hlsest::dumpEffectiveConfig(const Config &config) {
     json::Object &obj = *cur->getAsObject();
     if (!obj.getObject("_source"))
       obj["_source"] = json::Object{};
-    (*obj.getObject("_source"))[key] = o.source;
+    (*obj.getObject("_source"))[key.str()] = o.source;
   }
   json::Object &root = *doc.getAsObject();
   root["_generated_by"] = "hls-est --dump-effective-config";

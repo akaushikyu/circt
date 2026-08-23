@@ -383,6 +383,13 @@ struct StorageSelectorConfig {
   bool inclusive = true;
   std::string block; ///< memory id of the block tier
   std::string below; ///< tier name for what stays below the threshold
+
+  /// Whether `bits` (words x exact element bits) stays below the block tier.
+  bool belowBlock(int64_t bits) const {
+    return inclusive ? bits < minBlockBits : bits <= minBlockBits;
+  }
+  /// "<" or "<=" for the reports.
+  const char *belowSymbol() const { return inclusive ? "<" : "<="; }
 };
 
 /// One depth band of the vitis-band7 mapper.
@@ -520,6 +527,15 @@ public:
 
   /// The clock period minus the timing margin (ns).
   double periodNs() const;
+
+  /// The block-RAM primitive the memory mapper prices with
+  /// (tool.backend.memory_mapper.primitive), or null.
+  const DeviceMemory *blockMemory() const;
+  /// The widest port of a bank priced wide (priced_configs.wide: 36) or
+  /// narrow (priced_configs.narrow: 18), from the device's port configs.
+  int64_t pricedPortWidth(bool wide) const;
+  /// Ports of the narrow (true-dual-port) configuration of one block (2).
+  int64_t blockPorts() const;
 
   /// The configuration of this process: what the driver installed, else the
   /// compiled-in defaults. Immutable once a pass has read it.

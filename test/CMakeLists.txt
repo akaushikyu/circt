@@ -37,6 +37,9 @@ set(CIRCT_TEST_DEPENDS
   circt-translate
   circt-reduce
   hls-est
+  HlsEstTestPlugin
+  HlsEstExamplePlugin
+  HlsEstPolarFirePlugin
   domaintool
   handshake-runner
   firld

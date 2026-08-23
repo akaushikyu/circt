@@ -21,6 +21,13 @@ add_mlir_library(HLSPasses
         StreamFifos.cpp
         DataflowChannels.cpp
         RamWidthNarrowing.cpp
+        AccessOrder.cpp
+        ../Plugins/Builtin/MAxiBuffers.cpp
+        ../Plugins/Builtin/Mappers.cpp
+        ../Plugins/Builtin/MemoryArchitecture.cpp
+        ../Plugins/Builtin/MemoryGroupings.cpp
+        ../Plugins/Builtin/RegisterBuiltins.cpp
+        ../Plugins/Builtin/StorageSelectors.cpp
 
         DEPENDS
         CIRCTTransformsPassIncGen
@@ -31,6 +38,8 @@ add_mlir_library(HLSPasses
         MLIRArithDialect
 
         LINK_LIBS PUBLIC
+        HLSConfig
+        HLSPlugins
         HLSInterfaces
         CIRCTHLS
         MLIRIR

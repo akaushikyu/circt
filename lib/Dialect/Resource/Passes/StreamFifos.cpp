@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 #include "circt/Dialect/Resource/Passes/StreamFifos.h"
+#include "circt/Dialect/Resource/Config/Config.h"
 
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
@@ -29,12 +30,9 @@ using namespace circt::hls_analysis;
 
 namespace {
 
-/// Default depth of a stream without a depth pragma or template argument.
-constexpr int64_t kDefaultStreamDepth = 2;
-/// FIFOs this shallow are shift registers at any width.
-constexpr int64_t kShiftRegisterMaxDepth = 2;
-/// FIFOs of at most this many bits (depth x width) are shift registers.
-constexpr int64_t kShiftRegisterMaxBits = 1024;
+const circt::hlsest::StreamConfig &streamRules() {
+  return circt::hlsest::Config::get().tool.hls.streams;
+}
 
 struct Demangler {
   StringRef stringValue;
@@ -296,29 +294,39 @@ FifoPrice circt::hls_analysis::priceFifo(
     portValue.reason = "element width unknown: not estimated, 0 BRAM";
     return portValue;
   }
+
+  const circt::hlsest::Config &cfg = circt::hlsest::Config::get();
+  int64_t pricedWidth = 0;
+  if (const circt::hlsest::DeviceMemory *memoryOp = cfg.blockMemory())
+    if (const circt::hlsest::PortConfig *pc =
+            memoryOp->portConfig(streamRules().pricedConfig))
+      pricedWidth = pc->maxWidth;
+  const std::string priced = "x" + std::to_string(pricedWidth);
+  const std::string wide = "x" + std::to_string(cfg.pricedPortWidth(true));
   if (impl == "bram") {
     portValue.bram = static_cast<unsigned>(bandBlocks(depth, bits));
     portValue.reason = "bind_storage impl=bram: block RAM at any size, " +
-                       geometry + ", depth bands at x18 -> " +
+                       geometry + ", depth bands at " + priced + " -> " +
                        std::to_string(portValue.bram);
     return portValue;
   }
-  if (depth <= kShiftRegisterMaxDepth) {
+  const int64_t srlMaxDepth = streamRules().srlMaxDepth;
+  const int64_t srlMaxBits = streamRules().srlMaxBits;
+  if (depth <= srlMaxDepth) {
     portValue.reason = "depth " + std::to_string(depth) +
-                       " <= " + std::to_string(kShiftRegisterMaxDepth) +
+                       " <= " + std::to_string(srlMaxDepth) +
                        ": shift registers at any width, 0 BRAM";
     return portValue;
   }
-  if (depth * static_cast<int64_t>(bits) <= kShiftRegisterMaxBits) {
-    portValue.reason = geometry +
-                       " <= " + std::to_string(kShiftRegisterMaxBits) +
+  if (depth * static_cast<int64_t>(bits) <= srlMaxBits) {
+    portValue.reason = geometry + " <= " + std::to_string(srlMaxBits) +
                        ": shift registers, 0 BRAM";
     return portValue;
   }
   portValue.bram = static_cast<unsigned>(bandBlocks(depth, bits));
-  portValue.reason = geometry + " > " + std::to_string(kShiftRegisterMaxBits) +
-                     ": block RAM, depth bands at x18 (never x36) -> " +
-                     std::to_string(portValue.bram);
+  portValue.reason = geometry + " > " + std::to_string(srlMaxBits) +
+                     ": block RAM, depth bands at " + priced + " (never " +
+                     wide + ") -> " + std::to_string(portValue.bram);
   return portValue;
 }
 
@@ -637,7 +645,7 @@ std::optional<StreamHandleRecord> circt::hls_analysis::analyzeStreamHandle(
       globalOp.depth = *tmplDepth;
       globalOp.depthSource = "template";
     } else {
-      globalOp.depth = kDefaultStreamDepth;
+      globalOp.depth = streamRules().defaultDepth;
       globalOp.depthSource =
           tmplDepth ? "default" : "default (template unparsed)";
     }

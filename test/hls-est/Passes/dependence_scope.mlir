@@ -2,7 +2,7 @@
 // RUN: FileCheck %s --check-prefix=STATS --input-file=%t.1
 // RUN: hls-est %s --inline --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --memory-banking-bram --convert-affine-to-loopschedule --bram-analysis --mlir-pass-statistics -o /dev/null 2> %t.2 | FileCheck %s
 // RUN: FileCheck %s --check-prefix=STATS --input-file=%t.2
-// RUN: hls-est %s --affine-loop-normalize --auto-pipeline-unroll --infer-vitis-split-array --memory-banking-bram --convert-affine-to-loopschedule --bram-analysis --mlir-pass-statistics -o /dev/null 2> %t.3 | FileCheck %s
+// RUN: hls-est %s --affine-loop-normalize --auto-pipeline-unroll --infer-vitis-split-array=td=auto --memory-banking-bram --convert-affine-to-loopschedule --bram-analysis --mlir-pass-statistics -o /dev/null 2> %t.3 | FileCheck %s
 // RUN: FileCheck %s --check-prefix=STATS --input-file=%t.3
 
 // The RUN line with the DME front (--inline ... --dead-memory-elimination) is the

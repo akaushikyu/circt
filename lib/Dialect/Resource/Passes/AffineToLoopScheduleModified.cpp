@@ -3,14 +3,19 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 #include "circt/Dialect/Resource/Passes/AffineToLoopScheduleModified.h"
+#include "../Plugins/Builtin/Builtins.h"
 #include "circt/Analysis/DependenceAnalysis.h"
 #include "circt/Dialect/LoopSchedule/LoopScheduleOps.h"
+#include "circt/Dialect/Resource/Config/ConfigUtils.h"
 #include "circt/Dialect/Resource/HLS/HLSDialect.h"
 #include "circt/Dialect/Resource/HLS/HLSOps.h"
 #include "circt/Dialect/Resource/Passes/CallInstances.h"
 #include "circt/Dialect/Resource/Passes/CyclicSchedulingAnalysisModified.h"
 #include "circt/Dialect/Resource/Passes/LoopPragmas.h"
 #include "circt/Dialect/Resource/Passes/MemrefBankClassification.h"
+#include "circt/Dialect/Resource/Plugins/MemoryInterfaces.h"
+#include "circt/Dialect/Resource/Plugins/Registry.h"
+#include "circt/Dialect/Resource/Plugins/Scheduling.h"
 #include "circt/Scheduling/Algorithms.h"
 #include "circt/Scheduling/Problems.h"
 #include "mlir/Conversion/AffineToStandard/AffineToStandard.h"
@@ -119,6 +124,17 @@ private:
   void mergeIfElseAccesses();
 
   CyclicSchedulingAnalysis *schedulingAnalysis;
+
+  std::unique_ptr<circt::hlsest::OperatorTimingModel> timingModel;
+  std::unique_ptr<circt::hlsest::DependenceModel> dependenceModel;
+  std::unique_ptr<circt::hlsest::ModuloScheduler> moduloScheduler;
+  std::unique_ptr<circt::hlsest::SequentialScheduler> sequentialScheduler;
+  std::unique_ptr<circt::hlsest::Binder> binder;
+  std::unique_ptr<circt::hlsest::MemoryArchitecturePolicy> memoryPolicy;
+  std::unique_ptr<circt::hlsest::StorageSelector> storageSelector;
+  circt::hlsest::SchedulingContext schedulingContext;
+  bool emitDetail = false;
+  LogicalResult createPlugins();
 
   Statistic numDepPairs{this, "dependence-pairs",
                         "Same-memref access pairs the memory dependence "
@@ -1055,7 +1071,9 @@ static bool isRectangularBand(ArrayRef<AffineForOp> band) {
   return true;
 }
 
-ModuloProblem AffineToLoopSchedule::getModuloProblem(CyclicProblem &prob) {
+/// A ModuloProblem with the operations, operator types, resources and
+/// dependences of a CyclicProblem (the dependence model cached-o1).
+static ModuloProblem copyToModuloProblem(CyclicProblem &prob) {
   ModuloProblem modProb(prob.getContainingOp());
   for (auto *op : prob.getOperations()) {
     auto opr = prob.getLinkedOperatorType(op);
@@ -1085,6 +1103,10 @@ ModuloProblem AffineToLoopSchedule::getModuloProblem(CyclicProblem &prob) {
   }
 
   return modProb;
+}
+
+ModuloProblem AffineToLoopSchedule::getModuloProblem(CyclicProblem &prob) {
+  return copyToModuloProblem(prob);
 }
 
 /// MODIFIED: Flatten perfectly nested loop bands into single loops using
@@ -1639,7 +1661,117 @@ LogicalResult FastModuloScheduler::schedule(unsigned maxIIBumps,
   return failure();
 }
 
+/// Creates the scheduling plugins and the memory models of the configuration
+/// once per pass instance (a clone creates its own). The plugins see the
+/// configuration with this pass's explicit options in it (fast-threshold,
+/// fast-ops-threshold, --loopschedule-call-latency,
+/// --loopschedule-kept-call-latency), so that an option beats the file.
+LogicalResult AffineToLoopSchedule::createPlugins() {
+  circt::hlsest::Config cfg = circt::hlsest::Config::get();
+  cfg.scheduling.fastThreshold = fastThreshold;
+  cfg.scheduling.fastOpsThreshold = fastOpsThreshold;
+  cfg.scheduling.userIITarget = userIITarget;
+  cfg.scheduling.operatorLatencies["call"] = circt::hlsest::resolveGlobalOption(
+      loopScheduleCallLatency,
+      static_cast<int>(cfg.scheduling.latency("call")));
+  cfg.scheduling.operatorLatencies["kept_call"] =
+      circt::hlsest::resolveGlobalOption(
+          loopScheduleKeptCallLatency,
+          static_cast<int>(cfg.scheduling.latency("kept_call")));
+  circt::hlsest::ConfigDiagnostics diag;
+  using circt::hlsest::PluginRegistry;
+  timingModel =
+      PluginRegistry<circt::hlsest::OperatorTimingModel>::instance().create(
+          cfg.scheduling.timingModel, cfg, diag);
+  dependenceModel =
+      PluginRegistry<circt::hlsest::DependenceModel>::instance().create(
+          cfg.scheduling.dependenceModel, cfg, diag);
+  moduloScheduler =
+      PluginRegistry<circt::hlsest::ModuloScheduler>::instance().create(
+          cfg.scheduling.moduloModel, cfg, diag);
+  sequentialScheduler =
+      PluginRegistry<circt::hlsest::SequentialScheduler>::instance().create(
+          cfg.scheduling.sequentialModel, cfg, diag);
+  binder = PluginRegistry<circt::hlsest::Binder>::instance().create(
+      cfg.scheduling.bindingModel, cfg, diag);
+  memoryPolicy =
+      PluginRegistry<circt::hlsest::MemoryArchitecturePolicy>::instance()
+          .create(cfg.tool.hls.memoryArchitecture.plugin, cfg, diag);
+  storageSelector =
+      PluginRegistry<circt::hlsest::StorageSelector>::instance().create(
+          cfg.tool.backend.storageSelector.plugin, cfg, diag);
+  if (!circt::hlsest::Config::get().blockMemory())
+    diag.errors.push_back("tool.backend.memory_mapper.primitive: no such "
+                          "device memory");
+  if (!diag.ok()) {
+    InFlightDiagnostic dimensionIndex =
+        getOperation().emitError("--convert-affine-to-loopschedule: ");
+    llvm::interleave(diag.errors, dimensionIndex, "; ");
+    return failure();
+  }
+  const circt::hlsest::Config &installed = circt::hlsest::Config::get();
+  schedulingContext.periodNs = installed.periodNs();
+  schedulingContext.clockNs = installed.run.clockNs;
+  schedulingContext.device = &installed.device;
+  schedulingContext.timingModel = timingModel.get();
+  emitDetail = installed.scheduling.emitDetail;
+  return success();
+}
+
+/// The dependences every problem needs whatever the dependence model
+/// delivers: the implicit value flow from an if's yields to its results, and
+/// every store before the loop's terminator (the anchor of the schedule).
+/// Re-inserting an edge the problem already holds changes nothing.
+static void addStructuralDependences(AffineForOp forOp,
+                                     ModuloProblem &problem) {
+  forOp.getBody()->walk([&](Operation *op) {
+    Block *thenBlock = nullptr, *elseBlock = nullptr;
+    if (auto ifOp = dyn_cast<scf::IfOp>(op)) {
+      thenBlock = ifOp.thenBlock();
+      elseBlock = ifOp.elseBlock();
+    } else if (auto ifOp = dyn_cast<AffineIfOp>(op)) {
+      thenBlock = ifOp.getThenBlock();
+      if (ifOp.hasElse())
+        elseBlock = ifOp.getElseBlock();
+    } else {
+      return WalkResult::advance();
+    }
+    if (op->getNumResults() == 0)
+      return WalkResult::skip();
+    (void)problem.insertDependence(
+        Problem::Dependence(thenBlock->getTerminator(), op));
+    if (elseBlock)
+      (void)problem.insertDependence(
+          Problem::Dependence(elseBlock->getTerminator(), op));
+    return WalkResult::advance();
+  });
+  Operation *anchor = forOp.getBody()->getTerminator();
+  forOp.getBody()->walk([&](Operation *op) {
+    if (isa<AffineStoreOp, memref::StoreOp>(op))
+      (void)problem.insertDependence(Problem::Dependence(op, anchor));
+  });
+}
+
 void AffineToLoopSchedule::runOnOperation() {
+
+  {
+    using circt::hlsest::applyConfigured;
+    const circt::hlsest::Config &cfg = circt::hlsest::Config::get();
+    const circt::hlsest::MiddleEndConfig &me = cfg.tool.hls.middleEnd;
+    applyConfigured(hoistInvariant, me.licmHoistInvariantLoads);
+    applyConfigured(cseLoads, me.gvnLoads);
+    applyConfigured(forwardStores, me.storeForwarding);
+    applyConfigured(hoistPastCalls, me.licmHoistPastCalls);
+    applyConfigured(hoistConditional, me.licmHoistConditional);
+    applyConfigured(mergeIfElse, me.mergeIfElseAccesses);
+    const circt::hlsest::SchedulingConfig &sc = cfg.scheduling;
+    applyConfigured(fastThreshold, static_cast<unsigned>(sc.fastThreshold));
+    applyConfigured(fastOpsThreshold,
+                    static_cast<unsigned>(sc.fastOpsThreshold));
+    applyConfigured(userIITarget, sc.userIITarget);
+  }
+  if (!timingModel && failed(createPlugins()))
+    return signalPassFailure();
 
   coalescePerfectNests();
 
@@ -1695,8 +1827,11 @@ void AffineToLoopSchedule::runOnOperation() {
 
   scheduleCache.clear();
   for (AffineForOp loop : innermostLoops) {
-    ModuloProblem moduloProblem =
-        getModuloProblem(schedulingAnalysis->getProblem(loop));
+
+    circt::hlsest::DependenceInputs inputs{*schedulingAnalysis,
+                                           dependenceAnalysis};
+    ModuloProblem moduloProblem = dependenceModel->populate(loop, inputs);
+    addStructuralDependences(loop, moduloProblem);
 
     if (failed(populateOperatorTypes(loop, moduloProblem, bramClass)))
       continue;
@@ -1710,6 +1845,30 @@ void AffineToLoopSchedule::runOnOperation() {
 
     if (failed(createLoopSchedulePipeline(loop, moduloProblem)))
       return signalPassFailure();
+  }
+
+  SmallVector<Block *> sequentialRegions;
+  if (!getOperation().getBody().empty())
+    sequentialRegions.push_back(&getOperation().getBody().front());
+  getOperation().walk(
+      [&](AffineForOp loop) { sequentialRegions.push_back(loop.getBody()); });
+  for (Block *region : sequentialRegions) {
+    circt::hlsest::SequentialSchedule sched;
+    sched.region = region;
+    if (!sequentialScheduler->schedule(*region, schedulingContext, sched))
+      continue;
+    Builder buildPoint(&getContext());
+    for (auto &[op, state] : sched.stateOf)
+      op->setAttr("hls.state", buildPoint.getI64IntegerAttr(state));
+  }
+
+  circt::hlsest::BindingResult binding;
+  binder->bind(circt::hlsest::ScheduleView::fromIR(getOperation()),
+               schedulingContext, binding);
+  if (!binding.opToUnit.empty()) {
+    Builder buildPoint(&getContext());
+    for (auto &[op, unit] : binding.opToUnit)
+      op->setAttr("hls.unit", buildPoint.getI64IntegerAttr(unit));
   }
 }
 
@@ -1969,207 +2128,183 @@ LogicalResult AffineToLoopSchedule::lowerAffineStructures(
   return success();
 }
 
-static void linkMemoryResource(Operation *memOp, Value memRef, bool isLoad,
-                               ModuloProblem &problem,
-                               const BRAMClassification &bramClass) {
+/// Records on the bank's defining op (its memref.alloca, or the
+/// memref.get_global that names a global) the tier the storage selector
+/// chose before scheduling (hls.storage_tier) and the read latency of the
+/// bank's ports (hls.read_latency), so that --bram-analysis prices the bank
+/// in the memory it was scheduled for (design memo 8.7 step 3).
+static void recordStorageTier(Value memRef,
+                              const circt::hlsest::StorageSelector &selector,
+                              const circt::hlsest::BankStaticProfile *profile,
+                              const circt::hlsest::PortPools &pools) {
+  Operation *def = memRef.getDefiningOp();
+  if (!def || !isa<memref::AllocaOp, memref::GetGlobalOp>(def) ||
+      def->hasAttr("hls.storage_tier"))
+    return;
+  auto memRefType = dyn_cast<MemRefType>(memRef.getType());
+  if (!memRefType || !memRefType.hasStaticShape() ||
+      !memRefType.getElementType().isIntOrFloat())
+    return;
+  circt::hlsest::MemoryRequest request;
+  request.words = memRefType.getNumElements();
+  request.writeWidth = memRefType.getElementType().getIntOrFloatBitWidth();
+  if (auto narrow =
+          def->getAttrOfType<IntegerAttr>(hls_analysis::kNarrowBitsAttrName))
+    if (narrow.getInt() > 0 &&
+        static_cast<uint64_t>(narrow.getInt()) < request.writeWidth) {
+      request.writeWidth = static_cast<unsigned>(narrow.getInt());
+      request.narrowed = true;
+    }
+  request.readWidths.push_back(request.writeWidth);
+  circt::hlsest::SelectionContext context;
+  context.profile = profile;
+  circt::hlsest::TierChoice choice =
+      selector.select(request, circt::hlsest::Config::get().device, context);
+  Builder buildPoint(def->getContext());
+  def->setAttr("hls.storage_tier", buildPoint.getStringAttr(choice.tier));
+  def->setAttr("hls.read_latency",
+               buildPoint.getI64IntegerAttr(pools.readLatency));
+}
+
+static void
+linkMemoryResource(Operation *memOp, Value memRef, bool isLoad,
+                   unsigned latency, ModuloProblem &problem,
+                   const BRAMClassification &bramClass,
+                   const circt::hlsest::MemoryArchitecturePolicy &policy,
+                   const circt::hlsest::StorageSelector &selector,
+                   const circt::hlsest::DeviceMemory &memory) {
   auto key = std::to_string(hash_value(memRef));
 
   Problem::OperatorType memOpr = problem.getOrInsertOperatorType("mem_" + key);
-  problem.setLatency(memOpr, 1);
+  problem.setLatency(memOpr, latency);
   problem.setLinkedOperatorType(memOp, memOpr);
 
   using hls_analysis::StorageMode;
   const BankProfile *prof = bramClass.getProfile(memRef);
+  circt::hlsest::BankStaticProfile staticProfile;
+  if (prof) {
+    staticProfile.width = prof->width;
+    staticProfile.depth = prof->depth;
+    staticProfile.maxReads = prof->maxReads;
+    staticProfile.maxWrites = prof->maxWrites;
+    staticProfile.replicable = prof->mode == StorageMode::OneWriteNRead;
+    staticProfile.registers = prof->mode == StorageMode::Registers;
+  }
+  circt::hlsest::PortPools pools =
+      policy.capacity(prof ? &staticProfile : nullptr, memory);
+  recordStorageTier(memRef, selector, prof ? &staticProfile : nullptr, pools);
 
   SmallVector<Problem::ResourceType> rsrcs;
-
-  StorageMode mode = prof ? prof->mode : StorageMode::TDP;
-  Problem::ResourceType r;
-
-  switch (mode) {
-  case StorageMode::OnePort:
-  case StorageMode::TDP:
-  case StorageMode::OneWriteNRead: {
-
-    r = problem.getOrInsertResourceType("mem_" + key + "_rsrc");
-    problem.setLimit(r, hls_analysis::storageModeSlots(mode));
+  for (const circt::hlsest::PortPool &pool : pools.pools) {
+    if (!pool.limit)
+      continue;
+    if ((pool.consumes == circt::hlsest::PortPool::Read && !isLoad) ||
+        (pool.consumes == circt::hlsest::PortPool::Write && isLoad))
+      continue;
+    Problem::ResourceType r =
+        problem.getOrInsertResourceType("mem_" + key + pool.suffix);
+    problem.setLimit(r, *pool.limit);
     rsrcs.push_back(r);
-    break;
-  }
-  case StorageMode::SDP: {
-
-    if (isLoad) {
-      r = problem.getOrInsertResourceType("mem_" + key + "_rd_rsrc");
-      problem.setLimit(r, 1);
-    } else {
-      r = problem.getOrInsertResourceType("mem_" + key + "_wr_rsrc");
-      problem.setLimit(r, 1);
-    }
-    rsrcs.push_back(r);
-    break;
-  }
-  case StorageMode::Registers:
-    break;
   }
   if (!rsrcs.empty())
     problem.setLinkedResourceTypes(memOp, rsrcs);
 
   LLVM_DEBUG(llvm::dbgs() << "linked " << (isLoad ? "load" : "store") << " to "
-                          << stringifyStorageMode(mode) << " resource for "
-                          << *memOp << "\n");
+                          << pools.pools.size() << " pool(s) for " << *memOp
+                          << "\n");
 }
 
-/// Populate the scheduling problem operator types for the dialect we are
-/// targeting. Right now, we assume Calyx, which has a standard library with
-/// well-defined operator latencies. Ultimately, we should move this to a
-/// dialect interface in the Scheduling dialect.
-///
-/// MODIFIED: now takes a single innermost loop, and covers the full set of
-/// arith ops produced by affine map expansion (including the floordiv/mod
-/// delinearization introduced by loop coalescing): mul/div/rem are
-/// multicycle, while select/sub/logical/shift/ext/trunc are combinational.
+/// The memref an access op reads or writes, and whether it reads (null for
+/// any other op).
+static Value accessedMemref(Operation *op, bool &isLoad) {
+  isLoad = false;
+  if (auto stringValue = dyn_cast<AffineStoreOp>(op))
+    return stringValue.getMemRef();
+  if (auto stringValue = dyn_cast<memref::StoreOp>(op))
+    return stringValue.getMemRef();
+  if (auto stringValue = dyn_cast<StoreEnableOp>(op))
+    return stringValue.getMemref();
+  isLoad = true;
+  if (auto lowerIndex = dyn_cast<AffineLoadOp>(op))
+    return lowerIndex.getMemRef();
+  if (auto lowerIndex = dyn_cast<memref::LoadOp>(op))
+    return lowerIndex.getMemRef();
+  isLoad = false;
+  return Value();
+}
+
+/// Populate the scheduling problem's operator types: the timing model's
+/// library first (calyx-fixed: comb, seq, multicycle, fpmul, fpaddsub,
+/// fpdiv, fpsqrt, fptrans, in that order), then every operation of the loop
+/// body with the class and latency the model gives it; a memory access gets
+/// the one operator type of its memref and the port pools of its bank. An
+/// operation the model does not support leaves the loop sequential.
 LogicalResult AffineToLoopSchedule::populateOperatorTypes(
     AffineForOp forOp, ModuloProblem &problem,
     const BRAMClassification &bramClass) {
-
-  Problem::OperatorType combOpr = problem.getOrInsertOperatorType("comb");
-  problem.setLatency(combOpr, 0);
-  Problem::OperatorType seqOpr = problem.getOrInsertOperatorType("seq");
-  problem.setLatency(seqOpr, 1);
-  Problem::OperatorType mcOpr = problem.getOrInsertOperatorType("multicycle");
-  problem.setLatency(mcOpr, 3);
-
-  Problem::OperatorType fpMulOpr = problem.getOrInsertOperatorType("fpmul");
-  problem.setLatency(fpMulOpr, 4);
-  Problem::OperatorType fpAddOpr = problem.getOrInsertOperatorType("fpaddsub");
-  problem.setLatency(fpAddOpr, 5);
-  Problem::OperatorType fpDivOpr = problem.getOrInsertOperatorType("fpdiv");
-  problem.setLatency(fpDivOpr, 12);
-
-  Problem::OperatorType fpSqrtOpr = problem.getOrInsertOperatorType("fpsqrt");
-  problem.setLatency(fpSqrtOpr, 16);
-  Problem::OperatorType fpTransOpr = problem.getOrInsertOperatorType("fptrans");
-  problem.setLatency(fpTransOpr, 20);
-
-  Operation *unsupported;
+  SmallVector<circt::hlsest::OperatorTiming> library;
+  timingModel->library(library);
+  for (const circt::hlsest::OperatorTiming &t : library) {
+    Problem::OperatorType opr = problem.getOrInsertOperatorType(t.cls);
+    problem.setLatency(opr, t.latency);
+  }
+  const circt::hlsest::Config &cfg = circt::hlsest::Config::get();
+  const circt::hlsest::DeviceMemory *blockMemory = cfg.blockMemory();
+  llvm::StringMap<unsigned> latencyOfClass;
+  Operation *unsupported = nullptr;
+  Operation *inconsistent = nullptr;
   WalkResult result = forOp.getBody()->walk([&](Operation *op) {
-    return TypeSwitch<Operation *, WalkResult>(op)
+    std::optional<circt::hlsest::OperatorTiming> t =
+        timingModel->timing(op, schedulingContext);
+    if (!t) {
+      unsupported = op;
+      return WalkResult::interrupt();
+    }
+    bool isLoad = false;
+    if (Value memRef = accessedMemref(op, isLoad)) {
+      linkMemoryResource(op, memRef, isLoad, t->latency, problem, bramClass,
+                         *memoryPolicy, *storageSelector, *blockMemory);
+      return WalkResult::advance();
+    }
 
-        .Case<IfOp, AffineYieldOp, arith::ConstantOp, CmpIOp, IndexCastOp,
-              IndexCastUIOp, AllocaOp, AllocOp, YieldOp, AddIOp, SubIOp,
-              SelectOp, AndIOp, OrIOp, XOrIOp, ShLIOp, ShRSIOp, ShRUIOp,
-              TruncIOp, ExtSIOp, ExtUIOp, NegFOp, CmpFOp, ExtFOp, TruncFOp,
-              SIToFPOp, UIToFPOp, FPToSIOp, FPToUIOp, BitcastOp>(
-            [&](Operation *combOp) {
-              problem.setLinkedOperatorType(combOp, combOpr);
-              return WalkResult::advance();
-            })
-
-        .Case<AffineStoreOp, memref::StoreOp>([&](Operation *memOp) {
-          Value memRef = isa<AffineStoreOp>(*memOp)
-                             ? cast<AffineStoreOp>(*memOp).getMemRef()
-                             : cast<memref::StoreOp>(*memOp).getMemRef();
-          linkMemoryResource(memOp, memRef, false, problem, bramClass);
-          return WalkResult::advance();
-        })
-
-        .Case<AffineLoadOp, memref::LoadOp>([&](Operation *memOp) {
-          Value memRef = isa<AffineLoadOp>(*memOp)
-                             ? cast<AffineLoadOp>(*memOp).getMemRef()
-                             : cast<memref::LoadOp>(*memOp).getMemRef();
-          linkMemoryResource(memOp, memRef, true, problem, bramClass);
-          return WalkResult::advance();
-        })
-        .Case<StoreEnableOp>([&](Operation *memOp) {
-          Value memRef = cast<StoreEnableOp>(*memOp).getMemref();
-          linkMemoryResource(memOp, memRef, false, problem, bramClass);
-          return WalkResult::advance();
-        })
-        .Case<MulIOp, DivSIOp, DivUIOp, RemSIOp, RemUIOp>([&](Operation *mcOp) {
-          problem.setLinkedOperatorType(mcOp, mcOpr);
-          return WalkResult::advance();
-        })
-        .Case<MulFOp>([&](Operation *fpOp) {
-          problem.setLinkedOperatorType(fpOp, fpMulOpr);
-          return WalkResult::advance();
-        })
-        .Case<AddFOp, SubFOp, MaximumFOp, MinimumFOp, MaxNumFOp, MinNumFOp>(
-            [&](Operation *fpOp) {
-              problem.setLinkedOperatorType(fpOp, fpAddOpr);
-              return WalkResult::advance();
-            })
-        .Case<DivFOp, RemFOp>([&](Operation *fpOp) {
-          problem.setLinkedOperatorType(fpOp, fpDivOpr);
-          return WalkResult::advance();
-        })
-        .Case<math::SqrtOp, math::RsqrtOp>([&](Operation *fpOp) {
-          problem.setLinkedOperatorType(fpOp, fpSqrtOpr);
-          return WalkResult::advance();
-        })
-        .Case<math::ExpOp, math::Exp2Op, math::ExpM1Op, math::LogOp,
-              math::Log2Op, math::Log10Op, math::Log1pOp, math::PowFOp,
-              math::SinOp, math::CosOp, math::TanOp, math::TanhOp, math::ErfOp,
-              math::AtanOp, math::Atan2Op>([&](Operation *fpOp) {
-          problem.setLinkedOperatorType(fpOp, fpTransOpr);
-          return WalkResult::advance();
-        })
-        .Case<math::FmaOp>([&](Operation *fpOp) {
-          problem.setLinkedOperatorType(fpOp, fpAddOpr);
-          return WalkResult::advance();
-        })
-        .Case<math::AbsFOp, math::CopySignOp, math::AbsIOp>(
-            [&](Operation *combOp) {
-              problem.setLinkedOperatorType(combOp, combOpr);
-              return WalkResult::advance();
-            })
-        .Case<math::FloorOp, math::CeilOp, math::RoundOp, math::RoundEvenOp,
-              math::TruncOp>([&](Operation *fpOp) {
-          problem.setLinkedOperatorType(fpOp, fpAddOpr);
-          return WalkResult::advance();
-        })
-        .Default([&](Operation *badOp) {
-          if (auto call = dyn_cast<CallOpInterface>(badOp)) {
-
-            if (loopScheduleKeptCallLatency >= 0 &&
-                resolveDefinedCallee(call)) {
-
-              unsigned latency =
-                  static_cast<unsigned>(loopScheduleKeptCallLatency);
-              if (auto occ = badOp->getAttrOfType<IntegerAttr>(
-                      circt::hls_analysis::kCallOccupancyAttr))
-                latency =
-                    static_cast<unsigned>(std::max<int64_t>(1, occ.getInt()));
-              Problem::OperatorType callOpr = problem.getOrInsertOperatorType(
-                  "call_kept_" + std::to_string(latency));
-              problem.setLatency(callOpr, latency);
-              problem.setLinkedOperatorType(badOp, callOpr);
-              return WalkResult::advance();
-            }
-            if (loopScheduleCallLatency >= 0 &&
-                llvm::none_of(badOp->getOperandTypes(),
-                              llvm::IsaPred<BaseMemRefType>) &&
-                llvm::none_of(badOp->getResultTypes(),
-                              llvm::IsaPred<BaseMemRefType>)) {
-              Problem::OperatorType callOpr =
-                  problem.getOrInsertOperatorType("call");
-              problem.setLatency(
-                  callOpr, static_cast<unsigned>(loopScheduleCallLatency));
-              problem.setLinkedOperatorType(badOp, callOpr);
-              return WalkResult::advance();
-            }
-          }
-          unsupported = op;
-          return WalkResult::interrupt();
-        });
+    auto [it, inserted] = latencyOfClass.try_emplace(t->cls, t->latency);
+    if (!inserted && it->second != t->latency) {
+      inconsistent = op;
+      return WalkResult::interrupt();
+    }
+    Problem::OperatorType opr = problem.getOrInsertOperatorType(t->cls);
+    problem.setLatency(opr, t->latency);
+    problem.setLinkedOperatorType(op, opr);
+    if (t->unitLimit) {
+      Problem::ResourceType r =
+          problem.getOrInsertResourceType("unit_" + t->cls);
+      problem.setLimit(r, *t->unitLimit);
+      problem.setLinkedResourceTypes(op, {r});
+    }
+    if (emitDetail) {
+      Builder buildPoint(op->getContext());
+      op->setAttr(
+          "hls.op_timing",
+          buildPoint.getDictionaryAttr(
+              {buildPoint.getNamedAttr("cls", buildPoint.getStringAttr(t->cls)),
+               buildPoint.getNamedAttr(
+                   "latency", buildPoint.getI64IntegerAttr(t->latency))}));
+    }
+    return WalkResult::advance();
   });
 
+  if (inconsistent) {
+    forOp.emitError("--convert-affine-to-loopschedule: the timing model gives "
+                    "operations of one class different latencies: ")
+        << *inconsistent;
+    return failure();
+  }
   if (result.wasInterrupted()) {
     forOp.emitWarning("not pipelined (left as a sequential loop): "
                       "unsupported operation ")
         << *unsupported;
     return failure();
   }
-
   return success();
 }
 
@@ -2208,12 +2343,14 @@ AffineToLoopSchedule::solveSchedulingProblem(AffineForOp forOp,
     return failure();
 
   auto *anchor = forOp.getBody()->getTerminator();
+
+  const bool reuse = reuseSchedules && moduloScheduler->isFunctionOfProblem();
   unsigned targetII = userIITarget ? userTargetII(forOp) : 0u;
 
   SmallVector<int64_t> signature;
   size_t signatureHash = 0;
   const CachedSchedule *reused = nullptr;
-  if (reuseSchedules) {
+  if (reuse) {
     signature = scheduleSignature(problem, anchor);
     signature.push_back(targetII);
     signatureHash =
@@ -2251,41 +2388,14 @@ AffineToLoopSchedule::solveSchedulingProblem(AffineForOp forOp,
     reused = nullptr;
   }
 
-  unsigned limited = FastModuloScheduler::countLimitedOps(problem);
-  bool scheduled = false, triedFast = false;
+  circt::hlsest::SchedulingContext context = schedulingContext;
+  if (targetII)
+    context.requestedII = targetII;
+  circt::hlsest::ScheduleOutcome outcome =
+      moduloScheduler->schedule(problem, anchor, context);
+  bool scheduled = outcome.success;
 
-  StringRef scheduler;
-  bool hugeProblem = fastOpsThreshold != 0 &&
-                     problem.getOperations().size() > fastOpsThreshold;
-  if (fastThreshold == 0 || limited > fastThreshold || hugeProblem) {
-    triedFast = true;
-    FastModuloScheduler fast(problem);
-    scheduled = succeeded(fast.schedule(4096));
-    if (scheduled)
-      scheduler = "greedy";
-    LLVM_DEBUG(if (!scheduled) llvm::dbgs()
-               << "fast modulo scheduler failed; falling back to simplex\n");
-  }
-  if (!scheduled) {
-    scheduled = succeeded(scheduleSimplex(problem, anchor));
-    if (scheduled)
-      scheduler = triedFast ? "simplex (greedy failed)" : "simplex";
-  }
-
-  if (!scheduled && !triedFast) {
-    LLVM_DEBUG(llvm::dbgs()
-               << "simplex modulo scheduler failed; falling back to fast\n");
-    FastModuloScheduler fast(problem);
-    scheduled = succeeded(fast.schedule(4096));
-    if (scheduled)
-      scheduler = "greedy (simplex failed)";
-  }
-
-  if (scheduled && targetII > *problem.getInitiationInterval()) {
-    FastModuloScheduler fast(problem);
-    if (succeeded(fast.schedule(4096, targetII)))
-      scheduler = "greedy (user II target)";
-  }
+  std::string scheduler = outcome.label;
   if (!scheduled)
     return failure();
 
@@ -2295,7 +2405,7 @@ AffineToLoopSchedule::solveSchedulingProblem(AffineForOp forOp,
   forOp->setAttr(circt::hls_analysis::kLoopSchedulerAttr,
                  StringAttr::get(forOp.getContext(), scheduler));
 
-  if (reuseSchedules) {
+  if (reuse) {
     SmallVector<unsigned> startTimes;
     for (Operation *op : problem.getOperations())
       startTimes.push_back(*problem.getStartTime(op));
@@ -2319,7 +2429,7 @@ AffineToLoopSchedule::solveSchedulingProblem(AffineForOp forOp,
         forOp.getLoc().print(os);
       scheduleCache[signatureHash].push_back(
           {std::move(signature), *problem.getInitiationInterval(),
-           std::move(startTimes), scheduler.str(), std::move(loc)});
+           std::move(startTimes), scheduler, std::move(loc)});
     }
   }
 
@@ -2579,6 +2689,351 @@ AffineToLoopSchedule::createLoopSchedulePipeline(AffineForOp forOp,
 
   return success();
 }
+
+namespace {
+
+using circt::hlsest::OperatorTiming;
+
+/// calyx-fixed: a fixed operator library "assuming Calyx" (no clock period
+/// enters): comb 0, seq 1, multicycle 3 (integer mul / div / rem), fpmul 4,
+/// fpaddsub 5, fpdiv 12, fpsqrt 16, fptrans 20, mem 1 cycles
+/// (scheduling.timing.operator_latencies; unconfirmed against Vitis); a call
+/// to a defined function holds its instance for hls.call_occupancy cycles
+/// (else kept_call, 1), another call without memref operands takes `call`
+/// (-1: the loop stays sequential).
+class CalyxFixedTiming : public circt::hlsest::OperatorTimingModel {
+public:
+  StringRef name() const override { return "calyx-fixed"; }
+
+  void configure(const circt::hlsest::Config &cfg,
+                 circt::hlsest::ConfigDiagnostics &diag) override {
+    latencies = cfg.scheduling.operatorLatencies;
+    SmallVector<std::string> classes;
+    listClasses(classes);
+    for (const std::string &candidateValue : classes)
+      if (!latencies.count(candidateValue))
+        diag.errors.push_back("scheduling.timing.operator_latencies: "
+                              "calyx-fixed needs a latency for '" +
+                              candidateValue + "'");
+  }
+
+  void listClasses(SmallVectorImpl<std::string> &out) const override {
+    for (const char *candidateValue :
+         {"comb", "seq", "multicycle", "fpmul", "fpaddsub", "fpdiv", "fpsqrt",
+          "fptrans", "mem", "call", "kept_call"})
+      out.push_back(candidateValue);
+  }
+
+  void library(SmallVectorImpl<OperatorTiming> &out) const override {
+    for (const char *candidateValue :
+         {"comb", "seq", "multicycle", "fpmul", "fpaddsub", "fpdiv", "fpsqrt",
+          "fptrans"})
+      out.push_back(make(candidateValue));
+  }
+
+  std::optional<OperatorTiming>
+  timing(Operation *op,
+         const circt::hlsest::SchedulingContext &) const override {
+    return TypeSwitch<Operation *, std::optional<OperatorTiming>>(op)
+
+        .Case<IfOp, AffineYieldOp, arith::ConstantOp, CmpIOp, IndexCastOp,
+              IndexCastUIOp, AllocaOp, AllocOp, YieldOp, AddIOp, SubIOp,
+              SelectOp, AndIOp, OrIOp, XOrIOp, ShLIOp, ShRSIOp, ShRUIOp,
+              TruncIOp, ExtSIOp, ExtUIOp, NegFOp, CmpFOp, ExtFOp, TruncFOp,
+              SIToFPOp, UIToFPOp, FPToSIOp, FPToUIOp, BitcastOp>(
+            [&](Operation *) { return make("comb"); })
+        .Case<AffineStoreOp, memref::StoreOp, AffineLoadOp, memref::LoadOp,
+              StoreEnableOp>([&](Operation *) { return make("mem"); })
+        .Case<MulIOp, DivSIOp, DivUIOp, RemSIOp, RemUIOp>(
+            [&](Operation *) { return make("multicycle"); })
+        .Case<MulFOp>([&](Operation *) { return make("fpmul"); })
+        .Case<AddFOp, SubFOp, MaximumFOp, MinimumFOp, MaxNumFOp, MinNumFOp>(
+            [&](Operation *) { return make("fpaddsub"); })
+        .Case<DivFOp, RemFOp>([&](Operation *) { return make("fpdiv"); })
+        .Case<math::SqrtOp, math::RsqrtOp>(
+            [&](Operation *) { return make("fpsqrt"); })
+        .Case<math::ExpOp, math::Exp2Op, math::ExpM1Op, math::LogOp,
+              math::Log2Op, math::Log10Op, math::Log1pOp, math::PowFOp,
+              math::SinOp, math::CosOp, math::TanOp, math::TanhOp, math::ErfOp,
+              math::AtanOp, math::Atan2Op>(
+            [&](Operation *) { return make("fptrans"); })
+        .Case<math::FmaOp>([&](Operation *) { return make("fpaddsub"); })
+        .Case<math::AbsFOp, math::CopySignOp, math::AbsIOp>(
+            [&](Operation *) { return make("comb"); })
+        .Case<math::FloorOp, math::CeilOp, math::RoundOp, math::RoundEvenOp,
+              math::TruncOp>([&](Operation *) { return make("fpaddsub"); })
+        .Default([&](Operation *badOp) -> std::optional<OperatorTiming> {
+          auto call = dyn_cast<CallOpInterface>(badOp);
+          if (!call)
+            return std::nullopt;
+
+          int64_t kept = latency("kept_call");
+          if (kept >= 0 && resolveDefinedCallee(call)) {
+            unsigned lat = static_cast<unsigned>(kept);
+            if (auto occ = badOp->getAttrOfType<IntegerAttr>(
+                    circt::hls_analysis::kCallOccupancyAttr))
+              lat = static_cast<unsigned>(std::max<int64_t>(1, occ.getInt()));
+            OperatorTiming t;
+            t.cls = "call_kept_" + std::to_string(lat);
+            t.latency = lat;
+            return t;
+          }
+          int64_t other = latency("call");
+          if (other >= 0 &&
+              llvm::none_of(badOp->getOperandTypes(),
+                            llvm::IsaPred<BaseMemRefType>) &&
+              llvm::none_of(badOp->getResultTypes(),
+                            llvm::IsaPred<BaseMemRefType>)) {
+            OperatorTiming t;
+            t.cls = "call";
+            t.latency = static_cast<unsigned>(other);
+            return t;
+          }
+          return std::nullopt;
+        });
+  }
+
+private:
+  std::map<std::string, int64_t> latencies;
+
+  int64_t latency(StringRef cls) const {
+    auto it = latencies.find(cls.str());
+    return it == latencies.end() ? 0 : it->second;
+  }
+  OperatorTiming make(StringRef cls) const {
+    OperatorTiming t;
+    t.cls = cls.str();
+    t.latency = static_cast<unsigned>(latency(cls));
+    return t;
+  }
+};
+
+/// cached-o1: the dependences of the function's cyclic scheduling analysis,
+/// keyed on the affine operations before the lowering, so that loop-carried
+/// memory dependences never reach the schedulers (OPEN_ISSUES O1; turning
+/// them on broke 16 of the 42 Estimation inputs).
+class CachedO1Dependences : public circt::hlsest::DependenceModel {
+public:
+  StringRef name() const override { return "cached-o1"; }
+  ModuloProblem populate(AffineForOp loop,
+                         circt::hlsest::DependenceInputs &in) const override {
+    return copyToModuloProblem(in.cached.getProblem(loop));
+  }
+};
+
+/// greedy-simplex: the greedy resource-bound modulo scheduler above
+/// fast_threshold resource-limited operations (or fast_ops_threshold
+/// operations), else the simplex scheduler; each falls back to the other; a
+/// loop with a user II target that could start more often is rescheduled
+/// greedily at the target. greedy / simplex: one algorithm, no fallback.
+class ModuloSchedulers : public circt::hlsest::ModuloScheduler {
+public:
+  enum Kind { GreedySimplex, Greedy, Simplex };
+  explicit ModuloSchedulers(Kind kind) : kind(kind) {}
+
+  StringRef name() const override {
+    return kind == GreedySimplex ? "greedy-simplex"
+           : kind == Greedy      ? "greedy"
+                                 : "simplex";
+  }
+  bool isFunctionOfProblem() const override { return true; }
+
+  void configure(const circt::hlsest::Config &cfg,
+                 circt::hlsest::ConfigDiagnostics &) override {
+    fastThreshold = static_cast<unsigned>(cfg.scheduling.fastThreshold);
+    fastOpsThreshold = static_cast<unsigned>(cfg.scheduling.fastOpsThreshold);
+    maxIIBumps = static_cast<unsigned>(cfg.scheduling.maxIIBumps);
+  }
+
+  circt::hlsest::ScheduleOutcome
+  schedule(ModuloProblem &problem, Operation *anchor,
+           const circt::hlsest::SchedulingContext &context) const override {
+    circt::hlsest::ScheduleOutcome out;
+    unsigned targetII = context.requestedII.value_or(0);
+    if (kind == Greedy) {
+      FastModuloScheduler fast(problem);
+      out.success = succeeded(fast.schedule(maxIIBumps));
+      out.label = "greedy";
+    } else if (kind == Simplex) {
+      out.success = succeeded(scheduleSimplex(problem, anchor));
+      out.label = "simplex";
+    } else {
+
+      unsigned limited = FastModuloScheduler::countLimitedOps(problem);
+      bool scheduled = false, triedFast = false;
+      StringRef label;
+      bool hugeProblem = fastOpsThreshold != 0 &&
+                         problem.getOperations().size() > fastOpsThreshold;
+      if (fastThreshold == 0 || limited > fastThreshold || hugeProblem) {
+        triedFast = true;
+        FastModuloScheduler fast(problem);
+        scheduled = succeeded(fast.schedule(maxIIBumps));
+        if (scheduled)
+          label = "greedy";
+        LLVM_DEBUG(
+            if (!scheduled) llvm::dbgs()
+            << "fast modulo scheduler failed; falling back to simplex\n");
+      }
+      if (!scheduled) {
+        scheduled = succeeded(scheduleSimplex(problem, anchor));
+        if (scheduled)
+          label = triedFast ? "simplex (greedy failed)" : "simplex";
+      }
+
+      if (!scheduled && !triedFast) {
+        LLVM_DEBUG(
+            llvm::dbgs()
+            << "simplex modulo scheduler failed; falling back to fast\n");
+        FastModuloScheduler fast(problem);
+        scheduled = succeeded(fast.schedule(maxIIBumps));
+        if (scheduled)
+          label = "greedy (simplex failed)";
+      }
+      out.success = scheduled;
+      out.label = label.str();
+    }
+
+    if (kind == GreedySimplex && out.success &&
+        targetII > *problem.getInitiationInterval()) {
+      FastModuloScheduler fast(problem);
+      if (succeeded(fast.schedule(maxIIBumps, targetII)))
+        out.label = "greedy (user II target)";
+    }
+    return out;
+  }
+
+private:
+  Kind kind;
+  unsigned fastThreshold = 150, fastOpsThreshold = 16384, maxIIBumps = 4096;
+};
+
+/// none: no state schedule; the BRAM port model applies its stretch-pair rule
+/// to every sequential scope.
+class NoSequentialScheduler : public circt::hlsest::SequentialScheduler {
+public:
+  StringRef name() const override { return "none"; }
+  bool schedule(Block &, const circt::hlsest::SchedulingContext &,
+                circt::hlsest::SequentialSchedule &) const override {
+    return false;
+  }
+};
+
+/// none: binds nothing (Phase 6 will add a binder).
+class NoBinder : public circt::hlsest::Binder {
+public:
+  StringRef name() const override { return "none"; }
+  void bind(const circt::hlsest::ScheduleView &,
+            const circt::hlsest::SchedulingContext &,
+            circt::hlsest::BindingResult &) const override {}
+};
+
+} // namespace
+
+void circt::hlsest::builtin::registerOperatorTimingModels() {
+  PluginRegistry<OperatorTimingModel>::instance().add(
+      "calyx-fixed",
+      "fixed operator latencies per class (scheduling.timing."
+      "operator_latencies), no clock",
+      [] { return std::make_unique<CalyxFixedTiming>(); }, "builtin");
+}
+
+void circt::hlsest::builtin::registerDependenceModels() {
+  PluginRegistry<DependenceModel>::instance().add(
+      "cached-o1",
+      "intra-iteration memory dependences and iter_arg recurrences of the "
+      "cached analysis (loop-carried memory dependences never reach the "
+      "scheduler, OPEN_ISSUES O1)",
+      [] { return std::make_unique<CachedO1Dependences>(); }, "builtin");
+}
+
+void circt::hlsest::builtin::registerModuloSchedulers() {
+  auto &r = PluginRegistry<ModuloScheduler>::instance();
+  r.add(
+      "greedy-simplex",
+      "greedy resource-bound modulo scheduler above fast_threshold, else "
+      "the simplex; each falls back to the other",
+      [] {
+        return std::make_unique<ModuloSchedulers>(
+            ModuloSchedulers::GreedySimplex);
+      },
+      "builtin");
+  r.add(
+      "greedy", "the greedy resource-bound modulo scheduler only",
+      [] {
+        return std::make_unique<ModuloSchedulers>(ModuloSchedulers::Greedy);
+      },
+      "builtin");
+  r.add(
+      "simplex", "the simplex modulo scheduler only",
+      [] {
+        return std::make_unique<ModuloSchedulers>(ModuloSchedulers::Simplex);
+      },
+      "builtin");
+}
+
+void circt::hlsest::builtin::registerSequentialSchedulers() {
+  PluginRegistry<SequentialScheduler>::instance().add(
+      "none", "no state schedule (the stretch-pair rule applies)",
+      [] { return std::make_unique<NoSequentialScheduler>(); }, "builtin");
+}
+
+void circt::hlsest::builtin::registerBinders() {
+  PluginRegistry<Binder>::instance().add(
+      "none", "binds nothing", [] { return std::make_unique<NoBinder>(); },
+      "builtin");
+}
+
+circt::hlsest::ScheduleView
+circt::hlsest::ScheduleView::fromIR(func::FuncOp func) {
+  ScheduleView view;
+  auto opSchedule = [](Operation *op, unsigned start) {
+    OpSchedule stringValue;
+    stringValue.op = op;
+    stringValue.start = start;
+    if (auto dimensionIndex =
+            op->getAttrOfType<DictionaryAttr>("hls.op_timing")) {
+      if (auto candidateValue = dimensionIndex.getAs<StringAttr>("cls"))
+        stringValue.cls = candidateValue.getValue().str();
+      if (auto lowerIndex = dimensionIndex.getAs<IntegerAttr>("latency"))
+        stringValue.latency = static_cast<unsigned>(lowerIndex.getInt());
+    }
+    if (auto useValue = op->getAttrOfType<IntegerAttr>("hls.unit"))
+      stringValue.unit = useValue.getInt();
+    return stringValue;
+  };
+  func.walk([&](circt::loopschedule::LoopSchedulePipelineOp pipe) {
+    RegionSchedule r;
+    r.region = pipe.getOperation();
+    r.pipelined = true;
+    r.ii = static_cast<unsigned>(pipe.getII());
+    if (auto tc = pipe.getTripCount())
+      r.tripCount = static_cast<int64_t>(*tc);
+    if (auto label = pipe->getAttrOfType<StringAttr>(
+            circt::hls_analysis::kLoopSchedulerAttr))
+      r.scheduler = label.getValue().str();
+    pipe.walk([&](circt::loopschedule::LoopSchedulePipelineStageOp stage) {
+      for (Operation &op : stage.getBodyBlock())
+        r.ops.push_back(
+            opSchedule(&op, static_cast<unsigned>(stage.getStart())));
+    });
+    view.regions.push_back(std::move(r));
+  });
+
+  llvm::MapVector<Operation *, RegionSchedule> sequential;
+  func.walk([&](Operation *op) {
+    auto state = op->getAttrOfType<IntegerAttr>("hls.state");
+    if (!state)
+      return;
+    Operation *parent = op->getParentOp();
+    RegionSchedule &r = sequential[parent];
+    r.region = parent;
+    r.ops.push_back(opSchedule(op, static_cast<unsigned>(state.getInt())));
+  });
+  for (auto &kv : sequential)
+    view.regions.push_back(std::move(kv.second));
+  return view;
+}
+
 namespace circt::hls_analysis {
 
 std::unique_ptr<mlir::Pass> createAffineToLoopSchedule() {

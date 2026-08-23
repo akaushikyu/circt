@@ -39,6 +39,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "circt/Dialect/Resource/Config/Config.h"
 #include "circt/Dialect/Resource/Passes/DataflowChannels.h"
 #include "circt/Dialect/Resource/Passes/StreamFifos.h"
 #include "circt/Dialect/Resource/Interfaces/MemoryDS.h"
@@ -132,9 +133,13 @@ DictionaryAttr pragmaDict(Operation *op, StringRef name) {
 
 // Blocks of a channel of `region` without a depth pragma, and why.
 std::pair<int64_t, std::string> structuralBlocks(Operation *region) {
+  // tool.hls.dataflow_channels.default_blocks (2): a ping-pong buffer.
+  const int64_t blocks = circt::hlsest::Config::get()
+                             .tool.hls.dataflowChannels.defaultBlocks;
+  const std::string n = std::to_string(blocks);
   if (!isa<func::FuncOp>(region))
-    return {2, "2: dataflow-in-loop body (one corpus design, no kernel: "
-               "unconfirmed)"};
+    return {blocks, n + ": dataflow-in-loop body (one corpus design, no "
+                        "kernel: unconfirmed)"};
   auto fn = cast<func::FuncOp>(region);
   auto module = fn->getParentOfType<ModuleOp>();
   std::optional<SymbolTable::UseRange> uses =
@@ -155,10 +160,11 @@ std::pair<int64_t, std::string> structuralBlocks(Operation *region) {
       }
     }
   if (!anyCall)
-    return {2, "2: the region of the top function"};
+    return {blocks, n + ": the region of the top function"};
   if (!caller.empty())
-    return {2, "2: the region function is called from the dataflow region " +
-                   caller};
+    return {blocks,
+            n + ": the region function is called from the dataflow region " +
+                caller};
   return {1, "1: the region function is not the top and none of its direct "
              "callers is a dataflow region, so two invocations never overlap"};
 }
@@ -773,6 +779,17 @@ priceChannel(int64_t words, unsigned bits, int64_t blocks, bool twoPorts,
              bool bound2p, bool lutram,
              llvm::function_ref<int64_t(int64_t, unsigned, bool)> blocksOf) {
   ChannelPrice p;
+  // The block-RAM threshold of the storage selector
+  // (tool.backend.storage_selector.min_block_bits, 1024 bits).
+  const circt::hlsest::Config &cfg = circt::hlsest::Config::get();
+  const circt::hlsest::StorageSelectorConfig &sel =
+      cfg.tool.backend.storageSelector;
+  const std::string minText = std::string(sel.belowSymbol()) + " " +
+                              std::to_string(sel.minBlockBits);
+  const std::string wideText =
+      "x" + std::to_string(cfg.pricedPortWidth(/*wide=*/true));
+  const std::string narrowText =
+      "x" + std::to_string(cfg.pricedPortWidth(/*wide=*/false));
   std::string geom = std::to_string(words) + "x" + std::to_string(bits);
   int64_t bankBits = words * static_cast<int64_t>(bits);
   if (lutram) {
@@ -782,22 +799,23 @@ priceChannel(int64_t words, unsigned bits, int64_t blocks, bool twoPorts,
   }
   if (blocks <= 1) {
     p.mode = "one block";
-    if (bankBits < kBRAMPromotionBits) {
-      p.rule = geom + " < 1024 bits: distributed RAM, 0 BRAM";
+    if (sel.belowBlock(bankBits)) {
+      p.rule = geom + " " + minText + " bits: distributed RAM, 0 BRAM";
       return p;
     }
     bool sdp = !twoPorts;
     p.bram = static_cast<unsigned>(blocksOf(words, bits, sdp));
     p.rule = "one block, an ordinary memory: F(" + geom + ") at " +
-             (sdp ? "x36 allowed (one port per process)"
-                  : "x18 (a process drives two ports)") +
+             (sdp ? wideText + " allowed (one port per process)"
+                  : narrowText + " (a process drives two ports)") +
              " = " + std::to_string(p.bram);
     return p;
   }
   if (twoPorts || bound2p) {
     p.mode = "separate";
-    if (bankBits < kBRAMPromotionBits) {
-      p.rule = "separate, " + geom + " per block < 1024 bits: distributed "
+    if (sel.belowBlock(bankBits)) {
+      p.rule = "separate, " + geom + " per block " + minText +
+               " bits: distributed "
                "RAM, 0 BRAM";
       return p;
     }
@@ -805,9 +823,9 @@ priceChannel(int64_t words, unsigned bits, int64_t blocks, bool twoPorts,
     int64_t each = blocksOf(words, bits, sdp);
     p.bram = static_cast<unsigned>(blocks * each);
     p.rule = "separate: " + std::to_string(blocks) + " x F(" + geom + ") at " +
-             (sdp ? "x36 allowed (bound ram_2p / ram_s2p, one port per "
+             (sdp ? wideText + " allowed (bound ram_2p / ram_s2p, one port per "
                     "process)"
-                  : "x18") +
+                  : narrowText) +
              " = " + std::to_string(blocks) + " x " + std::to_string(each) +
              " = " + std::to_string(p.bram);
     return p;
@@ -815,14 +833,16 @@ priceChannel(int64_t words, unsigned bits, int64_t blocks, bool twoPorts,
   p.mode = "single";
   int64_t allWords = blocks * words;
   std::string all = std::to_string(allWords) + "x" + std::to_string(bits);
-  if (allWords * static_cast<int64_t>(bits) < kBRAMPromotionBits) {
-    p.rule = "single memory of " + all + " < 1024 bits: distributed RAM, 0 "
+  if (sel.belowBlock(allWords * static_cast<int64_t>(bits))) {
+    p.rule = "single memory of " + all + " " + minText +
+             " bits: distributed RAM, 0 "
              "BRAM";
     return p;
   }
   p.bram = static_cast<unsigned>(blocksOf(allWords, bits, /*sdp=*/false));
   p.rule = "single memory of all " + std::to_string(blocks) + " blocks: F(" +
-           all + ") at x18 (true dual port, one port per side) = " +
+           all + ") at " + narrowText +
+             " (true dual port, one port per side) = " +
            std::to_string(p.bram);
   return p;
 }

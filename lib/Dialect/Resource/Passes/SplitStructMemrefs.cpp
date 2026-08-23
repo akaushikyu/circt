@@ -62,6 +62,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "circt/Dialect/Resource/Config/ConfigUtils.h"
 #include "circt/Dialect/Resource/Interfaces/MemoryDS.h"
 #include "circt/Dialect/Resource/Passes/CallInstances.h"
 #include "circt/Dialect/Resource/Passes/PolygeistCompat.h"
@@ -2820,6 +2821,13 @@ struct SplitStructMemrefsPass
   SmallVector<Operation *> dead;
 
   void runOnOperation() override {
+    // An option given explicitly, else tool.hls.structs.*.
+    const circt::hlsest::StructConfig &sc =
+        circt::hlsest::Config::get().tool.hls.structs;
+    circt::hlsest::applyConfigured(honorAggregate, sc.aggregate);
+    circt::hlsest::applyConfigured(globals, sc.globals);
+    circt::hlsest::applyConfigured(scalarRegisters, sc.scalarRegisters);
+    circt::hlsest::applyConfigured(throughCalls, sc.throughCalls);
     ModuleOp module = getOperation();
     inlineMemberCalls(module);
     argNode.clear();

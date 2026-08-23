@@ -11,6 +11,7 @@
 // use site.
 //===----------------------------------------------------------------------===//
 
+#include "circt/Dialect/Resource/Config/Config.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
@@ -53,7 +54,8 @@ int64_t computeSizeInBits(ArrayRef<int64_t> shape, Type elt) {
   if (elt.isIntOrFloat())
     w = elt.getIntOrFloatBitWidth();
   else if (isa<IndexType>(elt))
-    w = 64; // platform-dependent; this is the convention we assume
+    w = static_cast<unsigned>(circt::hlsest::Config::get()
+                                  .frontend.indexBits); // frontend.index_bits
   return n * static_cast<int64_t>(w);
 }
 
@@ -110,7 +112,9 @@ std::optional<PartitionSpec> parsePartitionSpec(Operation *op) {
 /// bits is a BRAM (VITIS_NOTES.md N5) - and shared with the --bram-debug
 /// explanation so the number it quotes is the one applied here.
 bool meetsBRAMPromotionThreshold(int64_t sizeInBits) {
-  return sizeInBits >= circt::hls_analysis::kBRAMPromotionBits;
+  // tool.backend.storage_selector.min_block_bits (1024), inclusive.
+  return !circt::hlsest::Config::get().tool.backend.storageSelector.belowBlock(
+      sizeInBits);
 }
 
 /// Shared cost opt-out: an allocation explicitly annotated as not BRAM-backed

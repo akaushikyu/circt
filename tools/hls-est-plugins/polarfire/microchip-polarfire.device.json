@@ -1,0 +1,67 @@
+{
+  "_doc": "Microchip PolarFire (MPF*): an example device description for hls-doc/new-architecture.md. No ground truth exists for it here: every value below comes from public documentation and none has been compared with a Microchip tool.",
+  "_status": "unvalidated",
+  "_sources": "LSRAM 20480 bits and its x1..x40 shapes, 8-bit / 10-bit bytes, tdp up to x20 and sdp up to x40: Yosys techlibs/microchip/LSRAM.txt (ISC), PolarFire FPGA Fabric User Guide UG0680 (LSRAM: 20 Kbit, 1Kx20 TDP, 512x40 two-port). uSRAM 64x12 (768 bits), one read and one write port, read latency 0 or 1: Yosys techlibs/microchip/uSRAM.txt, UG0680. Per-block overhead 36 4LUT + 36 DFF per LSRAM and 12 + 12 per uSRAM: Libero synthesis report snippets (search index, unverified). MACC 18x18 signed / 17x17 unsigned, 18-bit pre-adder, 48-bit accumulator: PolarFire Math Block User Guide (search index). Capacities: not looked up (null).",
+  "id": "microchip-polarfire",
+  "part": "MPF*",
+  "speed_grade": "STD",
+  "tool_ids": {},
+  "resource_classes": [
+    { "name": "LSRAM", "capacity": null },
+    { "name": "uSRAM", "capacity": null },
+    { "name": "MATH", "capacity": null },
+    { "name": "4LUT", "capacity": null },
+    { "name": "DFF", "capacity": null }
+  ],
+  "memories": [
+    {
+      "id": "lsram",
+      "tier": "block",
+      "cost": { "LSRAM": 1 },
+      "overhead": { "4LUT": 36, "DFF": 36 },
+      "bits": 20480,
+      "geometries": [
+        { "width": 1, "depth": 16384, "byte": 8 },
+        { "width": 2, "depth": 8192, "byte": 8 },
+        { "width": 4, "depth": 4096, "byte": 8 },
+        { "width": 8, "depth": 2048, "byte": 8 },
+        { "width": 16, "depth": 1024, "byte": 8 },
+        { "width": 32, "depth": 512, "byte": 8 },
+        { "width": 5, "depth": 4096, "byte": 10 },
+        { "width": 10, "depth": 2048, "byte": 10 },
+        { "width": 20, "depth": 1024, "byte": 10 },
+        { "width": 40, "depth": 512, "byte": 10 }
+      ],
+      "port_configs": [
+        { "name": "tdp", "ports": ["rw", "rw"], "max_width": 20 },
+        { "name": "sdp", "ports": ["r", "w"], "max_width": 40 }
+      ],
+      "init": "any",
+      "read_latency_options": [ { "cycles": 1 } ]
+    },
+    {
+      "id": "usram",
+      "tier": "hard-small",
+      "cost": { "uSRAM": 1 },
+      "overhead": { "4LUT": 12, "DFF": 12 },
+      "bits": 768,
+      "geometries": [ { "width": 12, "depth": 64 } ],
+      "port_configs": [ { "name": "sdp", "ports": ["r", "w"], "max_width": 12 } ],
+      "init": "any",
+      "read_latency_options": [ { "cycles": 0 }, { "cycles": 1 } ]
+    }
+  ],
+  "arith": [
+    {
+      "id": "macc_pa",
+      "cost": { "MATH": 1 },
+      "overhead": { "4LUT": 36, "DFF": 36 },
+      "mul": [ { "a": 18, "b": 18, "signed": "signed" }, { "a": 17, "b": 17, "signed": "unsigned" } ],
+      "pre_add": 18,
+      "acc": 48
+    }
+  ],
+  "logic": { "cell": "4LUT", "lut_inputs": 4, "regs_per_cell": 1 },
+  "timing": null,
+  "operator_table": null
+}

@@ -52,7 +52,7 @@ ABLATION = [
     ("base+merge-cond", FRONT + " --affine-loop-normalize --merge-conditional-stores " + CORE),
     ("canonical+merge-cond", FRONT + " --affine-loop-normalize --auto-pipeline-unroll --merge-conditional-stores " + CORE),
     ("normalize-after-unroll", FRONT + " --auto-pipeline-unroll --affine-loop-normalize " + CORE),
-    ("split-after-banking?", FRONT + " --affine-loop-normalize --auto-pipeline-unroll --memory-banking-bram --infer-vitis-split-array --convert-affine-to-loopschedule --bram-analysis"),
+    ("split-after-banking?", FRONT + " --affine-loop-normalize --auto-pipeline-unroll --memory-banking-bram --infer-vitis-split-array=td=auto --convert-affine-to-loopschedule --bram-analysis"),
     ("+cse", FRONT + " --affine-loop-normalize --cse --auto-pipeline-unroll " + CORE),
     ("+scalrep", FRONT + " --affine-loop-normalize --auto-pipeline-unroll --canonicalize --affine-scalrep " + CORE),
     ("+loop-fusion", FRONT + " --affine-loop-normalize --affine-loop-fusion --auto-pipeline-unroll " + CORE),

@@ -346,6 +346,11 @@ PluginNameCheck &pluginNameCheck() {
   return check;
 }
 
+PluginConfigCheck &pluginConfigCheck() {
+  static PluginConfigCheck check;
+  return check;
+}
+
 } // namespace
 
 llvm::ArrayRef<KeySpec> circt::hlsest::configSchema() { return kSchema; }
@@ -413,4 +418,12 @@ void circt::hlsest::setPluginNameCheck(PluginNameCheck check) {
 
 const PluginNameCheck &circt::hlsest::getPluginNameCheck() {
   return pluginNameCheck();
+}
+
+void circt::hlsest::setPluginConfigCheck(PluginConfigCheck check) {
+  pluginConfigCheck() = std::move(check);
+}
+
+const PluginConfigCheck &circt::hlsest::getPluginConfigCheck() {
+  return pluginConfigCheck();
 }

@@ -218,3 +218,24 @@ double Config::periodNs() const {
     return run.clockNs - *m.ns;
   return run.clockNs;
 }
+
+const DeviceMemory *Config::blockMemory() const {
+  return device.memory(tool.backend.memoryMapper.primitive);
+}
+
+int64_t Config::pricedPortWidth(bool wide) const {
+  const MemoryArchitectureConfig &m = tool.hls.memoryArchitecture;
+  if (const DeviceMemory *mem = blockMemory())
+    if (const PortConfig *p =
+            mem->portConfig(wide ? m.pricedWide : m.pricedNarrow))
+      return p->maxWidth;
+  return 0;
+}
+
+int64_t Config::blockPorts() const {
+  if (const DeviceMemory *mem = blockMemory())
+    if (const PortConfig *p =
+            mem->portConfig(tool.hls.memoryArchitecture.pricedNarrow))
+      return static_cast<int64_t>(p->ports.size());
+  return 2;
+}

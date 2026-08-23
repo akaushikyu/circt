@@ -1,7 +1,7 @@
 // RUN: hls-est %s --affine-loop-normalize --auto-pipeline-unroll --infer-vitis-split-array=td=off --memory-banking-bram --convert-affine-to-loopschedule --bram-analysis --bram-debug > %t.out 2> %t.err
 // RUN: FileCheck %s --input-file=%t.out --check-prefix=REPORT
 // RUN: FileCheck %s --input-file=%t.err
-// RUN: hls-est %s --affine-loop-normalize --auto-pipeline-unroll --infer-vitis-split-array --memory-banking-bram --convert-affine-to-loopschedule --bram-analysis | FileCheck %s --check-prefix=AUTO
+// RUN: hls-est %s --affine-loop-normalize --auto-pipeline-unroll --infer-vitis-split-array=td=auto --memory-banking-bram --convert-affine-to-loopschedule --bram-analysis | FileCheck %s --check-prefix=AUTO
 
 // End to end with td=off, on the cgeist output of four Vitis kernels
 // (~/hls-est-work/exp-src/partition, Vitis 2025.1 td=off totals in brackets,

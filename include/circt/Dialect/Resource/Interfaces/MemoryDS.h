@@ -89,6 +89,7 @@ namespace circt::hls_analysis {
     struct BRAMCost {
         StorageKind kind;
         unsigned bramCount;
+        std::string label;         // the storage kind as the report names it
         bool infeasible = false;   // true if port demand exceeds chosen kind
         std::string note;          // human-readable explanation
     };

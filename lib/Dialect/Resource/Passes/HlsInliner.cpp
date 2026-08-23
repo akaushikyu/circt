@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 #include "circt/Dialect/Resource/Passes/HlsInliner.h"
+#include "circt/Dialect/Resource/Config/ConfigUtils.h"
 #include "circt/Dialect/Resource/Passes/CallInstances.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
@@ -24,7 +25,10 @@ struct VitisInlinerInterface : public DialectInlinerInterface {
 
   bool isLegalToInline(Operation *call, Operation *calledFunction,
                        bool cloneRequested) const final {
-    if (allowInliningKeptCallees)
+
+    if (circt::hlsest::resolveGlobalOption(
+            allowInliningKeptCallees,
+            !circt::hlsest::Config::get().tool.hls.honourInlineOff))
       return true;
 
     return !circt::hls_analysis::isKeptCallee(calledFunction) &&

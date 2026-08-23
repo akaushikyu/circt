@@ -1,5 +1,5 @@
 // RUN: hls-est %s '--infer-vitis-split-array=td=off annotate-pressure=false' | FileCheck %s --check-prefix=OFF
-// RUN: hls-est %s '--infer-vitis-split-array=annotate-pressure=false' | FileCheck %s --check-prefix=AUTO
+// RUN: hls-est %s '--infer-vitis-split-array=td=auto annotate-pressure=false' | FileCheck %s --check-prefix=AUTO
 // RUN: hls-est %s '--infer-vitis-split-array=td=auto auto-partitions=true annotate-pressure=false' | FileCheck %s --check-prefix=AUTOP
 // RUN: not hls-est %s --infer-vitis-split-array=td=on 2>&1 | FileCheck %s --check-prefix=BAD
 // RUN: hls-est %s '--infer-vitis-split-array=td=off annotate-pressure=false emit-remarks=true' 2>&1 | FileCheck %s --check-prefix=REMARK

@@ -86,6 +86,17 @@ using PluginNameCheck = std::function<bool(
 void setPluginNameCheck(PluginNameCheck check);
 const PluginNameCheck &getPluginNameCheck();
 
+class Config;
+struct ConfigDiagnostics;
+/// How the loader lets every plugin the configuration names read its
+/// parameters and check the device (PluginBase::configure / checkDevice), so
+/// that a profile that cannot price the device is refused before any pass
+/// runs. Installed by the plugin registry; without one nothing is checked.
+using PluginConfigCheck =
+    std::function<void(const Config &config, ConfigDiagnostics &diag)>;
+void setPluginConfigCheck(PluginConfigCheck check);
+const PluginConfigCheck &getPluginConfigCheck();
+
 } // namespace circt::hlsest
 
 #endif // CIRCT_DIALECT_RESOURCE_CONFIG_SCHEMA_H

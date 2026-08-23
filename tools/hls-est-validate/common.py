@@ -109,7 +109,10 @@ DME_FRONT = ("--lower-polygeist-subindex --inline --split-struct-memrefs --mark-
 NO_FRONT_PIPELINE = ("--affine-loop-normalize --auto-pipeline-unroll --narrow-ram-widths "
                      "--memory-banking-bram --convert-affine-to-loopschedule --bram-analysis")
 DEFAULT_PIPELINE = DME_FRONT + " " + NO_FRONT_PIPELINE
-SPLIT_PIPELINE = ("--affine-loop-normalize --auto-pipeline-unroll --infer-vitis-split-array "
+# td=auto is pinned: since the configuration (P2) a bare --infer-vitis-split-array takes
+# tool.hls.options.array_partition.throughput_driven, whose default is the ground truth's "off"
+# (design memo decision 5, MEMOS #38); this pipeline keeps the port-pressure meaning it always had.
+SPLIT_PIPELINE = ("--affine-loop-normalize --auto-pipeline-unroll --infer-vitis-split-array=td=auto "
                   "--memory-banking-bram --convert-affine-to-loopschedule --bram-analysis")
 HLSEST_TIMEOUT = 120
 

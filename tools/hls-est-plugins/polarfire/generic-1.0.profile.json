@@ -1,0 +1,249 @@
+{
+  "_doc": "An example tool profile for a device without a Vitis model (hls-doc/new-architecture.md): the Vitis HLS decisions (pipeline, partitioning, folding, scheduling) with a designer-chosen memory back end. Every choice that differs from vitis-2025.1 is a designer knob, not a model of SmartHLS or Libero.",
+  "tool": {
+    "id": "generic-1.0",
+    "name": "generic",
+    "version": "1.0",
+    "hls": {
+      "options": {
+        "flow_target": "vivado",
+        "pipeline_loops": 64,
+        "array_partition": {
+          "throughput_driven": "off",
+          "complete_threshold": 4,
+          "include_ports": false
+        }
+      },
+      "timing_margin": {
+        "fraction": 0.27
+      },
+      "memory_architecture": {
+        "plugin": "vitis-auto",
+        "untracked_memory_ports": 2,
+        "port_occupancy_cycles": 1,
+        "replication": {
+          "max_copies": 1,
+          "max_stores_per_iteration": 1,
+          "shared_write_port_reads_when_idle": true,
+          "exclusive_arm_stores_once": true,
+          "callee_stores_per_loop": true
+        },
+        "rom": {
+          "sdp_max_reads": 2,
+          "copies": "ceil_half"
+        },
+        "sequential_scope": {
+          "model": "stretch-pair"
+        },
+        "port_set_rule": "by_demand",
+        "wide_port_sets": [
+          [
+            "rw"
+          ],
+          [
+            "r"
+          ],
+          [
+            "w"
+          ],
+          [
+            "r",
+            "w"
+          ]
+        ],
+        "priced_configs": {
+          "wide": "sdp",
+          "narrow": "tdp"
+        }
+      },
+      "implicit_buffers": [],
+      "streams": {
+        "enabled": true,
+        "default_depth": 2,
+        "srl_max_depth": 2,
+        "srl_max_bits": 1024,
+        "mapper": "geometry-min",
+        "priced_config": "tdp"
+      },
+      "dataflow_channels": {
+        "enabled": true,
+        "default_blocks": 2
+      },
+      "pipeline_decision": {
+        "policy": "vitis-pipeline-loops",
+        "float_loads_perfect": true,
+        "promote_pipelined": true,
+        "flatten_across_calls": false
+      },
+      "partitioning": {
+        "policy": "vitis-td",
+        "constant_index": {
+          "min_extent": 2
+        },
+        "inference": {
+          "target_ii": 1,
+          "ports": {
+            "any": 2,
+            "read": 1,
+            "write": 1
+          },
+          "max_factor": 0,
+          "max_dims": 1,
+          "rotating_banks": false,
+          "max_scanned_factor": 65536
+        },
+        "steer_affine_loads": true
+      },
+      "folding": {
+        "rule_set": "vitis-undef",
+        "canonicalize": true,
+        "max_rounds": 16
+      },
+      "middle_end": {
+        "licm_hoist_invariant_loads": true,
+        "licm_hoist_past_calls": true,
+        "licm_hoist_conditional": true,
+        "merge_if_else_accesses": true,
+        "gvn_loads": true,
+        "store_forwarding": true,
+        "dead_memory": {
+          "overwritten_stores": true,
+          "dead_calls": true,
+          "honour_preserve": false,
+          "global_shared_by_functions_escapes": true
+        }
+      },
+      "inlining": {
+        "honour_inline_off": true
+      },
+      "structs": {
+        "aggregate": true,
+        "globals": true,
+        "scalar_registers": true,
+        "through_calls": true
+      },
+      "narrowing": {
+        "stored_ranges": true,
+        "load_demand": true
+      },
+      "globals": {
+        "attribute_accesses": false
+      },
+      "grouping": {
+        "plugin": "identity"
+      },
+      "math_library": {
+        "table": ""
+      }
+    },
+    "backend": {
+      "id": "yosys-like",
+      "storage_selector": {
+        "plugin": "usram-first",
+        "min_block_bits": 0,
+        "inclusive": true,
+        "block": "lsram",
+        "below": "distributed"
+      },
+      "memory_mapper": {
+        "plugin": "geometry-min",
+        "primitive": "lsram",
+        "depth_rounding": "exact",
+        "accepted_libraries": [],
+        "depth_bands": []
+      }
+    },
+    "report": {
+      "primary_memory_class": "LSRAM",
+      "stdout_format": "per-class",
+      "reference_stage": "post_synthesis",
+      "classes": [
+        "LSRAM",
+        "uSRAM",
+        "4LUT",
+        "DFF"
+      ]
+    },
+    "pipeline": "--lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --narrow-ram-widths --memory-banking-bram --convert-affine-to-loopschedule --bram-analysis"
+  },
+  "scheduling": {
+    "timing": {
+      "model": "calyx-fixed",
+      "operator_latencies": {
+        "comb": 0,
+        "seq": 1,
+        "multicycle": 3,
+        "fpmul": 4,
+        "fpaddsub": 5,
+        "fpdiv": 12,
+        "fpsqrt": 16,
+        "fptrans": 20,
+        "mem": 1,
+        "call": -1,
+        "kept_call": 1
+      }
+    },
+    "dependences": {
+      "model": "cached-o1"
+    },
+    "modulo": {
+      "model": "greedy-simplex",
+      "fast_threshold": 150,
+      "fast_ops_threshold": 16384,
+      "max_ii_bumps": 4096,
+      "user_ii_target": true
+    },
+    "sequential": {
+      "model": "none"
+    },
+    "binding": {
+      "model": "none"
+    },
+    "emit_detail": false,
+    "call_depth": {
+      "load_data_ns": 3.25,
+      "logic_ns": 0.99,
+      "select_ns": 0.69,
+      "variable_shift_ns": 4.42,
+      "constant_multiplier_ns": 5.58,
+      "narrow_multiply_max_bits": 32,
+      "narrow_multiply_cycles": 2,
+      "ports_per_memory": 2,
+      "index_bits": 32,
+      "carry_chain_ns": [
+        {
+          "max_bits": 10,
+          "ns": 1.91
+        },
+        {
+          "max_bits": 16,
+          "ns": 2.07
+        },
+        {
+          "max_bits": 32,
+          "ns": 2.55
+        },
+        {
+          "ns": 3.52
+        }
+      ],
+      "ternary_adder_ns": [
+        {
+          "max_bits": 10,
+          "ns": 3.72
+        },
+        {
+          "max_bits": 16,
+          "ns": 3.9
+        },
+        {
+          "max_bits": 32,
+          "ns": 4.37
+        },
+        {
+          "ns": 4.42
+        }
+      ]
+    }
+  }
+}

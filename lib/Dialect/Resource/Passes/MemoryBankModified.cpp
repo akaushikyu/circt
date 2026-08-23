@@ -2,6 +2,7 @@
 
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+#include "circt/Dialect/Resource/Config/ConfigUtils.h"
 #include "circt/Dialect/Resource/HLS/HLSOps.h"
 #include "circt/Dialect/Resource/Interfaces/MemoryDS.h"
 #include "circt/Dialect/Resource/Passes/CallInstances.h"
@@ -1252,6 +1253,14 @@ struct MemoryBankingPass
       llvm::cl::init(true)};
 
   void runOnOperation() override {
+
+    const circt::hlsest::HlsToolConfig &hc =
+        circt::hlsest::Config::get().tool.hls;
+    circt::hlsest::applyConfigured(steerAffineLoads,
+                                   hc.partitioning.steerAffineLoads);
+    circt::hlsest::applyConfigured(
+        annotateCalleeStores,
+        hc.memoryArchitecture.replication.calleeStoresPerLoop);
     BankingPlan(getOperation(), steerAffineLoads).run();
 
     if (annotateCalleeStores)

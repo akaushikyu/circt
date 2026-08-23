@@ -2,6 +2,7 @@
 
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+#include "circt/Dialect/Resource/Config/ConfigUtils.h"
 #include "circt/Dialect/Resource/HLS/HLSOps.h"
 #include "circt/Dialect/Resource/Passes/PartitionLayout.h"
 #include "circt/Dialect/Resource/Passes/VitisCleanup.h"
@@ -1786,6 +1787,11 @@ struct NarrowRamWidthsPass
     targetRegistry.insert<arith::ArithDialect, memref::MemRefDialect>();
   }
   void runOnOperation() override {
+
+    const circt::hlsest::NarrowingConfig &nc =
+        circt::hlsest::Config::get().tool.hls.narrowing;
+    circt::hlsest::applyConfigured(storedRanges, nc.storedRanges);
+    circt::hlsest::applyConfigured(loadDemand, nc.loadDemand);
     Narrowing(getOperation(), storedRanges, loadDemand, remarks).run();
   }
 };

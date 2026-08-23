@@ -18,3 +18,14 @@
 // The --config alias and a later file winning over an earlier one.
 // RUN: hls-est --config=%S/Inputs/clock5.json --config-set run.clock_ns=8 --hls-config=%S/Inputs/clock5.json --dump-effective-config %S/Inputs/kernel.mlir -o /dev/null 2>&1 >/dev/null | FileCheck %s --check-prefix=ORDER
 // ORDER: "clock_ns": "--config-set run.clock_ns=8"
+
+// A free-form plugin section set key by key: the keys are owned by the
+// document (they once pointed into a freed command-line copy) and the
+// override names the assignment.
+// RUN: hls-est --config-set plugins.some-plugin.depth=4 --config-set plugins.some-plugin.mode=fast --dump-effective-config %S/Inputs/kernel.mlir -o /dev/null 2>&1 >/dev/null | FileCheck %s --check-prefix=FREE
+// FREE:      "plugins": {
+// FREE-NEXT:   "_source": {
+// FREE-NEXT:     "some-plugin": "--config-set plugins.some-plugin.
+// FREE:        "some-plugin": {
+// FREE-NEXT:     "depth": 4,
+// FREE-NEXT:     "mode": "fast"
