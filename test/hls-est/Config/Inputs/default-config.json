@@ -1,0 +1,744 @@
+{
+  "_device": "object: The silicon as data with a data-sheet source: resource classes, memory primitives, shift registers, arithmetic blocks, the logic cell; no tool policy",
+  "_doc": "hls-est configuration: the compiled-in defaults (device amd-xc7z020clg400-1, tool profile vitis-2025.1). Keys starting with _ are documentation and are ignored when this file is read back with --hls-config.",
+  "_frontend": "object: What the MLIR input is assumed to look like",
+  "_generated_by": "hls-est --dump-default-config",
+  "_plugins": "object (free-form): plugins.<name>: a section owned by the external plugin of that name, validated by it",
+  "_run": "object: Which device, which tool profile, which clock [S-17]",
+  "_scheduling": "object: Operator timing, dependences, schedulers and binding [S-01..S-22]",
+  "_tool": "object: The tool profile: what the HLS tool decides (hls), what the memory mapping back end decides (backend), the report and the default pipeline",
+  "_version": "uint: Format version of the document; this hls-est reads 1",
+  "device": {
+    "_arith": "array of objects: DSP and math blocks (Phase 6 timing models and binders)",
+    "_id": "string: Identity of the description",
+    "_logic": "object: The logic cell",
+    "_memories": "array of objects: The memory primitives [B-01, B-02, B-03, N-02]",
+    "_operator_table": "path or null: Operator characterisation table (op, widths, period, impl -> latency, delays, occupancy, cost) for timing models other than calyx-fixed; null: none [N-08]",
+    "_part": "string: Part number",
+    "_resource_classes": "array of objects: The countable resources; every cost is a vector over these names [N-01]",
+    "_shift_registers": "array of objects: Shift-register primitives (never derived into the Vitis FIFO cut-offs)",
+    "_sources": "RAMB18E1 aspect ratios and port widths: UG953 (RAMB18E1), UG473; 64x1 LUT RAM and SRL32: UG474; DSP48E1: UG953 (DSP48E1), UG479; capacities: csynth.xml AvailableResources of the Vitis 2025.1 ground-truth runs (results/vitis.json).",
+    "_speed_grade": "string: Speed grade",
+    "_status": "validated",
+    "_timing": "object or null: Chaining terms {ff_setup_ns, clk_to_q_ns, connection_ns, mux_ns_per_input} (null: none) [N-14]",
+    "_tool_ids": "object (free-form): Identity strings one tool's model needs, per tool (vitis.library); read only by that tool's plugins [N-09]",
+    "arith": [
+      {
+        "_acc": "uint, bits: Accumulator width",
+        "_cost": "resource vector: Cost of one block",
+        "_id": "string: Block id",
+        "_mul": "array of objects: Multiplier fracture modes, widest first",
+        "_pre_add": "uint, bits: Pre-adder width",
+        "acc": 48,
+        "cost": {
+          "DSP": 1
+        },
+        "id": "dsp48e1",
+        "mul": [
+          {
+            "_a": "uint, bits: Width of operand a",
+            "_b": "uint, bits: Width of operand b",
+            "_signed": "enum (signed|unsigned|both): Signedness of the mode",
+            "a": 25,
+            "b": 18,
+            "signed": "signed"
+          }
+        ],
+        "pre_add": 25
+      }
+    ],
+    "id": "amd-xc7z020clg400-1",
+    "logic": {
+      "_cell": "string: Cell name (LUT6, 4LUT, ALM)",
+      "_lut_inputs": "uint: Inputs of one LUT",
+      "cell": "LUT6",
+      "lut_inputs": 6
+    },
+    "memories": [
+      {
+        "_bits": "uint, bits: Bits of one instance, parity included [B-01]",
+        "_cost": "resource vector: Cost of one instance [N-01]",
+        "_geometries": "array of objects: The legal (width, depth) shapes [B-02]",
+        "_id": "string: Primitive id (ramb18, lut64x1, usram, ...)",
+        "_init": "enum (none|zero|any|no_undef): Initial contents the primitive supports (a ROM needs any or no_undef)",
+        "_port_configs": "array of objects: The port configurations; a geometry is legal in a configuration when its width <= max_width [B-03]",
+        "_read_latency_options": "array of objects: Read latencies the primitive offers [S-03]",
+        "_tier": "enum (distributed|hard-small|block|large): The tier a storage selector chooses among [N-02]",
+        "bits": 18432,
+        "cost": {
+          "BRAM_18K": 1
+        },
+        "geometries": [
+          {
+            "_depth": "uint, words: Words in this shape [B-02]",
+            "_width": "uint, bits: Data bits per word in this shape, parity included [B-02]",
+            "depth": 16384,
+            "width": 1
+          },
+          {
+            "_depth": "uint, words: Words in this shape [B-02]",
+            "_width": "uint, bits: Data bits per word in this shape, parity included [B-02]",
+            "depth": 8192,
+            "width": 2
+          },
+          {
+            "_depth": "uint, words: Words in this shape [B-02]",
+            "_width": "uint, bits: Data bits per word in this shape, parity included [B-02]",
+            "depth": 4096,
+            "width": 4
+          },
+          {
+            "_depth": "uint, words: Words in this shape [B-02]",
+            "_width": "uint, bits: Data bits per word in this shape, parity included [B-02]",
+            "depth": 2048,
+            "width": 9
+          },
+          {
+            "_depth": "uint, words: Words in this shape [B-02]",
+            "_width": "uint, bits: Data bits per word in this shape, parity included [B-02]",
+            "depth": 1024,
+            "width": 18
+          },
+          {
+            "_depth": "uint, words: Words in this shape [B-02]",
+            "_width": "uint, bits: Data bits per word in this shape, parity included [B-02]",
+            "depth": 512,
+            "width": 36
+          }
+        ],
+        "id": "ramb18",
+        "init": "any",
+        "port_configs": [
+          {
+            "_max_width": "uint, bits: The widest geometry this configuration allows [B-03]",
+            "_name": "string: Configuration name (sp, sdp, tdp, sqp, ...) [B-03]",
+            "_ports": "array of strings: The ports, each r, w or rw [B-03]",
+            "max_width": 18,
+            "name": "sp",
+            "ports": ["rw"]
+          },
+          {
+            "_max_width": "uint, bits: The widest geometry this configuration allows [B-03]",
+            "_name": "string: Configuration name (sp, sdp, tdp, sqp, ...) [B-03]",
+            "_ports": "array of strings: The ports, each r, w or rw [B-03]",
+            "max_width": 36,
+            "name": "sdp",
+            "ports": ["r", "w"]
+          },
+          {
+            "_max_width": "uint, bits: The widest geometry this configuration allows [B-03]",
+            "_name": "string: Configuration name (sp, sdp, tdp, sqp, ...) [B-03]",
+            "_ports": "array of strings: The ports, each r, w or rw [B-03]",
+            "max_width": 18,
+            "name": "tdp",
+            "ports": ["rw", "rw"]
+          }
+        ],
+        "read_latency_options": [
+          {
+            "_cycles": "uint, cycles: Read latency (0: asynchronous read) [S-03]",
+            "cycles": 1
+          }
+        ],
+        "tier": "block"
+      },
+      {
+        "_bits": "uint, bits: Bits of one instance, parity included [B-01]",
+        "_cost": "resource vector: Cost of one instance [N-01]",
+        "_geometries": "array of objects: The legal (width, depth) shapes [B-02]",
+        "_id": "string: Primitive id (ramb18, lut64x1, usram, ...)",
+        "_init": "enum (none|zero|any|no_undef): Initial contents the primitive supports (a ROM needs any or no_undef)",
+        "_port_configs": "array of objects: The port configurations; a geometry is legal in a configuration when its width <= max_width [B-03]",
+        "_read_latency_options": "array of objects: Read latencies the primitive offers [S-03]",
+        "_tier": "enum (distributed|hard-small|block|large): The tier a storage selector chooses among [N-02]",
+        "bits": 64,
+        "cost": {
+          "LUT": 1
+        },
+        "geometries": [
+          {
+            "_depth": "uint, words: Words in this shape [B-02]",
+            "_width": "uint, bits: Data bits per word in this shape, parity included [B-02]",
+            "depth": 64,
+            "width": 1
+          }
+        ],
+        "id": "lut64x1",
+        "init": "any",
+        "port_configs": [
+          {
+            "_max_width": "uint, bits: The widest geometry this configuration allows [B-03]",
+            "_name": "string: Configuration name (sp, sdp, tdp, sqp, ...) [B-03]",
+            "_ports": "array of strings: The ports, each r, w or rw [B-03]",
+            "max_width": 1,
+            "name": "sp",
+            "ports": ["rw"]
+          }
+        ],
+        "read_latency_options": [
+          {
+            "_cycles": "uint, cycles: Read latency (0: asynchronous read) [S-03]",
+            "cycles": 0
+          }
+        ],
+        "tier": "distributed"
+      }
+    ],
+    "operator_table": null,
+    "part": "xc7z020clg400-1",
+    "resource_classes": [
+      {
+        "_capacity": "uint or null, units: Units on the part (null: not looked up); recorded, read only by validation [N-01]",
+        "_name": "string: Class name (BRAM_18K, LUT, M20K, ...) [N-01]",
+        "capacity": 280,
+        "name": "BRAM_18K"
+      },
+      {
+        "_capacity": "uint or null, units: Units on the part (null: not looked up); recorded, read only by validation [N-01]",
+        "_name": "string: Class name (BRAM_18K, LUT, M20K, ...) [N-01]",
+        "capacity": 220,
+        "name": "DSP"
+      },
+      {
+        "_capacity": "uint or null, units: Units on the part (null: not looked up); recorded, read only by validation [N-01]",
+        "_name": "string: Class name (BRAM_18K, LUT, M20K, ...) [N-01]",
+        "capacity": 106400,
+        "name": "FF"
+      },
+      {
+        "_capacity": "uint or null, units: Units on the part (null: not looked up); recorded, read only by validation [N-01]",
+        "_name": "string: Class name (BRAM_18K, LUT, M20K, ...) [N-01]",
+        "capacity": 53200,
+        "name": "LUT"
+      },
+      {
+        "_capacity": "uint or null, units: Units on the part (null: not looked up); recorded, read only by validation [N-01]",
+        "_name": "string: Class name (BRAM_18K, LUT, M20K, ...) [N-01]",
+        "capacity": 0,
+        "name": "URAM"
+      }
+    ],
+    "shift_registers": [
+      {
+        "_cost": "resource vector: Cost of one primitive",
+        "_id": "string: Primitive id",
+        "_max_depth": "uint, words: Deepest shift register of one primitive",
+        "_width": "uint, bits: Width of one primitive",
+        "cost": {
+          "LUT": 1
+        },
+        "id": "srl32",
+        "max_depth": 32,
+        "width": 1
+      }
+    ],
+    "speed_grade": "-1",
+    "timing": null,
+    "tool_ids": {
+      "vitis": {
+        "library": "zynq"
+      }
+    }
+  },
+  "frontend": {
+    "_element_types": "array of strings: Element types that make an array of words (informational) [B-11, C-03]",
+    "_index_bits": "uint, bits: Width of an index element (cgeist lowers C indices to index) [B-10]",
+    "_user_storage_pragmas": "array of strings: Attributes by which the user decided an array's storage (no automatic partition) [Q-05]",
+    "element_types": ["int", "float", "index"],
+    "index_bits": 64,
+    "user_storage_pragmas": ["hls.array_partition", "hls.array_reshape", "hls.bind_storage", "hls.stream"]
+  },
+  "plugins": {},
+  "run": {
+    "_clock_ns": "number, ns: Target clock period (Vitis create_clock); the call-depth model of the pipeline decision chains operators within it [S-17]",
+    "_device": "string: Id of a compiled-in device description, or the path of a device file; setting it replaces the device section",
+    "_tool": "string: Id of a compiled-in tool profile, or the path of a profile file; setting it replaces the tool and scheduling sections",
+    "clock_ns": 10,
+    "device": "amd-xc7z020clg400-1",
+    "tool": "vitis-2025.1"
+  },
+  "scheduling": {
+    "_binding": "object: Operator binding and sharing [S-21]",
+    "_call_depth": "object: The ASAP chaining model of the depth of one call of a loop-free callee in a pipelined loop (Vitis 2025.1 xc7z020-1 delays)",
+    "_dependences": "object: Which dependences constrain the schedule [S-11..S-13]",
+    "_emit_detail": "bool: Write hls.op_timing on every scheduled operation (inspection only; never changes a number) [S-21, C-02]",
+    "_modulo": "object: The modulo scheduler of pipelined loops [S-08, S-10]",
+    "_sequential": "object: The scheduler of non-pipelined regions [K-12..K-14, S-22]",
+    "_timing": "object: The operator timing model [S-01..S-05]",
+    "binding": {
+      "_model": "plugin name (a binder): The Binder (none: nothing is bound) [S-21]",
+      "model": "none"
+    },
+    "call_depth": {
+      "_carry_chain_ns": "array of objects: Adder / subtractor / comparator delay by width (the last band has no max_bits)",
+      "_constant_multiplier_ns": "number, ns: A multiply by a constant with three or more set bits (unconfirmed)",
+      "_index_bits": "uint, bits: Width an index value is timed at (Vitis narrows addresses)",
+      "_load_data_ns": "number, ns: A load's data arrives this far into the cycle after it issues",
+      "_logic_ns": "number, ns: and / or / xor",
+      "_narrow_multiply_cycles": "uint, cycles: Latency of such a multiply",
+      "_narrow_multiply_max_bits": "uint, bits: Multiplies of two variables up to this width take narrow_multiply_cycles; wider ones the multicycle latency",
+      "_ports_per_memory": "uint, ports: Accesses of one memory per cycle",
+      "_select_ns": "number, ns: select",
+      "_ternary_adder_ns": "array of objects: Three-input adder delay by width",
+      "_variable_shift_ns": "number, ns: A shift by a variable amount",
+      "carry_chain_ns": [
+        {
+          "_max_bits": "uint, bits: Widest operand of the band",
+          "_ns": "number, ns: Delay",
+          "max_bits": 10,
+          "ns": 1.91
+        },
+        {
+          "_max_bits": "uint, bits: Widest operand of the band",
+          "_ns": "number, ns: Delay",
+          "max_bits": 16,
+          "ns": 2.07
+        },
+        {
+          "_max_bits": "uint, bits: Widest operand of the band",
+          "_ns": "number, ns: Delay",
+          "max_bits": 32,
+          "ns": 2.55
+        },
+        {
+          "_ns": "number, ns: Delay",
+          "ns": 3.52
+        }
+      ],
+      "constant_multiplier_ns": 5.58,
+      "index_bits": 32,
+      "load_data_ns": 3.25,
+      "logic_ns": 0.99,
+      "narrow_multiply_cycles": 2,
+      "narrow_multiply_max_bits": 32,
+      "ports_per_memory": 2,
+      "select_ns": 0.69,
+      "ternary_adder_ns": [
+        {
+          "_max_bits": "uint, bits: Widest result of the band",
+          "_ns": "number, ns: Delay",
+          "max_bits": 10,
+          "ns": 3.72
+        },
+        {
+          "_max_bits": "uint, bits: Widest result of the band",
+          "_ns": "number, ns: Delay",
+          "max_bits": 16,
+          "ns": 3.9
+        },
+        {
+          "_max_bits": "uint, bits: Widest result of the band",
+          "_ns": "number, ns: Delay",
+          "max_bits": 32,
+          "ns": 4.37
+        },
+        {
+          "_ns": "number, ns: Delay",
+          "ns": 4.42
+        }
+      ],
+      "variable_shift_ns": 4.42
+    },
+    "dependences": {
+      "_model": "plugin name (a dependence_model): The DependenceModel (cached-o1 keeps OPEN_ISSUES O1) [S-11]",
+      "model": "cached-o1"
+    },
+    "emit_detail": false,
+    "modulo": {
+      "_fast_ops_threshold": "uint, ops: greedy-simplex: more operations than this go to the greedy scheduler (0: no rule) [S-08]",
+      "_fast_threshold": "uint, ops: greedy-simplex: more resource-limited operations than this go to the greedy scheduler (0: always) [S-08]",
+      "_max_ii_bumps": "uint: II increments the greedy scheduler tries [S-08, R-06]",
+      "_model": "plugin name (a modulo_scheduler): The ModuloScheduler [S-10]",
+      "_user_ii_target": "bool: A loop with a user pipeline II=N > 1 is scheduled at N when it could start more often",
+      "fast_ops_threshold": 16384,
+      "fast_threshold": 150,
+      "max_ii_bumps": 4096,
+      "model": "greedy-simplex",
+      "user_ii_target": true
+    },
+    "sequential": {
+      "_model": "plugin name (a sequential_scheduler): The SequentialScheduler (none: the stretch-pair rule applies) [S-22]",
+      "model": "none"
+    },
+    "timing": {
+      "_model": "plugin name (a operator_timing_model): The OperatorTimingModel [S-02]",
+      "_operator_latencies": "map of int, cycles: Latency per operator class of calyx-fixed (unconfirmed against Vitis); call / kept_call -1: the loop stays sequential [S-01, S-03, S-04]",
+      "model": "calyx-fixed",
+      "operator_latencies": {
+        "call": -1,
+        "comb": 0,
+        "fpaddsub": 5,
+        "fpdiv": 12,
+        "fpmul": 4,
+        "fpsqrt": 16,
+        "fptrans": 20,
+        "kept_call": 1,
+        "mem": 1,
+        "multicycle": 3,
+        "seq": 1
+      }
+    }
+  },
+  "tool": {
+    "_backend": "object: What maps memories to primitives (the HLS tool itself for Vitis, logic synthesis for other flows)",
+    "_hls": "object: Decisions of the HLS tool",
+    "_id": "string: Profile id",
+    "_name": "string: The modelled tool",
+    "_pipeline": "string: The default pass pipeline (hls-est --default-pipeline; the harness's DEFAULT_PIPELINE) [R-01]",
+    "_report": "object: What the report prints and which ground truth it compares with [N-07]",
+    "_version": "string: Its version",
+    "backend": {
+      "_id": "string: Back-end id",
+      "_memory_mapper": "object: The rule that turns a bank into primitives [B-04..B-07]",
+      "_storage_selector": "object: Which tier a bank goes to, before scheduling [B-08, B-09]",
+      "id": "vitis-internal",
+      "memory_mapper": {
+        "_accepted_libraries": "array of strings: vitis-band7: the Vitis part libraries whose pricing was measured [B-05]",
+        "_depth_bands": "array of objects: vitis-band7: the depth bands (max_depth increasing, one beyond band last) [B-05]",
+        "_depth_rounding": "enum (pow2|exact): pow2: the address space is priced (2500 words as 4096); exact: the words [B-04]",
+        "_plugin": "plugin name (a memory_mapper): The MemoryMapper: vitis-band7, vitis-aspect-min or geometry-min (bram-formula=band|n6 overrides) [B-07]",
+        "_primitive": "string: Memory id it maps to [B-01]",
+        "accepted_libraries": ["zynq"],
+        "depth_bands": [
+          {
+            "_max_depth": "uint, words: Deepest address space of the band [B-05]",
+            "_sdp_width": "uint, bits: Column width of a wide bank [B-05]",
+            "_tdp_width": "uint, bits: Column width of a narrow bank [B-05]",
+            "max_depth": 512,
+            "sdp_width": 36,
+            "tdp_width": 18
+          },
+          {
+            "_max_depth": "uint, words: Deepest address space of the band [B-05]",
+            "_width": "uint, bits: Column width [B-05]",
+            "max_depth": 1024,
+            "width": 18
+          },
+          {
+            "_max_depth": "uint, words: Deepest address space of the band [B-05]",
+            "_width": "uint, bits: Column width [B-05]",
+            "max_depth": 2048,
+            "width": 9
+          },
+          {
+            "_alternative": "object: A second column shape; the cheaper one is taken [B-05]",
+            "_max_depth": "uint, words: Deepest address space of the band [B-05]",
+            "_width": "uint, bits: Column width [B-05]",
+            "alternative": {
+              "_stack": "uint, blocks: Its blocks per column [B-05]",
+              "_width": "uint, bits: Its width [B-05]",
+              "stack": 2,
+              "width": 9
+            },
+            "max_depth": 4096,
+            "width": 4
+          },
+          {
+            "_max_depth": "uint, words: Deepest address space of the band [B-05]",
+            "_width": "uint, bits: Column width [B-05]",
+            "max_depth": 8192,
+            "width": 2
+          },
+          {
+            "_beyond": "bool: The band for every deeper address space [B-05]",
+            "_width": "uint, bits: Column width [B-05]",
+            "_words_per_block": "uint, words: beyond: words of one block (columns of address space / this blocks) [B-05]",
+            "beyond": true,
+            "width": 1,
+            "words_per_block": 16384
+          }
+        ],
+        "depth_rounding": "pow2",
+        "plugin": "vitis-band7",
+        "primitive": "ramb18"
+      },
+      "storage_selector": {
+        "_below": "string: Tier of a bank below the threshold (priced at 0 of the primary class) [B-08]",
+        "_block": "string: Memory id of the block tier [B-08]",
+        "_inclusive": "bool: A bank of exactly min_block_bits is a block RAM [B-08]",
+        "_min_block_bits": "uint, bits: Words x exact element bits from which a bank is a block RAM [B-08]",
+        "_plugin": "plugin name (a storage_selector): The StorageSelector [B-08]",
+        "below": "distributed",
+        "block": "ramb18",
+        "inclusive": true,
+        "min_block_bits": 1024,
+        "plugin": "vitis-bits-threshold"
+      }
+    },
+    "hls": {
+      "_dataflow_channels": "object: Ping-pong channels of a dataflow region",
+      "_folding": "object: The tool's constant folding [F-01..F-03]",
+      "_globals": "object: File-scope arrays [T-03]",
+      "_grouping": "object: Several memrefs mapped to one memory [N-11]",
+      "_implicit_buffers": "array of objects: Sources of RAM no user array accounts for (one entry per source) [A-01..A-08, B-13, N-12]",
+      "_inlining": "object: Function inlining",
+      "_math_library": "object: Cost table of the math cores [N-15]",
+      "_memory_architecture": "object: Port pools before scheduling, then kind, replication, ROM handling and pricing configuration after it [K-02..K-14, S-06]",
+      "_middle_end": "object: The LLVM clean-ups of the tool that change ports and memories [L-01..L-03, E-02..E-04]",
+      "_narrowing": "object: Element width the tool stores per word",
+      "_options": "object: The run configuration of the modelled tool (the ground-truth settings)",
+      "_partitioning": "object: Automatic and inferred array partitioning [Q-03..Q-08, Q-15]",
+      "_pipeline_decision": "object: The automatic pipeline / unroll / flatten decision [D-01..D-12]",
+      "_streams": "object: hls::stream objects: one FIFO each (VITIS_NOTES N31)",
+      "_structs": "object: Disaggregation of struct-typed variables",
+      "_timing_margin": "object: Clock uncertainty subtracted from the period (one of fraction or ns) [S-20]",
+      "dataflow_channels": {
+        "_default_blocks": "uint, blocks: Blocks of a channel without a stream type=pipo depth",
+        "_enabled": "bool: Price an array one process writes and a later one reads as a PIPO (--bram-dataflow-channels overrides)",
+        "default_blocks": 2,
+        "enabled": true
+      },
+      "folding": {
+        "_canonicalize": "bool: Also apply every dialect's canonicalization in the same rewrite, so a folded zero propagates [F-03]",
+        "_max_rounds": "uint: Rounds of the fold rewrite at most [F-03]",
+        "_rule_set": "plugin name (a fold_rule_set): The FoldRuleSet: vitis-undef (Vitis' undefined value of x / 0) or zero (x / 0 -> 0) [F-01, F-02]",
+        "canonicalize": true,
+        "max_rounds": 16,
+        "rule_set": "vitis-undef"
+      },
+      "globals": {
+        "_attribute_accesses": "bool: A global's accesses are attributed through its get_global sites (--bram-attribute-globals overrides) [T-03]",
+        "attribute_accesses": false
+      },
+      "grouping": {
+        "_plugin": "plugin name (a memory_grouping): The MemoryGrouping (identity: one memref, one memory) [N-11]",
+        "plugin": "identity"
+      },
+      "implicit_buffers": [
+        {
+          "_default_bundle": "string: Bundle of a port without bundle= [A-03]",
+          "_defaults": "object: Interface pragma defaults [A-05]",
+          "_enabled": "bool: Price these buffers (--bram-maxi-adapters overrides) [A-01]",
+          "_min_bus_bits": "uint, bits: Narrowest adapter data width [A-04]",
+          "_mode": "string: The hls.interface mode that selects the entry (m_axi) [A-03]",
+          "_plugin": "plugin name (a implicit_buffer_model): The ImplicitBufferModel [A-06, A-07]",
+          "_protocol": "string: Interface protocol (axi4-mm) [A-03]",
+          "_read_fifo": "object: The read data FIFO (depth = burst x outstanding) [A-06, B-13]",
+          "_source": "enum (interface|cluster_fifo|lsu_cache|dataflow_pipo): What creates the buffer [N-12]",
+          "_unresolved_call": "enum (rw|none): What a port passed to a call without a body is assumed to do [A-08]",
+          "_write_buffer": "object: The write buffer [A-07]",
+          "default_bundle": "gmem",
+          "defaults": {
+            "_max_read_burst_length": "uint, beats: Default max_read_burst_length [A-05]",
+            "_max_write_burst_length": "uint, beats: Default max_write_burst_length [A-05]",
+            "_num_read_outstanding": "uint: Default num_read_outstanding [A-05]",
+            "_num_write_outstanding": "uint: Default num_write_outstanding [A-05]",
+            "max_read_burst_length": 16,
+            "max_write_burst_length": 16,
+            "num_read_outstanding": 16,
+            "num_write_outstanding": 16
+          },
+          "enabled": true,
+          "min_bus_bits": 32,
+          "mode": "m_axi",
+          "plugin": "vitis-m_axi",
+          "protocol": "axi4-mm",
+          "read_fifo": {
+            "_confirmed_max_depth": "uint, words: Deeper FIFOs are marked unconfirmed in the debug output (never changes a number) [A-06]",
+            "_mapper": "plugin name (a memory_mapper): The MemoryMapper that prices the FIFO, whatever the main mapper is [B-13]",
+            "_priced_config": "string: The port configuration it is priced at [B-13]",
+            "_srl_max_depth": "uint, words: A read FIFO at most this deep is shift registers (0 BRAM); a measured Vitis rule [A-06]",
+            "confirmed_max_depth": 4096,
+            "mapper": "vitis-band7",
+            "priced_config": "tdp",
+            "srl_max_depth": 32
+          },
+          "source": "interface",
+          "unresolved_call": "rw",
+          "write_buffer": {
+            "_confirmed_min_burst": "uint, beats: Shorter priced bursts are marked unconfirmed (never changes a number) [A-07]",
+            "_free_max_burst": "uint, beats: A write burst at most this long needs no buffer RAM; a measured Vitis rule [A-07]",
+            "_port_width_bits": "uint, bits: Longer bursts cost ceil(bus width / this) [A-07]",
+            "confirmed_min_burst": 32,
+            "free_max_burst": 16,
+            "port_width_bits": 18
+          }
+        }
+      ],
+      "inlining": {
+        "_honour_inline_off": "bool: Calls to hls.inline_off callees stay calls (--inline-ignore-inline-off overrides)",
+        "honour_inline_off": true
+      },
+      "math_library": {
+        "_table": "string: Path of the math-core cost table (math_costs.json format; relative to the file that sets it); empty: math calls cost nothing (--bram-analysis=math-costs= overrides) [S-04, N-15]",
+        "table": ""
+      },
+      "memory_architecture": {
+        "_plugin": "plugin name (a memory_architecture_policy): The MemoryArchitecturePolicy [K-04]",
+        "_port_occupancy_cycles": "uint, cycles: Cycles one access holds its port [K-11]",
+        "_port_set_rule": "enum (by_kind|by_demand): Where a bank's port set comes from: the selected kind (by_kind), or the per-cycle demand (by_demand, a designer knob) [K-04, K-05]",
+        "_priced_configs": "object: The port configurations whose max_width prices a bank [B-03, K-05]",
+        "_replication": "object: RAM_1WNR replication [K-02, K-06, K-07]",
+        "_rom": "object: Read-only memories [K-08]",
+        "_sequential_scope": "object: Ports of a non-pipelined scope that no sequential scheduler scheduled [K-12..K-14]",
+        "_untracked_memory_ports": "uint, ports: Ports of a memref the scheduler does not track (a function argument, a memref.alloc, a global) [K-03, K-20]",
+        "_wide_port_sets": "array of port sets: Port sets priced at priced_configs.wide (Vitis' SDP test: one port, a read and a write port, two read ports) [K-05, N-10]",
+        "plugin": "vitis-auto",
+        "port_occupancy_cycles": 1,
+        "port_set_rule": "by_kind",
+        "priced_configs": {
+          "_narrow": "string: Configuration of any other bank and of every replicated copy [B-03]",
+          "_wide": "string: Configuration of a bank whose port set is wide [B-03]",
+          "narrow": "tdp",
+          "wide": "sdp"
+        },
+        "replication": {
+          "_callee_stores_per_loop": "bool: A bank passed to a callee whose loop body stores it twice is not replicable in the caller either",
+          "_exclusive_arm_stores_once": "bool: The stores the two arms of one if make count once per iteration, whatever their addresses (off: only a same-address pair)",
+          "_max_copies": "uint, copies: At most this many copies of a replicated bank (1: no replication); the scheduler's pool is max_copies * (ports - 1) + 1 slots [K-02]",
+          "_max_stores_per_iteration": "uint, stores: A bank some loop body stores to more often than this is never replicated [K-06]",
+          "_shared_write_port_reads_when_idle": "bool: The shared write port of the copies reads in a cycle without a write (the +1 slot) [K-02]",
+          "callee_stores_per_loop": true,
+          "exclusive_arm_stores_once": true,
+          "max_copies": 16,
+          "max_stores_per_iteration": 1,
+          "shared_write_port_reads_when_idle": true
+        },
+        "rom": {
+          "_copies": "enum (ceil_half|n_minus_1): Copies of a ROM read more often (ROM_NP): ceil(n/2), or n-1 [K-08]",
+          "_sdp_max_reads": "uint, reads/cycle: A ROM read at most this often per cycle is one simple-dual-port memory [K-08]",
+          "copies": "ceil_half",
+          "sdp_max_reads": 2
+        },
+        "sequential_scope": {
+          "_model": "enum (stretch-pair|one-port): stretch-pair: two independent accesses of one straight-line stretch share a state; one-port: one access per state [K-12]",
+          "model": "stretch-pair"
+        },
+        "untracked_memory_ports": 2,
+        "wide_port_sets": [["rw"], ["r", "w"], ["r"], ["r", "r"]]
+      },
+      "middle_end": {
+        "_dead_memory": "object: Dead-memory elimination [E-02..E-04]",
+        "_gvn_loads": "bool: GVN: a repeated load of one address is one load [L-02]",
+        "_licm_hoist_conditional": "bool: Invariant loads nested in an if of the body are hoisted too (speculated)",
+        "_licm_hoist_invariant_loads": "bool: LICM: invariant loads move out of the pipelined loop and use none of its ports [L-01]",
+        "_licm_hoist_past_calls": "bool: A memref some call takes is still hoisted from a loop without calls",
+        "_merge_if_else_accesses": "bool: A load / store both arms of an if/else make of one address is one access (SimplifyCFG / InstCombine)",
+        "_store_forwarding": "bool: Store-to-load forwarding and dead-store elimination within a block [L-03]",
+        "dead_memory": {
+          "_dead_calls": "bool: A call of a kept callee whose written arrays are never read is deleted",
+          "_global_shared_by_functions_escapes": "bool: A global used by more than one function escapes [E-02]",
+          "_honour_preserve": "bool: hls.preserve keeps a dead array (Vitis: no) [E-04]",
+          "_overwritten_stores": "bool: A store a later store of the same access overwrites before any read is deleted [E-03]",
+          "dead_calls": true,
+          "global_shared_by_functions_escapes": true,
+          "honour_preserve": false,
+          "overwritten_stores": true
+        },
+        "gvn_loads": true,
+        "licm_hoist_conditional": true,
+        "licm_hoist_invariant_loads": true,
+        "licm_hoist_past_calls": true,
+        "merge_if_else_accesses": true,
+        "store_forwarding": true
+      },
+      "narrowing": {
+        "_load_demand": "bool: Narrow to the low bits the loads' users demand",
+        "_stored_ranges": "bool: Narrow to the bits the stored values need",
+        "load_demand": true,
+        "stored_ranges": true
+      },
+      "options": {
+        "_array_partition": "object: syn.array_partition settings [Q-01, Q-02, Q-09]",
+        "_flow_target": "string: Vitis flow_target (recorded)",
+        "_pipeline_loops": "uint, iterations: config_compile -pipeline_loops: a loop whose nested trip-count products are all <= this is pipelined and everything inside it unrolled; 0 disables the automatic decision [D-01]",
+        "array_partition": {
+          "_complete_threshold": "uint, elements: Arrays of at most this many elements are completely partitioned (registers) [Q-02]",
+          "_include_ports": "bool: Interface arrays are partitioned too [Q-09]",
+          "_throughput_driven": "enum (auto|off): auto: port-pressure partitioning; off: only the automatic partitions (the ground truth); a bare --infer-vitis-split-array takes this value [Q-01]",
+          "complete_threshold": 4,
+          "include_ports": false,
+          "throughput_driven": "off"
+        },
+        "flow_target": "vivado",
+        "pipeline_loops": 64
+      },
+      "partitioning": {
+        "_constant_index": "object: Rule (b): a dimension every access indexes with a constant [Q-03]",
+        "_inference": "object: The td=auto port-pressure search [Q-06..Q-08]",
+        "_policy": "plugin name (a partition_policy): The PartitionPolicy [Q-03, Q-04, Q-08, Q-15]",
+        "_steer_affine_loads": "bool: Unrolled copies of a partitioned load with distinct constant offsets read each bank once",
+        "constant_index": {
+          "_min_extent": "uint, elements: Smallest extent of such a dimension that is partitioned [Q-03]",
+          "min_extent": 2
+        },
+        "inference": {
+          "_max_dims": "uint: Dimensions partitioned per array [Q-08]",
+          "_max_factor": "uint: Largest factor (0: the extent) [Q-08]",
+          "_max_scanned_factor": "uint: Factors above this are not scanned one by one (a guard) [Q-08]",
+          "_ports": "object: Port model of the search, per bank and cycle [Q-06]",
+          "_rotating_banks": "bool: A rotating access is charged to one bank (off: to every bank) [Q-08]",
+          "_target_ii": "uint, cycles: II of a loop without its own [Q-07]",
+          "max_dims": 1,
+          "max_factor": 0,
+          "max_scanned_factor": 65536,
+          "ports": {
+            "_any": "uint, ports: Accesses of any kind [Q-06]",
+            "_read": "uint, ports: Reads [Q-06]",
+            "_write": "uint, ports: Writes [Q-06]",
+            "any": 2,
+            "read": 1,
+            "write": 1
+          },
+          "rotating_banks": false,
+          "target_ii": 1
+        },
+        "policy": "vitis-td",
+        "steer_affine_loads": true
+      },
+      "pipeline_decision": {
+        "_flatten_across_calls": "bool: Flatten a loop into a pipelined loop of a callee (documented assumption: never) [D-11]",
+        "_float_loads_perfect": "bool: A read-only inner-invariant floating-point load keeps a nest perfect (flattened, not unrolled) [D-03]",
+        "_policy": "plugin name (a pipeline_policy): The PipelinePolicy [D-02, D-07, D-08]",
+        "_promote_pipelined": "bool: Promote the invariant accesses of the pipelined loop itself to registers after the unroll [D-06]",
+        "flatten_across_calls": false,
+        "float_loads_perfect": true,
+        "policy": "vitis-pipeline-loops",
+        "promote_pipelined": true
+      },
+      "streams": {
+        "_default_depth": "uint, words: Depth of a stream without a depth pragma or template argument",
+        "_enabled": "bool: Price the stream objects as FIFOs (--bram-stream-fifos overrides); off prices the handle storage as a RAM",
+        "_mapper": "plugin name (a memory_mapper): The MemoryMapper that prices a block-RAM FIFO",
+        "_priced_config": "string: The port configuration a FIFO is priced at (never x36)",
+        "_srl_max_bits": "uint, bits: FIFOs of at most this many bits (depth x width) are shift registers",
+        "_srl_max_depth": "uint, words: FIFOs at most this deep are shift registers at any width",
+        "default_depth": 2,
+        "enabled": true,
+        "mapper": "vitis-band7",
+        "priced_config": "tdp",
+        "srl_max_bits": 1024,
+        "srl_max_depth": 2
+      },
+      "structs": {
+        "_aggregate": "bool: A variable an AGGREGATE pragma reached is one memory of packed words",
+        "_globals": "bool: Struct-typed globals are split like locals",
+        "_scalar_registers": "bool: A member of a single struct variable accessed only at constant positions is registers",
+        "_through_calls": "bool: A variable passed whole to kept calls is split together with the callees' parameters",
+        "aggregate": true,
+        "globals": true,
+        "scalar_registers": true,
+        "through_calls": true
+      },
+      "timing_margin": {
+        "_fraction": "number: Fraction of the period (Vitis default 27%) [S-20]",
+        "fraction": 0.27
+      }
+    },
+    "id": "vitis-2025.1",
+    "name": "vitis_hls",
+    "pipeline": "--lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --narrow-ram-widths --memory-banking-bram --convert-affine-to-loopschedule --bram-analysis",
+    "report": {
+      "_classes": "array of strings: The classes printed and compared [N-07]",
+      "_primary_memory_class": "string: The class whose count is the bram= number [N-07]",
+      "_reference_stage": "enum (hls_estimate|post_synthesis|post_fit): Which ground-truth number the profile may be compared with [N-07]",
+      "_stdout_format": "enum (vitis-bram|per-class): vitis-bram: kind= / bram= lines and Total BRAM; per-class: also Total <class> for every class [N-07]",
+      "classes": ["BRAM_18K"],
+      "primary_memory_class": "BRAM_18K",
+      "reference_stage": "hls_estimate",
+      "stdout_format": "vitis-bram"
+    },
+    "version": "2025.1"
+  },
+  "version": 1
+}

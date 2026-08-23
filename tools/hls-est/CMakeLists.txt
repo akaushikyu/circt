@@ -24,6 +24,7 @@ target_link_libraries(hls-est PRIVATE
         CIRCTCalyx
 
         # Your libraries
+        HLSConfig
         HLSInterfaces
         HLSPasses
         CIRCTHLS
