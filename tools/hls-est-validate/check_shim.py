@@ -5,7 +5,7 @@
                           [--seed 1] [--n 40] [--out-dir ~/hls-est-work/shim-check] [--keep]
 
 One C++ program is generated (the design-table expressions of
-tools/hls-est-validate/REPORT.md / feas/A/design.md 1.1 plus `--n` seeded
+hls-doc/notes/REPORT.md / feas/A/design.md 1.1 plus `--n` seeded
 random constants or operations per category), compiled twice - with clang++
 against the shim and with g++ -std=c++14 against the Vitis include directory -
 and the raw bit patterns printed by the two binaries are compared line by

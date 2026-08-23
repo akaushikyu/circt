@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Regenerate the git-derived appendices of SESSION_LOG.md.
+"""Regenerate the git-derived appendices of hls-doc/notes/SESSION_LOG.md.
 
 Everything above the line '## Appendix A' is hand-written and kept; the
 appendices are rebuilt from `git log --name-status` of ~/circt (since the
@@ -13,8 +13,10 @@ import time
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-LOG = HERE / "SESSION_LOG.md"
 CIRCT = HERE.parent.parent
+# The notes moved into hls-doc/notes/ in phase P1b (2026-10-14); tools/hls-est-validate/SESSION_LOG.md
+# is a one-line stub that says so.
+LOG = CIRCT / "hls-doc" / "notes" / "SESSION_LOG.md"
 POLY = Path("/mnt/d/HLS/Polygeist")
 CIRCT_BASE, POLY_BASE = "e9da1aaf0", "90541e3b"
 

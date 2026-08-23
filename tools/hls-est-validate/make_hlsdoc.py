@@ -253,7 +253,7 @@ def render_ground_truth(V, vitis_path, date, catalogue_keys=None, catalogue_sour
             "have no entry in the ground-truth file: Vitis was never run on them, so they have no ground "
             "truth and take part in no comparison. Together with the failed and timed-out designs above "
             "they are every catalogue design without ground truth. The reasons are recorded in "
-            "`tools/hls-est-validate/MEMOS.md`: the hlsyn-vitis runner was stopped by decision #52 (its remaining "
+            "`hls-doc/notes/MEMOS.md`: the hlsyn-vitis runner was stopped by decision #52 (its remaining "
             "designs exceed the time and memory budget, and their kernels are covered by polybench and "
             "machsuite); the `basic` designs are MLIR inputs without C sources.", "",
             md_table(["dataset", "benchmark", "category", "why it has no ground truth"], never), "",

@@ -2,7 +2,7 @@
 //
 // Passes that reproduce what the Vitis HLS front end (clang + the "reflow"
 // LLVM passes, before the a.o.1 stage) removes or folds before it allocates
-// memories (tools/hls-est-validate/VITIS_NOTES.md N1, N1a):
+// memories (hls-doc/notes/VITIS_NOTES.md N1, N1a):
 //
 //   --promote-globals-to-allocas  a non-constant memref.global used by one
 //                                 function becomes an alloca there, so every

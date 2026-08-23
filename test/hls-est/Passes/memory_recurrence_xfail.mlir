@@ -2,7 +2,7 @@
 // RUN: hls-est %s --affine-loop-normalize --memory-banking-bram --convert-affine-to-loopschedule=fast-threshold=0 -o - | FileCheck %s
 // XFAIL: *
 //
-// Open issue O1 (tools/hls-est-validate/OPEN_ISSUES.md): a loop-carried
+// Open issue O1 (hls-doc/notes/OPEN_ISSUES.md): a loop-carried
 // memory dependence (store a[i], load a[i-1] one iteration later) never
 // reaches either modulo scheduler, because the pass lowers the affine accesses
 // in a copy of MemoryDependenceAnalysis while CyclicSchedulingAnalysis reads
