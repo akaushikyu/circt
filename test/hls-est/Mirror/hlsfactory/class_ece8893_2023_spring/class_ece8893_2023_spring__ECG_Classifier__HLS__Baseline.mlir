@@ -687,42 +687,62 @@ module {
   }
 }
 
-// CHECK: memref.global @ loc("{{[^"]*}}":11:3)
-// CHECK-NEXT: kind=RAM_1P  bram=1
-// CHECK: memref.global @ loc("{{[^"]*}}":12:3)
-// CHECK-NEXT: kind=RAM_1P  bram=1
-// CHECK: memref.global @ loc("{{[^"]*}}":13:3)
-// CHECK-NEXT: kind=RAM_1P  bram=1
-// CHECK: memref.global @ loc("{{[^"]*}}":14:3)
-// CHECK-NEXT: kind=RAM_1P  bram=1
-// CHECK: memref.global @ loc("{{[^"]*}}":15:3)
-// CHECK-NEXT: kind=RAM_1P  bram=2
-// CHECK: memref.global @ loc("{{[^"]*}}":16:3)
-// CHECK-NEXT: kind=RAM_1P  bram=2
-// CHECK: memref.global @ loc("{{[^"]*}}":17:3)
-// CHECK-NEXT: kind=RAM_1P  bram=4
-// CHECK: memref.global @ loc("{{[^"]*}}":18:3)
-// CHECK-NEXT: kind=RAM_1P  bram=4
-// CHECK: memref.global @ loc("{{[^"]*}}":19:3)
-// CHECK-NEXT: kind=RAM_1P  bram=8
-// CHECK: memref.global @ loc("{{[^"]*}}":20:3)
-// CHECK-NEXT: kind=RAM_1P  bram=8
-// CHECK: memref.global @ loc("{{[^"]*}}":21:3)
-// CHECK-NEXT: kind=RAM_1P  bram=16
-// CHECK: memref.alloca @ loc("{{[^"]*}}":351:15)
-// CHECK-NEXT: kind=RAM_1P  bram=0
-// CHECK: memref.alloca @ loc("{{[^"]*}}":352:17)
-// CHECK-NEXT: kind=RAM_2P  bram=2
-// CHECK: memref.alloca @ loc("{{[^"]*}}":353:17)
-// CHECK-NEXT: kind=RAM_1WNR  bram=30
-// CHECK: memref.alloca @ loc("{{[^"]*}}":354:17)
-// CHECK-NEXT: kind=RAM_1WNR  bram=60
-// CHECK: memref.alloca @ loc("{{[^"]*}}":355:17)
-// CHECK-NEXT: kind=RAM_2P  bram=16
-// CHECK: memref.alloca @ loc("{{[^"]*}}":356:17)
-// CHECK-NEXT: kind=RAM_2P  bram=16
-// CHECK: memref.alloca @ loc("{{[^"]*}}":357:17)
-// CHECK-NEXT: kind=RAM_2P  bram=16
-// CHECK: memref.alloca @ loc("{{[^"]*}}":358:17)
-// CHECK-NEXT: kind=RAM_2P  bram=2
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":11:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":12:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":13:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":14:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":15:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=2{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":16:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=2{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":17:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":18:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":19:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=8{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":20:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=8{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":21:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=16{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":351:15){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":352:17){{$}}
+// CHECK-NEXT: kind=RAM_2P  bram=2{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":353:17){{$}}
+// CHECK-NEXT: kind=RAM_1WNR  bram=30{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":354:17){{$}}
+// CHECK-NEXT: kind=RAM_1WNR  bram=60{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":355:17){{$}}
+// CHECK-NEXT: kind=RAM_2P  bram=16{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":356:17){{$}}
+// CHECK-NEXT: kind=RAM_2P  bram=16{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":357:17){{$}}
+// CHECK-NEXT: kind=RAM_2P  bram=16{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":358:17){{$}}
+// CHECK-NEXT: kind=RAM_2P  bram=2{{$}}
+// CHECK-NOT: {{^memref\.}}
 // CHECK: Total BRAM: 198{{$}}

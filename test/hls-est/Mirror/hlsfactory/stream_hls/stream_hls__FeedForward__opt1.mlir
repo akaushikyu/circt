@@ -214,40 +214,59 @@ module {
   func.func private @_ZN3hls6streamIfLi0EEC1EPKc(memref<?xi32>, memref<?xi8>) attributes {hls.orig_name = "stream", llvm.linkage = #llvm.linkage<external>}
 }
 
-// CHECK: memref.alloca @ loc("{{[^"]*}}":29:15)
-// CHECK-NEXT: kind=RAM_1P  bram=0
-// CHECK: memref.alloca @ loc("{{[^"]*}}":46:15)
-// CHECK-NEXT: kind=RAM_1P  bram=0
-// CHECK: memref.alloca @ loc("{{[^"]*}}":50:17)
-// CHECK-NEXT: kind=RAM_1P  bram=256
-// CHECK: memref.alloca @ loc("{{[^"]*}}":51:17)
-// CHECK-NEXT: kind=RAM_1P  bram=64
-// CHECK: memref.alloca @ loc("{{[^"]*}}":52:17)
-// CHECK-NEXT: kind=RAM_1P  bram=128
-// CHECK: memref.alloca @ loc("{{[^"]*}}":92:15)
-// CHECK-NEXT: kind=RAM_1P  bram=0
-// CHECK: memref.alloca @ loc("{{[^"]*}}":110:15)
-// CHECK-NEXT: kind=RAM_1P  bram=0
-// CHECK: memref.alloca @ loc("{{[^"]*}}":114:17)
-// CHECK-NEXT: kind=RAM_1P  bram=128
-// CHECK: memref.alloca @ loc("{{[^"]*}}":115:17)
-// CHECK-NEXT: kind=RAM_1P  bram=64
-// CHECK: memref.alloca @ loc("{{[^"]*}}":116:17)
-// CHECK-NEXT: kind=RAM_1P  bram=256
-// CHECK: memref.alloca @ loc("{{[^"]*}}":156:15)
-// CHECK-NEXT: kind=RAM_1P  bram=0
-// CHECK: memref.alloca @ loc("{{[^"]*}}":171:15)
-// CHECK-NEXT: kind=FIFO  bram=128
-// CHECK: memref.alloca @ loc("{{[^"]*}}":175:17)
-// CHECK-NEXT: kind=PIPO  bram=128
-// CHECK: memref.alloca @ loc("{{[^"]*}}":176:17)
-// CHECK-NEXT: kind=FIFO  bram=256
-// CHECK: memref.alloca @ loc("{{[^"]*}}":179:17)
-// CHECK-NEXT: kind=FIFO  bram=256
-// CHECK: memref.alloca @ loc("{{[^"]*}}":182:17)
-// CHECK-NEXT: kind=PIPO  bram=128
-// CHECK: memref.alloca @ loc("{{[^"]*}}":183:17)
-// CHECK-NEXT: kind=FIFO  bram=128
-// CHECK: memref.alloca @ loc("{{[^"]*}}":186:17)
-// CHECK-NEXT: kind=FIFO  bram=128
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":29:15){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":46:15){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":50:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=256{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":51:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=64{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":52:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=128{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":92:15){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":110:15){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":114:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=128{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":115:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=64{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":116:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=256{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":156:15){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":171:15){{$}}
+// CHECK-NEXT: kind=FIFO  bram=128{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":175:17){{$}}
+// CHECK-NEXT: kind=PIPO  bram=128{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":176:17){{$}}
+// CHECK-NEXT: kind=FIFO  bram=256{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":179:17){{$}}
+// CHECK-NEXT: kind=FIFO  bram=256{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":182:17){{$}}
+// CHECK-NEXT: kind=PIPO  bram=128{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":183:17){{$}}
+// CHECK-NEXT: kind=FIFO  bram=128{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":186:17){{$}}
+// CHECK-NEXT: kind=FIFO  bram=128{{$}}
+// CHECK-NOT: {{^memref\.}}
 // CHECK: Total BRAM: 2048{{$}}

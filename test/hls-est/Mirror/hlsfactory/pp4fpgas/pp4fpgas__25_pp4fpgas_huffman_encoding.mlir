@@ -2098,140 +2098,209 @@ module {
   }
 }
 
-// CHECK: memref.global @ loc("{{[^"]*}}":17:3)
-// CHECK-NEXT: kind=RAM_1P  bram=0
-// CHECK: memref.global @ loc("{{[^"]*}}":28:3)
-// CHECK-NEXT: kind=RAM_1P  bram=0
-// CHECK: memref.global @ loc("{{[^"]*}}":32:3)
-// CHECK-NEXT: kind=RAM_1P  bram=0
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1394:15)
-// CHECK-NEXT: kind=PIPO  bram=1
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1395:17)
-// CHECK-NEXT: kind=PIPO  bram=1
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1396:17)
-// CHECK-NEXT: kind=PIPO  bram=0
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1397:17)
-// CHECK-NEXT: kind=PIPO  bram=1
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1398:17)
-// CHECK-NEXT: kind=RAM_1P  bram=0
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1401:17)
-// CHECK-NEXT: kind=PIPO  bram=1
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1402:17)
-// CHECK-NEXT: kind=PIPO  bram=1
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1403:17)
-// CHECK-NEXT: kind=PIPO  bram=1
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1404:17)
-// CHECK-NEXT: kind=PIPO  bram=1
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1405:17)
-// CHECK-NEXT: kind=PIPO  bram=1
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1405:17)
-// CHECK-NEXT: kind=PIPO  bram=2
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1406:17)
-// CHECK-NEXT: kind=PIPO  bram=1
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1406:17)
-// CHECK-NEXT: kind=PIPO  bram=2
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1407:18)
-// CHECK-NEXT: kind=PIPO  bram=1
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1407:18)
-// CHECK-NEXT: kind=PIPO  bram=2
-// CHECK: memref.alloca @ loc(callsite("/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1594:15 at "/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1410:5))
-// CHECK-NEXT: kind=RAM_1P  bram=1
-// CHECK: memref.alloca @ loc(callsite("/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1595:17 at "/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1410:5))
-// CHECK-NEXT: kind=RAM_1P  bram=0
-// CHECK: memref.alloca @ loc(callsite("/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1595:17 at "/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1410:5))
-// CHECK-NEXT: kind=RAM_1P  bram=0
-// CHECK: memref.alloca @ loc(callsite("/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1595:17 at "/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1410:5))
-// CHECK-NEXT: kind=RAM_1P  bram=0
-// CHECK: memref.alloca @ loc(callsite("/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1595:17 at "/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1410:5))
-// CHECK-NEXT: kind=RAM_1P  bram=0
-// CHECK: memref.alloca @ loc(callsite("/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1595:17 at "/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1410:5))
-// CHECK-NEXT: kind=RAM_1P  bram=0
-// CHECK: memref.alloca @ loc(callsite("/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1595:17 at "/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1410:5))
-// CHECK-NEXT: kind=RAM_1P  bram=0
-// CHECK: memref.alloca @ loc(callsite("/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1595:17 at "/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1410:5))
-// CHECK-NEXT: kind=RAM_1P  bram=0
-// CHECK: memref.alloca @ loc(callsite("/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1595:17 at "/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1410:5))
-// CHECK-NEXT: kind=RAM_1P  bram=0
-// CHECK: memref.alloca @ loc(callsite("/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1595:17 at "/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1410:5))
-// CHECK-NEXT: kind=RAM_1P  bram=0
-// CHECK: memref.alloca @ loc(callsite("/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1595:17 at "/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1410:5))
-// CHECK-NEXT: kind=RAM_1P  bram=0
-// CHECK: memref.alloca @ loc(callsite("/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1595:17 at "/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1410:5))
-// CHECK-NEXT: kind=RAM_1P  bram=0
-// CHECK: memref.alloca @ loc(callsite("/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1595:17 at "/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1410:5))
-// CHECK-NEXT: kind=RAM_1P  bram=0
-// CHECK: memref.alloca @ loc(callsite("/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1595:17 at "/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1410:5))
-// CHECK-NEXT: kind=RAM_1P  bram=0
-// CHECK: memref.alloca @ loc(callsite("/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1595:17 at "/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1410:5))
-// CHECK-NEXT: kind=RAM_1P  bram=0
-// CHECK: memref.alloca @ loc(callsite("/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1595:17 at "/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1410:5))
-// CHECK-NEXT: kind=RAM_1P  bram=0
-// CHECK: memref.alloca @ loc(callsite("/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1595:17 at "/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1410:5))
-// CHECK-NEXT: kind=RAM_1P  bram=0
-// CHECK: memref.alloca @ loc(callsite("/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1596:17 at "/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1410:5))
-// CHECK-NEXT: kind=RAM_1P  bram=0
-// CHECK: memref.alloca @ loc(callsite("/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1596:17 at "/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1410:5))
-// CHECK-NEXT: kind=RAM_1P  bram=0
-// CHECK: memref.alloca @ loc(callsite("/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1596:17 at "/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1410:5))
-// CHECK-NEXT: kind=RAM_1P  bram=0
-// CHECK: memref.alloca @ loc(callsite("/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1596:17 at "/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1410:5))
-// CHECK-NEXT: kind=RAM_1P  bram=0
-// CHECK: memref.alloca @ loc(callsite("/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1596:17 at "/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1410:5))
-// CHECK-NEXT: kind=RAM_1P  bram=0
-// CHECK: memref.alloca @ loc(callsite("/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1596:17 at "/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1410:5))
-// CHECK-NEXT: kind=RAM_1P  bram=0
-// CHECK: memref.alloca @ loc(callsite("/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1596:17 at "/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1410:5))
-// CHECK-NEXT: kind=RAM_1P  bram=0
-// CHECK: memref.alloca @ loc(callsite("/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1596:17 at "/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1410:5))
-// CHECK-NEXT: kind=RAM_1P  bram=0
-// CHECK: memref.alloca @ loc(callsite("/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1596:17 at "/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1410:5))
-// CHECK-NEXT: kind=RAM_1P  bram=0
-// CHECK: memref.alloca @ loc(callsite("/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1596:17 at "/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1410:5))
-// CHECK-NEXT: kind=RAM_1P  bram=0
-// CHECK: memref.alloca @ loc(callsite("/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1596:17 at "/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1410:5))
-// CHECK-NEXT: kind=RAM_1P  bram=0
-// CHECK: memref.alloca @ loc(callsite("/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1596:17 at "/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1410:5))
-// CHECK-NEXT: kind=RAM_1P  bram=0
-// CHECK: memref.alloca @ loc(callsite("/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1596:17 at "/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1410:5))
-// CHECK-NEXT: kind=RAM_1P  bram=0
-// CHECK: memref.alloca @ loc(callsite("/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1596:17 at "/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1410:5))
-// CHECK-NEXT: kind=RAM_1P  bram=0
-// CHECK: memref.alloca @ loc(callsite("/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1596:17 at "/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1410:5))
-// CHECK-NEXT: kind=RAM_1P  bram=0
-// CHECK: memref.alloca @ loc(callsite("/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1596:17 at "/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1410:5))
-// CHECK-NEXT: kind=RAM_1P  bram=0
-// CHECK: memref.alloca @ loc(callsite("/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1597:17 at "/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1410:5))
-// CHECK-NEXT: kind=RAM_1P  bram=1
-// CHECK: memref.alloca @ loc(callsite("/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1597:17 at "/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1410:5))
-// CHECK-NEXT: kind=RAM_1WNR  bram=4
-// CHECK: memref.alloca @ loc(callsite("/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1598:17 at "/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1410:5))
-// CHECK-NEXT: kind=RAM_2P  bram=1
-// CHECK: memref.alloca @ loc(callsite("/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1598:17 at "/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1410:5))
-// CHECK-NEXT: kind=RAM_2P  bram=2
-// CHECK: memref.alloca @ loc(callsite("/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":983:15 at "/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1453:5))
-// CHECK-NEXT: kind=RAM_1P  bram=0
-// CHECK: memref.alloca @ loc(callsite("/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":983:15 at "/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1453:5))
-// CHECK-NEXT: kind=RAM_1P  bram=0
-// CHECK: memref.alloca @ loc(callsite("/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":985:17 at "/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1453:5))
-// CHECK-NEXT: kind=RAM_1P  bram=0
-// CHECK: memref.alloca @ loc(callsite("/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":987:17 at "/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1453:5))
-// CHECK-NEXT: kind=RAM_1P  bram=0
-// CHECK: memref.alloca @ loc(callsite("/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":990:17 at "/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1453:5))
-// CHECK-NEXT: kind=RAM_1P  bram=0
-// CHECK: memref.alloca @ loc(callsite("/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":992:17 at "/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1453:5))
-// CHECK-NEXT: kind=RAM_2P  bram=2
-// CHECK: memref.alloca @ loc(callsite("/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":284:15 at "/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1455:5))
-// CHECK-NEXT: kind=RAM_1P  bram=0
-// CHECK: memref.alloca @ loc(callsite("/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":285:17 at "/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1455:5))
-// CHECK-NEXT: kind=RAM_1P  bram=1
-// CHECK: memref.alloca @ loc(callsite("/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1721:15 at "/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1456:5))
-// CHECK-NEXT: kind=RAM_1P  bram=0
-// CHECK: memref.alloca @ loc(callsite("/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":45:15 at "/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1459:5))
-// CHECK-NEXT: kind=RAM_1P  bram=0
-// CHECK: memref.alloca @ loc(callsite("/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":48:17 at "/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1459:5))
-// CHECK-NEXT: kind=RAM_1P  bram=0
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1460:18)
-// CHECK-NEXT: kind=RAM_1P  bram=0
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1546:15)
-// CHECK-NEXT: kind=RAM_1P  bram=0
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":17:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":28:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":1394:15){{$}}
+// CHECK-NEXT: kind=PIPO  bram=1{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":1395:17){{$}}
+// CHECK-NEXT: kind=PIPO  bram=1{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":1396:17){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":1397:17){{$}}
+// CHECK-NEXT: kind=PIPO  bram=1{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":1398:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":1401:17){{$}}
+// CHECK-NEXT: kind=PIPO  bram=1{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":1402:17){{$}}
+// CHECK-NEXT: kind=PIPO  bram=1{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":1403:17){{$}}
+// CHECK-NEXT: kind=PIPO  bram=1{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":1404:17){{$}}
+// CHECK-NEXT: kind=PIPO  bram=1{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":1405:17){{$}}
+// CHECK-NEXT: kind=PIPO  bram=1{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":1405:17){{$}}
+// CHECK-NEXT: kind=PIPO  bram=2{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":1406:17){{$}}
+// CHECK-NEXT: kind=PIPO  bram=1{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":1406:17){{$}}
+// CHECK-NEXT: kind=PIPO  bram=2{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":1407:18){{$}}
+// CHECK-NEXT: kind=PIPO  bram=1{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":1407:18){{$}}
+// CHECK-NEXT: kind=PIPO  bram=2{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc(callsite("/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1594:15 at "/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1410:5)){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc(callsite("/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1595:17 at "/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1410:5)){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc(callsite("/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1595:17 at "/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1410:5)){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc(callsite("/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1595:17 at "/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1410:5)){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc(callsite("/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1595:17 at "/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1410:5)){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc(callsite("/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1595:17 at "/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1410:5)){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc(callsite("/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1595:17 at "/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1410:5)){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc(callsite("/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1595:17 at "/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1410:5)){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc(callsite("/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1595:17 at "/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1410:5)){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc(callsite("/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1595:17 at "/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1410:5)){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc(callsite("/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1595:17 at "/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1410:5)){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc(callsite("/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1595:17 at "/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1410:5)){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc(callsite("/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1595:17 at "/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1410:5)){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc(callsite("/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1595:17 at "/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1410:5)){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc(callsite("/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1595:17 at "/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1410:5)){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc(callsite("/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1595:17 at "/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1410:5)){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc(callsite("/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1595:17 at "/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1410:5)){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc(callsite("/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1596:17 at "/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1410:5)){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc(callsite("/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1596:17 at "/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1410:5)){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc(callsite("/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1596:17 at "/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1410:5)){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc(callsite("/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1596:17 at "/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1410:5)){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc(callsite("/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1596:17 at "/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1410:5)){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc(callsite("/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1596:17 at "/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1410:5)){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc(callsite("/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1596:17 at "/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1410:5)){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc(callsite("/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1596:17 at "/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1410:5)){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc(callsite("/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1596:17 at "/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1410:5)){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc(callsite("/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1596:17 at "/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1410:5)){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc(callsite("/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1596:17 at "/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1410:5)){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc(callsite("/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1596:17 at "/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1410:5)){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc(callsite("/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1596:17 at "/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1410:5)){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc(callsite("/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1596:17 at "/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1410:5)){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc(callsite("/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1596:17 at "/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1410:5)){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc(callsite("/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1596:17 at "/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1410:5)){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc(callsite("/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1597:17 at "/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1410:5)){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc(callsite("/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1597:17 at "/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1410:5)){{$}}
+// CHECK-NEXT: kind=RAM_1WNR  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc(callsite("/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1598:17 at "/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1410:5)){{$}}
+// CHECK-NEXT: kind=RAM_2P  bram=1{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc(callsite("/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1598:17 at "/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1410:5)){{$}}
+// CHECK-NEXT: kind=RAM_2P  bram=2{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc(callsite("/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":983:15 at "/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1453:5)){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc(callsite("/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":983:15 at "/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1453:5)){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc(callsite("/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":985:17 at "/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1453:5)){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc(callsite("/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":987:17 at "/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1453:5)){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc(callsite("/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":990:17 at "/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1453:5)){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc(callsite("/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":992:17 at "/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1453:5)){{$}}
+// CHECK-NEXT: kind=RAM_2P  bram=2{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc(callsite("/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":284:15 at "/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1455:5)){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc(callsite("/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":285:17 at "/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1455:5)){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc(callsite("/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1721:15 at "/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1456:5)){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc(callsite("/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":45:15 at "/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1459:5)){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc(callsite("/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":48:17 at "/home/peter/circt/test/hls-est/Mirror/hlsfactory/pp4fpgas/pp4fpgas__25_pp4fpgas_huffman_encoding.mlir":1459:5)){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":1460:18){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":1546:15){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
 // CHECK: Total BRAM: 28{{$}}

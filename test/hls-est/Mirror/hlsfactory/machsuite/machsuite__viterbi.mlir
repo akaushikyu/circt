@@ -89,6 +89,8 @@ module {
   }
 }
 
-// CHECK: memref.alloca @ loc("{{[^"]*}}":14:15)
-// CHECK-NEXT: kind=RAM_1WNR  bram=128
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":14:15){{$}}
+// CHECK-NEXT: kind=RAM_1WNR  bram=128{{$}}
+// CHECK-NOT: {{^memref\.}}
 // CHECK: Total BRAM: 128{{$}}

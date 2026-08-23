@@ -679,4 +679,5 @@ module {
   }
 }
 
+// CHECK-NOT: {{^memref\.}}
 // CHECK: Total BRAM: 0{{$}}

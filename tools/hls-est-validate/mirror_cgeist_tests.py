@@ -2,7 +2,7 @@
 """Mirror every cgeist HLS lit test as an hls-est lit test (phase P1a, MEMOS decision #47).
 
     python3 mirror_cgeist_tests.py [-j 4] [--timeout 120] [--long-timeout 600]
-                                   [--only <substring>] [--dry-run]
+                                   [--only <substring>] [--dry-run] [--recheck]
 
 Inventory: every cgeist test under Polygeist's tools/cgeist/Test/HLS -- the one .test file per
 HLSFactory_v2 design under hlsfactory/ (W8), and every other .c / .cpp file with a RUN line.
@@ -24,7 +24,9 @@ Per test:
      (--symbol-privatize=exclude=<top> --symbol-dce and top=<top> on --bram-analysis) and the
      harness's math-core cost table (lit substitution %hls_est_math_costs).
   3. hls-est runs that RUN line; its report becomes the CHECK lines at the end of the file (one
-     CHECK / CHECK-NEXT pair per memref: the report line and its kind / BRAM; then the total).
+     CHECK / CHECK-NEXT pair per memref: the report line and its kind / BRAM, both anchored with
+     {{$}}; a CHECK-NOT of any further report line before, between and after them, which pins the
+     number of memrefs; then the total).
      The current hls-est output is the expectation: a regression pin, not Vitis.
      hls-est failing gives an XFAIL test; hls-est still running after --long-timeout seconds
      gives an XFAIL test whose RUN line stops hls-est after --timeout seconds.
@@ -329,19 +331,48 @@ def run_hlsest(path, top, timeout):
 
 def check_lines(stdout):
     """CHECK lines pinning the report: per memref its report line (the input path replaced by a
-    regex) and the kind / BRAM line after it, then the total."""
-    out = []
+    regex) and the kind / BRAM line after it, each anchored at the end of the line, then the total.
+    A CHECK-NOT for a report line before the first memref, between two memrefs and before the total
+    pins the number of memrefs: a memref the report gains or loses fails the test."""
+    no_memref = "// CHECK-NOT: {{^memref\\.}}"
+    out = [no_memref]
     lines = stdout.splitlines()
     for i, line in enumerate(lines):
         if re.match(r"^memref\.\w+", line):
             pat = line.rstrip().replace("{{", "{{[{][{]}}").replace("[[", "{{[[][[]}}")
             pat = re.sub(r'loc\("[^"]*"', 'loc("{{[^"]*}}"', pat)
-            out.append(f"// CHECK: {pat}")
+            out.append(f"// CHECK: {pat}{{{{$}}}}")
             if i + 1 < len(lines) and re.match(r"^\s+kind=", lines[i + 1]):
-                out.append(f"// CHECK-NEXT: {lines[i + 1].strip()}")
+                out.append(f"// CHECK-NEXT: {lines[i + 1].strip()}{{{{$}}}}")
+            out.append(no_memref)
     total, _ = RH.parse_hlsest_output(stdout)
     out.append(f"// CHECK: Total BRAM: {total}{{{{$}}}}")
     return out
+
+
+def recheck_existing(path, timeout):
+    """--recheck: re-runs hls-est on a checked-in Mirror file (its RUN line's arguments) and rewrites
+    only its CHECK block; the header, the RUN line and the MLIR body stay byte for byte. Returns
+    (path, outcome). An XFAIL test is left as it is."""
+    text = path.read_text()
+    if "// XFAIL:" in text:
+        return path, "xfail (unchanged)"
+    run = re.search(r"^// RUN: (?:timeout \d+ )?hls-est %s (.*) -o /dev/null \| FileCheck %s$", text, re.M)
+    if not run:
+        return path, "no RUN line"
+    args = [a.replace(MATH_COSTS_SUBST, str(RH.DEFAULT_MATH_COSTS)) for a in shlex.split(run.group(1))]
+    p = subprocess.run([C.HLS_EST, str(path), *args, "-o", "/dev/null"], capture_output=True, text=True,
+                       errors="replace", timeout=timeout)
+    if p.returncode != 0:
+        return path, f"hls-est exit {p.returncode}"
+    body = text[:text.index("\n// CHECK")] if "\n// CHECK" in text else text.rstrip("\n")
+    new_text = body.rstrip("\n") + "\n\n" + "\n".join(check_lines(p.stdout)) + "\n"
+    old_total = re.search(r"^// CHECK: Total BRAM: (\S+?)\{\{\$\}\}$", text, re.M)
+    total, _ = RH.parse_hlsest_output(p.stdout)
+    if not old_total or old_total.group(1) != str(total):
+        return path, f"total changed {old_total and old_total.group(1)} -> {total}: not rewritten"
+    path.write_text(new_text)
+    return path, "rewritten"
 
 
 # --------------------------------------------------------------------------- ground truth ----
@@ -545,10 +576,23 @@ def main():
     ap.add_argument("--only", default="", help="only the tests whose path contains this text "
                     "(the manifest and tests.md are then not rewritten)")
     ap.add_argument("--dry-run", action="store_true", help="inventory and cgeist only")
+    ap.add_argument("--recheck", action="store_true",
+                    help="no cgeist: re-run hls-est on every checked-in Mirror test (its own RUN line) and "
+                         "rewrite only the CHECK block in the current format; the manifest is not rewritten")
     ap.add_argument("--mlir-from", default=None,
                     help="an earlier run_hlsest.py result JSON: reuse its MLIR files where they carry "
                          "the cache key of the current inputs (same cgeist md5, shim and flags)")
     args = ap.parse_args()
+    if args.recheck:
+        files = sorted(p for p in MIRROR.rglob("*.mlir") if args.only in str(p))
+        from collections import Counter
+        with cf.ThreadPoolExecutor(args.j) as ex:
+            res = list(ex.map(lambda p: recheck_existing(p, args.long_timeout), files))
+        for p, o in res:
+            if o not in ("rewritten", "xfail (unchanged)"):
+                log(f"[recheck] {p.relative_to(C.CIRCT)}: {o}")
+        log(f"recheck: {dict(Counter(o.split(' ')[0] for _, o in res))}")
+        return
 
     shim = RH.resolve_shim(C.DEFAULT_SHIM)
     designs = D.load_designs(catalog="v2", problems=[])

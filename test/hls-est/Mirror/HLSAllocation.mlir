@@ -1251,12 +1251,17 @@ module {
   }
 }
 
-// CHECK: memref.global @ loc("{{[^"]*}}":9:3)
-// CHECK-NEXT: kind=RAM_1P  bram=64
-// CHECK: memref.global @ loc("{{[^"]*}}":10:3)
-// CHECK-NEXT: kind=RAM_1P  bram=64
-// CHECK: memref.global @ loc("{{[^"]*}}":11:3)
-// CHECK-NEXT: kind=RAM_1P  bram=64
-// CHECK: memref.global @ loc("{{[^"]*}}":12:3)
-// CHECK-NEXT: kind=RAM_1P  bram=64
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":9:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=64{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":10:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=64{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":11:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=64{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":12:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=64{{$}}
+// CHECK-NOT: {{^memref\.}}
 // CHECK: Total BRAM: 258{{$}}

@@ -93,14 +93,20 @@ module {
   func.func private @_ZN3hls6streamIfLi0EEC1EPKc(memref<?xi32>, memref<?xi8>) attributes {hls.orig_name = "stream", llvm.linkage = #llvm.linkage<external>}
 }
 
-// CHECK: memref.alloca @ loc("{{[^"]*}}":25:15)
-// CHECK-NEXT: kind=RAM_1P  bram=0
-// CHECK: memref.alloca @ loc("{{[^"]*}}":45:15)
-// CHECK-NEXT: kind=RAM_1P  bram=0
-// CHECK: memref.alloca @ loc("{{[^"]*}}":49:17)
-// CHECK-NEXT: kind=RAM_1P  bram=128
-// CHECK: memref.alloca @ loc("{{[^"]*}}":75:15)
-// CHECK-NEXT: kind=FIFO  bram=128
-// CHECK: memref.alloca @ loc("{{[^"]*}}":79:17)
-// CHECK-NEXT: kind=FIFO  bram=128
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":25:15){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":45:15){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":49:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=128{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":75:15){{$}}
+// CHECK-NEXT: kind=FIFO  bram=128{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":79:17){{$}}
+// CHECK-NEXT: kind=FIFO  bram=128{{$}}
+// CHECK-NOT: {{^memref\.}}
 // CHECK: Total BRAM: 384{{$}}

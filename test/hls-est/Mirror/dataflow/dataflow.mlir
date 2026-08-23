@@ -58,10 +58,14 @@ module {
   }
 }
 
-// CHECK: memref.alloca @ loc("{{[^"]*}}":10:15)
-// CHECK-NEXT: kind=PIPO  bram=2
-// CHECK: memref.alloca @ loc("{{[^"]*}}":35:15)
-// CHECK-NEXT: kind=PIPO  bram=2
-// CHECK: memref.alloca @ loc("{{[^"]*}}":44:15)
-// CHECK-NEXT: kind=RAM_1P  bram=0
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":10:15){{$}}
+// CHECK-NEXT: kind=PIPO  bram=2{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":35:15){{$}}
+// CHECK-NEXT: kind=PIPO  bram=2{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":44:15){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
 // CHECK: Total BRAM: 4{{$}}

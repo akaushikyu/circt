@@ -33,6 +33,8 @@ module {
   }
 }
 
-// CHECK: memref.alloca @ loc("{{[^"]*}}":15:15)
-// CHECK-NEXT: kind=RAM_1P  bram=1
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":15:15){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
+// CHECK-NOT: {{^memref\.}}
 // CHECK: Total BRAM: 1{{$}}

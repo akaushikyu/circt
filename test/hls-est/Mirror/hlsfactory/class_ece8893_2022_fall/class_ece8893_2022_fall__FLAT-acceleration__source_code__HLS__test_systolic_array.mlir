@@ -160,10 +160,14 @@ module {
   }
 }
 
-// CHECK: memref.alloca @ loc("{{[^"]*}}":17:15)
-// CHECK-NEXT: kind=RAM_2P  bram=8
-// CHECK: memref.alloca @ loc(callsite("/home/peter/circt/test/hls-est/Mirror/hlsfactory/class_ece8893_2022_fall/class_ece8893_2022_fall__FLAT-acceleration__source_code__HLS__test_systolic_array.mlir":58:15 at "/home/peter/circt/test/hls-est/Mirror/hlsfactory/class_ece8893_2022_fall/class_ece8893_2022_fall__FLAT-acceleration__source_code__HLS__test_systolic_array.mlir":18:5))
-// CHECK-NEXT: kind=RAM_1P  bram=8
-// CHECK: memref.alloca @ loc("{{[^"]*}}":19:17)
-// CHECK-NEXT: kind=RAM_T2P  bram=8
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":17:15){{$}}
+// CHECK-NEXT: kind=RAM_2P  bram=8{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc(callsite("/home/peter/circt/test/hls-est/Mirror/hlsfactory/class_ece8893_2022_fall/class_ece8893_2022_fall__FLAT-acceleration__source_code__HLS__test_systolic_array.mlir":58:15 at "/home/peter/circt/test/hls-est/Mirror/hlsfactory/class_ece8893_2022_fall/class_ece8893_2022_fall__FLAT-acceleration__source_code__HLS__test_systolic_array.mlir":18:5)){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=8{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":19:17){{$}}
+// CHECK-NEXT: kind=RAM_T2P  bram=8{{$}}
+// CHECK-NOT: {{^memref\.}}
 // CHECK: Total BRAM: 24{{$}}

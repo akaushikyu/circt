@@ -89,8 +89,11 @@ module {
   }
 }
 
-// CHECK: memref.alloca @ loc("{{[^"]*}}":53:15)
-// CHECK-NEXT: kind=RAM_T2P  bram=128
-// CHECK: memref.alloca @ loc("{{[^"]*}}":53:15)
-// CHECK-NEXT: kind=RAM_T2P  bram=128
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":53:15){{$}}
+// CHECK-NEXT: kind=RAM_T2P  bram=128{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":53:15){{$}}
+// CHECK-NEXT: kind=RAM_T2P  bram=128{{$}}
+// CHECK-NOT: {{^memref\.}}
 // CHECK: Total BRAM: 264{{$}}

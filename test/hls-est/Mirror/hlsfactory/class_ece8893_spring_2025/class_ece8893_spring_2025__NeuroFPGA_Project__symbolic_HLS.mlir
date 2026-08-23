@@ -49,36 +49,53 @@ module {
   }
 }
 
-// CHECK: memref.alloca @ loc("{{[^"]*}}":15:15)
-// CHECK-NEXT: kind=RAM_2P  bram=2
-// CHECK: memref.alloca @ loc("{{[^"]*}}":15:15)
-// CHECK-NEXT: kind=RAM_2P  bram=2
-// CHECK: memref.alloca @ loc("{{[^"]*}}":15:15)
-// CHECK-NEXT: kind=RAM_2P  bram=2
-// CHECK: memref.alloca @ loc("{{[^"]*}}":15:15)
-// CHECK-NEXT: kind=RAM_2P  bram=2
-// CHECK: memref.alloca @ loc("{{[^"]*}}":15:15)
-// CHECK-NEXT: kind=RAM_2P  bram=2
-// CHECK: memref.alloca @ loc("{{[^"]*}}":15:15)
-// CHECK-NEXT: kind=RAM_2P  bram=2
-// CHECK: memref.alloca @ loc("{{[^"]*}}":15:15)
-// CHECK-NEXT: kind=RAM_2P  bram=2
-// CHECK: memref.alloca @ loc("{{[^"]*}}":15:15)
-// CHECK-NEXT: kind=RAM_2P  bram=2
-// CHECK: memref.alloca @ loc("{{[^"]*}}":16:17)
-// CHECK-NEXT: kind=RAM_1WNR  bram=30
-// CHECK: memref.alloca @ loc("{{[^"]*}}":16:17)
-// CHECK-NEXT: kind=RAM_1WNR  bram=30
-// CHECK: memref.alloca @ loc("{{[^"]*}}":16:17)
-// CHECK-NEXT: kind=RAM_1WNR  bram=30
-// CHECK: memref.alloca @ loc("{{[^"]*}}":16:17)
-// CHECK-NEXT: kind=RAM_1WNR  bram=30
-// CHECK: memref.alloca @ loc("{{[^"]*}}":16:17)
-// CHECK-NEXT: kind=RAM_1WNR  bram=30
-// CHECK: memref.alloca @ loc("{{[^"]*}}":16:17)
-// CHECK-NEXT: kind=RAM_1WNR  bram=30
-// CHECK: memref.alloca @ loc("{{[^"]*}}":16:17)
-// CHECK-NEXT: kind=RAM_1WNR  bram=30
-// CHECK: memref.alloca @ loc("{{[^"]*}}":16:17)
-// CHECK-NEXT: kind=RAM_1WNR  bram=30
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":15:15){{$}}
+// CHECK-NEXT: kind=RAM_2P  bram=2{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":15:15){{$}}
+// CHECK-NEXT: kind=RAM_2P  bram=2{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":15:15){{$}}
+// CHECK-NEXT: kind=RAM_2P  bram=2{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":15:15){{$}}
+// CHECK-NEXT: kind=RAM_2P  bram=2{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":15:15){{$}}
+// CHECK-NEXT: kind=RAM_2P  bram=2{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":15:15){{$}}
+// CHECK-NEXT: kind=RAM_2P  bram=2{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":15:15){{$}}
+// CHECK-NEXT: kind=RAM_2P  bram=2{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":15:15){{$}}
+// CHECK-NEXT: kind=RAM_2P  bram=2{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":16:17){{$}}
+// CHECK-NEXT: kind=RAM_1WNR  bram=30{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":16:17){{$}}
+// CHECK-NEXT: kind=RAM_1WNR  bram=30{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":16:17){{$}}
+// CHECK-NEXT: kind=RAM_1WNR  bram=30{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":16:17){{$}}
+// CHECK-NEXT: kind=RAM_1WNR  bram=30{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":16:17){{$}}
+// CHECK-NEXT: kind=RAM_1WNR  bram=30{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":16:17){{$}}
+// CHECK-NEXT: kind=RAM_1WNR  bram=30{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":16:17){{$}}
+// CHECK-NEXT: kind=RAM_1WNR  bram=30{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":16:17){{$}}
+// CHECK-NEXT: kind=RAM_1WNR  bram=30{{$}}
+// CHECK-NOT: {{^memref\.}}
 // CHECK: Total BRAM: 256{{$}}

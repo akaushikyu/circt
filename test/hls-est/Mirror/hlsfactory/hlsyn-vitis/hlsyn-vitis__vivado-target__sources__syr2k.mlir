@@ -77,10 +77,14 @@ module {
   }
 }
 
-// CHECK: memref.alloca @ loc("{{[^"]*}}":12:15)
-// CHECK-NEXT: kind=RAM_2P  bram=32
-// CHECK: memref.alloca @ loc("{{[^"]*}}":13:17)
-// CHECK-NEXT: kind=RAM_2P  bram=32
-// CHECK: memref.alloca @ loc("{{[^"]*}}":14:17)
-// CHECK-NEXT: kind=RAM_T2P  bram=32
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":12:15){{$}}
+// CHECK-NEXT: kind=RAM_2P  bram=32{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":13:17){{$}}
+// CHECK-NEXT: kind=RAM_2P  bram=32{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":14:17){{$}}
+// CHECK-NEXT: kind=RAM_T2P  bram=32{{$}}
+// CHECK-NOT: {{^memref\.}}
 // CHECK: Total BRAM: 96{{$}}
