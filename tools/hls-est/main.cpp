@@ -249,6 +249,21 @@ int main(int argc, char **argv) {
     return mlir::asMainReturnCode(mlir::MlirOptMain(
         argc, argv, inputFilename, outputFilename, targetRegistry));
 
+  for (int loopIndex = 1; loopIndex < argc; ++loopIndex) {
+    llvm::StringRef arg(argv[loopIndex]);
+    if (!arg.starts_with("-"))
+      continue;
+    llvm::StringRef name = arg.ltrim('-').split('=').first;
+    if (name == "pass-pipeline" || mlir::PassInfo::lookup(name) ||
+        mlir::PassPipelineInfo::lookup(name)) {
+      llvm::errs() << "error: --default-pipeline runs the configuration's "
+                      "tool.pipeline; '"
+                   << arg
+                   << "' would be ignored (drop it, or give the whole "
+                      "pipeline as pass flags instead of --default-pipeline)\n";
+      return 1;
+    }
+  }
   llvm::InitLLVM initLLVM(argc, argv);
   mlir::MlirOptMainConfig config =
       mlir::MlirOptMainConfig::createFromCLOptions();

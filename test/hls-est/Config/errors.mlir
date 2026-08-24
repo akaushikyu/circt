@@ -41,3 +41,28 @@
 // INDEX: error: hls-config: --config-set tool.hls.implicit_buffers[3].enabled=false: tool.hls.implicit_buffers[3] does not exist
 // RUN: not hls-est --hls-config=%S/Inputs/errors/does-not-exist.json %S/Inputs/kernel.mlir 2>&1 | FileCheck %s --check-prefix=MISSING
 // MISSING: error: hls-config: {{.*}}does-not-exist.json: cannot read: No such file or directory
+
+// P2 review: values the loader once accepted silently.
+// A reserved value that is not implemented.
+// RUN: not hls-est --config-set tool.hls.pipeline_decision.flatten_across_calls=true %S/Inputs/kernel.mlir 2>&1 | FileCheck %s --check-prefix=FLATTEN
+// FLATTEN: error: hls-config: --config-set tool.hls.pipeline_decision.flatten_across_calls=true: tool.hls.pipeline_decision.flatten_across_calls: true is not implemented (reserved; only false, D-11)
+// An unknown section names the file or --config-set that put it there.
+// RUN: not hls-est --config-set tool.hls.optionz.pipeline_loops=3 %S/Inputs/kernel.mlir 2>&1 | FileCheck %s --check-prefix=SECTSET
+// SECTSET: error: hls-config: --config-set tool.hls.optionz.pipeline_loops=3: tool.hls.optionz: unknown key (did you mean options?)
+// RUN: not hls-est --hls-config=%S/Inputs/errors/unknown_section.json %S/Inputs/kernel.mlir 2>&1 | FileCheck %s --check-prefix=SECTFILE
+// SECTFILE: error: hls-config: {{.*}}unknown_section.json: tool.hls.optionz: unknown key (did you mean options?)
+// An operator class calyx-fixed does not read.
+// RUN: not hls-est --config-set scheduling.timing.operator_latencies.fp_mul=3 %S/Inputs/kernel.mlir 2>&1 | FileCheck %s --check-prefix=LATCLS
+// LATCLS: error: hls-config: --config-set scheduling.timing.operator_latencies.fp_mul=3: scheduling.timing.operator_latencies.fp_mul: calyx-fixed has no operator class 'fp_mul' (did you mean fpmul?)
+// A tier that is not one.
+// RUN: not hls-est --config-set tool.backend.storage_selector.below=nosuchtier %S/Inputs/kernel.mlir 2>&1 | FileCheck %s --check-prefix=BELOW
+// BELOW: tool.backend.storage_selector.below: 'nosuchtier' is not one of registers, distributed, hard-small, block, large
+// A priced port configuration no device memory has.
+// RUN: not hls-est --config-set tool.hls.memory_architecture.priced_configs.wide=xyz %S/Inputs/kernel.mlir 2>&1 | FileCheck %s --check-prefix=PRICED
+// PRICED: tool.hls.memory_architecture.priced_configs.wide: 'xyz' is the port configuration of no device memory (device: sdp, sp, tdp)
+// A plugin section no plugin key selects.
+// RUN: not hls-est --config-set plugins.nosuch.x=1 %S/Inputs/kernel.mlir 2>&1 | FileCheck %s --check-prefix=PSECT
+// PSECT: error: hls-config: --config-set plugins.nosuch.x=1: plugins.nosuch: no plugin key selects a plugin named 'nosuch', so nothing reads this section
+// An integer beyond 64 bits is out of range, not of the wrong type.
+// RUN: not hls-est --config-set tool.hls.options.pipeline_loops=99999999999999999999 %S/Inputs/kernel.mlir 2>&1 | FileCheck %s --check-prefix=BIG
+// BIG: tool.hls.options.pipeline_loops: out of range: 1e+20 exceeds the 64-bit integer range

@@ -2715,6 +2715,29 @@ public:
         diag.errors.push_back("scheduling.timing.operator_latencies: "
                               "calyx-fixed needs a latency for '" +
                               candidateValue + "'");
+
+    for (const auto &kv : latencies) {
+      if (llvm::is_contained(classes, kv.first))
+        continue;
+      std::string msg = "scheduling.timing.operator_latencies." + kv.first +
+                        ": calyx-fixed has no operator class '" + kv.first +
+                        "'";
+      unsigned best = ~0u;
+      StringRef bestName;
+      for (const std::string &candidateValue : classes) {
+        unsigned dimensionIndex =
+            StringRef(kv.first).edit_distance(candidateValue);
+        if (dimensionIndex < best) {
+          best = dimensionIndex;
+          bestName = candidateValue;
+        }
+      }
+      if (best <= std::max<size_t>(2, kv.first.size() / 3))
+        msg += " (did you mean " + bestName.str() + "?)";
+      else
+        msg += " (classes: " + llvm::join(classes, ", ") + ")";
+      diag.errors.push_back(msg);
+    }
   }
 
   void listClasses(SmallVectorImpl<std::string> &out) const override {

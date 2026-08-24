@@ -55,3 +55,11 @@ module {
     return
   }
 }
+
+// A dataflow ping-pong channel goes where the storage selector puts it, like
+// any other bank (P2 review): the 16x32 channel of @top is distributed RAM
+// under the default selector and one true-dual-port block memory under
+// test-all-block.
+// RUN: hls-est %S/../Passes/bram_dataflow_channels.mlir --load-plugin=%hls_est_test_plugin --affine-loop-normalize --auto-pipeline-unroll --memory-banking-bram --convert-affine-to-loopschedule --bram-analysis=top=top --config-set tool.backend.storage_selector.plugin=test-all-block -o /dev/null | FileCheck %s --check-prefix=PIPO
+// PIPO:      single memory of all 2 blocks: F(16x32) at x18 (true dual port, one port per side) = 2 (never replicated)
+// PIPO:      Total BRAM: 34{{$}}

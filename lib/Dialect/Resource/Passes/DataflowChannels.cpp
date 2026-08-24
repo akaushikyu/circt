@@ -777,21 +777,16 @@ ChannelVerdict analyzeDataflowChannel(Operation *storage,
 ChannelPrice
 priceChannel(int64_t words, unsigned bits, int64_t blocks, bool twoPorts,
              bool bound2p, bool lutram,
+             llvm::function_ref<std::optional<std::string>(int64_t, unsigned)>
+                 belowBlock,
              llvm::function_ref<int64_t(int64_t, unsigned, bool)> blocksOf) {
   ChannelPrice p;
-  // The block-RAM threshold of the storage selector
-  // (tool.backend.storage_selector.min_block_bits, 1024 bits).
   const circt::hlsest::Config &cfg = circt::hlsest::Config::get();
-  const circt::hlsest::StorageSelectorConfig &sel =
-      cfg.tool.backend.storageSelector;
-  const std::string minText = std::string(sel.belowSymbol()) + " " +
-                              std::to_string(sel.minBlockBits);
   const std::string wideText =
       "x" + std::to_string(cfg.pricedPortWidth(/*wide=*/true));
   const std::string narrowText =
       "x" + std::to_string(cfg.pricedPortWidth(/*wide=*/false));
   std::string geom = std::to_string(words) + "x" + std::to_string(bits);
-  int64_t bankBits = words * static_cast<int64_t>(bits);
   if (lutram) {
     p.mode = "lutram";
     p.rule = "bind_storage impl=lutram: distributed RAM, 0 BRAM";
@@ -799,8 +794,8 @@ priceChannel(int64_t words, unsigned bits, int64_t blocks, bool twoPorts,
   }
   if (blocks <= 1) {
     p.mode = "one block";
-    if (sel.belowBlock(bankBits)) {
-      p.rule = geom + " " + minText + " bits: distributed RAM, 0 BRAM";
+    if (std::optional<std::string> why = belowBlock(words, bits)) {
+      p.rule = geom + " " + *why + ": distributed RAM, 0 BRAM";
       return p;
     }
     bool sdp = !twoPorts;
@@ -813,10 +808,9 @@ priceChannel(int64_t words, unsigned bits, int64_t blocks, bool twoPorts,
   }
   if (twoPorts || bound2p) {
     p.mode = "separate";
-    if (sel.belowBlock(bankBits)) {
-      p.rule = "separate, " + geom + " per block " + minText +
-               " bits: distributed "
-               "RAM, 0 BRAM";
+    if (std::optional<std::string> why = belowBlock(words, bits)) {
+      p.rule = "separate, " + geom + " per block " + *why +
+               ": distributed RAM, 0 BRAM";
       return p;
     }
     bool sdp = bound2p && !twoPorts;
@@ -833,10 +827,9 @@ priceChannel(int64_t words, unsigned bits, int64_t blocks, bool twoPorts,
   p.mode = "single";
   int64_t allWords = blocks * words;
   std::string all = std::to_string(allWords) + "x" + std::to_string(bits);
-  if (sel.belowBlock(allWords * static_cast<int64_t>(bits))) {
-    p.rule = "single memory of " + all + " " + minText +
-             " bits: distributed RAM, 0 "
-             "BRAM";
+  if (std::optional<std::string> why = belowBlock(allWords, bits)) {
+    p.rule = "single memory of " + all + " " + *why +
+             ": distributed RAM, 0 BRAM";
     return p;
   }
   p.bram = static_cast<unsigned>(blocksOf(allWords, bits, /*sdp=*/false));

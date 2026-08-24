@@ -9,3 +9,7 @@
 // CHECK: memref.alloca
 // CHECK-NEXT: kind=RAM_2P  bram=2{{$}}
 // CHECK: Total BRAM: 2{{$}}
+
+// A pass flag given with --default-pipeline would be dropped: an error.
+// RUN: not hls-est %S/Inputs/kernel.mlir --default-pipeline --bram-analysis=bram-formula=n6 -o /dev/null 2>&1 | FileCheck %s --check-prefix=EXTRA
+// EXTRA: error: --default-pipeline runs the configuration's tool.pipeline; '--bram-analysis=bram-formula=n6' would be ignored

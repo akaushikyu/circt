@@ -146,12 +146,17 @@ struct ChannelPrice {
 /// One bank of `words` x `bits` of a channel of `blocks` blocks.
 /// `twoPorts`: some process can access the bank twice in one cycle;
 /// `bound2p`: a bind_storage type=ram_2p / ram_s2p; `lutram`: impl=lutram.
-/// `blocksOf(words, bits, sdp)` is the BRAM_18K of one memory by the depth
-/// bands (`sdp`: the x36 mode is allowed).
-ChannelPrice
-priceChannel(int64_t words, unsigned bits, int64_t blocks, bool twoPorts,
-             bool bound2p, bool lutram,
-             llvm::function_ref<int64_t(int64_t, unsigned, bool)> blocksOf);
+/// `belowBlock(words, bits)` is the storage selector's decision for one
+/// memory of that geometry: the reason it stays in distributed RAM (the text
+/// after the geometry, e.g. "< 1024 bits"), or nullopt when it goes to a
+/// priced memory. `blocksOf(words, bits, sdp)` is the BRAM_18K of one memory
+/// by the depth bands (`sdp`: the x36 mode is allowed).
+ChannelPrice priceChannel(
+    int64_t words, unsigned bits, int64_t blocks, bool twoPorts, bool bound2p,
+    bool lutram,
+    llvm::function_ref<std::optional<std::string>(int64_t, unsigned)>
+        belowBlock,
+    llvm::function_ref<int64_t(int64_t, unsigned, bool)> blocksOf);
 
 } // namespace circt::hls_analysis
 

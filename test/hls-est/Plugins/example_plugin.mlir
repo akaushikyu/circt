@@ -14,7 +14,8 @@
 // RUN: hls-est %S/../Config/Inputs/replicate.mlir --load-plugin=%hlsest_example_plugin --config-set scheduling.modulo.model=asap-fixed-ii --config-set plugins.asap-fixed-ii.min_ii=4 --default-pipeline -o /dev/null | FileCheck %s --check-prefix=FLOOR
 // FLOOR: kind=RAM_2P  bram=2{{$}}
 // RUN: not hls-est %S/../Config/Inputs/replicate.mlir --load-plugin=%hlsest_example_plugin --config-set scheduling.modulo.model=asap-fixed-ii --config-set plugins.asap-fixed-ii.min_ii=0 2>&1 | FileCheck %s --check-prefix=BADII
-// BADII: error: hls-config: plugins.asap-fixed-ii.min_ii: expected an integer >= 1
+// The plugin's error names the --config-set that set the key (P2 review).
+// BADII: error: hls-config: --config-set plugins.asap-fixed-ii.min_ii=0: plugins.asap-fixed-ii.min_ii: expected an integer >= 1
 
 // clock-scaled: the calyx-fixed latencies scaled from 10 ns to run.clock_ns;
 // at 5 ns the multiply takes 8 cycles and the store after it starts at stage 9.

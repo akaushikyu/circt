@@ -982,15 +982,55 @@ static BRAMCost estimateChannel(MemoryResourceOpInterface iface,
     twoPorts = false;
   }
   bool lutram = ch.bindImpl == "lutram";
+
+  const circt::hlsest::Device &device = config().device;
+  const circt::hlsest::DeviceMemory *chosen = models.block;
+  auto belowBlock = [&](int64_t widthValue,
+                        unsigned bits) -> std::optional<std::string> {
+    circt::hlsest::MemoryRequest request;
+    request.words = widthValue;
+    request.writeWidth = bits;
+    request.readWidths.push_back(bits);
+    request.narrowed = bits != rec.elemBits;
+    circt::hlsest::TierChoice choice =
+        models.selector->select(request, device, {});
+    if (!choice.memory.empty()) {
+      if (const circt::hlsest::DeviceMemory *memoryOp =
+              device.memory(choice.memory))
+        chosen = memoryOp;
+      return std::nullopt;
+    }
+    const circt::hlsest::StorageSelectorConfig &sel =
+        config().tool.backend.storageSelector;
+
+    if (sel.belowBlock(widthValue * static_cast<int64_t>(bits)))
+      return std::string(sel.belowSymbol()) + " " +
+             std::to_string(sel.minBlockBits) + " bits";
+    return "kept in tier " + choice.tier + " by storage selector '" +
+           models.selector->name().str() + "'";
+  };
   ChannelPrice price = priceChannel(
-      words, pricedBits, ch.blocks, twoPorts, bound2p, lutram,
-      [&](int64_t widthValue, unsigned bits, bool sdp) {
+      words, pricedBits, ch.blocks, twoPorts, bound2p, lutram, belowBlock,
+      [&](int64_t widthValue, unsigned bits, bool sdp) -> int64_t {
         const circt::hlsest::MemoryArchitectureConfig &memoryOp =
             config().tool.hls.memoryArchitecture;
-        return mapBlocks(*models.mapper, *models.block,
-                         sdp ? memoryOp.pricedWide : memoryOp.pricedNarrow,
-                         widthValue, bits, &rec.bankMath);
+        llvm::StringRef priced =
+            sdp ? memoryOp.pricedWide : memoryOp.pricedNarrow;
+        if (!chosen->portConfig(priced)) {
+
+          iface->emitError("--bram-analysis: dataflow channel priced at port "
+                           "configuration '")
+              << priced << "', which memory '" << chosen->id << "' (tier "
+              << chosen->tier << ") does not have";
+          models.failed = true;
+          return 0;
+        }
+        return mapBlocks(*models.mapper, *chosen, priced, widthValue, bits,
+                         &rec.bankMath);
       });
+
+  if (price.bram && chosen != models.block)
+    rec.memoryId = chosen->id;
   if (rec.bankMath.present)
     rec.bankMath.blocks = price.bram;
   portValue.mode = price.mode;
@@ -1416,11 +1456,17 @@ static BRAMCost estimateBRAM(MemoryResourceOpInterface iface, MemrefRecord &rec,
         cost.kind = StorageKind::ROM_1P;
         cost.label = policy.unpricedLabel(true);
         cost.bramCount = 0;
+
+        std::string why =
+            sel.belowBlock(numElems * static_cast<int64_t>(widthValue))
+                ? std::string(sel.belowSymbol()) + " " +
+                      std::to_string(sel.minBlockBits) + " bits"
+                : "kept in tier " + romChoice.tier + " by storage selector '" +
+                      models.selector->name().str() + "'";
         cost.note = std::to_string(numElems) + "x" +
                     std::to_string(widthValue) + "b ROM (narrowed from " +
-                    std::to_string(declaredBits) + " bits, N26) " +
-                    sel.belowSymbol() + " " + std::to_string(sel.minBlockBits) +
-                    " bits: distributed ROM, 0 BRAM";
+                    std::to_string(declaredBits) + " bits, N26) " + why +
+                    ": distributed ROM, 0 BRAM";
         recordAccesses(accesses, rec, seq);
         rec.demand = demand;
         rec.status = "excluded_small";

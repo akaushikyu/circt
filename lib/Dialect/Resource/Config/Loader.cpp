@@ -38,6 +38,7 @@
 #include "llvm/Support/FormatVariadic.h"
 
 #include <cmath>
+#include <cstdio>
 #include <cstdlib>
 #include <set>
 
@@ -228,6 +229,10 @@ void recordSources(const json::Value &overlay, const std::string &prefix,
                    const std::string &origin,
                    std::map<std::string, std::string> &sources) {
   if (const json::Object *o = overlay.getAsObject()) {
+    if (o->empty() && !prefix.empty()) {
+      sources[prefix] = origin; // an empty section is a leaf of the overlay
+      return;
+    }
     for (const auto &kv : *o)
       recordSources(kv.second,
                     prefix.empty() ? kv.first.str()
@@ -509,6 +514,19 @@ private:
 
   bool isInteger(const json::Value &v) { return v.getAsInteger().has_value(); }
 
+  /// A whole number beyond the 64-bit signed range (JSON reads it, but not as
+  /// an integer): out of range rather than of the wrong type.
+  bool tooLarge(const json::Value &v, const std::string &where) {
+    std::optional<double> d = v.getAsNumber();
+    if (isInteger(v) || !d || *d != std::floor(*d))
+      return false;
+    char text[32];
+    std::snprintf(text, sizeof(text), "%.17g", *d);
+    error(where, "out of range: " + std::string(text) +
+                     " exceeds the 64-bit integer range");
+    return true;
+  }
+
   void enumValue(StringRef s, StringRef values, const std::string &where) {
     SmallVector<StringRef> allowed;
     values.split(allowed, '|');
@@ -548,17 +566,21 @@ private:
         typeError("true or false");
       return;
     case KeyKind::Int:
+      if (tooLarge(v, where))
+        return;
       if (!isInteger(v))
         return typeError("an integer");
       number(v, spec, where);
       return;
     case KeyKind::UInt:
+      if (tooLarge(v, where))
+        return;
       if (!isInteger(v) || *v.getAsInteger() < 0)
         return typeError("a non-negative integer");
       number(v, spec, where);
       return;
     case KeyKind::NullableUInt:
-      if (v.kind() == json::Value::Null)
+      if (v.kind() == json::Value::Null || tooLarge(v, where))
         return;
       if (!isInteger(v) || *v.getAsInteger() < 0)
         return typeError("a non-negative integer or null");
@@ -654,6 +676,8 @@ private:
         if (StringRef(kv.first).starts_with("_"))
           continue;
         std::string w = where + "." + kv.first.str();
+        if (tooLarge(kv.second, w))
+          continue;
         if (!isInteger(kv.second))
           error(w, "wrong type: expected an integer");
         else
@@ -1125,6 +1149,70 @@ void crossCheck(const Config &c, ConfigDiagnostics &diag) {
     err("tool.backend.memory_mapper.depth_bands",
         "needs exactly one beyond band");
 
+  // A port configuration a bank is priced at must exist in some memory of
+  // the device (which memory prices a bank is decided later, per bank).
+  auto checkPortConfig = [&](const std::string &where,
+                             const std::string &name) {
+    llvm::StringSet<> known;
+    for (const DeviceMemory &m : d.memories)
+      for (const PortConfig &p : m.portConfigs) {
+        if (p.name == name)
+          return;
+        known.insert(p.name);
+      }
+    std::vector<std::string> names;
+    for (const auto &k : known)
+      names.push_back(k.getKey().str());
+    llvm::sort(names);
+    err(where, "'" + name + "' is the port configuration of no device "
+                            "memory (device: " +
+                   llvm::join(names, ", ") + ")");
+  };
+  const MemoryArchitectureConfig &ma = t.hls.memoryArchitecture;
+  checkPortConfig("tool.hls.memory_architecture.priced_configs.wide",
+                  ma.pricedWide);
+  checkPortConfig("tool.hls.memory_architecture.priced_configs.narrow",
+                  ma.pricedNarrow);
+  if (t.hls.streams.enabled)
+    checkPortConfig("tool.hls.streams.priced_config",
+                    t.hls.streams.pricedConfig);
+  for (size_t i = 0; i < t.hls.implicitBuffers.size(); ++i)
+    if (t.hls.implicitBuffers[i].enabled)
+      checkPortConfig("tool.hls.implicit_buffers[" + std::to_string(i) +
+                          "].read_fifo.priced_config",
+                      t.hls.implicitBuffers[i].readFifoPricedConfig);
+
+  // Reserved: --auto-pipeline-unroll implements only the documented
+  // assumption (D-11: a loop is never flattened across a call).
+  if (t.hls.pipelineDecision.flattenAcrossCalls)
+    err("tool.hls.pipeline_decision.flatten_across_calls",
+        "true is not implemented (reserved; only false, D-11)");
+
+  // A plugins.<name> section belongs to a plugin some plugin key selects;
+  // any other name (a misspelt plugin) would drop its parameters silently.
+  llvm::StringSet<> selected;
+  for (const std::string *n :
+       {&t.backend.storageSelector.plugin, &ma.plugin,
+        &t.backend.memoryMapper.plugin, &t.hls.streams.mapper,
+        &t.hls.groupingPlugin, &t.hls.pipelineDecision.policy,
+        &t.hls.partitioning.policy, &t.hls.folding.ruleSet,
+        &c.scheduling.timingModel, &c.scheduling.dependenceModel,
+        &c.scheduling.moduloModel, &c.scheduling.sequentialModel,
+        &c.scheduling.bindingModel})
+    selected.insert(*n);
+  for (const ImplicitBufferConfig &b : t.hls.implicitBuffers) {
+    selected.insert(b.plugin);
+    selected.insert(b.readFifoMapper);
+  }
+  for (const auto &kv : c.plugins) {
+    StringRef name = kv.first;
+    if (name.starts_with("_") || selected.contains(name))
+      continue;
+    err("plugins." + name.str(),
+        "no plugin key selects a plugin named '" + name.str() +
+            "', so nothing reads this section");
+  }
+
   if (!classes.contains(t.report.primaryMemoryClass))
     err("tool.report.primary_memory_class",
         "'" + t.report.primaryMemoryClass +
@@ -1433,8 +1521,9 @@ std::optional<Config> &installedConfig() {
 }
 
 /// The file or --config-set that set `path` (array indexes and the
-/// "(id)" of a named element are ignored): the longest recorded prefix;
-/// "<defaults>" when the key comes from the compiled-in files.
+/// "(id)" of a named element are ignored): `path` itself, else a leaf below
+/// it, else the longest recorded prefix; "<defaults>" when the key comes from
+/// the compiled-in files.
 std::string originOf(StringRef path,
                      const std::map<std::string, std::string> &sources) {
   std::string p;
@@ -1447,6 +1536,14 @@ std::string originOf(StringRef path,
       continue;
     }
     p += ch;
+  }
+  // Sources are recorded per leaf: a key that is wrong as a whole (an unknown
+  // section) was put there by the leaves below it.
+  if (!sources.count(p)) {
+    std::string below = p + ".";
+    auto it = sources.lower_bound(below);
+    if (it != sources.end() && StringRef(it->first).starts_with(below))
+      return it->second;
   }
   for (;;) {
     auto it = sources.find(p);
@@ -1514,8 +1611,21 @@ Config circt::hlsest::buildConfig(llvm::ArrayRef<std::string> files,
   // Every plugin the configuration names reads its parameters and checks the
   // device (a builtin refuses a device it cannot price), also when a cross-key
   // check failed, so that a refusal names everything the device lacks.
-  if (const PluginConfigCheck &check = getPluginConfigCheck())
+  if (const PluginConfigCheck &check = getPluginConfigCheck()) {
+    size_t first = diag.errors.size();
     check(c, diag);
+    // A plugin's error that names a key some file or --config-set set gets
+    // that origin too (a device refusal names no key and stays as it is).
+    for (size_t i = first; i < diag.errors.size(); ++i) {
+      std::string &e = diag.errors[i];
+      size_t colon = e.find(": ");
+      if (colon == std::string::npos)
+        continue;
+      std::string origin = originOf(e.substr(0, colon), b.sources);
+      if (origin != "<defaults>")
+        e = origin + ": " + e;
+    }
+  }
   if (!diag.ok())
     return c;
   checkMathTable(c, diag);

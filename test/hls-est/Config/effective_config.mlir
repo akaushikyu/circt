@@ -22,10 +22,10 @@
 // A free-form plugin section set key by key: the keys are owned by the
 // document (they once pointed into a freed command-line copy) and the
 // override names the assignment.
-// RUN: hls-est --config-set plugins.some-plugin.depth=4 --config-set plugins.some-plugin.mode=fast --dump-effective-config %S/Inputs/kernel.mlir -o /dev/null 2>&1 >/dev/null | FileCheck %s --check-prefix=FREE
+// RUN: hls-est --config-set plugins.vitis-auto.depth=4 --config-set plugins.vitis-auto.mode=fast --dump-effective-config %S/Inputs/kernel.mlir -o /dev/null 2>&1 >/dev/null | FileCheck %s --check-prefix=FREE
 // FREE:      "plugins": {
 // FREE-NEXT:   "_source": {
-// FREE-NEXT:     "some-plugin": "--config-set plugins.some-plugin.
-// FREE:        "some-plugin": {
+// FREE-NEXT:     "vitis-auto": "--config-set plugins.vitis-auto.
+// FREE:        "vitis-auto": {
 // FREE-NEXT:     "depth": 4,
 // FREE-NEXT:     "mode": "fast"
