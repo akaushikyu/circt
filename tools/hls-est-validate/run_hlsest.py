@@ -7,6 +7,8 @@
                           [--out results/hlsest.json] [--force-cgeist] [--debug-json]
                           [--mlir-from <earlier result json>]
                           [--math-costs <cost table json> | --no-math-costs]
+                          [--hls-config <configuration json>] [--config-set key.path=value ...]
+                          [--load-plugin <lib> ...]
 
 --shim defaults to common.DEFAULT_SHIM = exactclass (MEMOS.md M2, decision #8): a name is a
 directory under shim/, "polygeist" Polygeist's own stand-ins, anything else a path. The shim's
@@ -25,6 +27,10 @@ Per design:
      --bram-analysis (MEMOS M7: costs only what the top reaches through calls;
      the same set as the prefix gives, and no warning about several public
      functions). --no-privatize drops both.
+--hls-config / --config-set / --load-plugin are passed to every hls-est command
+(hls-doc/configuration.md, hls-doc/plugins.md); _meta records the file, its md5, the assignments,
+the plugins and the hash of the effective configuration (`hls-est --dump-effective-config`'s
+`_hash`), which is also recorded without a file (the defaults' hash), when the binary has the option.
 --math-costs (default tools/hls-est-validate/math_costs.json: the cost table is how the
 programmer sets the BRAM of the hls:: math cores, one fixed cost per core instance) adds
 math-costs=<path> to the pipeline's --bram-analysis, so every math call is priced from the table;
@@ -39,6 +45,7 @@ hls-est error: <status> | hls-est timeout <N>s.
 import argparse
 import concurrent.futures as cf
 import hashlib
+import json
 import os
 import re
 import shlex
@@ -427,6 +434,39 @@ def with_bram_option(args, option):
     return out
 
 
+# The configuration arguments of every hls-est command (--hls-config, --config-set, --load-plugin;
+# set by main from the command line).
+CONFIG_ARGS = []
+
+
+def config_args(args):
+    """The hls-est arguments that select the configuration and load plugins."""
+    out = [f"--load-plugin={lib}" for lib in args.load_plugin]
+    if args.hls_config:
+        out.append(f"--hls-config={Path(args.hls_config).resolve()}")
+    for a in args.config_set:
+        out += ["--config-set", a]
+    return out
+
+
+def effective_config_hash(cfg_args):
+    """The `_hash` of `hls-est <cfg_args> --dump-effective-config` (None when the binary has no
+    such option, or the configuration does not load: then every design fails with the reason)."""
+    try:
+        p = subprocess.run([C.HLS_EST, *cfg_args, "--dump-effective-config"], capture_output=True,
+                           text=True, errors="replace", timeout=120, stdin=subprocess.DEVNULL)
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    for text in (p.stderr, p.stdout):
+        try:
+            return json.loads(text).get("_hash")
+        except (ValueError, AttributeError):
+            m = re.search(r'"_hash":\s*"([0-9a-f]+)"', text)
+            if m:
+                return m.group(1)
+    return None
+
+
 def run_hlsest(mlir, top_fn, pipeline, timeout, log_prefix, privatize=True, debug_json=None,
                math_costs=None):
     """... math_costs: the cost table to add as --bram-analysis math-costs= (None: none); the
@@ -442,6 +482,7 @@ def run_hlsest(mlir, top_fn, pipeline, timeout, log_prefix, privatize=True, debu
         args = with_bram_option(args, f"math-costs={math_costs}")
         applied = str(math_costs)
     cmd += args
+    cmd += CONFIG_ARGS
     if debug_json:
         cmd += [f"--bram-debug-json={debug_json}"]
     cmd += ["-o", "/dev/null"]
@@ -539,6 +580,13 @@ def main():
     ap.add_argument("--no-debug-json", action="store_true")
     ap.add_argument("--quiet", action="store_true")
     add_math_costs_args(ap)
+    ap.add_argument("--hls-config", default=None,
+                    help="hls-est configuration file (hls-doc/configuration.md); default: none (the "
+                         "compiled-in xc7z020 + Vitis 2025.1 defaults)")
+    ap.add_argument("--config-set", action="append", default=[], metavar="KEY.PATH=VALUE",
+                    help="one configuration assignment, passed as hls-est --config-set (repeatable)")
+    ap.add_argument("--load-plugin", action="append", default=[], metavar="LIB",
+                    help="an hls-est plugin library (hls-doc/plugins.md; repeatable)")
     ap.add_argument("--catalog", choices=D.CATALOGS, default=None,
                     help="design catalogue (designs.py): 'v2' (the HLSFactory 1.1.0 tree, default) or "
                          "'polygeist' (the Polygeist lit copies; $HLS_EST_CATALOG changes the default)")
@@ -564,6 +612,7 @@ def main():
             cgeist_md5_or_raise()
         except CgeistUnhashable as e:
             sys.exit(f"run_hlsest.py: {e} ({n_cgeist} designs would run cgeist)")
+    CONFIG_ARGS[:] = config_args(args)
     run_id = args.run_id or time.strftime("%Y%m%d-%H%M%S")
     ghash, bsha = C.hls_est_identity()
     results = {"_meta": {"pipeline": args.pipeline, "shim": str(shim), "hls_est_git": ghash,
@@ -580,6 +629,14 @@ def main():
                          "math_costs_md5": C.md5_of_file(args.math_costs) if args.math_costs else None,
                          "math_costs_applied": bool(args.math_costs) and
                                                bram_option_supported(C.HLS_EST, "math-costs")}}
+    results["_meta"].update({
+        "hls_config": str(Path(args.hls_config).resolve()) if args.hls_config else None,
+        "hls_config_md5": C.md5_of_file(args.hls_config) if args.hls_config else None,
+        "config_set": list(args.config_set),
+        "load_plugin": [{"path": lib, "md5": C.md5_of_file(lib)} for lib in args.load_plugin],
+        "config_hash": effective_config_hash(CONFIG_ARGS),
+        "config_args": shlex.join(CONFIG_ARGS),
+    })
     results["_meta"]["catalog"] = (f"{catalog} ({D.hlsfactory_root()})" if catalog != "polygeist"
                                    else catalog)
     if not args.quiet:

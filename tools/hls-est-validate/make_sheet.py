@@ -49,6 +49,22 @@ GREEN = PatternFill("solid", fgColor="C6EFCE")
 RED = PatternFill("solid", fgColor="FFC7CE")
 
 
+
+def run_configuration(meta):
+    """The hls-est configuration a run used, from run_hlsest.py's _meta (hls-doc/configuration.md):
+    the file (with its md5), the --config-set assignments, the plugins and the effective
+    configuration's hash. Runs from before the configuration file (P2) record none of these."""
+    if "config_hash" not in meta:
+        return "not recorded (a run from before the configuration file: the compiled-in defaults)"
+    parts = [f"file {meta['hls_config']} (md5 {meta.get('hls_config_md5')})" if meta.get("hls_config")
+             else "compiled-in defaults (amd-xc7z020clg400-1, vitis-2025.1)"]
+    if meta.get("config_set"):
+        parts.append("--config-set " + " ".join(meta["config_set"]))
+    for lib in meta.get("load_plugin") or []:
+        parts.append(f"plugin {lib.get('path')} (md5 {lib.get('md5')})")
+    parts.append(f"effective configuration hash {meta.get('config_hash') or 'unknown'}")
+    return "; ".join(parts)
+
 def table(ws, header, rows):
     ws.append(header)
     for c in ws[1]:
@@ -380,6 +396,9 @@ def main():
         ["hls-est git hash (run)", hmeta.get("hls_est_git", "")],
         ["hls-est binary sha256 (run)", hmeta.get("hls_est_sha256", "")],
         ["hls-est timeout (s)", hmeta.get("timeout", "")],
+        [f"prediction column ({hlabel}): hls-est configuration",
+         run_configuration(hmeta)],
+        [f"second run ({nlabel}): hls-est configuration", run_configuration(nmeta) if nmeta else ""],
         ["cgeist that produced the run's MLIR",
          (f"{hmeta.get('cgeist')} md5 {hmeta.get('cgeist_md5')} (Polygeist {hmeta.get('polygeist_head')})"
           if hmeta.get("cgeist_md5") else
