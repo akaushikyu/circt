@@ -4,7 +4,7 @@
 // design: vitis_examples/21_basic_examples_vhls_uram_ecc (harness catalogue record; compiled as run_hlsest.py does)
 // top: _Z9ecc_flagsPiS_iS_
 // Vitis 2025.1 td=off: vitis failed: ERROR: [HLS 214-370] in function 'ecc_flags(int*, int*, int, int*)': Impl=uram_ecc in bind_storage is not supported for the targeted device xc7z020clg400-1 (D:/
-// RUN: hls-est %s --symbol-privatize=exclude=_Z9ecc_flagsPiS_iS_ --symbol-dce --lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --narrow-ram-widths --memory-banking-bram --convert-affine-to-loopschedule '--bram-analysis=top=_Z9ecc_flagsPiS_iS_ math-costs=%hls_est_math_costs' -o /dev/null | FileCheck %s
+// RUN: hls-est %s --symbol-privatize=exclude=_Z9ecc_flagsPiS_iS_ --symbol-dce --lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --infer-vitis-split-array=td=off --narrow-ram-widths --memory-banking-bram --convert-affine-to-loopschedule '--bram-analysis=top=_Z9ecc_flagsPiS_iS_ math-costs=%hls_est_math_costs' -o /dev/null | FileCheck %s
 
 module {
   func.func @_Z6sfunc2PiiS_(%arg0: memref<10xi32>, %arg1: i32, %arg2: memref<10xi32>) attributes {hls.orig_name = "sfunc2", llvm.linkage = #llvm.linkage<external>} {

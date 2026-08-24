@@ -4,7 +4,7 @@
 // design: machsuite/aes_table (harness catalogue record; compiled as run_hlsest.py does)
 // top: aes256_encrypt_ecb
 // Vitis 2025.1 td=off: BRAM_18K 8 (results/vitis.json, key a79035a52ab74451); a comment only, the CHECK lines pin hls-est's current output
-// RUN: hls-est %s --symbol-privatize=exclude=aes256_encrypt_ecb --symbol-dce --lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --narrow-ram-widths --memory-banking-bram --convert-affine-to-loopschedule '--bram-analysis=top=aes256_encrypt_ecb math-costs=%hls_est_math_costs' -o /dev/null | FileCheck %s
+// RUN: hls-est %s --symbol-privatize=exclude=aes256_encrypt_ecb --symbol-dce --lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --infer-vitis-split-array=td=off --narrow-ram-widths --memory-banking-bram --convert-affine-to-loopschedule '--bram-analysis=top=aes256_encrypt_ecb math-costs=%hls_est_math_costs' -o /dev/null | FileCheck %s
 
 module {
   memref.global @sbox : memref<256xi8> = dense<"0x637C777BF26B6FC53001672BFED7AB76CA82C97DFA5947F0ADD4A2AF9CA472C0B7FD9326363FF7CC34A5E5F171D8311504C723C31896059A071280E2EB27B27509832C1A1B6E5AA0523BD6B329E32F8453D100ED20FCB15B6ACBBE394A4C58CFD0EFAAFB434D338545F9027F503C9FA851A3408F929D38F5BCB6DA2110FFF3D2CD0C13EC5F974417C4A77E3D645D197360814FDC222A908846EEB814DE5E0BDBE0323A0A4906245CC2D3AC629195E479E7C8376D8DD54EA96C56F4EA657AAE08BA78252E1CA6B4C6E8DD741F4BBD8B8A703EB5664803F60E613557B986C11D9EE1F8981169D98E949B1E87E9CE5528DF8CA1890DBFE6426841992D0FB054BB16">

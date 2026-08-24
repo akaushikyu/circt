@@ -4,7 +4,7 @@
 // design: spector_hls/mergesort (harness catalogue record; compiled as run_hlsest.py does)
 // top: _Z9mergesortPiS_
 // Vitis 2025.1 td=off: BRAM_18K 0 (results/vitis.json, key a9287ea5d4d39db8); a comment only, the CHECK lines pin hls-est's current output
-// RUN: hls-est %s --symbol-privatize=exclude=_Z9mergesortPiS_ --symbol-dce --lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --narrow-ram-widths --memory-banking-bram --convert-affine-to-loopschedule '--bram-analysis=top=_Z9mergesortPiS_ math-costs=%hls_est_math_costs' -o /dev/null | FileCheck %s
+// RUN: hls-est %s --symbol-privatize=exclude=_Z9mergesortPiS_ --symbol-dce --lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --infer-vitis-split-array=td=off --narrow-ram-widths --memory-banking-bram --convert-affine-to-loopschedule '--bram-analysis=top=_Z9mergesortPiS_ math-costs=%hls_est_math_costs' -o /dev/null | FileCheck %s
 
 module {
   func.func @_Z9mergesortPiS_(%arg0: memref<16xi32> {hls.array_partition = [{dim = 1 : i32, factor = 2 : i32, kind = "block", variable = "in"}]}, %arg1: memref<16xi32> {hls.array_partition = [{dim = 1 : i32, factor = 2 : i32, kind = "block", variable = "out"}]}) attributes {hls.orig_name = "mergesort", llvm.linkage = #llvm.linkage<external>} {

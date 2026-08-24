@@ -4,7 +4,7 @@
 // design: class_ece8893_spring_2025/stefan_test_design (harness catalogue record; compiled as run_hlsest.py does)
 // top: _Z9my_kernelPiS_S_
 // Vitis 2025.1 td=off: BRAM_18K 0 (results/vitis.json, key 41578d2a0cffcf40); a comment only, the CHECK lines pin hls-est's current output
-// RUN: hls-est %s --symbol-privatize=exclude=_Z9my_kernelPiS_S_ --symbol-dce --lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --narrow-ram-widths --memory-banking-bram --convert-affine-to-loopschedule '--bram-analysis=top=_Z9my_kernelPiS_S_ math-costs=%hls_est_math_costs' -o /dev/null | FileCheck %s
+// RUN: hls-est %s --symbol-privatize=exclude=_Z9my_kernelPiS_S_ --symbol-dce --lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --infer-vitis-split-array=td=off --narrow-ram-widths --memory-banking-bram --convert-affine-to-loopschedule '--bram-analysis=top=_Z9my_kernelPiS_S_ math-costs=%hls_est_math_costs' -o /dev/null | FileCheck %s
 
 module {
   func.func @_Z9my_kernelPiS_S_(%arg0: memref<16xi32>, %arg1: memref<16xi32>, %arg2: memref<16xi32>) attributes {hls.orig_name = "my_kernel", llvm.linkage = #llvm.linkage<external>} {

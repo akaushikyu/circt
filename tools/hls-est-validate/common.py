@@ -83,9 +83,10 @@ HLS_EST_DEFAULT = str(CIRCT / "build/clion/bin/hls-est")
 HLS_EST = os.environ.get("HLS_EST_BIN") or HLS_EST_DEFAULT
 
 # The canonical hls-est pipeline (CLAUDE.md).  Experiments vary this string.
-# --infer-vitis-split-array is not in it (MEMOS.md M1, decision #1 of 2026-10-10): its
-# port-pressure partitioning is the td=auto behaviour and the ground truth is td=off. The
-# pass stays available (td=auto|off); SPLIT_PIPELINE is the former default, for comparisons.
+# --infer-vitis-split-array=td=auto is not in it (MEMOS.md M1, decision #1 of 2026-10-10): its
+# port-pressure partitioning is the td=auto behaviour and the ground truth is td=off; the
+# td=off mode is (decision #61, below). SPLIT_PIPELINE is the former td=auto default, for
+# comparisons.
 # DME_FRONT (MEMOS.md M5 recommendation 1 with T8's --inline, "prefix B"; decision #4 of
 # 2026-10-10) runs right after the top selection (run_hlsest.py prepends
 # --symbol-privatize=exclude=<top> --symbol-dce): Vitis' integer folds and its undefined
@@ -106,8 +107,15 @@ DME_FRONT = ("--lower-polygeist-subindex --inline --split-struct-memrefs --mark-
 # --narrow-ram-widths (W9r2-impl, MEMOS.md #58) marks the element width Vitis stores per word
 # (stored-value ranges, low bits the loads' users demand; VITIS_NOTES N35) before banking, so
 # the LUTRAM test, the BRAM formula and the PIPO price see the narrowed width.
-NO_FRONT_PIPELINE = ("--affine-loop-normalize --auto-pipeline-unroll --narrow-ram-widths "
-                     "--memory-banking-bram --convert-affine-to-loopschedule --bram-analysis")
+# --infer-vitis-split-array=td=off (W9r5-impl, MEMOS.md #61) is the td=off half of the split
+# pass: the automatic partitions Vitis makes under throughput_driven=off (VITIS_NOTES N7 (a)
+# arrays of at most 4 words become registers, N7 (b) / N43 a dimension indexed only by
+# constants once the pipelined body is unrolled is split completely), after the unroll
+# decision and before the widths and the banks are fixed. Its port-pressure (td=auto) half
+# stays out (decision #1).
+NO_FRONT_PIPELINE = ("--affine-loop-normalize --auto-pipeline-unroll --infer-vitis-split-array=td=off "
+                     "--narrow-ram-widths --memory-banking-bram --convert-affine-to-loopschedule "
+                     "--bram-analysis")
 DEFAULT_PIPELINE = DME_FRONT + " " + NO_FRONT_PIPELINE
 # td=auto is pinned: since the configuration (P2) a bare --infer-vitis-split-array takes
 # tool.hls.options.array_partition.throughput_driven, whose default is the ground truth's "off"

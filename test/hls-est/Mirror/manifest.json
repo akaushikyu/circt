@@ -8,7 +8,7 @@
   "hls_est_git": "89eab523",
   "hls_est_md5": "8276d2f242262eb0bb1ad37b0f212cd8",
   "long_timeout": 600,
-  "pipeline": "--lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --narrow-ram-widths --memory-banking-bram --convert-affine-to-loopschedule --bram-analysis",
+  "pipeline": "--lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --infer-vitis-split-array=td=off --narrow-ram-widths --memory-banking-bram --convert-affine-to-loopschedule --bram-analysis",
   "polygeist_commit": "36cc8374",
   "shim": "tools/hls-est-validate/shim/exactclass",
   "shim_flags": [

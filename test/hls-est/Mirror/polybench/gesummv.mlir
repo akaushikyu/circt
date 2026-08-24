@@ -4,7 +4,7 @@
 // design: polybench_pragmas/gesummv (harness catalogue record; compiled as run_hlsest.py does)
 // top: gesummv
 // Vitis 2025.1 td=off: BRAM_18K 16 (results/vitis.json, key c0c31a01bbc1d881); a comment only, the CHECK lines pin hls-est's current output
-// RUN: hls-est %s --symbol-privatize=exclude=gesummv --symbol-dce --lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --narrow-ram-widths --memory-banking-bram --convert-affine-to-loopschedule '--bram-analysis=top=gesummv math-costs=%hls_est_math_costs' -o /dev/null | FileCheck %s
+// RUN: hls-est %s --symbol-privatize=exclude=gesummv --symbol-dce --lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --infer-vitis-split-array=td=off --narrow-ram-widths --memory-banking-bram --convert-affine-to-loopschedule '--bram-analysis=top=gesummv math-costs=%hls_est_math_costs' -o /dev/null | FileCheck %s
 
 module {
   func.func @gesummv(%arg0: f32, %arg1: f32, %arg2: memref<64x64xf32> {hls.array_partition = [{dim = 2 : i32, factor = 4 : i32, kind = "cyclic", variable = "A"}], hls.bind_storage = [{type = "ram_1p", variable = "A"}]}, %arg3: memref<64x64xf32> {hls.array_partition = [{dim = 2 : i32, factor = 4 : i32, kind = "cyclic", variable = "B"}], hls.bind_storage = [{type = "ram_1p", variable = "B"}]}, %arg4: memref<64xf32> {hls.bind_storage = [{type = "ram_1p", variable = "x"}]}, %arg5: memref<64xf32> {hls.interface = [{mode = "ap_fifo", port = "y_out"}]}) attributes {hls.orig_name = "gesummv", llvm.linkage = #llvm.linkage<external>} {

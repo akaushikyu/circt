@@ -4,7 +4,7 @@
 // design: polybench__reproducible/polybench__fixed__mini__2mm (harness catalogue record; compiled as run_hlsest.py does)
 // top: kernel_2mm
 // Vitis 2025.1 td=off: BRAM_18K 0 (results/vitis.json, key b463143b483fb14f); a comment only, the CHECK lines pin hls-est's current output
-// RUN: hls-est %s --symbol-privatize=exclude=kernel_2mm --symbol-dce --lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --narrow-ram-widths --memory-banking-bram --convert-affine-to-loopschedule '--bram-analysis=top=kernel_2mm math-costs=%hls_est_math_costs' -o /dev/null | FileCheck %s
+// RUN: hls-est %s --symbol-privatize=exclude=kernel_2mm --symbol-dce --lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --infer-vitis-split-array=td=off --narrow-ram-widths --memory-banking-bram --convert-affine-to-loopschedule '--bram-analysis=top=kernel_2mm math-costs=%hls_est_math_costs' -o /dev/null | FileCheck %s
 
 module {
   func.func @kernel_2mm(%arg0: i32, %arg1: i32, %arg2: memref<16x18xi32>, %arg3: memref<16x22xi32>, %arg4: memref<22x18xi32>, %arg5: memref<18x24xi32>, %arg6: memref<16x24xi32>) attributes {hls.orig_name = "kernel_2mm", hls.top = [{name = "kernel_2mm"}], llvm.linkage = #llvm.linkage<external>} {

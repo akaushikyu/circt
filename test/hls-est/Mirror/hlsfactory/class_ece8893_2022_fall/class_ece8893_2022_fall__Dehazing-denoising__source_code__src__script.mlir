@@ -5,7 +5,7 @@
 // top: none (the test names no top function and defines several; every public function is estimated)
 // Vitis 2025.1 td=off: vitis failed: ERROR: [HLS 214-157] Top function not found: there is no function named 'image_dehaze'
 // the design's top 'image_dehaze' is not among the MLIR functions (run_hlsest.py reports 'top not found'); every public function is estimated
-// RUN: hls-est %s --lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --narrow-ram-widths --memory-banking-bram --convert-affine-to-loopschedule --bram-analysis=math-costs=%hls_est_math_costs -o /dev/null | FileCheck %s
+// RUN: hls-est %s --lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --infer-vitis-split-array=td=off --narrow-ram-widths --memory-banking-bram --convert-affine-to-loopschedule --bram-analysis=math-costs=%hls_est_math_costs -o /dev/null | FileCheck %s
 
 #set = affine_set<(d0, d1) : (-d0 - d1 * 64 + 3 >= 0)>
 #set1 = affine_set<(d0)[s0] : (-d0 - s0 * 64 + 3 >= 0)>

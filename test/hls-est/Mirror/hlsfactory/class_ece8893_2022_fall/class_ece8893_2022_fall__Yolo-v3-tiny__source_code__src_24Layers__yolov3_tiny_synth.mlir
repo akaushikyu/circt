@@ -4,7 +4,7 @@
 // design: class_ece8893_2022_fall/Yolo-v3-tiny__source_code__src_24Layers__yolov3_tiny_synth (harness catalogue record; compiled as run_hlsest.py does)
 // top: _Z11yolov3_tinyPA416_A416_8ap_fixedILi16ELi2EL9ap_q_mode5EL9ap_o_mode3ELi0EEPA1024_A3_A3_S2_S9_S9_S9_S9_S9_S9_PA1024_A1_A1_S2_S9_SD_SD_S9_SD_PS2_SE_S5_S5_S5_S5_
 // Vitis 2025.1 td=off: BRAM_18K 257 (results/vitis.json, key 515b195398eec038); a comment only, the CHECK lines pin hls-est's current output
-// RUN: hls-est %s --symbol-privatize=exclude=_Z11yolov3_tinyPA416_A416_8ap_fixedILi16ELi2EL9ap_q_mode5EL9ap_o_mode3ELi0EEPA1024_A3_A3_S2_S9_S9_S9_S9_S9_S9_PA1024_A1_A1_S2_S9_SD_SD_S9_SD_PS2_SE_S5_S5_S5_S5_ --symbol-dce --lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --narrow-ram-widths --memory-banking-bram --convert-affine-to-loopschedule '--bram-analysis=top=_Z11yolov3_tinyPA416_A416_8ap_fixedILi16ELi2EL9ap_q_mode5EL9ap_o_mode3ELi0EEPA1024_A3_A3_S2_S9_S9_S9_S9_S9_S9_PA1024_A1_A1_S2_S9_SD_SD_S9_SD_PS2_SE_S5_S5_S5_S5_ math-costs=%hls_est_math_costs' -o /dev/null | FileCheck %s
+// RUN: hls-est %s --symbol-privatize=exclude=_Z11yolov3_tinyPA416_A416_8ap_fixedILi16ELi2EL9ap_q_mode5EL9ap_o_mode3ELi0EEPA1024_A3_A3_S2_S9_S9_S9_S9_S9_S9_PA1024_A1_A1_S2_S9_SD_SD_S9_SD_PS2_SE_S5_S5_S5_S5_ --symbol-dce --lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --infer-vitis-split-array=td=off --narrow-ram-widths --memory-banking-bram --convert-affine-to-loopschedule '--bram-analysis=top=_Z11yolov3_tinyPA416_A416_8ap_fixedILi16ELi2EL9ap_q_mode5EL9ap_o_mode3ELi0EEPA1024_A3_A3_S2_S9_S9_S9_S9_S9_S9_PA1024_A1_A1_S2_S9_SD_SD_S9_SD_PS2_SE_S5_S5_S5_S5_ math-costs=%hls_est_math_costs' -o /dev/null | FileCheck %s
 
 #map = affine_map<()[s0] -> (s0 - 1)>
 #set = affine_set<(d0) : (d0 - 13 == 0)>
@@ -3474,7 +3474,7 @@ module {
 // CHECK-NEXT: kind=RAM_1P  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
 // CHECK: memref.alloca @ loc("{{[^"]*}}":2850:17){{$}}
-// CHECK-NEXT: kind=RAM_2P  bram=2{{$}}
+// CHECK-NEXT: kind=RAM_1WNR  bram=6{{$}}
 // CHECK-NOT: {{^memref\.}}
 // CHECK: memref.alloca @ loc("{{[^"]*}}":2851:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
@@ -3551,4 +3551,4 @@ module {
 // CHECK: memref.alloca @ loc("{{[^"]*}}":3258:18){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: Total BRAM: 433{{$}}
+// CHECK: Total BRAM: 437{{$}}

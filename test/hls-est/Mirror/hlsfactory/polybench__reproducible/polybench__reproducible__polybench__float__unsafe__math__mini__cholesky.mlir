@@ -4,7 +4,7 @@
 // design: polybench__reproducible/polybench__float__unsafe__math__mini__cholesky (harness catalogue record; compiled as run_hlsest.py does)
 // top: kernel_cholesky
 // Vitis 2025.1 td=off: BRAM_18K 0 (results/vitis.json, key 2f05c6d697f7c435); a comment only, the CHECK lines pin hls-est's current output
-// RUN: hls-est %s --symbol-privatize=exclude=kernel_cholesky --symbol-dce --lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --narrow-ram-widths --memory-banking-bram --convert-affine-to-loopschedule '--bram-analysis=top=kernel_cholesky math-costs=%hls_est_math_costs' -o /dev/null | FileCheck %s
+// RUN: hls-est %s --symbol-privatize=exclude=kernel_cholesky --symbol-dce --lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --infer-vitis-split-array=td=off --narrow-ram-widths --memory-banking-bram --convert-affine-to-loopschedule '--bram-analysis=top=kernel_cholesky math-costs=%hls_est_math_costs' -o /dev/null | FileCheck %s
 
 #map = affine_map<(d0) -> (d0)>
 module {

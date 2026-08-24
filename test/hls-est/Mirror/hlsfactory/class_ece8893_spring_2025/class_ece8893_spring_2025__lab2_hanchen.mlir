@@ -5,7 +5,7 @@
 // top: _Z21compute_attention_HLSPA100_A128_8ap_fixedILi16ELi5EL9ap_q_mode5EL9ap_o_mode3ELi0EES5_S5_S5_
 // Vitis 2025.1 td=off: vitis timeout: 3600s
 // expected to fail: hls-est did not finish within 600 s at generation; the RUN line stops it after 120 s
-// RUN: timeout 120 hls-est %s --symbol-privatize=exclude=_Z21compute_attention_HLSPA100_A128_8ap_fixedILi16ELi5EL9ap_q_mode5EL9ap_o_mode3ELi0EES5_S5_S5_ --symbol-dce --lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --narrow-ram-widths --memory-banking-bram --convert-affine-to-loopschedule '--bram-analysis=top=_Z21compute_attention_HLSPA100_A128_8ap_fixedILi16ELi5EL9ap_q_mode5EL9ap_o_mode3ELi0EES5_S5_S5_ math-costs=%hls_est_math_costs' -o /dev/null | FileCheck %s
+// RUN: timeout 120 hls-est %s --symbol-privatize=exclude=_Z21compute_attention_HLSPA100_A128_8ap_fixedILi16ELi5EL9ap_q_mode5EL9ap_o_mode3ELi0EES5_S5_S5_ --symbol-dce --lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --infer-vitis-split-array=td=off --narrow-ram-widths --memory-banking-bram --convert-affine-to-loopschedule '--bram-analysis=top=_Z21compute_attention_HLSPA100_A128_8ap_fixedILi16ELi5EL9ap_q_mode5EL9ap_o_mode3ELi0EES5_S5_S5_ math-costs=%hls_est_math_costs' -o /dev/null | FileCheck %s
 // XFAIL: *
 
 module {

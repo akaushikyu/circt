@@ -4,7 +4,7 @@
 // design: class_ece8893_spring_2025/neuro_monarchs_neural_kernel_ece8893_spring_2025 (harness catalogue record; compiled as run_hlsest.py does)
 // top: last_layer_kernel
 // Vitis 2025.1 td=off: vitis timeout: 3600s
-// RUN: hls-est %s --symbol-privatize=exclude=last_layer_kernel --symbol-dce --lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --narrow-ram-widths --memory-banking-bram --convert-affine-to-loopschedule '--bram-analysis=top=last_layer_kernel math-costs=%hls_est_math_costs' -o /dev/null | FileCheck %s
+// RUN: hls-est %s --symbol-privatize=exclude=last_layer_kernel --symbol-dce --lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --infer-vitis-split-array=td=off --narrow-ram-widths --memory-banking-bram --convert-affine-to-loopschedule '--bram-analysis=top=last_layer_kernel math-costs=%hls_est_math_costs' -o /dev/null | FileCheck %s
 
 module {
   memref.global "private" @"_ZL18conv1x1_downsamplePA40_A40_KfPA20_A20_fPA256_A1_A1_S_i@static@_ZZL18conv1x1_downsamplePA40_A40_KfPA20_A20_fPA256_A1_A1_S_iE8w_buffer" : memref<512x256xf32> = uninitialized {hls.array_partition = [{dim = 2 : i32, factor = 32 : i32, kind = "cyclic", variable = "w_buffer"}], hls.bind_storage = [{impl = "bram", type = "ram_t2p", variable = "w_buffer"}]}

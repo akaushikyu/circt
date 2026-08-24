@@ -5,7 +5,7 @@
 // top: _Z6bbgemmPdS_S_
 // Vitis 2025.1 td=off: vitis failed: ERROR: [HLS 200-70] Failed building synthesis data model.
 // expected to fail: hls-est did not finish within 600 s at generation; the RUN line stops it after 120 s
-// RUN: timeout 120 hls-est %s --symbol-privatize=exclude=_Z6bbgemmPdS_S_ --symbol-dce --lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --narrow-ram-widths --memory-banking-bram --convert-affine-to-loopschedule '--bram-analysis=top=_Z6bbgemmPdS_S_ math-costs=%hls_est_math_costs' -o /dev/null | FileCheck %s
+// RUN: timeout 120 hls-est %s --symbol-privatize=exclude=_Z6bbgemmPdS_S_ --symbol-dce --lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --infer-vitis-split-array=td=off --narrow-ram-widths --memory-banking-bram --convert-affine-to-loopschedule '--bram-analysis=top=_Z6bbgemmPdS_S_ math-costs=%hls_est_math_costs' -o /dev/null | FileCheck %s
 // XFAIL: *
 
 module {

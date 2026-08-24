@@ -5,7 +5,7 @@
 // top: _Z14kernel_fdtd_2diiiPA240_dS0_S0_Pd
 // Vitis 2025.1 td=off: vitis failed: ERROR: [HLS 200-1715] Encountered problem during source synthesis
 // expected to fail: hls-est did not finish within 600 s at generation; the RUN line stops it after 120 s
-// RUN: timeout 120 hls-est %s --symbol-privatize=exclude=_Z14kernel_fdtd_2diiiPA240_dS0_S0_Pd --symbol-dce --lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --narrow-ram-widths --memory-banking-bram --convert-affine-to-loopschedule '--bram-analysis=top=_Z14kernel_fdtd_2diiiPA240_dS0_S0_Pd math-costs=%hls_est_math_costs' -o /dev/null | FileCheck %s
+// RUN: timeout 120 hls-est %s --symbol-privatize=exclude=_Z14kernel_fdtd_2diiiPA240_dS0_S0_Pd --symbol-dce --lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --infer-vitis-split-array=td=off --narrow-ram-widths --memory-banking-bram --convert-affine-to-loopschedule '--bram-analysis=top=_Z14kernel_fdtd_2diiiPA240_dS0_S0_Pd math-costs=%hls_est_math_costs' -o /dev/null | FileCheck %s
 // XFAIL: *
 
 module {

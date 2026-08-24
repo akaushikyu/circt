@@ -4,7 +4,7 @@
 // design: spector_hls/fir (harness catalogue record; compiled as run_hlsest.py does)
 // top: _Z7fir_hlsPfS_S_jii
 // Vitis 2025.1 td=off: BRAM_18K 4 (results/vitis.json, key 774447f016363ef4); a comment only, the CHECK lines pin hls-est's current output
-// RUN: hls-est %s --symbol-privatize=exclude=_Z7fir_hlsPfS_S_jii --symbol-dce --lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --narrow-ram-widths --memory-banking-bram --convert-affine-to-loopschedule '--bram-analysis=top=_Z7fir_hlsPfS_S_jii math-costs=%hls_est_math_costs' -o /dev/null | FileCheck %s
+// RUN: hls-est %s --symbol-privatize=exclude=_Z7fir_hlsPfS_S_jii --symbol-dce --lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --infer-vitis-split-array=td=off --narrow-ram-widths --memory-banking-bram --convert-affine-to-loopschedule '--bram-analysis=top=_Z7fir_hlsPfS_S_jii math-costs=%hls_est_math_costs' -o /dev/null | FileCheck %s
 
 module {
   func.func @_Z7fir_hlsPfS_S_jii(%arg0: memref<541696xf32> {hls.array_partition = [{dim = 1 : i32, factor = 8 : i32, kind = "cyclic", variable = "dataPtr"}]}, %arg1: memref<8192xf32> {hls.array_partition = [{dim = 1 : i32, factor = 8 : i32, kind = "cyclic", variable = "filterPtr"}]}, %arg2: memref<541696xf32> {hls.array_partition = [{dim = 1 : i32, factor = 8 : i32, kind = "cyclic", variable = "resultPtr"}]}, %arg3: i32, %arg4: i32, %arg5: i32) attributes {hls.orig_name = "fir_hls", llvm.linkage = #llvm.linkage<external>} {

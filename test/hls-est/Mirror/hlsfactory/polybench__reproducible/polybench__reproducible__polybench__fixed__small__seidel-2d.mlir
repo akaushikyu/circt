@@ -4,7 +4,7 @@
 // design: polybench__reproducible/polybench__fixed__small__seidel-2d (harness catalogue record; compiled as run_hlsest.py does)
 // top: kernel_seidel_2d
 // Vitis 2025.1 td=off: BRAM_18K 0 (results/vitis.json, key 9414b773dcc2fda8); a comment only, the CHECK lines pin hls-est's current output
-// RUN: hls-est %s --symbol-privatize=exclude=kernel_seidel_2d --symbol-dce --lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --narrow-ram-widths --memory-banking-bram --convert-affine-to-loopschedule '--bram-analysis=top=kernel_seidel_2d math-costs=%hls_est_math_costs' -o /dev/null | FileCheck %s
+// RUN: hls-est %s --symbol-privatize=exclude=kernel_seidel_2d --symbol-dce --lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --infer-vitis-split-array=td=off --narrow-ram-widths --memory-banking-bram --convert-affine-to-loopschedule '--bram-analysis=top=kernel_seidel_2d math-costs=%hls_est_math_costs' -o /dev/null | FileCheck %s
 
 module {
   func.func @kernel_seidel_2d(%arg0: memref<120x120xi32>) attributes {hls.orig_name = "kernel_seidel_2d", hls.top = [{name = "kernel_seidel_2d"}], llvm.linkage = #llvm.linkage<external>} {

@@ -5,7 +5,7 @@
 // top: _Z11kernel_trmmdPA60_dPA80_d
 // Vitis 2025.1 td=off: no ground truth (not synthesised)
 // expected to fail: hls-est did not finish within 600 s at generation; the RUN line stops it after 120 s
-// RUN: timeout 120 hls-est %s --symbol-privatize=exclude=_Z11kernel_trmmdPA60_dPA80_d --symbol-dce --lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --narrow-ram-widths --memory-banking-bram --convert-affine-to-loopschedule '--bram-analysis=top=_Z11kernel_trmmdPA60_dPA80_d math-costs=%hls_est_math_costs' -o /dev/null | FileCheck %s
+// RUN: timeout 120 hls-est %s --symbol-privatize=exclude=_Z11kernel_trmmdPA60_dPA80_d --symbol-dce --lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --infer-vitis-split-array=td=off --narrow-ram-widths --memory-banking-bram --convert-affine-to-loopschedule '--bram-analysis=top=_Z11kernel_trmmdPA60_dPA80_d math-costs=%hls_est_math_costs' -o /dev/null | FileCheck %s
 // XFAIL: *
 
 #set = affine_set<(d0, d1) : (d0 - d1 - 1 >= 0)>

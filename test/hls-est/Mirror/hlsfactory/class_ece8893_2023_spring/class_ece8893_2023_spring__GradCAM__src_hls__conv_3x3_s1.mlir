@@ -4,7 +4,7 @@
 // design: class_ece8893_2023_spring/GradCAM__src_hls__conv_3x3_s1 (harness catalogue record; compiled as run_hlsest.py does)
 // top: _ZN11conv_3x3_s19test_convEP8ap_fixedILi16ELi3EL9ap_q_mode5EL9ap_o_mode3ELi0EEPKS3_S6_S6_
 // Vitis 2025.1 td=off: BRAM_18K 32 (results/vitis.json, key 2a677d2761b66569); a comment only, the CHECK lines pin hls-est's current output
-// RUN: hls-est %s --symbol-privatize=exclude=_ZN11conv_3x3_s19test_convEP8ap_fixedILi16ELi3EL9ap_q_mode5EL9ap_o_mode3ELi0EEPKS3_S6_S6_ --symbol-dce --lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --narrow-ram-widths --memory-banking-bram --convert-affine-to-loopschedule '--bram-analysis=top=_ZN11conv_3x3_s19test_convEP8ap_fixedILi16ELi3EL9ap_q_mode5EL9ap_o_mode3ELi0EEPKS3_S6_S6_ math-costs=%hls_est_math_costs' -o /dev/null | FileCheck %s
+// RUN: hls-est %s --symbol-privatize=exclude=_ZN11conv_3x3_s19test_convEP8ap_fixedILi16ELi3EL9ap_q_mode5EL9ap_o_mode3ELi0EEPKS3_S6_S6_ --symbol-dce --lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --infer-vitis-split-array=td=off --narrow-ram-widths --memory-banking-bram --convert-affine-to-loopschedule '--bram-analysis=top=_ZN11conv_3x3_s19test_convEP8ap_fixedILi16ELi3EL9ap_q_mode5EL9ap_o_mode3ELi0EEPKS3_S6_S6_ math-costs=%hls_est_math_costs' -o /dev/null | FileCheck %s
 
 #map = affine_map<()[s0] -> (s0 + 2)>
 #set = affine_set<()[s0] : (s0 - 65 >= 0)>

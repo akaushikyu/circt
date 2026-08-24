@@ -4,7 +4,7 @@
 // design: accelerators/GP_selection_kernel_fixed_dataset (harness catalogue record; compiled as run_hlsest.py does)
 // top: _Z15GP_kernel_fixedP8ap_fixedILi32ELi16EL9ap_q_mode5EL9ap_o_mode3ELi0EEPA104_S2_S3_S3_PiS6_S5_S3_
 // Vitis 2025.1 td=off: BRAM_18K 67 (results/vitis.json, key 969194cf019c3bd3); a comment only, the CHECK lines pin hls-est's current output
-// RUN: hls-est %s --symbol-privatize=exclude=_Z15GP_kernel_fixedP8ap_fixedILi32ELi16EL9ap_q_mode5EL9ap_o_mode3ELi0EEPA104_S2_S3_S3_PiS6_S5_S3_ --symbol-dce --lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --narrow-ram-widths --memory-banking-bram --convert-affine-to-loopschedule '--bram-analysis=top=_Z15GP_kernel_fixedP8ap_fixedILi32ELi16EL9ap_q_mode5EL9ap_o_mode3ELi0EEPA104_S2_S3_S3_PiS6_S5_S3_ math-costs=%hls_est_math_costs' -o /dev/null | FileCheck %s
+// RUN: hls-est %s --symbol-privatize=exclude=_Z15GP_kernel_fixedP8ap_fixedILi32ELi16EL9ap_q_mode5EL9ap_o_mode3ELi0EEPA104_S2_S3_S3_PiS6_S5_S3_ --symbol-dce --lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --infer-vitis-split-array=td=off --narrow-ram-widths --memory-banking-bram --convert-affine-to-loopschedule '--bram-analysis=top=_Z15GP_kernel_fixedP8ap_fixedILi32ELi16EL9ap_q_mode5EL9ap_o_mode3ELi0EEPA104_S2_S3_S3_PiS6_S5_S3_ math-costs=%hls_est_math_costs' -o /dev/null | FileCheck %s
 
 #map = affine_map<(d0)[s0] -> (d0 + s0 * 13)>
 #map1 = affine_map<(d0)[s0] -> (d0 + s0 * 13 + 1)>

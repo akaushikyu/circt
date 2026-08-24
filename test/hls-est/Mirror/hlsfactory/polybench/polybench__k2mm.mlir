@@ -4,7 +4,7 @@
 // design: polybench/k2mm (harness catalogue record; compiled as run_hlsest.py does)
 // top: k2mm
 // Vitis 2025.1 td=off: BRAM_18K 504 (results/vitis.json, key 4bbeda37bc5d6992); a comment only, the CHECK lines pin hls-est's current output
-// RUN: hls-est %s --symbol-privatize=exclude=k2mm --symbol-dce --lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --narrow-ram-widths --memory-banking-bram --convert-affine-to-loopschedule '--bram-analysis=top=k2mm math-costs=%hls_est_math_costs' -o /dev/null | FileCheck %s
+// RUN: hls-est %s --symbol-privatize=exclude=k2mm --symbol-dce --lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --infer-vitis-split-array=td=off --narrow-ram-widths --memory-banking-bram --convert-affine-to-loopschedule '--bram-analysis=top=k2mm math-costs=%hls_est_math_costs' -o /dev/null | FileCheck %s
 
 module {
   func.func @k2mm(%arg0: f32, %arg1: f32, %arg2: memref<64x64xf32>, %arg3: memref<64x64xf32>, %arg4: memref<64x64xf32>, %arg5: memref<64x64xf32>, %arg6: memref<64x64xf32>) attributes {hls.orig_name = "k2mm", llvm.linkage = #llvm.linkage<external>} {

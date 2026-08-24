@@ -4,7 +4,7 @@
 // design: hlsyn-vitis/vivado-target__sources__gesummv-medium (harness catalogue record; compiled as run_hlsest.py does)
 // top: _Z14kernel_gesummvddPA250_dS0_PdS1_S1_
 // Vitis 2025.1 td=off: BRAM_18K 8202 (results/vitis.json, key 0380ea6a79171125); a comment only, the CHECK lines pin hls-est's current output
-// RUN: hls-est %s --symbol-privatize=exclude=_Z14kernel_gesummvddPA250_dS0_PdS1_S1_ --symbol-dce --lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --narrow-ram-widths --memory-banking-bram --convert-affine-to-loopschedule '--bram-analysis=top=_Z14kernel_gesummvddPA250_dS0_PdS1_S1_ math-costs=%hls_est_math_costs' -o /dev/null | FileCheck %s
+// RUN: hls-est %s --symbol-privatize=exclude=_Z14kernel_gesummvddPA250_dS0_PdS1_S1_ --symbol-dce --lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --infer-vitis-split-array=td=off --narrow-ram-widths --memory-banking-bram --convert-affine-to-loopschedule '--bram-analysis=top=_Z14kernel_gesummvddPA250_dS0_PdS1_S1_ math-costs=%hls_est_math_costs' -o /dev/null | FileCheck %s
 
 module {
   func.func @_Z14kernel_gesummvddPA250_dS0_PdS1_S1_(%arg0: f64, %arg1: f64, %arg2: memref<250x250xf64>, %arg3: memref<250x250xf64>, %arg4: memref<250xf64>, %arg5: memref<250xf64>, %arg6: memref<250xf64>) attributes {hls.orig_name = "kernel_gesummv", llvm.linkage = #llvm.linkage<external>} {

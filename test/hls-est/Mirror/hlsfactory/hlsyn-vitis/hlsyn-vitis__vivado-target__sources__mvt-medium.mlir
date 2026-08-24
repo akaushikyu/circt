@@ -4,7 +4,7 @@
 // design: hlsyn-vitis/vivado-target__sources__mvt-medium (harness catalogue record; compiled as run_hlsest.py does)
 // top: _Z10kernel_mvtPdS_S_S_PA400_d
 // Vitis 2025.1 td=off: BRAM_18K 16400 (results/vitis.json, key c9815e7dc50af40d); a comment only, the CHECK lines pin hls-est's current output
-// RUN: hls-est %s --symbol-privatize=exclude=_Z10kernel_mvtPdS_S_S_PA400_d --symbol-dce --lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --narrow-ram-widths --memory-banking-bram --convert-affine-to-loopschedule '--bram-analysis=top=_Z10kernel_mvtPdS_S_S_PA400_d math-costs=%hls_est_math_costs' -o /dev/null | FileCheck %s
+// RUN: hls-est %s --symbol-privatize=exclude=_Z10kernel_mvtPdS_S_S_PA400_d --symbol-dce --lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --infer-vitis-split-array=td=off --narrow-ram-widths --memory-banking-bram --convert-affine-to-loopschedule '--bram-analysis=top=_Z10kernel_mvtPdS_S_S_PA400_d math-costs=%hls_est_math_costs' -o /dev/null | FileCheck %s
 
 module {
   func.func @_Z10kernel_mvtPdS_S_S_PA400_d(%arg0: memref<400xf64>, %arg1: memref<400xf64>, %arg2: memref<400xf64>, %arg3: memref<400xf64>, %arg4: memref<400x400xf64>) attributes {hls.orig_name = "kernel_mvt", llvm.linkage = #llvm.linkage<external>} {

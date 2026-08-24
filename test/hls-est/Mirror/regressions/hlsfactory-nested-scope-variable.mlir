@@ -3,7 +3,7 @@
 // cgeist: /mnt/d/HLS/Polygeist/build/bin/cgeist (md5 d104d556cc4041c12011492419e5bc00, Polygeist 36cc8374), shim tools/hls-est-validate/shim/exactclass (--scalar-wrapper-abi -DHLSEST_MATH_MARKERS)
 // top: _Z9attentionPA8_A16_fPS_
 // Vitis 2025.1 td=off: none (not a catalogue design)
-// RUN: hls-est %s --symbol-privatize=exclude=_Z9attentionPA8_A16_fPS_ --symbol-dce --lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --narrow-ram-widths --memory-banking-bram --convert-affine-to-loopschedule '--bram-analysis=top=_Z9attentionPA8_A16_fPS_ math-costs=%hls_est_math_costs' -o /dev/null | FileCheck %s
+// RUN: hls-est %s --symbol-privatize=exclude=_Z9attentionPA8_A16_fPS_ --symbol-dce --lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --infer-vitis-split-array=td=off --narrow-ram-widths --memory-banking-bram --convert-affine-to-loopschedule '--bram-analysis=top=_Z9attentionPA8_A16_fPS_ math-costs=%hls_est_math_costs' -o /dev/null | FileCheck %s
 
 module {
   func.func @_Z9attentionPA8_A16_fPS_(%arg0: memref<4x8x16xf32>, %arg1: memref<4x16xf32>) attributes {hls.orig_name = "attention", llvm.linkage = #llvm.linkage<external>} {

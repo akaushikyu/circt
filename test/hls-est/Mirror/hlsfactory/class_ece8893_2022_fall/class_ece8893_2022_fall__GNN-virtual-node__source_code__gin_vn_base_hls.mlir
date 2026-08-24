@@ -4,7 +4,7 @@
 // design: class_ece8893_2022_fall/GNN-virtual-node__source_code__gin_vn_base_hls (harness catalogue record; compiled as run_hlsest.py does)
 // top: GIN_virtualnode_compute_one_graph
 // Vitis 2025.1 td=off: vitis failed: ERROR: [HLS 214-370] in function 'GIN_virtualnode_compute_one_graph': Impl=uram in bind_storage is not supported for the targeted device xc7z020clg400-1 (D:/HLS
-// RUN: hls-est %s --symbol-privatize=exclude=GIN_virtualnode_compute_one_graph --symbol-dce --lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --narrow-ram-widths --memory-banking-bram --convert-affine-to-loopschedule '--bram-analysis=top=GIN_virtualnode_compute_one_graph math-costs=%hls_est_math_costs' -o /dev/null | FileCheck %s
+// RUN: hls-est %s --symbol-privatize=exclude=GIN_virtualnode_compute_one_graph --symbol-dce --lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --infer-vitis-split-array=td=off --narrow-ram-widths --memory-banking-bram --convert-affine-to-loopschedule '--bram-analysis=top=GIN_virtualnode_compute_one_graph math-costs=%hls_est_math_costs' -o /dev/null | FileCheck %s
 
 #map = affine_map<()[s0] -> (s0 * 400)>
 #map1 = affine_map<(d0) -> (d0)>

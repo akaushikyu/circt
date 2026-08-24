@@ -4,7 +4,7 @@
 // design: spector_hls/histogram (harness catalogue record; compiled as run_hlsest.py does)
 // top: _Z13histogram_hlsPhPjm
 // Vitis 2025.1 td=off: BRAM_18K 8 (results/vitis.json, key c8baabc9fdf01f27); a comment only, the CHECK lines pin hls-est's current output
-// RUN: hls-est %s --symbol-privatize=exclude=_Z13histogram_hlsPhPjm --symbol-dce --lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --narrow-ram-widths --memory-banking-bram --convert-affine-to-loopschedule '--bram-analysis=top=_Z13histogram_hlsPhPjm math-costs=%hls_est_math_costs' -o /dev/null | FileCheck %s
+// RUN: hls-est %s --symbol-privatize=exclude=_Z13histogram_hlsPhPjm --symbol-dce --lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --infer-vitis-split-array=td=off --narrow-ram-widths --memory-banking-bram --convert-affine-to-loopschedule '--bram-analysis=top=_Z13histogram_hlsPhPjm math-costs=%hls_est_math_costs' -o /dev/null | FileCheck %s
 
 module {
   func.func @_Z13histogram_hlsPhPjm(%arg0: memref<8192xi8>, %arg1: memref<256xi32>, %arg2: i64) attributes {hls.orig_name = "histogram_hls", llvm.linkage = #llvm.linkage<external>} {

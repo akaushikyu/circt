@@ -4,7 +4,7 @@
 // design: rosetta/digit-recognition__src__sdsoc (harness catalogue record; compiled as run_hlsest.py does)
 // top: _Z8DigitRecP7ap_uintILi256EES1_Phi
 // Vitis 2025.1 td=off: vitis failed: ERROR: [HLS 207-812] '../host/typedefs.h' file not found (D:/HLS/Polygeist/tools/cgeist/Test/HLS/hlsfactory/Inputs/rosetta/digit-recognition/src/sdsoc/digitrec.
-// RUN: hls-est %s --symbol-privatize=exclude=_Z8DigitRecP7ap_uintILi256EES1_Phi --symbol-dce --lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --narrow-ram-widths --memory-banking-bram --convert-affine-to-loopschedule '--bram-analysis=top=_Z8DigitRecP7ap_uintILi256EES1_Phi math-costs=%hls_est_math_costs' -o /dev/null | FileCheck %s
+// RUN: hls-est %s --symbol-privatize=exclude=_Z8DigitRecP7ap_uintILi256EES1_Phi --symbol-dce --lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --infer-vitis-split-array=td=off --narrow-ram-widths --memory-banking-bram --convert-affine-to-loopschedule '--bram-analysis=top=_Z8DigitRecP7ap_uintILi256EES1_Phi math-costs=%hls_est_math_costs' -o /dev/null | FileCheck %s
 
 module {
   memref.global "private" @"_Z8DigitRecP7ap_uintILi256EES1_Phi@static@_ZZ8DigitRecP7ap_uintILi256EES1_PhiE7results" : memref<2000xi8> = uninitialized

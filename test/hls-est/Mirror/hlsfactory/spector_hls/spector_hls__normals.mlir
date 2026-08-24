@@ -4,7 +4,7 @@
 // design: spector_hls/normals (harness catalogue record; compiled as run_hlsest.py does)
 // top: _Z7normalsPiS_
 // Vitis 2025.1 td=off: BRAM_18K 4 (results/vitis.json, key a4b58d04aa22dfbe); a comment only, the CHECK lines pin hls-est's current output
-// RUN: hls-est %s --symbol-privatize=exclude=_Z7normalsPiS_ --symbol-dce --lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --narrow-ram-widths --memory-banking-bram --convert-affine-to-loopschedule '--bram-analysis=top=_Z7normalsPiS_ math-costs=%hls_est_math_costs' -o /dev/null | FileCheck %s
+// RUN: hls-est %s --symbol-privatize=exclude=_Z7normalsPiS_ --symbol-dce --lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --infer-vitis-split-array=td=off --narrow-ram-widths --memory-banking-bram --convert-affine-to-loopschedule '--bram-analysis=top=_Z7normalsPiS_ math-costs=%hls_est_math_costs' -o /dev/null | FileCheck %s
 
 module {
   func.func @_Z10normalizedPi(%arg0: memref<3xi32>) attributes {hls.orig_name = "normalized", llvm.linkage = #llvm.linkage<external>} {

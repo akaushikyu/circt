@@ -4,7 +4,7 @@
 // design: hlsyn-vitis/vivado-target__sources__md (harness catalogue record; compiled as run_hlsest.py does)
 // top: _Z9md_kernelPdS_S_S_S_S_Pi
 // Vitis 2025.1 td=off: BRAM_18K 234 (results/vitis.json, key aa8302820da3c9cf); a comment only, the CHECK lines pin hls-est's current output
-// RUN: hls-est %s --symbol-privatize=exclude=_Z9md_kernelPdS_S_S_S_S_Pi --symbol-dce --lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --narrow-ram-widths --memory-banking-bram --convert-affine-to-loopschedule '--bram-analysis=top=_Z9md_kernelPdS_S_S_S_S_Pi math-costs=%hls_est_math_costs' -o /dev/null | FileCheck %s
+// RUN: hls-est %s --symbol-privatize=exclude=_Z9md_kernelPdS_S_S_S_S_Pi --symbol-dce --lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --infer-vitis-split-array=td=off --narrow-ram-widths --memory-banking-bram --convert-affine-to-loopschedule '--bram-analysis=top=_Z9md_kernelPdS_S_S_S_S_Pi math-costs=%hls_est_math_costs' -o /dev/null | FileCheck %s
 
 module {
   func.func @_Z9md_kernelPdS_S_S_S_S_Pi(%arg0: memref<256xf64>, %arg1: memref<256xf64>, %arg2: memref<256xf64>, %arg3: memref<256xf64>, %arg4: memref<256xf64>, %arg5: memref<256xf64>, %arg6: memref<4096xi32>) attributes {hls.orig_name = "md_kernel", llvm.linkage = #llvm.linkage<external>} {

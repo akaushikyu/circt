@@ -4,7 +4,7 @@
 // design: machsuite/fft_transpose (harness catalogue record; compiled as run_hlsest.py does)
 // top: fft1D_512
 // Vitis 2025.1 td=off: BRAM_18K 28 (results/vitis.json, key 4517179bd22d423a); a comment only, the CHECK lines pin hls-est's current output
-// RUN: hls-est %s --symbol-privatize=exclude=fft1D_512 --symbol-dce --lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --narrow-ram-widths --memory-banking-bram --convert-affine-to-loopschedule '--bram-analysis=top=fft1D_512 math-costs=%hls_est_math_costs' -o /dev/null | FileCheck %s
+// RUN: hls-est %s --symbol-privatize=exclude=fft1D_512 --symbol-dce --lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --infer-vitis-split-array=td=off --narrow-ram-widths --memory-banking-bram --convert-affine-to-loopschedule '--bram-analysis=top=fft1D_512 math-costs=%hls_est_math_costs' -o /dev/null | FileCheck %s
 
 module {
   func.func @twiddles8(%arg0: memref<8xf64>, %arg1: memref<8xf64>, %arg2: i32, %arg3: i32) attributes {hls.orig_name = "twiddles8", llvm.linkage = #llvm.linkage<external>} {

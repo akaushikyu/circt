@@ -727,7 +727,7 @@
     },
     "id": "vitis-2025.1",
     "name": "vitis_hls",
-    "pipeline": "--lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --narrow-ram-widths --memory-banking-bram --convert-affine-to-loopschedule --bram-analysis",
+    "pipeline": "--lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --infer-vitis-split-array=td=off --narrow-ram-widths --memory-banking-bram --convert-affine-to-loopschedule --bram-analysis",
     "report": {
       "_classes": "array of strings: The classes printed and compared [N-07]",
       "_primary_memory_class": "string: The class whose count is the bram= number [N-07]",

@@ -4,7 +4,7 @@
 // design: stream_hls/ResidualBlock__opt4 (harness catalogue record; compiled as run_hlsest.py does)
 // top: _Z7forwardPA16_A56_A56_fPA16_A3_A3_fS6_S2_
 // Vitis 2025.1 td=off: BRAM_18K 1248 (results/vitis.json, key 7cf67a6cf41499b9); a comment only, the CHECK lines pin hls-est's current output
-// RUN: hls-est %s --symbol-privatize=exclude=_Z7forwardPA16_A56_A56_fPA16_A3_A3_fS6_S2_ --symbol-dce --lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --narrow-ram-widths --memory-banking-bram --convert-affine-to-loopschedule '--bram-analysis=top=_Z7forwardPA16_A56_A56_fPA16_A3_A3_fS6_S2_ math-costs=%hls_est_math_costs' -o /dev/null | FileCheck %s
+// RUN: hls-est %s --symbol-privatize=exclude=_Z7forwardPA16_A56_A56_fPA16_A3_A3_fS6_S2_ --symbol-dce --lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --infer-vitis-split-array=td=off --narrow-ram-widths --memory-banking-bram --convert-affine-to-loopschedule '--bram-analysis=top=_Z7forwardPA16_A56_A56_fPA16_A3_A3_fS6_S2_ math-costs=%hls_est_math_costs' -o /dev/null | FileCheck %s
 
 #set = affine_set<(d0, d1, d2, d3) : (d0 == 0, d1 == 0, d2 == 0, d3 == 0)>
 #set1 = affine_set<(d0, d1, d2, d3) : (d0 - 2 == 0, d2 + d3 * 2 - 15 == 0, d1 - 2 == 0)>

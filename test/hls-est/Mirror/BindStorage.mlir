@@ -3,7 +3,7 @@
 // cgeist: /mnt/d/HLS/Polygeist/build/bin/cgeist (md5 d104d556cc4041c12011492419e5bc00, Polygeist 36cc8374), shim tools/hls-est-validate/shim/exactclass (--scalar-wrapper-abi -DHLSEST_MATH_MARKERS)
 // top: _Z7mac_topPiRi
 // Vitis 2025.1 td=off: none (not a catalogue design)
-// RUN: hls-est %s --symbol-privatize=exclude=_Z7mac_topPiRi --symbol-dce --lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --narrow-ram-widths --memory-banking-bram --convert-affine-to-loopschedule '--bram-analysis=top=_Z7mac_topPiRi math-costs=%hls_est_math_costs' -o /dev/null | FileCheck %s
+// RUN: hls-est %s --symbol-privatize=exclude=_Z7mac_topPiRi --symbol-dce --lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --infer-vitis-split-array=td=off --narrow-ram-widths --memory-banking-bram --convert-affine-to-loopschedule '--bram-analysis=top=_Z7mac_topPiRi math-costs=%hls_est_math_costs' -o /dev/null | FileCheck %s
 
 module {
   func.func @_Z7mac_topPiRi(%arg0: memref<64xi32>, %arg1: memref<?xi32>) attributes {hls.orig_name = "mac_top", llvm.linkage = #llvm.linkage<external>} {

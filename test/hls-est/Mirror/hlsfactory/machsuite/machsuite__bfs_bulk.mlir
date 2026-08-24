@@ -4,7 +4,7 @@
 // design: machsuite/bfs_bulk (harness catalogue record; compiled as run_hlsest.py does)
 // top: bfs
 // Vitis 2025.1 td=off: BRAM_18K 0 (results/vitis.json, key 0198e7e381b17946); a comment only, the CHECK lines pin hls-est's current output
-// RUN: hls-est %s --symbol-privatize=exclude=bfs --symbol-dce --lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --narrow-ram-widths --memory-banking-bram --convert-affine-to-loopschedule '--bram-analysis=top=bfs math-costs=%hls_est_math_costs' -o /dev/null | FileCheck %s
+// RUN: hls-est %s --symbol-privatize=exclude=bfs --symbol-dce --lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --infer-vitis-split-array=td=off --narrow-ram-widths --memory-banking-bram --convert-affine-to-loopschedule '--bram-analysis=top=bfs math-costs=%hls_est_math_costs' -o /dev/null | FileCheck %s
 
 module {
   func.func @bfs(%arg0: memref<256x2xi64>, %arg1: memref<4096xi64>, %arg2: i64, %arg3: memref<256xi8>, %arg4: memref<10xi64>) attributes {hls.orig_name = "bfs", llvm.linkage = #llvm.linkage<external>} {

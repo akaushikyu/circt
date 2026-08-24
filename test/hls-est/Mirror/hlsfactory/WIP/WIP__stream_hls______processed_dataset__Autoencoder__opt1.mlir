@@ -4,7 +4,7 @@
 // design: WIP/stream_hls______processed_dataset__Autoencoder__opt1 (harness catalogue record; compiled as run_hlsest.py does)
 // top: _Z7forwardPA784_fPfS0_S1_PA256_fS1_PA128_fS1_PA64_fS1_S5_S1_S3_S0_
 // Vitis 2025.1 td=off: BRAM_18K 2768 (results/vitis.json, key f12b70f31f54ded5); a comment only, the CHECK lines pin hls-est's current output
-// RUN: hls-est %s --symbol-privatize=exclude=_Z7forwardPA784_fPfS0_S1_PA256_fS1_PA128_fS1_PA64_fS1_S5_S1_S3_S0_ --symbol-dce --lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --narrow-ram-widths --memory-banking-bram --convert-affine-to-loopschedule '--bram-analysis=top=_Z7forwardPA784_fPfS0_S1_PA256_fS1_PA128_fS1_PA64_fS1_S5_S1_S3_S0_ math-costs=%hls_est_math_costs' -o /dev/null | FileCheck %s
+// RUN: hls-est %s --symbol-privatize=exclude=_Z7forwardPA784_fPfS0_S1_PA256_fS1_PA128_fS1_PA64_fS1_S5_S1_S3_S0_ --symbol-dce --lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --infer-vitis-split-array=td=off --narrow-ram-widths --memory-banking-bram --convert-affine-to-loopschedule '--bram-analysis=top=_Z7forwardPA784_fPfS0_S1_PA256_fS1_PA128_fS1_PA64_fS1_S5_S1_S3_S0_ math-costs=%hls_est_math_costs' -o /dev/null | FileCheck %s
 
 #set = affine_set<(d0) : (d0 == 0)>
 #set1 = affine_set<(d0) : (d0 - 255 == 0)>

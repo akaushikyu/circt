@@ -4,7 +4,7 @@
 // design: polybench_pragmas/bicg (harness catalogue record; compiled as run_hlsest.py does)
 // top: bicg
 // Vitis 2025.1 td=off: BRAM_18K 8 (results/vitis.json, key 1b6128a047ae45b2); a comment only, the CHECK lines pin hls-est's current output
-// RUN: hls-est %s --symbol-privatize=exclude=bicg --symbol-dce --lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --narrow-ram-widths --memory-banking-bram --convert-affine-to-loopschedule '--bram-analysis=top=bicg math-costs=%hls_est_math_costs' -o /dev/null | FileCheck %s
+// RUN: hls-est %s --symbol-privatize=exclude=bicg --symbol-dce --lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --infer-vitis-split-array=td=off --narrow-ram-widths --memory-banking-bram --convert-affine-to-loopschedule '--bram-analysis=top=bicg math-costs=%hls_est_math_costs' -o /dev/null | FileCheck %s
 
 module {
   func.func @bicg(%arg0: memref<64x64xf32> {hls.array_partition = [{dim = 2 : i32, factor = 4 : i32, kind = "cyclic", variable = "A"}], hls.bind_storage = [{type = "ram_1p", variable = "A"}]}, %arg1: memref<64xf32> {hls.bind_storage = [{type = "ram_1p", variable = "p"}]}, %arg2: memref<64xf32> {hls.bind_storage = [{type = "ram_1p", variable = "r"}]}, %arg3: memref<64xf32> {hls.interface = [{mode = "ap_fifo", port = "s_out"}]}, %arg4: memref<64xf32> {hls.interface = [{mode = "ap_fifo", port = "q_out"}]}) attributes {hls.orig_name = "bicg", llvm.linkage = #llvm.linkage<external>} {

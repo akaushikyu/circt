@@ -4,7 +4,7 @@
 // design: auto_ntt/shuffler_out_shift (harness catalogue record; compiled as run_hlsest.py does)
 // top: _Z18shuffler_out_shiftRA16_N4tapa7istreamI7ap_uintILi32EEEES5_S5_RA16_NS_7ostreamIS2_EES9_S9_btt
 // Vitis 2025.1 td=off: BRAM_18K 0 (results/vitis.json, key ae842a946b10a138); a comment only, the CHECK lines pin hls-est's current output
-// RUN: hls-est %s --symbol-privatize=exclude=_Z18shuffler_out_shiftRA16_N4tapa7istreamI7ap_uintILi32EEEES5_S5_RA16_NS_7ostreamIS2_EES9_S9_btt --symbol-dce --lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --narrow-ram-widths --memory-banking-bram --convert-affine-to-loopschedule '--bram-analysis=top=_Z18shuffler_out_shiftRA16_N4tapa7istreamI7ap_uintILi32EEEES5_S5_RA16_NS_7ostreamIS2_EES9_S9_btt math-costs=%hls_est_math_costs' -o /dev/null | FileCheck %s
+// RUN: hls-est %s --symbol-privatize=exclude=_Z18shuffler_out_shiftRA16_N4tapa7istreamI7ap_uintILi32EEEES5_S5_RA16_NS_7ostreamIS2_EES9_S9_btt --symbol-dce --lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --infer-vitis-split-array=td=off --narrow-ram-widths --memory-banking-bram --convert-affine-to-loopschedule '--bram-analysis=top=_Z18shuffler_out_shiftRA16_N4tapa7istreamI7ap_uintILi32EEEES5_S5_RA16_NS_7ostreamIS2_EES9_S9_btt math-costs=%hls_est_math_costs' -o /dev/null | FileCheck %s
 
 module {
   memref.global "private" @_ZL20WORD_SIZE_PLUS2_MASK : memref<1xi34> = dense<-1>

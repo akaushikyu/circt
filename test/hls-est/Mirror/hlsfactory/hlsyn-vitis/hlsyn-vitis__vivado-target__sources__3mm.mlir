@@ -4,7 +4,7 @@
 // design: hlsyn-vitis/vivado-target__sources__3mm (harness catalogue record; compiled as run_hlsest.py does)
 // top: _Z10kernel_3mmiiiiiPA50_dPA60_dS0_PA70_dPA80_dS4_S4_
 // Vitis 2025.1 td=off: vitis timeout: 7200s
-// RUN: hls-est %s --symbol-privatize=exclude=_Z10kernel_3mmiiiiiPA50_dPA60_dS0_PA70_dPA80_dS4_S4_ --symbol-dce --lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --narrow-ram-widths --memory-banking-bram --convert-affine-to-loopschedule '--bram-analysis=top=_Z10kernel_3mmiiiiiPA50_dPA60_dS0_PA70_dPA80_dS4_S4_ math-costs=%hls_est_math_costs' -o /dev/null | FileCheck %s
+// RUN: hls-est %s --symbol-privatize=exclude=_Z10kernel_3mmiiiiiPA50_dPA60_dS0_PA70_dPA80_dS4_S4_ --symbol-dce --lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --infer-vitis-split-array=td=off --narrow-ram-widths --memory-banking-bram --convert-affine-to-loopschedule '--bram-analysis=top=_Z10kernel_3mmiiiiiPA50_dPA60_dS0_PA70_dPA80_dS4_S4_ math-costs=%hls_est_math_costs' -o /dev/null | FileCheck %s
 
 module {
   func.func @_Z10kernel_3mmiiiiiPA50_dPA60_dS0_PA70_dPA80_dS4_S4_(%arg0: i32, %arg1: i32, %arg2: i32, %arg3: i32, %arg4: i32, %arg5: memref<40x50xf64>, %arg6: memref<40x60xf64>, %arg7: memref<60x50xf64>, %arg8: memref<50x70xf64>, %arg9: memref<50x80xf64>, %arg10: memref<80x70xf64>, %arg11: memref<40x70xf64>) attributes {hls.orig_name = "kernel_3mm", llvm.linkage = #llvm.linkage<external>} {

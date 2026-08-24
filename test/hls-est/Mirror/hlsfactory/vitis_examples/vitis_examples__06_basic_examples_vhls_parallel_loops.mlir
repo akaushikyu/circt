@@ -4,7 +4,7 @@
 // design: vitis_examples/06_basic_examples_vhls_parallel_loops (harness catalogue record; compiled as run_hlsest.py does)
 // top: _Z14loop_functionsP6ap_intILi8EES1_PS_ILi13EES3_7ap_uintILi5EES5_
 // Vitis 2025.1 td=off: BRAM_18K 0 (results/vitis.json, key f49179115f6755ca); a comment only, the CHECK lines pin hls-est's current output
-// RUN: hls-est %s --symbol-privatize=exclude=_Z14loop_functionsP6ap_intILi8EES1_PS_ILi13EES3_7ap_uintILi5EES5_ --symbol-dce --lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --narrow-ram-widths --memory-banking-bram --convert-affine-to-loopschedule '--bram-analysis=top=_Z14loop_functionsP6ap_intILi8EES1_PS_ILi13EES3_7ap_uintILi5EES5_ math-costs=%hls_est_math_costs' -o /dev/null | FileCheck %s
+// RUN: hls-est %s --symbol-privatize=exclude=_Z14loop_functionsP6ap_intILi8EES1_PS_ILi13EES3_7ap_uintILi5EES5_ --symbol-dce --lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --infer-vitis-split-array=td=off --narrow-ram-widths --memory-banking-bram --convert-affine-to-loopschedule '--bram-analysis=top=_Z14loop_functionsP6ap_intILi8EES1_PS_ILi13EES3_7ap_uintILi5EES5_ math-costs=%hls_est_math_costs' -o /dev/null | FileCheck %s
 
 module {
   func.func @_Z8sub_funcP6ap_intILi8EEPS_ILi13EE7ap_uintILi5EE(%arg0: memref<32xi8>, %arg1: memref<32xi13>, %arg2: i5) attributes {hls.orig_name = "sub_func", llvm.linkage = #llvm.linkage<external>} {

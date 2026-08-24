@@ -162,8 +162,11 @@ def pipeline_name(pipe):
     if pipe == C.SPLIT_PIPELINE:
         return "split pipeline"
     toks = pipe.split()
-    base = "split pipeline" if any(t.startswith("--infer-vitis-split-array") for t in toks) else "pipeline"
-    if " ".join(t.split("=", 1)[0] for t in toks) == C.DEFAULT_PIPELINE:
+    base = ("split pipeline" if any(t.startswith("--infer-vitis-split-array") and t != "--infer-vitis-split-array=td=off"
+                                    for t in toks) else "pipeline")
+    def passes(tokens):
+        return [t.split("=", 1)[0] for t in tokens]
+    if passes(toks) == passes(C.DEFAULT_PIPELINE.split()):
         base = "default pipeline"
     # "--pass=opt=v" contributes "opt=v"; a global flag "--flag=v" contributes "flag=v".
     opts = [t.split("=", 1)[1] if t.count("=") > 1 else t[2:] for t in toks if "=" in t]

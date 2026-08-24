@@ -4,7 +4,7 @@
 // design: hlsyn-vitis/vivado-target__sources__jacobi-2d (harness catalogue record; compiled as run_hlsest.py does)
 // top: _Z16kernel_jacobi_2diiPA90_dS0_
 // Vitis 2025.1 td=off: no ground truth (not synthesised)
-// RUN: hls-est %s --symbol-privatize=exclude=_Z16kernel_jacobi_2diiPA90_dS0_ --symbol-dce --lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --narrow-ram-widths --memory-banking-bram --convert-affine-to-loopschedule '--bram-analysis=top=_Z16kernel_jacobi_2diiPA90_dS0_ math-costs=%hls_est_math_costs' -o /dev/null | FileCheck %s
+// RUN: hls-est %s --symbol-privatize=exclude=_Z16kernel_jacobi_2diiPA90_dS0_ --symbol-dce --lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --infer-vitis-split-array=td=off --narrow-ram-widths --memory-banking-bram --convert-affine-to-loopschedule '--bram-analysis=top=_Z16kernel_jacobi_2diiPA90_dS0_ math-costs=%hls_est_math_costs' -o /dev/null | FileCheck %s
 
 module {
   func.func @_Z16kernel_jacobi_2diiPA90_dS0_(%arg0: i32, %arg1: i32, %arg2: memref<90x90xf64>, %arg3: memref<90x90xf64>) attributes {hls.orig_name = "kernel_jacobi_2d", llvm.linkage = #llvm.linkage<external>} {

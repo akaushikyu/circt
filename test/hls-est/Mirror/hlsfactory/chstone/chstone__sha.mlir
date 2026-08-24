@@ -4,7 +4,7 @@
 // design: chstone/sha (harness catalogue record; compiled as run_hlsest.py does)
 // top: sha_stream
 // Vitis 2025.1 td=off: BRAM_18K 7 (results/vitis.json, key afc515dcd508f51b); a comment only, the CHECK lines pin hls-est's current output
-// RUN: hls-est %s --symbol-privatize=exclude=sha_stream --symbol-dce --lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --narrow-ram-widths --memory-banking-bram --convert-affine-to-loopschedule '--bram-analysis=top=sha_stream math-costs=%hls_est_math_costs' -o /dev/null | FileCheck %s
+// RUN: hls-est %s --symbol-privatize=exclude=sha_stream --symbol-dce --lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --infer-vitis-split-array=td=off --narrow-ram-widths --memory-banking-bram --convert-affine-to-loopschedule '--bram-analysis=top=sha_stream math-costs=%hls_est_math_costs' -o /dev/null | FileCheck %s
 
 #map = affine_map<()[s0] -> (s0 + 1)>
 module {

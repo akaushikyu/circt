@@ -4,7 +4,7 @@
 // design: machsuite/spmv_ellpack (harness catalogue record; compiled as run_hlsest.py does)
 // top: ellpack
 // Vitis 2025.1 td=off: BRAM_18K 0 (results/vitis.json, key 3050253fdc49a1d5); a comment only, the CHECK lines pin hls-est's current output
-// RUN: hls-est %s --symbol-privatize=exclude=ellpack --symbol-dce --lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --narrow-ram-widths --memory-banking-bram --convert-affine-to-loopschedule '--bram-analysis=top=ellpack math-costs=%hls_est_math_costs' -o /dev/null | FileCheck %s
+// RUN: hls-est %s --symbol-privatize=exclude=ellpack --symbol-dce --lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --infer-vitis-split-array=td=off --narrow-ram-widths --memory-banking-bram --convert-affine-to-loopschedule '--bram-analysis=top=ellpack math-costs=%hls_est_math_costs' -o /dev/null | FileCheck %s
 
 module {
   func.func @ellpack(%arg0: memref<4940xf64>, %arg1: memref<4940xi32>, %arg2: memref<494xf64>, %arg3: memref<494xf64>) attributes {hls.orig_name = "ellpack", llvm.linkage = #llvm.linkage<external>} {

@@ -4,7 +4,7 @@
 // design: forgebench/llama_transformer_p2 (harness catalogue record; compiled as run_hlsest.py does)
 // top: _Z3topPA32_8ap_fixedILi16ELi5EL9ap_q_mode5EL9ap_o_mode3ELi0EES4_S4_S4_S4_S4_PA128_S2_S4_S4_
 // Vitis 2025.1 td=off: BRAM_18K 30 (results/vitis.json, key cab76b892c3d568b); a comment only, the CHECK lines pin hls-est's current output
-// RUN: hls-est %s --symbol-privatize=exclude=_Z3topPA32_8ap_fixedILi16ELi5EL9ap_q_mode5EL9ap_o_mode3ELi0EES4_S4_S4_S4_S4_PA128_S2_S4_S4_ --symbol-dce --lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --narrow-ram-widths --memory-banking-bram --convert-affine-to-loopschedule '--bram-analysis=top=_Z3topPA32_8ap_fixedILi16ELi5EL9ap_q_mode5EL9ap_o_mode3ELi0EES4_S4_S4_S4_S4_PA128_S2_S4_S4_ math-costs=%hls_est_math_costs' -o /dev/null | FileCheck %s
+// RUN: hls-est %s --symbol-privatize=exclude=_Z3topPA32_8ap_fixedILi16ELi5EL9ap_q_mode5EL9ap_o_mode3ELi0EES4_S4_S4_S4_S4_PA128_S2_S4_S4_ --symbol-dce --lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --infer-vitis-split-array=td=off --narrow-ram-widths --memory-banking-bram --convert-affine-to-loopschedule '--bram-analysis=top=_Z3topPA32_8ap_fixedILi16ELi5EL9ap_q_mode5EL9ap_o_mode3ELi0EES4_S4_S4_S4_S4_PA128_S2_S4_S4_ math-costs=%hls_est_math_costs' -o /dev/null | FileCheck %s
 
 module {
   memref.global @BRAM_MLP_2 : memref<8x128xi16> = uninitialized

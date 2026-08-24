@@ -4,7 +4,7 @@
 // design: vitis_examples/08_basic_examples_vhls_max_bounded_loop (harness catalogue record; compiled as run_hlsest.py does)
 // top: _Z15loop_max_boundsP6ap_intILi8EE7ap_uintILi5EE
 // Vitis 2025.1 td=off: BRAM_18K 0 (results/vitis.json, key 31caccd200c6630c); a comment only, the CHECK lines pin hls-est's current output
-// RUN: hls-est %s --symbol-privatize=exclude=_Z15loop_max_boundsP6ap_intILi8EE7ap_uintILi5EE --symbol-dce --lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --narrow-ram-widths --memory-banking-bram --convert-affine-to-loopschedule '--bram-analysis=top=_Z15loop_max_boundsP6ap_intILi8EE7ap_uintILi5EE math-costs=%hls_est_math_costs' -o /dev/null | FileCheck %s
+// RUN: hls-est %s --symbol-privatize=exclude=_Z15loop_max_boundsP6ap_intILi8EE7ap_uintILi5EE --symbol-dce --lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --infer-vitis-split-array=td=off --narrow-ram-widths --memory-banking-bram --convert-affine-to-loopschedule '--bram-analysis=top=_Z15loop_max_boundsP6ap_intILi8EE7ap_uintILi5EE math-costs=%hls_est_math_costs' -o /dev/null | FileCheck %s
 
 module {
   func.func @_Z15loop_max_boundsP6ap_intILi8EE7ap_uintILi5EE(%arg0: memref<32xi8>, %arg1: i5) -> i13 attributes {hls.orig_name = "loop_max_bounds", llvm.linkage = #llvm.linkage<external>} {

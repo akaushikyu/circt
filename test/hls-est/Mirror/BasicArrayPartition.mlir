@@ -3,7 +3,7 @@
 // cgeist: /mnt/d/HLS/Polygeist/build/bin/cgeist (md5 d104d556cc4041c12011492419e5bc00, Polygeist 36cc8374), shim tools/hls-est-validate/shim/exactclass (--scalar-wrapper-abi -DHLSEST_MATH_MARKERS)
 // top: _Z21basic_array_partitionv
 // Vitis 2025.1 td=off: none (not a catalogue design)
-// RUN: hls-est %s --symbol-privatize=exclude=_Z21basic_array_partitionv --symbol-dce --lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --narrow-ram-widths --memory-banking-bram --convert-affine-to-loopschedule '--bram-analysis=top=_Z21basic_array_partitionv math-costs=%hls_est_math_costs' -o /dev/null | FileCheck %s
+// RUN: hls-est %s --symbol-privatize=exclude=_Z21basic_array_partitionv --symbol-dce --lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --infer-vitis-split-array=td=off --narrow-ram-widths --memory-banking-bram --convert-affine-to-loopschedule '--bram-analysis=top=_Z21basic_array_partitionv math-costs=%hls_est_math_costs' -o /dev/null | FileCheck %s
 
 module {
   func.func @_Z21basic_array_partitionv() attributes {hls.orig_name = "basic_array_partition", llvm.linkage = #llvm.linkage<external>} {

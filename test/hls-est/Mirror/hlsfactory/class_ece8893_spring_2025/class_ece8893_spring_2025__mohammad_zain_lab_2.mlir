@@ -4,7 +4,7 @@
 // design: class_ece8893_spring_2025/mohammad_zain_lab_2 (harness catalogue record; compiled as run_hlsest.py does)
 // top: _Z21compute_attention_HLSPA100_A4_7ap_uintILi512EES3_S3_PA100_A128_8ap_fixedILi16ELi5EL9ap_q_mode5EL9ap_o_mode3ELi0EE
 // Vitis 2025.1 td=off: BRAM_18K 113 (results/vitis.json, key 651717522d6b4415); a comment only, the CHECK lines pin hls-est's current output
-// RUN: hls-est %s --symbol-privatize=exclude=_Z21compute_attention_HLSPA100_A4_7ap_uintILi512EES3_S3_PA100_A128_8ap_fixedILi16ELi5EL9ap_q_mode5EL9ap_o_mode3ELi0EE --symbol-dce --lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --narrow-ram-widths --memory-banking-bram --convert-affine-to-loopschedule '--bram-analysis=top=_Z21compute_attention_HLSPA100_A4_7ap_uintILi512EES3_S3_PA100_A128_8ap_fixedILi16ELi5EL9ap_q_mode5EL9ap_o_mode3ELi0EE math-costs=%hls_est_math_costs' -o /dev/null | FileCheck %s
+// RUN: hls-est %s --symbol-privatize=exclude=_Z21compute_attention_HLSPA100_A4_7ap_uintILi512EES3_S3_PA100_A128_8ap_fixedILi16ELi5EL9ap_q_mode5EL9ap_o_mode3ELi0EE --symbol-dce --lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --infer-vitis-split-array=td=off --narrow-ram-widths --memory-banking-bram --convert-affine-to-loopschedule '--bram-analysis=top=_Z21compute_attention_HLSPA100_A4_7ap_uintILi512EES3_S3_PA100_A128_8ap_fixedILi16ELi5EL9ap_q_mode5EL9ap_o_mode3ELi0EE math-costs=%hls_est_math_costs' -o /dev/null | FileCheck %s
 
 #map = affine_map<()[s0] -> (s0 + 1)>
 module {
