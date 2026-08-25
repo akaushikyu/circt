@@ -13,8 +13,13 @@ Usage: hls_est_ce.py <source.cpp|source.c> [options]
   --top=NAME        top function (default: 'top', else the last function cgeist emits)
   --show=WHAT       report (default) | input (cgeist MLIR) | output (MLIR after the pipeline) | all
   --explain         add the per-array reasons (port demand, RAM type, bank math)
+  --list-passes     print the default pipeline with a one-line description of every pass
+  --opt-pipeline-file=PATH  also write the MLIR after every pass (Compiler Explorer's Opt Pipeline view)
   -I<dir>, -D<m>    passed to cgeist
-  anything else     passed to hls-est (for example --config-set=tool.hls.options.pipeline_loops=2)
+  --<pass>[=opts]   hls-est passes: when any is given they REPLACE the default pipeline
+                    (--bram-analysis is appended with top= if missing), e.g.
+                    --canonicalize --affine-loop-normalize --memory-banking-bram --bram-analysis
+  --config-set=..., --hls-config=..., --load-plugin=..., --mlir-...   passed to hls-est as options
 
 Paths come from the environment, with defaults for this machine:
   HLSEST_CE_CGEIST, HLSEST_CE_HLSEST, HLSEST_CE_SHIM, HLSEST_CE_RESOURCE_DIR, HLSEST_CE_MATH_COSTS
@@ -56,6 +61,11 @@ PIPELINE = ("--lower-polygeist-subindex --inline --split-struct-memrefs --mark-c
             "--auto-pipeline-unroll --infer-vitis-split-array=td=off --narrow-ram-widths "
             "--memory-banking-bram --convert-affine-to-loopschedule").split()
 
+# hls-est options that are not passes: they never replace the default pipeline.
+NON_PASS_PREFIXES = ("--config-set", "--hls-config", "--load-plugin", "--mlir-", "--bram-debug",
+                     "--allow-unregistered-dialect", "--dump-", "--split-input-file",
+                     "--verify-diagnostics")
+
 # The macros Vitis' front end defines (VITIS_NOTES N19); run_hlsest.vitis_frontend_flags.
 VITIS_DEFINES = ["-D__SYNTHESIS__", "-D__VITIS_HLS__", "-D__HLS_SYN__", "-DAESL_SYN"]
 
@@ -90,10 +100,15 @@ def parse_args(argv):
     if argv[0] in ("--version", "-v"):
         print(version())
         sys.exit(0)
+    if argv[0] == "--list-passes":
+        print(list_passes())
+        sys.exit(0)
     opts = {"source": None, "top": None, "show": "report", "explain": False,
-            "cgeist": [], "hlsest": []}
+            "cgeist": [], "hlsest": [], "passes": [], "opt_file": None}
     for a in argv:
-        if a.startswith("--top="):
+        if a.startswith("--opt-pipeline-file="):
+            opts["opt_file"] = a.split("=", 1)[1]
+        elif a.startswith("--top="):
             opts["top"] = a.split("=", 1)[1]
         elif a.startswith("--show="):
             opts["show"] = a.split("=", 1)[1]
@@ -101,6 +116,10 @@ def parse_args(argv):
             opts["explain"] = True
         elif a.startswith(("-I", "-D", "-std=")):
             opts["cgeist"].append(a)
+        elif a.startswith(NON_PASS_PREFIXES):
+            opts["hlsest"].append(a)
+        elif a.startswith("--"):
+            opts["passes"].append(a)
         elif a.startswith("-"):
             opts["hlsest"].append(a)
         elif opts["source"] is None:
@@ -112,6 +131,27 @@ def parse_args(argv):
     if opts["show"] not in ("report", "input", "output", "all"):
         sys.exit(f"hls-est-ce: --show must be report, input, output or all, not {opts['show']!r}")
     return opts
+
+
+def pass_descriptions():
+    """{pass flag: one-line description} from `hls-est --help`."""
+    p = subprocess.run([HLSEST, "--help"], capture_output=True, text=True, errors="replace",
+                       timeout=60)
+    out = {}
+    for line in p.stdout.splitlines():
+        m = re.match(r"^\s{6}(--[a-z0-9-]+)\s+-\s+(.*)$", line)
+        if m:
+            out.setdefault(m.group(1), m.group(2).strip())
+    return out
+
+
+def list_passes():
+    desc = pass_descriptions()
+    lines = ["hls-est default pipeline (Vitis HLS 2025.1 model), in order:"]
+    for flag in [*PIPELINE, "--bram-analysis"]:
+        name = flag.split("=", 1)[0]
+        lines.append(f"  {flag:<40} {desc.get(name, '')}")
+    return "\n".join(lines)
 
 
 def run(cmd, cwd=None):
@@ -171,16 +211,37 @@ def find_top(mlir, wanted):
 def estimate(mlir, top, opts, work):
     debug = work / "debug.json"
     out = work / "output.mlir"
-    bram = f"--bram-analysis=top={top}"
+    bram_opts = [f"top={top}"]
     if Path(MATH_COSTS).is_file():
-        bram += f" math-costs={MATH_COSTS}"
-    cmd = [HLSEST, str(mlir), f"--symbol-privatize=exclude={top}", "--symbol-dce", *PIPELINE,
-           bram, *opts["hlsest"], f"--bram-debug-json={debug}", "-o", str(out)]
+        bram_opts.append(f"math-costs={MATH_COSTS}")
+    passes = list(opts["passes"]) or list(PIPELINE)
+    # The report comes from --bram-analysis: keep the user's own options on it and add top=.
+    bram_given = [p for p in passes if p.split("=", 1)[0] == "--bram-analysis"]
+    passes = [p for p in passes if p.split("=", 1)[0] != "--bram-analysis"]
+    for given in bram_given:
+        for o in given.split("=", 1)[1].split() if "=" in given else []:
+            if not o.startswith(("top=", "math-costs=")):
+                bram_opts.append(o)
+    passes.append("--bram-analysis=" + " ".join(bram_opts))
+    opts["pipeline_used"] = passes
+    dump = ["--mlir-print-ir-after-all", "--mlir-disable-threading"] if opts["opt_file"] else []
+    cmd = [HLSEST, str(mlir), f"--symbol-privatize=exclude={top}", "--symbol-dce", *passes,
+           *opts["hlsest"], *dump, f"--bram-debug-json={debug}", "-o", str(out)]
     p, secs = run(cmd)
+    if opts["opt_file"]:
+        # cgeist's output first, as if it were a pass, then every hls-est pass.
+        header = "// -----// IR Dump After cgeist (C/C++ -> affine MLIR) //----- //\n"
+        Path(opts["opt_file"]).write_text(header + mlir.read_text() + "\n" + short_pass_headers(p.stderr))
     if p.returncode != 0 or not debug.exists():
         sys.stderr.write(p.stderr or p.stdout or f"hls-est failed (exit {p.returncode})\n")
         sys.exit(1)
     return json.loads(debug.read_text()), out, p.stdout, secs
+
+
+def short_pass_headers(dump):
+    """'IR Dump After {anonymous}::FooPass: foo-bar{opt=1 ...}' -> 'IR Dump After foo-bar'."""
+    return re.sub(r"^(// -----// IR Dump (?:Before|After) )[^\n]*?: ([a-z0-9-]+)(?:\{[^\n]*\})? //----- //$",
+                  r"\1\2 //----- //", dump, flags=re.M)
 
 
 def shape_text(m):
@@ -321,7 +382,7 @@ def short_reason(reason):
     return reason.replace(" (Words*Bits >= 1024 -> BRAM)", "")
 
 
-def report(dbg, top_plain, src_name, t_cgeist, t_hlsest, explain):
+def report(dbg, top_plain, src_name, t_cgeist, t_hlsest, explain, pipeline=None, custom=False):
     rows = [row_for(g) for g in group_arrays(dbg.get("memrefs") or [])]
     rows.sort(key=lambda r: (-r["bram"], r["name"]))
     total = dbg.get("total_bram", sum(r["bram"] for r in rows))
@@ -330,8 +391,12 @@ def report(dbg, top_plain, src_name, t_cgeist, t_hlsest, explain):
         "hls-est: static BRAM estimate (replicates Vitis HLS 2025.1 csynth, td=off)",
         f"source {src_name}  |  top {top_plain}  |  target {TARGET_NAME}, BRAM_18K",
         f"time: cgeist {t_cgeist:.1f} s, hls-est {t_hlsest:.2f} s",
-        "",
     ]
+    if pipeline:
+        shown = [p.split("=", 1)[0] if p.startswith("--bram-analysis") else p for p in pipeline]
+        lines.append(("pipeline (custom, from the options box): " if custom
+                      else "pipeline (default): ") + " ".join(shown))
+    lines.append("")
     live = [r for r in rows if r["status"] == "live"]
     # Unnamed one-element temporaries (cgeist's scalar spills) are noise in a demo table.
     gone = [r for r in rows if r["status"] != "live"
@@ -369,7 +434,8 @@ def main():
         mlir, t_cgeist = compile_to_mlir(src, opts, work)
         top, top_plain = find_top(mlir, opts["top"])
         dbg, out_mlir, _, t_hlsest = estimate(mlir, top, opts, work)
-        lines = report(dbg, top_plain, src.name, t_cgeist, t_hlsest, opts["explain"])
+        lines = report(dbg, top_plain, src.name, t_cgeist, t_hlsest, opts["explain"],
+                       opts.get("pipeline_used"), bool(opts["passes"]))
         if opts["show"] in ("input", "all"):
             lines += ["", "// ---- cgeist output (affine MLIR) ----", mlir.read_text().rstrip()]
         if opts["show"] in ("output", "all"):

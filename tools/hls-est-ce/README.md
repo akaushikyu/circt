@@ -25,8 +25,15 @@ Compiler Explorer otherwise writes every compile to the Windows temp folder.
 | `--top=NAME` | the top function (default `top`, else the last function) |
 | `--explain` | per-array reasons: port demand, RAM type, bank math, why an array is not a memory |
 | `--show=input` / `output` / `all` | append the cgeist MLIR, the MLIR after the pipeline, or both |
+| `--list-passes` | the default pipeline with a description of every pass |
+| `--<pass>` ... | hls-est passes: when any is given they **replace** the default pipeline (`--bram-analysis` is added with `top=` if missing), e.g. `--affine-loop-normalize --memory-banking-bram --convert-affine-to-loopschedule --bram-analysis` |
 | `-I...`, `-D...` | passed to cgeist |
-| anything else | passed to hls-est, e.g. `--config-set=tool.hls.options.pipeline_loops=2` |
+| `--config-set=`, `--hls-config=`, `--load-plugin=`, `--mlir-...` | passed to hls-est as options, e.g. `--config-set=tool.hls.options.pipeline_loops=2` |
+
+The report's header line names the pipeline that ran. **Opt Pipeline view:** in the output
+pane, "Add new..." -> "Opt Pipeline" lists cgeist and every hls-est pass with the MLIR after
+each one and a diff against the previous pass (the driver's `--opt-pipeline-file`, from
+`--mlir-print-ir-after-all`).
 
 ## Binaries
 
