@@ -1377,7 +1377,9 @@ static unsigned cseBlockPureOps(Block &block) {
 namespace {
 class FastModuloScheduler {
 public:
-  explicit FastModuloScheduler(ModuloProblem &prob) : prob(prob) {}
+  explicit FastModuloScheduler(ModuloProblem &prob,
+                               unsigned recurrenceRepairRounds = 0)
+      : prob(prob), recurrenceRepairRounds(recurrenceRepairRounds) {}
 
   /// Returns the number of operations linked to a resource with a limit.
   static unsigned countLimitedOps(ModuloProblem &prob);
@@ -1392,6 +1394,7 @@ private:
   };
 
   ModuloProblem &prob;
+  unsigned recurrenceRepairRounds;
   SmallVector<Operation *> ops;
   SmallVector<unsigned> latency;
   SmallVector<SmallVector<Edge, 4>> preds;
@@ -1406,6 +1409,12 @@ private:
   bool asapTimes(unsigned ii, SmallVectorImpl<int64_t> &asap) const;
   /// Smallest II >= lo without a positive cycle, or 0 if there is none.
   unsigned recMinII(unsigned lo) const;
+  /// List-schedules every op at or after `asap` against a modulo
+  /// reservation table; false when a resource-limited op finds no slot.
+  bool placeAll(unsigned ii, ArrayRef<int64_t> asap,
+                SmallVectorImpl<int64_t> &st);
+  /// (2)-(4) at `ii`: placement, then the check of every edge, with the
+  /// recurrence repair rounds in between.
   bool tryII(unsigned ii, SmallVectorImpl<unsigned> &start);
 };
 } // namespace
@@ -1580,13 +1589,45 @@ unsigned FastModuloScheduler::recMinII(unsigned lo) const {
 }
 
 bool FastModuloScheduler::tryII(unsigned ii, SmallVectorImpl<unsigned> &start) {
-  unsigned elementCount = ops.size();
 
-  SmallVector<int64_t> asap;
-  if (!asapTimes(ii, asap))
+  SmallVector<int64_t> earliest;
+  if (!asapTimes(ii, earliest))
     return false;
 
-  SmallVector<int64_t> st(elementCount, -1);
+  for (unsigned round = 0;; ++round) {
+    SmallVector<int64_t> st;
+    if (!placeAll(ii, earliest, st))
+      return false;
+    bool raised = false, violated = false;
+    for (unsigned innerIndex = 0, elementCount = ops.size();
+         innerIndex < elementCount; ++innerIndex)
+      for (const Edge &e : preds[innerIndex]) {
+        int64_t need = st[e.src] + static_cast<int64_t>(e.latency) -
+                       static_cast<int64_t>(e.distance) * ii;
+        if (need <= st[innerIndex])
+          continue;
+        violated = true;
+        if (e.distance > 0 && need > earliest[innerIndex]) {
+          earliest[innerIndex] = need;
+          raised = true;
+        }
+      }
+    if (!violated) {
+      start.clear();
+      for (int64_t t : st)
+        start.push_back(static_cast<unsigned>(t));
+      return true;
+    }
+    if (!raised || round >= recurrenceRepairRounds)
+      return false;
+  }
+}
+
+bool FastModuloScheduler::placeAll(unsigned ii, ArrayRef<int64_t> asap,
+                                   SmallVectorImpl<int64_t> &st) {
+  unsigned elementCount = ops.size();
+
+  st.assign(elementCount, -1);
   DenseMap<Problem::ResourceType, SmallVector<unsigned>> mrt;
   for (unsigned innerIndex : topo) {
     int64_t est = asap[innerIndex];
@@ -1622,16 +1663,6 @@ bool FastModuloScheduler::tryII(unsigned ii, SmallVectorImpl<unsigned> &start) {
     if (!placed)
       return false;
   }
-
-  for (unsigned innerIndex = 0; innerIndex < elementCount; ++innerIndex)
-    for (const Edge &e : preds[innerIndex])
-      if (st[e.src] + static_cast<int64_t>(e.latency) >
-          st[innerIndex] + static_cast<int64_t>(e.distance) * ii)
-        return false;
-
-  start.clear();
-  for (int64_t t : st)
-    start.push_back(static_cast<unsigned>(t));
   return true;
 }
 
@@ -2866,6 +2897,8 @@ public:
     fastThreshold = static_cast<unsigned>(cfg.scheduling.fastThreshold);
     fastOpsThreshold = static_cast<unsigned>(cfg.scheduling.fastOpsThreshold);
     maxIIBumps = static_cast<unsigned>(cfg.scheduling.maxIIBumps);
+    recurrenceRepairRounds =
+        static_cast<unsigned>(cfg.scheduling.recurrenceRepairRounds);
   }
 
   circt::hlsest::ScheduleOutcome
@@ -2874,7 +2907,7 @@ public:
     circt::hlsest::ScheduleOutcome out;
     unsigned targetII = context.requestedII.value_or(0);
     if (kind == Greedy) {
-      FastModuloScheduler fast(problem);
+      FastModuloScheduler fast(problem, recurrenceRepairRounds);
       out.success = succeeded(fast.schedule(maxIIBumps));
       out.label = "greedy";
     } else if (kind == Simplex) {
@@ -2889,7 +2922,7 @@ public:
                          problem.getOperations().size() > fastOpsThreshold;
       if (fastThreshold == 0 || limited > fastThreshold || hugeProblem) {
         triedFast = true;
-        FastModuloScheduler fast(problem);
+        FastModuloScheduler fast(problem, recurrenceRepairRounds);
         scheduled = succeeded(fast.schedule(maxIIBumps));
         if (scheduled)
           label = "greedy";
@@ -2907,7 +2940,7 @@ public:
         LLVM_DEBUG(
             llvm::dbgs()
             << "simplex modulo scheduler failed; falling back to fast\n");
-        FastModuloScheduler fast(problem);
+        FastModuloScheduler fast(problem, recurrenceRepairRounds);
         scheduled = succeeded(fast.schedule(maxIIBumps));
         if (scheduled)
           label = "greedy (simplex failed)";
@@ -2918,7 +2951,7 @@ public:
 
     if (kind == GreedySimplex && out.success &&
         targetII > *problem.getInitiationInterval()) {
-      FastModuloScheduler fast(problem);
+      FastModuloScheduler fast(problem, recurrenceRepairRounds);
       if (succeeded(fast.schedule(maxIIBumps, targetII)))
         out.label = "greedy (user II target)";
     }
@@ -2928,6 +2961,7 @@ public:
 private:
   Kind kind;
   unsigned fastThreshold = 150, fastOpsThreshold = 16384, maxIIBumps = 4096;
+  unsigned recurrenceRepairRounds = 0;
 };
 
 /// none: no state schedule; the BRAM port model applies its stretch-pair rule

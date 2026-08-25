@@ -296,6 +296,7 @@ const KeySpec kSchema[] = {
   {"scheduling.modulo.fast_threshold", KeyKind::UInt, "ops", "greedy-simplex: more resource-limited operations than this go to the greedy scheduler (0: always)", "S-08", A2L, "", 0, kNoLimit, false},
   {"scheduling.modulo.fast_ops_threshold", KeyKind::UInt, "ops", "greedy-simplex: more operations than this go to the greedy scheduler (0: no rule)", "S-08", A2L, "", 0, kNoLimit, false},
   {"scheduling.modulo.max_ii_bumps", KeyKind::UInt, "", "II increments the greedy scheduler tries", "S-08, R-06", A2L, "", 0, kNoLimit, false},
+  {"scheduling.modulo.recurrence_repair_rounds", KeyKind::UInt, "", "greedy scheduler: times a loop-carried edge broken by resource delays may move its destination later before the II is bumped (0: bump at once, the default until R-cmpd is modelled, OPEN_ISSUES O56 / O51 (a)); VITIS_NOTES N39", "S-08", A2L, "", 0, kNoLimit, false},
   {"scheduling.modulo.user_ii_target", KeyKind::Bool, "", "A loop with a user pipeline II=N > 1 is scheduled at N when it could start more often", "P-14", A2L, "", kNoLimit, kNoLimit, false},
   {"scheduling.sequential", KeyKind::Section, "", "The scheduler of non-pipelined regions", "K-12..K-14, S-22", A2L, "", kNoLimit, kNoLimit, false},
   {"scheduling.sequential.model", KeyKind::PluginName, "", "The SequentialScheduler (none: the stretch-pair rule applies)", "S-22", A2L, "sequential_scheduler", kNoLimit, kNoLimit, false},

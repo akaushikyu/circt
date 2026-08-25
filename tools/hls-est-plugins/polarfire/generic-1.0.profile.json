@@ -194,6 +194,7 @@
       "fast_threshold": 150,
       "fast_ops_threshold": 16384,
       "max_ii_bumps": 4096,
+      "recurrence_repair_rounds": 0,
       "user_ii_target": true
     },
     "sequential": {

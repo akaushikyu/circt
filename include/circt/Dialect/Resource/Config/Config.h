@@ -472,6 +472,7 @@ struct SchedulingConfig {
   int64_t fastThreshold = 150;
   int64_t fastOpsThreshold = 16384;
   int64_t maxIIBumps = 4096;
+  int64_t recurrenceRepairRounds = 0;
   bool userIITarget = true;
   std::string sequentialModel;
   std::string bindingModel;

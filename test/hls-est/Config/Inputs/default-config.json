@@ -349,11 +349,13 @@
       "_fast_threshold": "uint, ops: greedy-simplex: more resource-limited operations than this go to the greedy scheduler (0: always) [S-08]",
       "_max_ii_bumps": "uint: II increments the greedy scheduler tries [S-08, R-06]",
       "_model": "plugin name (a modulo_scheduler): The ModuloScheduler [S-10]",
+      "_recurrence_repair_rounds": "uint: greedy scheduler: times a loop-carried edge broken by resource delays may move its destination later before the II is bumped (0: bump at once, the default until R-cmpd is modelled, OPEN_ISSUES O56 / O51 (a)); VITIS_NOTES N39 [S-08]",
       "_user_ii_target": "bool: A loop with a user pipeline II=N > 1 is scheduled at N when it could start more often [P-14]",
       "fast_ops_threshold": 16384,
       "fast_threshold": 150,
       "max_ii_bumps": 4096,
       "model": "greedy-simplex",
+      "recurrence_repair_rounds": 0,
       "user_ii_target": true
     },
     "sequential": {
