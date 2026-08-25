@@ -235,6 +235,7 @@ const KeySpec kSchema[] = {
   {"tool.hls.narrowing", KeyKind::Section, "", "Element width the tool stores per word", "P-03", "--narrow-ram-widths", "", kNoLimit, kNoLimit, false},
   {"tool.hls.narrowing.stored_ranges", KeyKind::Bool, "", "Narrow to the bits the stored values need", "P-03", "--narrow-ram-widths", "", kNoLimit, kNoLimit, false},
   {"tool.hls.narrowing.load_demand", KeyKind::Bool, "", "Narrow to the low bits the loads' users demand", "P-03", "--narrow-ram-widths", "", kNoLimit, kNoLimit, false},
+  {"tool.hls.narrowing.full_address_interface_modes", KeyKind::StringList, "", "Interface modes of a top-level array argument whose subscripts demand every bit (m_axi: 32 bits, VITIS_NOTES N41); an argument without a pragma or of another mode demands the bits of its own address like a local (ap_memory: confirmed; the other modes unconfirmed)", "P-03", "--narrow-ram-widths", "", kNoLimit, kNoLimit, false},
   {"tool.hls.globals", KeyKind::Section, "", "File-scope arrays", "T-03", BA, "", kNoLimit, kNoLimit, false},
   {"tool.hls.globals.attribute_accesses", KeyKind::Bool, "", "A global's accesses are attributed through its get_global sites (--bram-attribute-globals overrides)", "T-03", BA, "", kNoLimit, kNoLimit, false},
   {"tool.hls.grouping", KeyKind::Section, "", "Several memrefs mapped to one memory", "N-11", BA, "", kNoLimit, kNoLimit, false},

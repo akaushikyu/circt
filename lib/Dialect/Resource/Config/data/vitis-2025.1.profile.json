@@ -92,7 +92,7 @@
       },
       "inlining": { "honour_inline_off": true },
       "structs": { "aggregate": true, "globals": true, "scalar_registers": true, "through_calls": true },
-      "narrowing": { "stored_ranges": true, "load_demand": true },
+      "narrowing": { "stored_ranges": true, "load_demand": true, "full_address_interface_modes": ["m_axi"] },
       "globals": { "attribute_accesses": false },
       "grouping": { "plugin": "identity" },
       "math_library": { "table": "" }

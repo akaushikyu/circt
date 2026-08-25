@@ -73,9 +73,9 @@ module {
 // CHECK-NEXT: kind=RAM_1WNR  bram=36{{$}}
 // CHECK-NOT: {{^memref\.}}
 // CHECK: memref.alloca @ loc("{{[^"]*}}":13:17){{$}}
-// CHECK-NEXT: kind=RAM_1WNR  bram=144{{$}}
+// CHECK-NEXT: kind=RAM_1WNR  bram=45{{$}}
 // CHECK-NOT: {{^memref\.}}
 // CHECK: memref.alloca @ loc("{{[^"]*}}":14:17){{$}}
 // CHECK-NEXT: kind=RAM_1WNR  bram=288{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: Total BRAM: 472{{$}}
+// CHECK: Total BRAM: 373{{$}}

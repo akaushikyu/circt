@@ -353,6 +353,7 @@ struct StructConfig {
 struct NarrowingConfig {
   bool storedRanges = true;
   bool loadDemand = true;
+  std::vector<std::string> fullAddressInterfaceModes;
 };
 
 struct HlsToolConfig {

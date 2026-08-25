@@ -151,6 +151,34 @@ bool usesOperand(AffineExpr entryValue, AffineMap map, unsigned innerIndex) {
   return entryValue.isFunctionOfSymbol(innerIndex - map.getNumDims());
 }
 
+/// Whether `op` is the destination side of cgeist's lowering of `memcpy`
+/// into an array: `polygeist.memref2pointer` whose pointer is only offset by
+/// `llvm.getelementptr` and stored through with `llvm.store` (the byte-copy
+/// loop). Vitis treats such a copy-in as ordinary stores of values it knows
+/// nothing about (VITIS_NOTES N41, kernel w9p5_idx_loc256): the array keeps
+/// its own address, and its width is what its loads demand.
+static bool isMemcpyDestination(Operation *op) {
+  if (op->getName().getStringRef() != "polygeist.memref2pointer" ||
+      op->getNumResults() != 1)
+    return false;
+  bool any = false;
+  for (Operation *gep : op->getResult(0).getUsers()) {
+    if (gep->getName().getStringRef() != "llvm.getelementptr" ||
+        gep->getNumOperands() == 0 || gep->getOperand(0) != op->getResult(0) ||
+        gep->getNumResults() != 1)
+      return false;
+    for (OpOperand &use : gep->getResult(0).getUses()) {
+      Operation *st = use.getOwner();
+
+      if (st->getName().getStringRef() != "llvm.store" ||
+          use.getOperandNumber() != 1)
+        return false;
+      any = true;
+    }
+  }
+  return any;
+}
+
 struct MemClass {
   SmallVector<Operation *> roots;
   SmallVector<Operation *> loads;
@@ -158,6 +186,10 @@ struct MemClass {
 
   bool fixed = false;
   bool opaque = false;
+
+  bool addressOpaque = false;
+
+  bool copiedIn = false;
   std::string fixedReason;
   Type elemType;
   unsigned declaredBits = 0;
@@ -184,9 +216,11 @@ struct MemClass {
 
 class Narrowing {
 public:
-  Narrowing(ModuleOp module, bool useRanges, bool useDemand, bool remarks)
+  Narrowing(ModuleOp module, bool useRanges, bool useDemand, bool remarks,
+            ArrayRef<std::string> fullAddressModes)
       : module(module), symbols(module), partitions(module, false),
-        rangesOn(useRanges), demandOn(useDemand), remarksOn(remarks) {}
+        rangesOn(useRanges), demandOn(useDemand), remarksOn(remarks),
+        fullAddressModes(fullAddressModes.begin(), fullAddressModes.end()) {}
 
   void run();
 
@@ -199,6 +233,7 @@ private:
   func::FuncOp internalCallee(func::CallOp callSite) const;
   bool isInternalFunction(func::FuncOp fieldValue) const;
   bool computeInternal(func::FuncOp fieldValue) const;
+  bool hasFullAddressInterface(func::FuncOp fieldValue, unsigned arg) const;
 
   void solveRanges();
   void markCyclicClasses();
@@ -242,10 +277,14 @@ private:
   PartitionRoots partitions;
   bool rangesOn, demandOn, remarksOn;
 
+  SmallVector<std::string> fullAddressModes;
+
   llvm::EquivalenceClasses<unsigned> unionFind;
   DenseMap<const void *, unsigned> nodeIds;
   DenseMap<Value, unsigned> nodeOfValue;
   DenseMap<unsigned, std::string> opaqueNodes;
+  DenseSet<unsigned> addressKnownNodes;
+  DenseSet<unsigned> copiedInNodes;
   SmallVector<Operation *> nodeRoot;
   std::vector<MemClass> classes;
   DenseMap<unsigned, unsigned> classOfLeader;
@@ -293,6 +332,26 @@ bool Narrowing::isInternalFunction(func::FuncOp fieldValue) const {
   bool internal = computeInternal(fieldValue);
   internalFunctions[fieldValue] = internal;
   return internal;
+}
+
+/// Whether memref parameter `arg` of the public function `f` has an
+/// interface pragma of a mode whose subscripts demand every bit (m_axi: the
+/// subscript is part of a bus address). An array parameter without a pragma
+/// is an ap_memory port under flow_target=vivado: its subscript demands the
+/// bits of its own address, as for a local (VITIS_NOTES N41).
+bool Narrowing::hasFullAddressInterface(func::FuncOp fieldValue,
+                                        unsigned arg) const {
+  auto ifaces = fieldValue.getArgAttrOfType<ArrayAttr>(arg, "hls.interface");
+  if (!ifaces)
+    return false;
+  for (Attribute arrayValue : ifaces) {
+    auto dimensionIndex = dyn_cast<DictionaryAttr>(arrayValue);
+    auto mode = dimensionIndex ? dimensionIndex.getAs<StringAttr>("mode")
+                               : StringAttr();
+    if (mode && llvm::is_contained(fullAddressModes, mode.getValue().str()))
+      return true;
+  }
+  return false;
 }
 
 bool Narrowing::computeInternal(func::FuncOp fieldValue) const {
@@ -358,9 +417,12 @@ void Narrowing::buildClasses() {
       if (!isa<BaseMemRefType>(arrayValue.getType()))
         continue;
       unsigned elementCount = nodeOf(arrayValue.getAsOpaquePointer());
-      if (!internal)
+      if (!internal) {
         opaqueNodes[elementCount] = "interface (memref parameter of " +
                                     fieldValue.getSymName().str() + ")";
+        if (!hasFullAddressInterface(fieldValue, arrayValue.getArgNumber()))
+          addressKnownNodes.insert(elementCount);
+      }
       trackValue(arrayValue, elementCount, work);
     }
   }
@@ -381,6 +443,10 @@ void Narrowing::buildClasses() {
         }
       if (isa<memref::DimOp, memref::DeallocOp>(user))
         continue;
+      if (isMemcpyDestination(user)) {
+        copiedInNodes.insert(elementCount);
+        continue;
+      }
       if (auto callSite = dyn_cast<func::CallOp>(user))
         if (func::FuncOp callee = internalCallee(callSite)) {
           BlockArgument portValue = callee.getArgument(use.getOperandNumber());
@@ -404,8 +470,12 @@ void Narrowing::buildClasses() {
          memoryOp != unionFind.member_end(); ++memoryOp) {
       if (Operation *root = nodeRoot[*memoryOp])
         candidateValue.roots.push_back(root);
+      candidateValue.copiedIn |= copiedInNodes.contains(*memoryOp);
       auto o = opaqueNodes.find(*memoryOp);
-      if (o != opaqueNodes.end() && !candidateValue.opaque) {
+      if (o == opaqueNodes.end())
+        continue;
+      candidateValue.addressOpaque |= !addressKnownNodes.contains(*memoryOp);
+      if (!candidateValue.opaque) {
         candidateValue.opaque = candidateValue.fixed = true;
         candidateValue.fixedReason = o->second;
       }
@@ -1248,7 +1318,10 @@ void Narrowing::solveRanges() {
   for (MemClass &candidateValue : classes) {
     if (candidateValue.fixed)
       continue;
-    if (candidateValue.initRange)
+    if (candidateValue.copiedIn) {
+      candidateValue.rangePinned = true;
+      candidateValue.pinReason = "filled by a memcpy copy-in";
+    } else if (candidateValue.initRange)
       candidateValue.stored = IntegerValueRange(*candidateValue.initRange);
     else if (candidateValue.stores.empty()) {
       candidateValue.rangePinned = true;
@@ -1404,7 +1477,7 @@ std::optional<unsigned> Narrowing::subscriptBits(Value memref,
                                                  unsigned dim) const {
   MemClass *candidateValue = classOf(memref);
   auto type = dyn_cast<MemRefType>(memref.getType());
-  if (!candidateValue || candidateValue->opaque || !type ||
+  if (!candidateValue || candidateValue->addressOpaque || !type ||
       !type.hasStaticShape() || dim >= type.getRank())
     return std::nullopt;
   std::optional<SmallVector<bool>> completeOpt = completeDims(memref);
@@ -1792,7 +1865,9 @@ struct NarrowRamWidthsPass
         circt::hlsest::Config::get().tool.hls.narrowing;
     circt::hlsest::applyConfigured(storedRanges, nc.storedRanges);
     circt::hlsest::applyConfigured(loadDemand, nc.loadDemand);
-    Narrowing(getOperation(), storedRanges, loadDemand, remarks).run();
+    Narrowing(getOperation(), storedRanges, loadDemand, remarks,
+              nc.fullAddressInterfaceModes)
+        .run();
   }
 };
 
