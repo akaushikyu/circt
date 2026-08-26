@@ -27,6 +27,10 @@ selects the first. Put them side by side with "Add new..." -> "Compiler" in the 
 
 ## Options (the options box of the hls-est compiler)
 
+The arrow at the right of the options box opens a menu with every option below (and, for the
+cgeist compiler, its `--hls-*` flags); clicking one appends it. The menu comes from the driver's
+`--help`, so a new pass or setting only needs adding there.
+
 | option | effect |
 |---|---|
 | `--top=NAME` | the top function (default `top`, else the last function) |

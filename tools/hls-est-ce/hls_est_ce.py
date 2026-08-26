@@ -102,6 +102,9 @@ def parse_args(argv):
     if argv[0] in ("--version", "-v"):
         print(version())
         sys.exit(0)
+    if "--help" in argv:
+        print(help_text("--emit=cgeist" in argv))
+        sys.exit(0)
     if argv[0] == "--list-passes":
         print(list_passes())
         sys.exit(0)
@@ -154,6 +157,67 @@ def pass_descriptions():
         if m:
             out.setdefault(m.group(1), m.group(2).strip())
     return out
+
+
+# Passes that are not in the default pipeline but are useful to try (hls-est --help has their text).
+EXTRA_PASSES = ["--infer-vitis-split-array=td=auto", "--promote-globals-to-allocas",
+                "--merge-conditional-stores", "--cse", "--affine-loop-unroll", "--affine-scalrep"]
+
+# Configuration settings worth showing (hls-doc/configuration.md lists every key).
+CONFIG_EXAMPLES = [
+    ("--config-set=tool.hls.options.pipeline_loops=0",
+     "Vitis config_compile -pipeline_loops 0: no automatic loop pipelining (default 64)"),
+    ("--config-set=tool.hls.memory_architecture.replication.max_copies=1",
+     "Never replicate a memory for read ports (default 16 copies)"),
+    ("--config-set=tool.hls.options.array_partition.complete_threshold=0",
+     "No automatic complete partitioning of small arrays (default 4 elements)"),
+    ("--config-set=tool.hls.streams.default_depth=1024",
+     "Depth of an hls::stream without a depth pragma (default 2)"),
+    ("--config-set=tool.backend.storage_selector.min_block_bits=4096",
+     "Smallest array put in block RAM, in bits (default 1024; smaller ones use LUTRAM)"),
+    ("--config-set=run.clock_ns=5", "Clock period in ns (default 10)"),
+]
+
+# The cgeist flags of interest for HLS (the rest of `cgeist --help` is LLVM's).
+CGEIST_HELP_PREFIXES = ("--hls-",)
+
+
+def help_text(cgeist_only):
+    """The option list Compiler Explorer turns into the options dropdown ('  --flag  description')."""
+    lines = []
+    if cgeist_only:
+        lines.append("cgeist options (the harness flags are always on):")
+        p = subprocess.run([CGEIST, "--help"], capture_output=True, text=True, errors="replace",
+                           timeout=60)
+        for line in p.stdout.splitlines():
+            m = re.match(r"^\s+(--[a-z0-9-]+(?:=<[a-z]+>)?)\s+-\s+(.*)$", line)
+            if m and m.group(1).startswith(CGEIST_HELP_PREFIXES) and m.group(1) != "--hls-annotate":
+                lines.append(f"  {m.group(1):<44}  {m.group(2).strip()}")
+        lines += [f"  {'-DNAME=VALUE':<44}  Define a macro", f"  {'-I<dir>':<44}  Add an include directory"]
+        return "\n".join(lines)
+    desc = pass_descriptions()
+    lines.append("Report options:")
+    for flag, text in (("--explain", "Per-array reasons: port demand, RAM type, bank math, why an array is not a memory"),
+                       ("--show=output", "Append the MLIR after the hls-est pipeline"),
+                       ("--show=input", "Append the MLIR cgeist produced"),
+                       ("--show=all", "Append both"),
+                       ("--top=top", "Top function (default: top, else the last function)"),
+                       ("--list-passes", "Print the default pipeline with a description of every pass")):
+        lines.append(f"  {flag:<44}  {text}")
+    lines.append("Default pipeline, in order (giving any pass replaces the whole pipeline; "
+                 "without --bram-analysis the output is the IR, like mlir-opt):")
+    for flag in [*PIPELINE, "--bram-analysis"]:
+        lines.append(f"  {flag:<44}  {desc.get(flag.split('=', 1)[0], '')}")
+    lines.append("Other passes:")
+    for flag in EXTRA_PASSES:
+        text = desc.get(flag.split("=", 1)[0], "")
+        if flag.endswith("td=auto"):
+            text = "Vitis throughput-driven partitioning (syn.array_partition.throughput_driven=auto)"
+        lines.append(f"  {flag:<44}  {text}")
+    lines.append("Configuration (hls-doc/configuration.md):")
+    for flag, text in CONFIG_EXAMPLES:
+        lines.append(f"  {flag:<44}  {text}")
+    return "\n".join(lines)
 
 
 def list_passes():
