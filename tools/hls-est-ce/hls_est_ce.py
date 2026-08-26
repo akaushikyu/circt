@@ -10,6 +10,7 @@ The debug JSON is turned into a table grouped by source variable. Everything is 
 '//' comments, so the Compiler Explorer pane can use MLIR highlighting, followed by MLIR when asked.
 
 Usage: hls_est_ce.py <source.cpp|source.c> [options]
+  --emit=cgeist     only the front end: print cgeist's MLIR (every other '-' option goes to cgeist)
   --top=NAME        top function (default: 'top', else the last function cgeist emits)
   --show=WHAT       report (default) | input (cgeist MLIR) | output (MLIR after the pipeline) | all
   --explain         add the per-array reasons (port demand, RAM type, bank math)
@@ -105,9 +106,16 @@ def parse_args(argv):
         print(list_passes())
         sys.exit(0)
     opts = {"source": None, "top": None, "show": "report", "explain": False,
-            "cgeist": [], "hlsest": [], "passes": [], "opt_file": None}
+            "cgeist": [], "hlsest": [], "passes": [], "opt_file": None, "emit": "hls-est"}
+    cgeist_only = "--emit=cgeist" in argv
     for a in argv:
-        if a.startswith("--opt-pipeline-file="):
+        if a.startswith("--emit="):
+            opts["emit"] = a.split("=", 1)[1]
+        elif cgeist_only and a.startswith("--opt-pipeline-file="):
+            opts["opt_file"] = a.split("=", 1)[1]
+        elif cgeist_only and a.startswith("-"):
+            opts["cgeist"].append(a)
+        elif a.startswith("--opt-pipeline-file="):
             opts["opt_file"] = a.split("=", 1)[1]
         elif a.startswith("--top="):
             opts["top"] = a.split("=", 1)[1]
@@ -129,6 +137,8 @@ def parse_args(argv):
             sys.exit(f"hls-est-ce: unexpected argument {a!r}")
     if opts["source"] is None:
         sys.exit("hls-est-ce: no source file")
+    if opts["emit"] not in ("hls-est", "cgeist"):
+        sys.exit(f"hls-est-ce: --emit must be hls-est or cgeist, not {opts['emit']!r}")
     if opts["show"] not in ("report", "input", "output", "all"):
         sys.exit(f"hls-est-ce: --show must be report, input, output or all, not {opts['show']!r}")
     return opts
@@ -173,6 +183,7 @@ def compile_to_mlir(src, opts, work):
     cmd = [CGEIST, str(src), "--function=*", "-S", "--hls-annotate", "--raise-scf-to-affine",
            "--memref-fullrank", *shim_flags(), f"-resource-dir={RESOURCE_DIR}", *VITIS_DEFINES,
            *std, "-I", SHIM, "-I", str(src.parent), *opts["cgeist"], "-o", str(out)]
+    opts["cgeist_cmd"] = cmd
     p, secs = run(cmd, cwd=src.parent)
     text = out.read_text(errors="replace") if out.exists() else ""
     if p.returncode != 0 or not re.search(r"func\.func\s", text):
@@ -437,6 +448,15 @@ def main():
     with tempfile.TemporaryDirectory(prefix="hls-est-ce-", dir=SCRATCH) as tmp:
         work = Path(tmp)
         mlir, t_cgeist = compile_to_mlir(src, opts, work)
+        if opts["emit"] == "cgeist":
+            flags = [a for a in opts["cgeist_cmd"][1:] if a not in (str(src), str(mlir), "-o")]
+            text = mlir.read_text().rstrip()
+            if opts["opt_file"]:
+                Path(opts["opt_file"]).write_text(
+                    "// -----// IR Dump After cgeist (C/C++ -> affine MLIR) //----- //\n" + text + "\n")
+            print("\n".join([f"// cgeist {src.name} {' '.join(flags)}",
+                              f"// {t_cgeist:.1f} s", "", text]).replace(str(work) + "/", ""))
+            return
         top, top_plain = find_top(mlir, opts["top"])
         dbg, out_mlir, _, t_hlsest = estimate(mlir, top, opts, work)
         if dbg is None:

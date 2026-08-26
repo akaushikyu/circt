@@ -18,7 +18,14 @@ examples menu are the demo kernels; each starts with the Vitis HLS 2025.1 csynth
 for the same source (xc7z020, 10 ns, td=off). `--tmp-dir /tmp` matters: under WSL,
 Compiler Explorer otherwise writes every compile to the Windows temp folder.
 
-## Options (the options box)
+## Two compilers
+
+The compiler dropdown has **cgeist** (HLS C/C++ -> affine MLIR: the front end alone, with the
+harness's flags; its options box takes cgeist flags) and **hls-est** (the same cgeist step, then
+the hls-est pipeline and the BRAM report). Both run this driver; `compiler.cgeistlocal.options=--emit=cgeist`
+selects the first. Put them side by side with "Add new..." -> "Compiler" in the source pane.
+
+## Options (the options box of the hls-est compiler)
 
 | option | effect |
 |---|---|
