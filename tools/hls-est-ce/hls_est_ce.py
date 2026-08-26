@@ -16,9 +16,10 @@ Usage: hls_est_ce.py <source.cpp|source.c> [options]
   --list-passes     print the default pipeline with a one-line description of every pass
   --opt-pipeline-file=PATH  also write the MLIR after every pass (Compiler Explorer's Opt Pipeline view)
   -I<dir>, -D<m>    passed to cgeist
-  --<pass>[=opts]   hls-est passes: when any is given they REPLACE the default pipeline
-                    (--bram-analysis is appended with top= if missing), e.g.
-                    --canonicalize --affine-loop-normalize --memory-banking-bram --bram-analysis
+  --<pass>[=opts]   hls-est passes: when any is given they REPLACE the default pipeline and the
+                    output is the MLIR after them (like mlir-opt); include --bram-analysis to get
+                    the BRAM report above that MLIR, e.g.
+                    --affine-loop-normalize --memory-banking-bram --bram-analysis
   --config-set=..., --hls-config=..., --load-plugin=..., --mlir-...   passed to hls-est as options
 
 Paths come from the environment, with defaults for this machine:
@@ -217,25 +218,29 @@ def estimate(mlir, top, opts, work):
     passes = list(opts["passes"]) or list(PIPELINE)
     # The report comes from --bram-analysis: keep the user's own options on it and add top=.
     bram_given = [p for p in passes if p.split("=", 1)[0] == "--bram-analysis"]
+    # A custom pipeline without --bram-analysis behaves like mlir-opt: the IR after those passes.
+    ir_only = bool(opts["passes"]) and not bram_given
     passes = [p for p in passes if p.split("=", 1)[0] != "--bram-analysis"]
     for given in bram_given:
         for o in given.split("=", 1)[1].split() if "=" in given else []:
             if not o.startswith(("top=", "math-costs=")):
                 bram_opts.append(o)
-    passes.append("--bram-analysis=" + " ".join(bram_opts))
+    if not ir_only:
+        passes.append("--bram-analysis=" + " ".join(bram_opts))
     opts["pipeline_used"] = passes
     dump = ["--mlir-print-ir-after-all", "--mlir-disable-threading"] if opts["opt_file"] else []
+    debug_args = [] if ir_only else [f"--bram-debug-json={debug}"]
     cmd = [HLSEST, str(mlir), f"--symbol-privatize=exclude={top}", "--symbol-dce", *passes,
-           *opts["hlsest"], *dump, f"--bram-debug-json={debug}", "-o", str(out)]
+           *opts["hlsest"], *dump, *debug_args, "-o", str(out)]
     p, secs = run(cmd)
     if opts["opt_file"]:
         # cgeist's output first, as if it were a pass, then every hls-est pass.
         header = "// -----// IR Dump After cgeist (C/C++ -> affine MLIR) //----- //\n"
         Path(opts["opt_file"]).write_text(header + mlir.read_text() + "\n" + short_pass_headers(p.stderr))
-    if p.returncode != 0 or not debug.exists():
+    if p.returncode != 0 or not (ir_only or debug.exists()):
         sys.stderr.write(p.stderr or p.stdout or f"hls-est failed (exit {p.returncode})\n")
         sys.exit(1)
-    return json.loads(debug.read_text()), out, p.stdout, secs
+    return (None if ir_only else json.loads(debug.read_text())), out, p.stdout, secs
 
 
 def short_pass_headers(dump):
@@ -434,8 +439,20 @@ def main():
         mlir, t_cgeist = compile_to_mlir(src, opts, work)
         top, top_plain = find_top(mlir, opts["top"])
         dbg, out_mlir, _, t_hlsest = estimate(mlir, top, opts, work)
+        if dbg is None:
+            # mlir-opt style: the IR after the passes in the options box.
+            lines = [f"// hls-est {' '.join(opts['pipeline_used'])}",
+                     f"// source {src.name}  |  top {top_plain}  |  cgeist {t_cgeist:.1f} s, "
+                     f"hls-est {t_hlsest:.2f} s  |  add --bram-analysis for the BRAM report", ""]
+            if opts["show"] in ("input", "all"):
+                lines += ["// ---- cgeist output (affine MLIR) ----", mlir.read_text().rstrip(), ""]
+            lines.append(out_mlir.read_text().rstrip())
+            print("\n".join(lines).replace(str(work) + "/", ""))
+            return
         lines = report(dbg, top_plain, src.name, t_cgeist, t_hlsest, opts["explain"],
                        opts.get("pipeline_used"), bool(opts["passes"]))
+        if opts["passes"] and opts["show"] == "report":
+            opts["show"] = "output"       # a custom pipeline shows its IR under the report
         if opts["show"] in ("input", "all"):
             lines += ["", "// ---- cgeist output (affine MLIR) ----", mlir.read_text().rstrip()]
         if opts["show"] in ("output", "all"):

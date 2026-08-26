@@ -26,7 +26,7 @@ Compiler Explorer otherwise writes every compile to the Windows temp folder.
 | `--explain` | per-array reasons: port demand, RAM type, bank math, why an array is not a memory |
 | `--show=input` / `output` / `all` | append the cgeist MLIR, the MLIR after the pipeline, or both |
 | `--list-passes` | the default pipeline with a description of every pass |
-| `--<pass>` ... | hls-est passes: when any is given they **replace** the default pipeline (`--bram-analysis` is added with `top=` if missing), e.g. `--affine-loop-normalize --memory-banking-bram --convert-affine-to-loopschedule --bram-analysis` |
+| `--<pass>` ... | hls-est passes: when any is given they **replace** the default pipeline and the output is the MLIR after them, like `mlir-opt`; add `--bram-analysis` to the list to also get the BRAM report above the MLIR |
 | `-I...`, `-D...` | passed to cgeist |
 | `--config-set=`, `--hls-config=`, `--load-plugin=`, `--mlir-...` | passed to hls-est as options, e.g. `--config-set=tool.hls.options.pipeline_loops=2` |
 
