@@ -26,11 +26,11 @@ whetstone,1,1,1,0,0.0,16,16,16,0,0,0,0,1,0,0.0
 ALL,812,736,671,584,87.0,10791,16.1,0,65,76,603,19,20,48,89.9
 
 run_setting,value
-generated,2026-10-15 01:15
+generated,2026-10-15 10:38
 generator,tools/hls-est-validate/make_compare_csv.py
-hls-est run json,/home/peter/hls-est-work/coord/scratch/w9r5i/final.json
-hls-est git,unknown (HLS_EST_BIN=/home/peter/hls-est-work/coord/scratch/w9r5i/bin/hls-est.final)
-hls-est binary,/home/peter/hls-est-work/coord/scratch/w9r5i/bin/hls-est.final
+hls-est run json,/home/peter/hls-est-work/coord/scratch/w9r5fix/final.json
+hls-est git,unknown (HLS_EST_BIN=/home/peter/hls-est-work/coord/scratch/w9r5fix/bin/hls-est.fix)
+hls-est binary,/home/peter/hls-est-work/coord/scratch/w9r5fix/bin/hls-est.fix
 pipeline,--lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --infer-vitis-split-array=td=off --narrow-ram-widths --memory-banking-bram --convert-affine-to-loopschedule --bram-analysis
 shim,/home/peter/circt/tools/hls-est-validate/shim/exactclass
 cgeist,/mnt/d/HLS/Polygeist/build/bin/cgeist

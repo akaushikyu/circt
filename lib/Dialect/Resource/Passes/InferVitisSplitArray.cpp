@@ -866,24 +866,29 @@ struct AutomaticRules {
   ArrayRef<std::string> userStoragePragmas; ///< arrays the user decided
 };
 
-static AutomaticPartition decideAutomaticPartition(memref::AllocaOp alloca,
-                                                   const AutomaticRules &rules) {
-  int64_t completeThreshold = rules.completeThreshold;
-  AutomaticPartition decision;
-  MemRefType ty = alloca.getType();
+/// Whether rules (a)-(c) may look at an array `def` of type `ty` at all: a
+/// static array of words the user has not given a storage pragma.
+static bool isAutomaticCandidate(Operation *def, MemRefType ty,
+                                 const AutomaticRules &rules) {
   if (!ty.hasStaticShape())
-    return decision;
+    return false;
   Type elt = ty.getElementType();
   if (!elt.isIntOrFloat() && !isa<IndexType>(elt))
-    return decision; // pointer variables, structs: not an array of words
-  Operation *def = alloca.getOperation();
+    return false; // pointer variables, structs: not an array of words
   for (StringRef pragma : rules.userStoragePragmas)
     if (def->hasAttr(pragma))
-      return decision; // the user decided
+      return false; // the user decided
+  return true;
+}
 
-  // (a) Small arrays, whatever their accesses (also those passed on to a
-  // call): complete_threshold counts elements, not bits (int[4] fires,
-  // char[5] does not; partition_chk.md R5).
+/// Rule (a), small arrays, whatever their accesses (also those passed on to a
+/// call): complete_threshold counts elements, not bits (int[4] fires, char[5]
+/// does not; partition_chk.md R5). It holds for globals and function
+/// statics as for locals (VITIS_NOTES N7 (a), kernel w9rv_r1_glob4).
+static AutomaticPartition decideSmallArray(MemRefType ty,
+                                           const AutomaticRules &rules) {
+  AutomaticPartition decision;
+  int64_t completeThreshold = rules.completeThreshold;
   int64_t elements = ty.getNumElements();
   if (elements > 0 && elements <= completeThreshold) {
     decision.kind = AutomaticPartition::Registers;
@@ -893,8 +898,21 @@ static AutomaticPartition decideAutomaticPartition(memref::AllocaOp alloca,
                       ": completely partitioned into registers (Vitis [HLS "
                       "214-421] 'Automatically partitioning small array ... "
                       "completely based on array size')";
-    return decision;
   }
+  return decision;
+}
+
+static AutomaticPartition decideAutomaticPartition(memref::AllocaOp alloca,
+                                                   const AutomaticRules &rules) {
+  AutomaticPartition decision;
+  MemRefType ty = alloca.getType();
+  if (!isAutomaticCandidate(alloca.getOperation(), ty, rules))
+    return decision;
+
+  // (a) Small arrays.
+  decision = decideSmallArray(ty, rules);
+  if (decision.kind != AutomaticPartition::None)
+    return decision;
 
   unsigned rank = ty.getRank();
   ConstantIndexInfo info = analyzeConstantIndices(alloca.getResult(), rank);
@@ -950,7 +968,7 @@ static AutomaticPartition decideAutomaticPartition(memref::AllocaOp alloca,
 //===----------------------------------------------------------------------===//
 
 struct InferVitisSplitArray
-    : public PassWrapper<InferVitisSplitArray, OperationPass<func::FuncOp>> {
+    : public PassWrapper<InferVitisSplitArray, OperationPass<ModuleOp>> {
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(InferVitisSplitArray)
 
   InferVitisSplitArray() = default;
@@ -1131,7 +1149,45 @@ struct InferVitisSplitArray
               << "' dimension " << part.dim + 1
               << " completely based on constant index";
     });
+    applySmallGlobals(func, rules, decided);
     return decided;
+  }
+
+  /// Rule (a) on the globals and function statics `func` reads or writes
+  /// (VITIS_NOTES N7 (a): Vitis logs [HLS 214-421] for them as for locals,
+  /// kernel w9rv_r1_glob4). Rules (b) and (c) look at every access of an
+  /// array, which for a global spans functions: not applied (unconfirmed).
+  /// The pass is a module pass, so writing the global from here is safe.
+  void applySmallGlobals(func::FuncOp func, const AutomaticRules &rules,
+                         DenseSet<Value> &decided) {
+    Builder builder(func.getContext());
+    func.walk([&](memref::GetGlobalOp get) {
+      auto global = SymbolTable::lookupNearestSymbolFrom<memref::GlobalOp>(
+          get, get.getNameAttr());
+      if (!global)
+        return;
+      Operation *def = global.getOperation();
+      if (def->hasAttr(kRegistersAttrName)) {
+        decided.insert(get.getResult());
+        return;
+      }
+      if (!isAutomaticCandidate(def, global.getType(), rules))
+        return;
+      AutomaticPartition decision = decideSmallArray(global.getType(), rules);
+      if (decision.kind != AutomaticPartition::Registers)
+        return;
+      decided.insert(get.getResult());
+      def->setAttr(kRegistersAttrName, builder.getUnitAttr());
+      def->setAttr(kRegistersReasonAttrName,
+                   builder.getStringAttr(decision.reason));
+      ++runStats.registers;
+      LLVM_DEBUG(llvm::dbgs() << "global '" << global.getSymName()
+                              << "': registers (" << decision.reason << ")\n");
+      if (emitRemarks)
+        mlir::emitRemark(global.getLoc())
+            << "global '" << global.getSymName()
+            << "' -> registers: " << decision.reason;
+    });
   }
 
   /// Target II of `loop` if it is a pipelined region.
@@ -1221,10 +1277,19 @@ struct InferVitisSplitArray
   /// statistics).
   circt::hlsest::PartitionStatistics runStats;
 
+  // A module pass: the policy runs on one function at a time, and rule (a)
+  // marks the globals a function uses (applySmallGlobals), which a function
+  // pass may not write.
   void runOnOperation() override {
-    func::FuncOp func = getOperation();
-    if (func.isExternal())
-      return;
+    for (func::FuncOp func : getOperation().getOps<func::FuncOp>()) {
+      if (func.isExternal())
+        continue;
+      if (failed(runOnFunction(func)))
+        return signalPassFailure();
+    }
+  }
+
+  LogicalResult runOnFunction(func::FuncOp func) {
     resolveConfiguration();
     circt::hlsest::PartitionOptions o;
     o.targetII = targetIIValue;
@@ -1245,7 +1310,7 @@ struct InferVitisSplitArray
       func.emitError("infer-vitis-split-array: td must be 'auto' or 'off', "
                      "got '")
           << throughputDrivenValue << "'";
-      return signalPassFailure();
+      return failure();
     }
     // The decision is the configuration's PartitionPolicy (builtin vitis-td:
     // runInference below).
@@ -1257,11 +1322,11 @@ struct InferVitisSplitArray
     if (!policy) {
       InFlightDiagnostic d = func.emitError("infer-vitis-split-array: ");
       llvm::interleave(diag.errors, d, "; ");
-      return signalPassFailure();
+      return failure();
     }
     circt::hlsest::PartitionStatistics stats;
     if (failed(policy->run(func, o, stats)))
-      return signalPassFailure();
+      return failure();
     numRegions += stats.regions;
     numPartitioned += stats.partitioned;
     numUnresolved += stats.unresolved;
@@ -1269,6 +1334,7 @@ struct InferVitisSplitArray
     numConstantDims += stats.constantDims;
     numMultiConstantDims += stats.multiConstantDims;
     numUnbankable += stats.unbankable;
+    return success();
   }
 
   /// Vitis' automatic partitions and, with td=auto, the port-pressure

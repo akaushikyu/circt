@@ -197,7 +197,7 @@ class_ece8893_2022_fall,Dehazing-denoising__source_code__src__script,,,,,False,,
 class_ece8893_2022_fall,Explainable-ML__source_code,39,55,16,16,False,over>15%,compared,ok,ok,conv_out_buf: hls-est 24 vs Vitis 8
 class_ece8893_2022_fall,FLAT-acceleration__source_code__HLS,262,,,,False,,hls-est missing,ok,cgeist error: systolic_array.cpp:13:16: error: call to 'exp' is ambiguous,local_out: hls-est None vs Vitis 32; attention_out_ping: hls-est None vs Vitis 16; attention_out_pong: hls-est None vs Vitis 16
 class_ece8893_2022_fall,FLAT-acceleration__source_code__HLS__test_systolic_array,,91,,,False,,vitis missing,vitis timeout,ok,local_out: hls-est 83 vs Vitis None; logit: hls-est 8 vs Vitis None
-class_ece8893_2022_fall,GNN-virtual-node__source_code__gin_vn_base_hls,,1150,,,False,,vitis missing,vitis failed,ok,mlp_1_weights: hls-est 200 vs Vitis None; mlp_2_weights: hls-est 200 vs Vitis None; virtualnode_mlp_1_weights: hls-est 200 vs Vitis None
+class_ece8893_2022_fall,GNN-virtual-node__source_code__gin_vn_base_hls,,1149,,,False,,vitis missing,vitis failed,ok,mlp_1_weights: hls-est 200 vs Vitis None; mlp_2_weights: hls-est 200 vs Vitis None; virtualnode_mlp_1_weights: hls-est 200 vs Vitis None
 class_ece8893_2022_fall,GNN-virtual-node__source_code__gin_vn_bitstream,,,,,False,,vitis missing,vitis failed,cgeist error: ./dcl.hpp:6:10: fatal error: '/tools/software/xilinx/Vitis_HLS/2021.1/include/gmp.h' file not found,
 class_ece8893_2022_fall,GNN-virtual-node__source_code__gin_vn_pipelined_hls,,,,,False,,vitis missing,vitis failed,cgeist error: ./dcl.hpp:6:10: fatal error: '/tools/software/xilinx/Vitis_HLS/2021.1/include/gmp.h' file not found,
 class_ece8893_2022_fall,Ray-tracing__source_code__HLS,440,,,,False,,hls-est missing,ok,cgeist error: ./fxp_sqrt.h:101:25: error: no viable overloaded '=',P1: hls-est None vs Vitis 48; P2: hls-est None vs Vitis 48; P3: hls-est None vs Vitis 48
@@ -390,7 +390,7 @@ gnnbuilder,designs__fpga_pna_qm9,13218,13012,-206,206,False,under,compared,ok,ok
 gnnbuilder,designs__fpga_sage_qm9,10346,10465,119,119,False,over<=15%,compared,ok,ok,_Z16compute_gnn_headii@static@_ZZ16compute_gnn_headiiE10conv_0_out: hls-est 256 vs Vitis None; _Z16compute_gnn_headii@static@_ZZ16compute_gnn_headiiE10conv_1_out: hls-est 256 vs Vitis None; _Z16compute_gnn_headii@static@_ZZ16compute_gnn_headiiE10conv_2_out: hls-est 256 vs Vitis None
 hlsyn-vitis,vivado-target__sources__2mm,,88,,,False,,vitis missing,vitis timeout,ok,A_buf: hls-est 32 vs Vitis None; B_buf: hls-est 16 vs Vitis None; C_buf: hls-est 16 vs Vitis None
 hlsyn-vitis,vivado-target__sources__3mm,,152,,,False,,vitis missing,vitis timeout,ok,A_buf: hls-est 32 vs Vitis None; C_buf: hls-est 32 vs Vitis None; D_buf: hls-est 32 vs Vitis None
-hlsyn-vitis,vivado-target__sources__adi,,,,,False,,vitis missing,vitis timeout,hls-est timeout 120s,
+hlsyn-vitis,vivado-target__sources__adi,,64,,,False,,vitis missing,vitis timeout,ok,p_buf: hls-est 16 vs Vitis None; q_buf: hls-est 16 vs Vitis None; u_buf: hls-est 16 vs Vitis None
 hlsyn-vitis,vivado-target__sources__aes,6,1,-5,5,False,under,compared,ok,ok,sbox: hls-est None vs Vitis 5; _ZL4sbox: hls-est 1 vs Vitis None
 hlsyn-vitis,vivado-target__sources__atax,1036,1034,-2,2,False,under,compared,ok,ok,tmp_buf: hls-est 2 vs Vitis 4
 hlsyn-vitis,vivado-target__sources__atax-medium,16396,16394,-2,2,False,under,compared,ok,ok,tmp_buf: hls-est 2 vs Vitis 4

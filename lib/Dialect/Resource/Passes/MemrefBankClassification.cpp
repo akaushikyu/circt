@@ -12,6 +12,7 @@
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/BuiltinTypes.h"
+#include "mlir/IR/SymbolTable.h"
 #include "mlir/Interfaces/CallInterfaces.h"
 #include "mlir/Interfaces/LoopLikeInterface.h"
 #include "llvm/ADT/MapVector.h"
@@ -414,6 +415,24 @@ void BRAMClassification::enumerateBanks(Operation *root) {
     if (prof.registers)
       prof.mode = StorageMode::Registers;
     banks.try_emplace(bank, prof);
+  });
+
+  root->walk([&](memref::GetGlobalOp get) {
+    auto global = SymbolTable::lookupNearestSymbolFrom<memref::GlobalOp>(
+        get, get.getNameAttr());
+    if (!global || !global->hasAttr(kRegistersAttrName))
+      return;
+    MemRefType memTy = get.getType();
+    Type elt = memTy.getElementType();
+    if (!memTy.hasStaticShape() || !elt.isIntOrFloat())
+      return;
+    BankProfile prof;
+    prof.memref = get.getResult();
+    prof.width = elt.getIntOrFloatBitWidth();
+    prof.depth = static_cast<unsigned>(memTy.getNumElements());
+    prof.registers = true;
+    prof.mode = StorageMode::Registers;
+    banks.try_emplace(get.getResult(), prof);
   });
 }
 

@@ -151,32 +151,44 @@ bool usesOperand(AffineExpr entryValue, AffineMap map, unsigned innerIndex) {
   return entryValue.isFunctionOfSymbol(innerIndex - map.getNumDims());
 }
 
+/// Whether every use of `ptr` is either the address of an `llvm.store` or
+/// the base of an `llvm.getelementptr` whose result satisfies the same
+/// condition; `any` is set when at least one store is reached.
+static bool onlyStoredThrough(Value ptr, bool &any) {
+  for (OpOperand &use : ptr.getUses()) {
+    Operation *user = use.getOwner();
+    StringRef name = user->getName().getStringRef();
+    if (name == "llvm.getelementptr") {
+      if (use.getOperandNumber() != 0 || user->getNumResults() != 1 ||
+          !onlyStoredThrough(user->getResult(0), any))
+        return false;
+      continue;
+    }
+
+    if (name != "llvm.store" || use.getOperandNumber() != 1)
+      return false;
+    any = true;
+  }
+  return true;
+}
+
 /// Whether `op` is the destination side of cgeist's lowering of `memcpy`
 /// into an array: `polygeist.memref2pointer` whose pointer is only offset by
-/// `llvm.getelementptr` and stored through with `llvm.store` (the byte-copy
-/// loop). Vitis treats such a copy-in as ordinary stores of values it knows
-/// nothing about (VITIS_NOTES N41, kernel w9p5_idx_loc256): the array keeps
-/// its own address, and its width is what its loads demand.
+/// (chains of) `llvm.getelementptr` and stored through with `llvm.store`
+/// (the byte-copy loop; `memcpy(&a[k], ...)` adds a constant-offset GEP in
+/// front of the loop's GEP). Vitis treats such a copy-in as ordinary stores
+/// of values it knows nothing about (VITIS_NOTES N41, kernels
+/// w9p5_idx_loc256 and w9rv_n41_mc): the array keeps its own address, and
+/// its width is what its loads demand.
 static bool isMemcpyDestination(Operation *op) {
   if (op->getName().getStringRef() != "polygeist.memref2pointer" ||
       op->getNumResults() != 1)
     return false;
   bool any = false;
-  for (Operation *gep : op->getResult(0).getUsers()) {
-    if (gep->getName().getStringRef() != "llvm.getelementptr" ||
-        gep->getNumOperands() == 0 || gep->getOperand(0) != op->getResult(0) ||
-        gep->getNumResults() != 1)
+  for (OpOperand &use : op->getResult(0).getUses())
+    if (use.getOwner()->getName().getStringRef() != "llvm.getelementptr")
       return false;
-    for (OpOperand &use : gep->getResult(0).getUses()) {
-      Operation *st = use.getOwner();
-
-      if (st->getName().getStringRef() != "llvm.store" ||
-          use.getOperandNumber() != 1)
-        return false;
-      any = true;
-    }
-  }
-  return any;
+  return onlyStoredThrough(op->getResult(0), any) && any;
 }
 
 struct MemClass {
@@ -1496,6 +1508,13 @@ std::optional<unsigned> Narrowing::subscriptBits(Value memref,
       stride *= static_cast<uint64_t>(type.getDimSize(dimensionIndex));
   }
   unsigned addrBits = llvm::Log2_64_Ceil(words);
+
+  bool outermost = true;
+  for (unsigned dimensionIndex = 0; dimensionIndex < dim; ++dimensionIndex)
+    if (!complete[dimensionIndex])
+      outermost = false;
+  if (outermost)
+    return llvm::Log2_64_Ceil(static_cast<uint64_t>(type.getDimSize(dim)));
   if (llvm::isPowerOf2_64(stride))
     return addrBits - std::min(addrBits, llvm::Log2_64(stride));
   return addrBits;

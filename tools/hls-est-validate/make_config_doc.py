@@ -84,7 +84,8 @@ were measured on.
 """
 
 
-DATE_RE = re.compile(r"\) on (\d{4}-\d{2}-\d{2})\. Do not edit")
+# The binary name and the date in the header line, which --check ignores.
+HEADER_RE = re.compile(r"`hls-est --list-plugins` \(([^)]*)\) on (\d{4}-\d{2}-\d{2})\. Do not edit")
 
 
 def run(binary, *args):
@@ -152,10 +153,11 @@ def parse_plugins(text):
     return interfaces
 
 
-def generate(binary, date):
+def generate(binary, date, shown_name=None):
     schema = json.loads(run(binary, "--dump-config-schema"))
     plugins = parse_plugins(run(binary, "--list-plugins"))
-    out = [INTRO.replace("{binary}", Path(binary).name).replace("{date}", date)]
+    name = shown_name if shown_name is not None else Path(binary).name
+    out = [INTRO.replace("{binary}", name).replace("{date}", date)]
     out.append(f"Schema version {schema['version']}; {len(schema['keys'])} keys.\n")
     out.append("## Contents\n")
     for sec, title in SECTIONS:
@@ -199,10 +201,12 @@ def main():
     a = ap.parse_args()
     out = Path(a.out)
     if a.check:
-        # The generation date of the page on disk is not a difference.
+        # The generation date and the binary's file name in the page on disk
+        # are not a difference.
         old = out.read_text() if out.exists() else ""
-        m = DATE_RE.search(old)
-        text = generate(a.hls_est, m.group(1) if m else "")
+        m = HEADER_RE.search(old)
+        text = (generate(a.hls_est, m.group(2), m.group(1)) if m
+                else generate(a.hls_est, ""))
         if old != text:
             print(f"{out} is stale: re-run {Path(__file__).name}", file=sys.stderr)
             return 1

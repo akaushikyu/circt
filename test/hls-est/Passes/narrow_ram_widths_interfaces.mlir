@@ -104,3 +104,59 @@ func.func @memcpy_out(%nl: memref<4096xi32>, %pos: memref<256xf64>, %out: memref
   }
   return
 }
+
+// A memcpy into an offset destination, `memcpy(&j[1024], in, 4096)`: cgeist
+// puts a constant-offset GEP in front of the byte loop's GEP. It is still a
+// copy-in, not an escape (w9rv_n41_mc, Vitis j 2048x10).
+// CHECK-LABEL: func.func @memcpy_offset
+// CHECK: memref.alloca() {hls.narrow_bits = 10 : i32, hls.narrow_reason = "10 of 32 bits: stored values: full range (filled by a memcpy copy-in){{.*}}", polygeist.varname = "j"}
+func.func @memcpy_offset(%in: memref<2048xi32>, %tbl: memref<1000xi32>, %out: memref<2048xi32>) {
+  %j = memref.alloca() {polygeist.varname = "j"} : memref<2048xi32>
+  %d = "polygeist.memref2pointer"(%j) : (memref<2048xi32>) -> !llvm.ptr
+  %d1 = llvm.getelementptr %d[4096] : (!llvm.ptr) -> !llvm.ptr, i8
+  %s = "polygeist.memref2pointer"(%in) : (memref<2048xi32>) -> !llvm.ptr
+  affine.for %b = 0 to 4096 {
+    %i = arith.index_cast %b : index to i32
+    %p = llvm.getelementptr %s[%i] : (!llvm.ptr, i32) -> !llvm.ptr, i8
+    %v = llvm.load %p : !llvm.ptr -> i8
+    %q = llvm.getelementptr %d1[%i] : (!llvm.ptr, i32) -> !llvm.ptr, i8
+    llvm.store %v, %q : i8, !llvm.ptr
+  }
+  affine.for %t = 0 to 1024 {
+    %v = affine.load %in[%t] : memref<2048xi32>
+    affine.store %v, %j[%t] : memref<2048xi32>
+  }
+  affine.for %t = 0 to 2048 {
+    %0 = affine.load %j[%t] : memref<2048xi32>
+    %1 = arith.index_cast %0 : i32 to index
+    %2 = memref.load %tbl[%1] : memref<1000xi32>
+    affine.store %2, %out[%t] : memref<2048xi32>
+  }
+  return
+}
+
+// The row index of a 2-D array whose rows are not a power of two long
+// demands only the row bits: `A[i1[t]][i4[t]]` with A[100][10] gives i1 7
+// bits (ceil(log2 100)), i4 the 10 of the linear address (w9rv_n41_2d /
+// w9rv_n41_2dloc, Vitis i1 2048x7, i4 2048x10).
+// CHECK-LABEL: func.func @row_index_2d
+// CHECK: memref.alloca() {hls.narrow_bits = 7 : i32, {{.*}}polygeist.varname = "i1"}
+// CHECK: memref.alloca() {hls.narrow_bits = 10 : i32, {{.*}}polygeist.varname = "i4"}
+func.func @row_index_2d(%a: memref<100x10xi32>, %in: memref<2048xi32>, %out: memref<2048xi32>) {
+  %i1 = memref.alloca() {polygeist.varname = "i1"} : memref<2048xi32>
+  %i4 = memref.alloca() {polygeist.varname = "i4"} : memref<2048xi32>
+  affine.for %t = 0 to 2048 {
+    %v = affine.load %in[%t] : memref<2048xi32>
+    affine.store %v, %i1[%t] : memref<2048xi32>
+    affine.store %v, %i4[%t] : memref<2048xi32>
+  }
+  affine.for %t = 0 to 2048 {
+    %r = affine.load %i1[%t] : memref<2048xi32>
+    %c = affine.load %i4[%t] : memref<2048xi32>
+    %ri = arith.index_cast %r : i32 to index
+    %ci = arith.index_cast %c : i32 to index
+    %x = memref.load %a[%ri, %ci] : memref<100x10xi32>
+    affine.store %x, %out[%t] : memref<2048xi32>
+  }
+  return
+}
