@@ -233,7 +233,7 @@ def compile_feature(e, shim):
         if out.exists():
             out.unlink()
         try:
-            p = subprocess.run(cmd, cwd=str(test.parent), capture_output=True, text=True,
+            p = subprocess.run(C.mem_limited(cmd), cwd=str(test.parent), capture_output=True, text=True,
                                errors="replace", timeout=RH.CGEIST_TIMEOUT)
         except subprocess.TimeoutExpired:
             status = f"cgeist timeout {RH.CGEIST_TIMEOUT}s"
@@ -314,7 +314,8 @@ def run_hlsest(path, top, timeout):
     cmd = [C.HLS_EST, str(path), *args, "-o", "/dev/null"]
     t0 = time.time()
     try:
-        p = subprocess.run(cmd, capture_output=True, text=True, errors="replace", timeout=timeout)
+        p = subprocess.run(C.mem_limited(cmd), capture_output=True, text=True, errors="replace",
+                           timeout=timeout)
     except subprocess.TimeoutExpired:
         return f"hls-est timeout {timeout}s", "", time.time() - t0
     el = time.time() - t0
@@ -361,8 +362,8 @@ def recheck_existing(path, timeout):
     if not run:
         return path, "no RUN line"
     args = [a.replace(MATH_COSTS_SUBST, str(RH.DEFAULT_MATH_COSTS)) for a in shlex.split(run.group(1))]
-    p = subprocess.run([C.HLS_EST, str(path), *args, "-o", "/dev/null"], capture_output=True, text=True,
-                       errors="replace", timeout=timeout)
+    p = subprocess.run(C.mem_limited([C.HLS_EST, str(path), *args, "-o", "/dev/null"]),
+                       capture_output=True, text=True, errors="replace", timeout=timeout)
     if p.returncode != 0:
         return path, f"hls-est exit {p.returncode}"
     body = text[:text.index("\n// CHECK")] if "\n// CHECK" in text else text.rstrip("\n")

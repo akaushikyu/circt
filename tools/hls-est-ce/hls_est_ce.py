@@ -229,13 +229,20 @@ def list_passes():
     return "\n".join(lines)
 
 
+# Memory cap per cgeist / hls-est run, as in the harness (common.mem_limited): a runaway compile
+# fails alone instead of starving WSL. HLSEST_CE_MEM_LIMIT_GB=0 turns it off.
+MEM_LIMIT_GB = float(os.environ.get("HLSEST_CE_MEM_LIMIT_GB", "12"))
+
+
 def run(cmd, cwd=None):
     t0 = time.time()
+    if MEM_LIMIT_GB > 0:
+        cmd = ["prlimit", f"--data={int(MEM_LIMIT_GB * 2**30)}", "--", *cmd]
     try:
         p = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, errors="replace",
                            timeout=TIMEOUT_S, stdin=subprocess.DEVNULL)
     except subprocess.TimeoutExpired:
-        sys.exit(f"hls-est-ce: {Path(cmd[0]).name} timed out after {TIMEOUT_S} s")
+        sys.exit(f"hls-est-ce: {Path(cmd[-1] if cmd[0] == 'prlimit' else cmd[0]).name} timed out after {TIMEOUT_S} s")
     return p, time.time() - t0
 
 

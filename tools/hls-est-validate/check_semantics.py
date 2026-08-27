@@ -1385,8 +1385,10 @@ def ref_thunk_c(top_fn, plan):
 def run(cmd, cwd=None, timeout=600, env=None):
     t0 = time.time()
     try:
-        p = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, errors="replace", timeout=timeout,
-                           env=env)
+        # The compile steps get the memory cap; the ASan executables below cannot (their shadow
+        # memory is a multi-terabyte private mapping that RLIMIT_DATA counts).
+        p = subprocess.run(C.mem_limited(cmd), cwd=cwd, capture_output=True, text=True, errors="replace",
+                           timeout=timeout, env=env)
         return p.returncode, p.stdout, p.stderr, time.time() - t0
     except subprocess.TimeoutExpired:
         return "timeout", "", "", time.time() - t0

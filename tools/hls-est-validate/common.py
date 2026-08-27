@@ -82,6 +82,30 @@ DEFAULT_SHIM = "exactclass"
 HLS_EST_DEFAULT = str(CIRCT / "build/clion/bin/hls-est")
 HLS_EST = os.environ.get("HLS_EST_BIN") or HLS_EST_DEFAULT
 
+# Per-process memory cap for every cgeist / hls-est / test-executable run the harness starts.
+# On 2026-10-15 one hls-est run of a pipeline ablation grew to 24 GB while 8 others and a lit run
+# were going, and the kernel's global OOM killer fired inside WSL (journal, 13:12). With the cap a
+# runaway run fails alone (std::bad_alloc -> "out of memory" status) instead of starving WSL.
+# RLIMIT_DATA counts heap and private anonymous mappings; normal runs stay far below it (the
+# largest catalogue design, gnnbuilder fpga_pna_qm9, peaks at about 100 MB).
+# HLS_EST_MEM_LIMIT_GB=0 turns it off.
+MEM_LIMIT_GB = float(os.environ.get("HLS_EST_MEM_LIMIT_GB", "12"))
+OUT_OF_MEMORY_MARKERS = ("std::bad_alloc", "out of memory", "Cannot allocate memory",
+                         "pthread_create failed: Resource temporarily unavailable")
+
+
+def mem_limited(cmd):
+    """cmd under `prlimit --data` (thread-safe, unlike a preexec_fn in the harness's thread pool)."""
+    if MEM_LIMIT_GB <= 0:
+        return list(cmd)
+    return ["prlimit", f"--data={int(MEM_LIMIT_GB * 2**30)}", "--", *cmd]
+
+
+def out_of_memory(stderr):
+    """True when a run stopped because it hit the memory cap."""
+    return any(m in (stderr or "") for m in OUT_OF_MEMORY_MARKERS)
+
+
 # The canonical hls-est pipeline (CLAUDE.md).  Experiments vary this string.
 # --infer-vitis-split-array=td=auto is not in it (MEMOS.md M1, decision #1 of 2026-10-10): its
 # port-pressure partitioning is the td=auto behaviour and the ground truth is td=off; the

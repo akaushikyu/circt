@@ -256,8 +256,8 @@ def run_cgeist(d, shim, force=False):
     for func in ("*", d["top"]):
         cmd = cgeist_cmd(d, shim, out, func)
         try:
-            p = subprocess.run(cmd, cwd=d["dir"], capture_output=True, text=True, errors="replace",
-                               timeout=CGEIST_TIMEOUT)
+            p = subprocess.run(C.mem_limited(cmd), cwd=d["dir"], capture_output=True, text=True,
+                               errors="replace", timeout=CGEIST_TIMEOUT)
         except subprocess.TimeoutExpired:
             status, note = "cgeist timeout", f"{CGEIST_TIMEOUT}s"
             break
@@ -271,7 +271,9 @@ def run_cgeist(d, shim, force=False):
         if p.returncode == 0:
             status, note = "cgeist error: empty module (no functions emitted)", f"--function={func}"
             continue
-        if p.returncode < 0 or "Stack dump" in p.stderr or "PLEASE submit a bug report" in p.stderr:
+        if p.returncode != 0 and C.out_of_memory(p.stderr):
+            status = f"cgeist out of memory (> {C.MEM_LIMIT_GB:g} GB)"
+        elif p.returncode < 0 or "Stack dump" in p.stderr or "PLEASE submit a bug report" in p.stderr:
             status = "cgeist crash"
         else:
             errs = [l for l in p.stderr.splitlines() if "error:" in l]
@@ -488,7 +490,8 @@ def run_hlsest(mlir, top_fn, pipeline, timeout, log_prefix, privatize=True, debu
     cmd += ["-o", "/dev/null"]
     t0 = time.time()
     try:
-        p = subprocess.run(cmd, capture_output=True, text=True, errors="replace", timeout=timeout)
+        p = subprocess.run(C.mem_limited(cmd), capture_output=True, text=True, errors="replace",
+                           timeout=timeout)
     except subprocess.TimeoutExpired:
         return {"status": f"hls-est timeout {timeout}s", "elapsed_s": timeout, "cmd": shlex.join(cmd)}
     el = time.time() - t0
@@ -502,7 +505,9 @@ def run_hlsest(mlir, top_fn, pipeline, timeout, log_prefix, privatize=True, debu
     full = shlex.join(a for a in cmd[2:] if a not in ("-o", "/dev/null"))
     r = {"elapsed_s": round(el, 2), "cmd": shlex.join(cmd), "pipeline_full": full, "total_bram": total,
          "memrefs": mems, "exit": p.returncode, "math_costs": applied}
-    if p.returncode < 0 or p.returncode > 1 and ("Stack dump" in p.stderr or "Aborted" in p.stderr or "Assertion" in p.stderr):
+    if p.returncode != 0 and C.out_of_memory(p.stderr):
+        r["status"] = f"hls-est out of memory (> {C.MEM_LIMIT_GB:g} GB)"
+    elif p.returncode < 0 or p.returncode > 1 and ("Stack dump" in p.stderr or "Aborted" in p.stderr or "Assertion" in p.stderr):
         r["status"] = "hls-est error: crash"
         a = re.search(r"Assertion `([^']*)' failed", p.stderr)
         r["note"] = (a.group(0) if a else p.stderr.strip().splitlines()[-1] if p.stderr.strip() else "")[:200]

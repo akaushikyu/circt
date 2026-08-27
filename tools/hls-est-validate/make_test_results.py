@@ -64,7 +64,7 @@ def predict(test_file, hls_est, default_timeout):
     cmd, timeout, pin = run_command(test_file, hls_est)
     t0 = time.time()
     try:
-        p = subprocess.run(cmd, capture_output=True, text=True, errors="replace",
+        p = subprocess.run(C.mem_limited(cmd), capture_output=True, text=True, errors="replace",
                            timeout=timeout or default_timeout)
     except subprocess.TimeoutExpired:
         return {"status": f"timeout {timeout or default_timeout}s", "pin": pin, "s": time.time() - t0}
