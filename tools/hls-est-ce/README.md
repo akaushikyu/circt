@@ -7,6 +7,10 @@ runs hls-est (cgeist with the harness's front-end flags, then the default pipeli
 
 ## Run it
 
+It runs as the systemd user service `hls-est-ce` (~/.config/systemd/user/hls-est-ce.service,
+enabled, lingering on), so it starts with WSL: `systemctl --user status|restart hls-est-ce`;
+its log is `~/hls-est-demo/ce.log`. By hand:
+
 ```bash
 cd /mnt/d/claude-compiler-explore/compiler-explore
 NODE_ENV=DEV node --no-warnings=ExperimentalWarning --import=tsx app.ts \
