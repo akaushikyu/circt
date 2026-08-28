@@ -1562,6 +1562,24 @@ def ref_flags(kind, flags, rec, vitis_inc):
         kept.append(flags[k])
         k += 1
     flags = kept
+    # A record compiled with --shim real (the synthesis tree C.VITIS_AUTOPILOT_WSL, its forced
+    # -include etc/autopilot_ssdm_op.h and -D__DSP48E1__, all from shim/real/cgeist_flags): the
+    # C simulation reads Vitis/include instead, with none of these.
+    autopilot = os.path.normpath(C.VITIS_AUTOPILOT_WSL)
+    kept, k = [], 0
+    while k < len(flags):
+        x = flags[k]
+        if x in ("-I", "-include") and k + 1 < len(flags) and \
+                os.path.normpath(flags[k + 1]).startswith(autopilot):
+            k += 2
+            continue
+        if (x.startswith("-I") and os.path.normpath(x[2:]).startswith(autopilot)) or x == "-D__DSP48E1__" or \
+                (x == "-D" and k + 1 < len(flags) and flags[k + 1] == "__DSP48E1__"):
+            k += 2 if x == "-D" else 1
+            continue
+        kept.append(x)
+        k += 1
+    flags = kept
     shim_dirs = {os.path.normpath(p) for p in (rec.get("shim"), C.SHIM_INCLUDE) if p}
     shim_root = os.path.normpath(str(Path(C.__file__).resolve().parent / "shim"))
     out, k, placed = [], 0, False

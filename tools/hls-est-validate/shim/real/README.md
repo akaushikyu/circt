@@ -22,8 +22,10 @@ like with `shim/exactclass`. The language standard (C++: gnu++14, C: gnu99) come
 default (gnu++17 / gnu17), which already accepts the headers' `typeof`.
 
 Requirements: the Vitis install at `/mnt/a/Vitis/2025.1` and a cgeist built from Polygeist
-branch `w11-real-headers` against the patched clang of that branch (`CGEIST_BIN`). The
-installed cgeist does not know `--xlx-prelude` / `-Xclang` and fails on the first flag.
+branch `w11-integrate` (W11 merged onto `hls-est-vitis-match`) against the patched clang
+(llvm-project branch `w11-xlx-bitwidth`; see Polygeist `patches/llvm-project/README.md`),
+given as `CGEIST_BIN`. run_hlsest.py stops before the first design when the cgeist lacks
+`--xlx-headers` (the installed one does) or the Vitis install is missing.
 
 `ap_int` / `ap_fixed` constructed from a string literal (`_ssdm_string2bits`, which the
 closed Vitis front end folds; the fixed-point math headers' lookup tables) are folded by
@@ -32,7 +34,10 @@ conversion), so those tables are dense ROM globals.
 
 Not covered (separate modelling tracks): `hls::stream` (`__fpga_fifo_*`), `hls::task`,
 `ap_float`, the float / double `hls_math` functions (closed bitcode), the DSP builtins,
-the FFT IP.
+the FFT IP. Known gap (OPEN_ISSUES O63): a global of an ap type initialised from a number
+(`static const ap_uint<10> X = -1;`, a `const ap_fixed<..> lut[] = {...}` table) has no
+constant initialiser, because the real `ap_uint` / `ap_fixed` constructors are not
+`constexpr`; cgeist then emits the global `uninitialized`.
 
 `autopilot.sha256` lists the sha256 of the Vitis headers this shim compiles against, so
 that every file in this directory (README and flags included) keys the MLIR cache as for

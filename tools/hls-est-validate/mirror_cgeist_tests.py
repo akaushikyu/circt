@@ -3,6 +3,7 @@
 
     python3 mirror_cgeist_tests.py [-j 4] [--timeout 120] [--long-timeout 600]
                                    [--only <substring>] [--dry-run] [--recheck]
+                                   [--shim <name> --mirror-dir <dir>]
 
 Inventory: every cgeist test under Polygeist's tools/cgeist/Test/HLS -- the one .test file per
 HLSFactory_v2 design under hlsfactory/ (W8), and every other .c / .cpp file with a RUN line.
@@ -39,6 +40,12 @@ number), which make_test_results.py and the generated section of hls-doc/tests.m
 Re-run after any cgeist install, any change of common.DEFAULT_PIPELINE / DEFAULT_SHIM, and any
 hls-est change that is meant to change an estimate (then review the diff of the CHECK lines).
 The script deletes Mirror files whose cgeist test no longer exists or no longer compiles.
+
+--shim compiles under another shim (run_hlsest.py's names: exactclass, exact, scalar, real, or a
+directory; `real` is the real Vitis 2025.1 headers through cgeist --xlx-headers, track W11, which
+needs a cgeist from Polygeist branch w11-integrate, e.g. through CGEIST_BIN). A shim other than
+common.DEFAULT_SHIM writes a separate tree: --mirror-dir is then required and must not be the
+checked-in test/hls-est/Mirror, and hls-doc/tests.md is left alone.
 """
 import argparse
 import concurrent.futures as cf
@@ -61,8 +68,18 @@ import run_vitis as RV                   # noqa: E402
 
 TEST_HLS = Path(C.POLYGEIST_TEST_HLS)
 POLYGEIST_REPO = Path("/mnt/d/HLS")
-MIRROR = C.CIRCT / "test" / "hls-est" / "Mirror"
+DEFAULT_MIRROR = C.CIRCT / "test" / "hls-est" / "Mirror"
+MIRROR = DEFAULT_MIRROR                  # --mirror-dir replaces both
 MANIFEST = MIRROR / "manifest.json"
+
+
+def shown(p):
+    """A path relative to the CIRCT tree when it is inside it, else absolute (a --mirror-dir)."""
+    p = Path(p)
+    try:
+        return str(p.relative_to(C.CIRCT))
+    except ValueError:
+        return str(p)
 TESTS_DOC = C.CIRCT / "hls-doc" / "tests.md"
 SCRATCH = Path.home() / "hls-est-work" / "mirror-cgeist"   # MLIR of the non-catalogue tests
 MATH_COSTS_SUBST = "%hls_est_math_costs"
@@ -454,7 +471,7 @@ def write_mirror(e, mlir_path, meta, args, V):
     st, stdout, el = run_hlsest(out, top, args.timeout)
     if st.startswith("hls-est timeout"):
         st, stdout, el = run_hlsest(out, top, args.long_timeout)
-    res = {"top": top, "vitis": vit, "mirror": str(out.relative_to(C.CIRCT))}
+    res = {"top": top, "vitis": vit, "mirror": shown(out)}
     if st == "ok":
         checks = check_lines(stdout)
         emit(run_line(top), [], checks)
@@ -583,7 +600,19 @@ def main():
     ap.add_argument("--mlir-from", default=None,
                     help="an earlier run_hlsest.py result JSON: reuse its MLIR files where they carry "
                          "the cache key of the current inputs (same cgeist md5, shim and flags)")
+    ap.add_argument("--shim", default=C.DEFAULT_SHIM,
+                    help=f"header shim, as run_hlsest.py --shim (default {C.DEFAULT_SHIM}); another shim "
+                         "needs --mirror-dir")
+    ap.add_argument("--mirror-dir", default=None,
+                    help="output tree instead of test/hls-est/Mirror (required with a non-default --shim)")
     args = ap.parse_args()
+    global MIRROR, MANIFEST
+    if args.mirror_dir:
+        MIRROR = Path(args.mirror_dir).resolve()
+        MANIFEST = MIRROR / "manifest.json"
+    if Path(RH.resolve_shim(args.shim)) != Path(RH.resolve_shim(C.DEFAULT_SHIM)) and MIRROR == DEFAULT_MIRROR:
+        sys.exit(f"--shim {args.shim} is not the default shim ({C.DEFAULT_SHIM}): give --mirror-dir "
+                 "(the checked-in Mirror suite pins the default shim's output)")
     if args.recheck:
         files = sorted(p for p in MIRROR.rglob("*.mlir") if args.only in str(p))
         from collections import Counter
@@ -591,11 +620,11 @@ def main():
             res = list(ex.map(lambda p: recheck_existing(p, args.long_timeout), files))
         for p, o in res:
             if o not in ("rewritten", "xfail (unchanged)"):
-                log(f"[recheck] {p.relative_to(C.CIRCT)}: {o}")
+                log(f"[recheck] {shown(p)}: {o}")
         log(f"recheck: {dict(Counter(o.split(' ')[0] for _, o in res))}")
         return
 
-    shim = RH.resolve_shim(C.DEFAULT_SHIM)
+    shim = RH.resolve_shim(args.shim)
     designs = D.load_designs(catalog="v2", problems=[])
     entries = inventory(designs)
     if args.only:
@@ -630,14 +659,16 @@ def main():
         return
     keep = {r["mirror"] for r in results if r.get("mirror") and r["outcome"] in ("pass", "xfail")}
     for p in MIRROR.rglob("*.mlir"):
-        if str(p.relative_to(C.CIRCT)) not in keep:
+        if shown(p) not in keep:
             p.unlink()
     for r in results:
         if r.get("mirror") and r["outcome"] not in ("pass", "xfail"):
             r.pop("mirror")
     manifest = {"_meta": meta, "tests": sorted(results, key=lambda r: r["test"])}
+    MIRROR.mkdir(parents=True, exist_ok=True)
     MANIFEST.write_text(json.dumps(manifest, indent=1, sort_keys=True) + "\n")
-    update_tests_doc(tests_doc_section(manifest))
+    if MIRROR == DEFAULT_MIRROR:
+        update_tests_doc(tests_doc_section(manifest))
     from collections import Counter
     log(f"done in {meta['elapsed_s']} s: {dict(Counter(r['outcome'] for r in results))}")
 

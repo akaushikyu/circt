@@ -3,7 +3,7 @@
 
     python3 run_hlsest.py [--datasets a,b] [--benchmarks x,y] [-j 8] [--timeout 120]
                           [--pipeline "<hls-est flags>"]
-                          [--shim exactclass|exact|scalar|polygeist|<dir>]
+                          [--shim exactclass|exact|scalar|real|polygeist|<dir>]
                           [--out results/hlsest.json] [--force-cgeist] [--debug-json]
                           [--mlir-from <earlier result json>]
                           [--math-costs <cost table json> | --no-math-costs]
@@ -13,6 +13,12 @@
 --shim defaults to common.DEFAULT_SHIM = exactclass (MEMOS.md M2, decision #8): a name is a
 directory under shim/, "polygeist" Polygeist's own stand-ins, anything else a path. The shim's
 cgeist_flags file (exactclass: --scalar-wrapper-abi) is appended to the cgeist command.
+--shim real is no shim: the real Vitis 2025.1 headers (the synthesis tree
+common/technology/autopilot, read from the install, never copied) with the Vitis front end's
+macros and -include, through cgeist's Xilinx extensions (--xlx-prelude --xlx-headers, clang
+-fxlx-bitwidth / -fxlx-apint-promote; MEMOS #39, M12, track W11); see shim/real/README.md. It
+needs a cgeist built from Polygeist branch w11-integrate (CGEIST_BIN) and stops at once with
+another binary.
 
 Per design:
   1. cgeist <sources> --function=<top> -S --hls-annotate --raise-scf-to-affine
@@ -98,6 +104,28 @@ def resolve_shim(s):
     if p.is_dir():
         return p
     return Path(s).resolve()
+
+
+def check_shim_supported(shim):
+    """Stop before any design runs when the shim needs cgeist options the binary lacks (shim/real:
+    --xlx-headers, only in a cgeist of Polygeist branch w11-integrate) or include directories that
+    are missing (the Vitis install); otherwise every design would fail with the same error."""
+    flags = shim_cgeist_flags(shim)
+    for i, f in enumerate(flags):
+        if f == "-I" and i + 1 < len(flags) and not Path(flags[i + 1]).is_dir():
+            sys.exit(f"shim {shim}: include directory {flags[i + 1]} does not exist")
+    needed = [f for f in flags if f in ("--xlx-headers", "--xlx-prelude")]
+    if not needed:
+        return
+    try:
+        out = subprocess.run([C.CGEIST, "--help-hidden"], capture_output=True, text=True,
+                             errors="replace", timeout=300).stdout
+    except (OSError, subprocess.SubprocessError) as e:
+        sys.exit(f"shim {shim}: cannot run {C.CGEIST} --help-hidden: {e}")
+    missing = [f for f in needed if f not in out]
+    if missing:
+        sys.exit(f"shim {shim} needs cgeist {' '.join(missing)}, which {C.CGEIST} does not have "
+                 "(build Polygeist branch w11-integrate and point CGEIST_BIN at it)")
 
 
 # ---------------------------------------------------------------- cgeist ----
@@ -574,7 +602,8 @@ def main():
     ap.add_argument("--timeout", type=int, default=C.HLSEST_TIMEOUT)
     ap.add_argument("--pipeline", default=C.DEFAULT_PIPELINE)
     ap.add_argument("--shim", default=C.DEFAULT_SHIM,
-                    help=f"header shim (default {C.DEFAULT_SHIM}; scalar / exact / polygeist / a directory)")
+                    help=f"header shim (default {C.DEFAULT_SHIM}; scalar / exact / real (the real Vitis headers, "
+                         "needs a W11 cgeist) / polygeist / a directory)")
     ap.add_argument("--out", default=str(C.RESULTS_DIR / "hlsest.json"))
     ap.add_argument("--run-id", default=None)
     ap.add_argument("--force-cgeist", action="store_true")
@@ -598,6 +627,7 @@ def main():
     args = ap.parse_args()
 
     shim = resolve_shim(args.shim)
+    check_shim_supported(shim)
     resolve_math_costs(args)
     args.mlir_from_records = None
     if args.mlir_from:

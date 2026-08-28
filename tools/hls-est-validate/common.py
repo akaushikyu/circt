@@ -33,6 +33,10 @@ VITIS_SETTINGS_BAT = VITIS_WIN_ROOT + r"\Vitis\settings64.bat"
 VITIS_VPP_BAT = VITIS_WIN_ROOT + r"\Vitis\bin\v++.bat"
 VITIS_VERSION = "2025.1"
 VITIS_INCLUDE_WSL = "/mnt/a/Vitis/2025.1/Vitis/include"   # the real headers
+# The synthesis header tree the Vitis front end reads (autopilot.flow.log:331 of every cached run);
+# shim/real's cgeist_flags name it. Eight headers differ from VITIS_INCLUDE_WSL (hls_stream.h is the
+# simulation model there, hls_stream_39.h here; MEMOS M12).
+VITIS_AUTOPILOT_WSL = "/mnt/a/Vitis/2025.1/Vitis/common/technology/autopilot"
 CMD_EXE = "/mnt/c/Windows/System32/cmd.exe"
 POWERSHELL_EXE = "/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe"
 
