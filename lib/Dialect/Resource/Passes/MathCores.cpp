@@ -316,6 +316,8 @@ struct Site {
   const MathCostEntry *entry = nullptr;
   bool folded = false, dead = false;
 
+  bool remainder = false;
+
   bool fillOnly = false;
 
   Operation *pipeline = nullptr;
@@ -912,6 +914,8 @@ analyzeMathCores(ModuleOp module, const MathCostConfig &config,
       s.fillOnly = true;
     }
     s.dead = !s.folded && !siteLive(s, lv);
+    s.remainder = !s.folded && !s.dead &&
+                  s.op->hasAttr(circt::hls_analysis::kUnrollRemainderAttr);
     placeSite(s, stretchOf);
   }
 
@@ -922,7 +926,9 @@ analyzeMathCores(ModuleOp module, const MathCostConfig &config,
            arrayValue.block == buildPoint.block &&
            arrayValue.stretch == buildPoint.stretch;
   };
-  auto counted = [](const Site &s) { return !s.folded && !s.dead; };
+  auto counted = [](const Site &s) {
+    return !s.folded && !s.dead && !s.remainder;
+  };
   for (size_t loopIndex = 0; loopIndex < sites.size(); ++loopIndex) {
     Site &s = sites[loopIndex];
     if (!counted(s) || !s.entry || s.sharedWith >= 0 ||
@@ -1026,6 +1032,12 @@ analyzeMathCores(ModuleOp module, const MathCostConfig &config,
         sr.status = "dead";
         sr.detail = "the result reaches no output";
         ++dead;
+      } else if (s.remainder) {
+        sr.status = "remainder";
+        sr.detail = "a remainder iteration of a partial unroll: Vitis runs it "
+                    "in the exit-checked copies of the unrolled loop, whose "
+                    "calls are counted";
+        ++live;
       } else if (s.sharedWith >= 0) {
         sr.status = "shared";
         sr.detail = "shares the instance of the " +

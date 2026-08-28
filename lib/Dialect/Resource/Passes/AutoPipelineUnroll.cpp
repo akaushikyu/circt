@@ -1193,12 +1193,23 @@ struct AutoPipelineUnrollPass
       if (auto forOp = dyn_cast<AffineForOp>(op))
         if (forOp->hasAttr(kUnrollPendingAttr))
           results.push_back(forOp);
+    bool mainLoopKept = llvm::any_of(results, [&](AffineForOp fieldValue) {
+      return fieldValue.getStepAsInt() != step;
+    });
     for (AffineForOp forOp : results) {
       forOp->removeAttr(kUnrollPendingAttr);
       if (forOp.getStepAsInt() != step) {
         markMain(forOp);
         continue;
       }
+
+      if (mainLoopKept)
+        forOp.getBody()->walk([&](Operation *op) {
+          if (isa<CallOpInterface>(op) ||
+              op->getName().getDialectNamespace() == "math")
+            op->setAttr(circt::hls_analysis::kUnrollRemainderAttr,
+                        buildPoint.getUnitAttr());
+        });
       remark(forOp.getLoc(),
              "user unroll: remainder iterations unrolled completely (Vitis "
              "keeps them in the unrolled body, there is no epilogue loop)");

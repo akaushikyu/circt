@@ -43,6 +43,13 @@ constexpr llvm::StringLiteral kLoopUnrollOffAttr = "hls.unroll_off";
 /// completely for an enclosing automatic pipeline, so no loop around it is
 /// auto-pipelined; the loop itself still is.
 constexpr llvm::StringLiteral kLoopUnrollPartialAttr = "hls.unroll_partial";
+/// `hls.unroll_remainder` (unit) on a call or math op of the remainder
+/// iterations of a partial user unroll, which --auto-pipeline-unroll unrolls
+/// into straight-line code after the main loop: Vitis has no epilogue loop
+/// (the remainder runs in the exit-checked copies of the unrolled body), so
+/// such an op is a copy of one in the main loop, not a call site of its own
+/// (MathCores does not count it again).
+constexpr llvm::StringLiteral kUnrollRemainderAttr = "hls.unroll_remainder";
 /// `hls.flattened_parents = N : i64` on a pipelined loop: Vitis flattens its N
 /// directly enclosing affine.for ancestors into the pipeline, so their
 /// induction variables are loop-variant for that pipeline.
