@@ -145,6 +145,51 @@ bool SubIndexOp::isOffsetView() {
          passResult.getShape()[0] <= src.getShape()[0];
 }
 
+/// cgeist marks a function of the real Vitis HLS hls_math.h (hls::exp,
+/// hls::tanh, ... ; Polygeist XlxMathCore.h, --xlx-headers) and every call of
+/// it with `hls.math_core`: one core of the Vitis math library, which the
+/// --bram-analysis math-cost model prices per instance from its cost table
+/// (MathCores.cpp, VITIS_NOTES N16), as it prices the stand-in headers'
+/// __hlsest_math_<fn> markers. The function's body is the library's
+/// implementation (CORDIC loops, ROM tables such as
+/// cordic_apfixed::hyperb_table_arctanh_128) and not the design's memories:
+/// it is dropped here, before any analysis, together with the private
+/// symbols nothing else references (the tables, the library's helpers).
+/// A module without the attribute (every other shim) is unchanged.
+static void dropMathCoreBodies(ModuleOp module) {
+  SmallVector<func::FuncOp> cores;
+  for (func::FuncOp fieldValue : module.getOps<func::FuncOp>())
+    if (fieldValue->hasAttr("hls.math_core") && !fieldValue.isExternal())
+      cores.push_back(fieldValue);
+  if (cores.empty())
+    return;
+
+  SmallVector<StringAttr> candidates;
+  auto collect = [&](Region &body) {
+    if (auto symbolUses = SymbolTable::getSymbolUses(&body))
+      for (const SymbolTable::SymbolUse &use : *symbolUses)
+        candidates.push_back(use.getSymbolRef().getRootReference());
+  };
+  for (func::FuncOp fieldValue : cores) {
+    collect(fieldValue.getBody());
+    fieldValue.getBody().getBlocks().clear();
+    fieldValue.setPrivate();
+  }
+  SymbolTable symbols(module);
+  for (unsigned elementCount = 0; elementCount < candidates.size();
+       ++elementCount) {
+    Operation *symbolName = symbols.lookup(candidates[elementCount]);
+    if (!symbolName || !SymbolTable::symbolKnownUseEmpty(symbolName, module))
+      continue;
+    auto symOp = dyn_cast<SymbolOpInterface>(symbolName);
+    if (!symOp || !symOp.isPrivate() || symbolName->hasAttr("hls.math_core"))
+      continue;
+    for (Region &resultValue : symbolName->getRegions())
+      collect(resultValue);
+    symbols.erase(symbolName);
+  }
+}
+
 namespace {
 
 static DictionaryAttr shiftPartitionDims(DictionaryAttr argAttrs,
@@ -548,6 +593,7 @@ struct LowerSubIndexPass
     ModuleOp module = getOperation();
     if (!checkUnmodelledOps(module))
       return signalPassFailure();
+    dropMathCoreBodies(module);
     SymbolTable symbols(module);
     SmallVector<SubIndexOp> worklist;
     module.walk([&](SubIndexOp si) { worklist.push_back(si); });

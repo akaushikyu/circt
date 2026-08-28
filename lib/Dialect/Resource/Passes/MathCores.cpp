@@ -255,6 +255,7 @@ static StringRef mathOpFunction(Operation *op) {
 }
 
 static constexpr StringLiteral kMarkerPrefix = "__hlsest_math_";
+static constexpr StringLiteral kMathCoreAttr = "hls.math_core";
 
 static std::string scalarTypeName(Type typeValue) {
   typeValue = getElementTypeOrSelf(typeValue);
@@ -301,7 +302,8 @@ static bool isPureCall(Operation *op) {
   StringRef elementCount = fn.getName();
   return elementCount.starts_with(kMarkerPrefix) ||
          !libmFunction(elementCount).empty() ||
-         pureLibmHelpers().contains(elementCount);
+         pureLibmHelpers().contains(elementCount) ||
+         call->hasAttr(kMathCoreAttr);
 }
 
 namespace {
@@ -373,6 +375,23 @@ static void recognise(Operation *op, SmallVectorImpl<Site> &out) {
   Site s;
   s.op = op;
   s.opText = ("func.call @" + name).str();
+
+  if (auto core = call->getAttrOfType<DictionaryAttr>(kMathCoreAttr)) {
+    auto fn = core.getAs<StringAttr>("function");
+    if (!fn)
+      return;
+    s.function = fn.getValue().str();
+    if (auto typeValue = core.getAs<StringAttr>("type")) {
+      s.type = typeValue.getValue().str();
+      s.typeSource = "cgeist";
+    } else {
+      s.type = scalarTypeName(call.getOperand(0).getType());
+      s.typeSource = "mlir";
+    }
+    s.args.append(call.operand_begin(), call.operand_end());
+    out.push_back(std::move(s));
+    return;
+  }
   if (name.starts_with(kMarkerPrefix)) {
     s.function = name.drop_front(kMarkerPrefix.size()).str();
     s.typeSource = "marker";
@@ -1243,7 +1262,9 @@ void printMathCoreText(const MathCoreRecord &resultValue,
   os << "  function: " << resultValue.function << " of " << resultValue.type
      << " (type from "
      << (resultValue.typeSource == "marker" ? "the shim marker"
-                                            : "the MLIR element type")
+         : resultValue.typeSource == "cgeist"
+             ? "cgeist's hls.math_core attribute"
+             : "the MLIR element type")
      << "), arguments " << resultValue.arguments << "\n";
   if (resultValue.entryInfo) {
     const MathCostEntry &entryValue = *resultValue.entryInfo;
