@@ -319,9 +319,18 @@ def lit_quote(a):
     return shlex.quote(a)
 
 
-def run_line(top, timeout=None):
+def run_line(top, timeout=None, capped=False):
+    """The RUN line. A test that is XFAIL because hls-est failed (capped) runs hls-est under the memory
+    cap it failed under at generation (C.MEM_LIMIT_GB, prlimit --data, as run_hlsest), so that lit
+    reproduces the failure instead of an unbounded run that can exhaust WSL's memory (MEMOS #65):
+    hlsyn-vitis seidel-2d grows past 12 GB and is killed there. (A timed-out test is bounded by its
+    timeout.)"""
     cmd = " ".join(lit_quote(a) for a in hlsest_args(top))
-    lead = f"timeout {timeout} hls-est" if timeout else "hls-est"
+    lead = "hls-est"
+    if capped and C.MEM_LIMIT_GB > 0:
+        lead = f"prlimit --data={int(C.MEM_LIMIT_GB * 2**30)} -- {lead}"
+    if timeout:
+        lead = f"timeout {timeout} {lead}"
     return f"{lead} %s {cmd} -o /dev/null | FileCheck %s"
 
 
@@ -486,7 +495,9 @@ def write_mirror(e, mlir_path, meta, args, V):
         res.update({"outcome": "xfail", "reason": f"hls-est timeout (> {args.long_timeout} s)"})
     else:
         extra_directives = ["// XFAIL: *"]
-        emit(run_line(top), [f"expected to fail: {st}"], ["// CHECK: Total BRAM:"])
+        emit(run_line(top, capped=True),
+             [f"expected to fail: {st} (under a {C.MEM_LIMIT_GB:g} GB memory cap, as the RUN line)"],
+             ["// CHECK: Total BRAM:"])
         res.update({"outcome": "xfail", "reason": st})
     return res
 
