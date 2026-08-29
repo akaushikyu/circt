@@ -32,12 +32,30 @@ closed Vitis front end folds; the fixed-point math headers' lookup tables) are f
 cgeist too (`--xlx-headers`, Polygeist `Lib/XlxStringBits.cc`, the C simulation's
 conversion), so those tables are dense ROM globals.
 
-Not covered (separate modelling tracks): `hls::stream` (`__fpga_fifo_*`), `hls::task`,
-`ap_float`, the float / double `hls_math` functions (closed bitcode), the DSP builtins,
-the FFT IP. Known gap (OPEN_ISSUES O63): a global of an ap type initialised from a number
-(`static const ap_uint<10> X = -1;`, a `const ap_fixed<..> lut[] = {...}` table) has no
-constant initialiser, because the real `ap_uint` / `ap_fixed` constructors are not
-`constexpr`; cgeist then emits the global `uninitialized`.
+`hls::stream` (`hls_stream_39.h`, and its AXI-Stream specialisation in `ap_axi_sdata.h`)
+reaches hls-est in the form of the stand-in headers that its FIFO model reads (VITIS_NOTES
+N31): under `--xlx-headers` cgeist makes every `hls::stream<T, D>` object an `i32` handle
+and every member an external call named as a member of the object's own class (so the
+name keeps D although the members are inherited from `hls::stream<T, 0>`); the
+`__fpga_fifo_*` / `__fpga_axis_*` builtins are declared by the prelude only so that the
+headers parse (Polygeist `clang-mlir.cc` `isXlxStreamClass`, OPEN_ISSUES O64 (a)).
+
+The `hls::` math functions of `hls_math.h` (fixed-point overloads with their bodies, and the
+float / double / half declarations of the closed library) are cores of the Vitis math
+library: cgeist marks each call `hls.math_core = {function, type}` and keeps the callee as a
+function (inlined only when every argument is a constant, which Vitis folds), hls-est's
+`--lower-polygeist-subindex` drops its body and the math-cost model prices it per instance
+(N16), as for the stand-in headers' `__hlsest_math_<fn>` markers (Polygeist
+`Lib/XlxMathCore.cc`, OPEN_ISSUES O64 (c)). A global of an ap type initialised from a number
+(`static const ap_uint<10> X = -1;`, `const ap_fixed<..> lut[] = {0.5, ...}`) gets the
+constant the headers' numeric constructor computes (Polygeist `XlxStringBits.cc`
+`foldNumericConstruct`, O63); the real constructors are not `constexpr`.
+
+Not covered (separate modelling tracks): `hls::task`, `hls::stream_of_blocks`, `ap_float`,
+the DSP builtins, the FFT IP, and the extern `cordic_apfixed` / `hotbm_apfixed` tables of the
+closed library (declared `extern` in the headers; only reachable inside a math core). Known
+gap (O64 (b)): an array of `hls::vector` / `std::array` elements whose trivial copy cgeist
+emits in place as a byte loop is not split by `--split-struct-memrefs`.
 
 `autopilot.sha256` lists the sha256 of the Vitis headers this shim compiles against, so
 that every file in this directory (README and flags included) keys the MLIR cache as for
