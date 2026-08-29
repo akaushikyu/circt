@@ -26,7 +26,11 @@
 //       instance count is the most calls that can run at once (the width of
 //       the order, not the number of its connected groups: w3r2_k6, two
 //       independent calls joined by a third keep 2 instances). A call site
-//       inside a loop is one instance whatever the trip count.
+//       inside a loop is one instance whatever the trip count. Calls whose
+//       data operands are read from one memory run at most its read ports
+//       (scheduling.call_depth.ports_per_memory, 2) at a time (N16 R4,
+//       w11rv_r3 / r8: k unrolled copies of `y[i] = hls::exp(x[i])` get
+//       min(k, 2) cores).
 //   R3  Every parent module that calls the callee gets its own instances, so
 //       a function's instance count is the sum over its parents of the
 //       parent's count times the instances it holds (the product down the
@@ -199,7 +203,9 @@ computeInstances(mlir::ModuleOp module,
 /// a storage root, when a value of one reaches an operand of the other
 /// (forward in program order, or around a common loop; a terminator forwards
 /// each operand to its own result / iter_arg), or when they lie in different
-/// branches of one conditional; the groups are a minimum cover of the
+/// branches of one conditional, or when they are the n-th and (n + ports)-th
+/// call reading their data operands from one memory (its read ports, from
+/// the configuration); the groups are a minimum cover of the
 /// transitively closed order by chains (each chain one instance, its calls
 /// run one after the other), then capped by `limit`. Returns the group of
 /// each site and the number of groups; `rule` receives a one-line

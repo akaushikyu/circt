@@ -1179,11 +1179,33 @@ struct AutoPipelineUnrollPass
     Operation *next = loop->getNextNode();
     int64_t step = loop.getStepAsInt();
 
+    auto isCoreOp = [](Operation *op) {
+      return isa<CallOpInterface>(op) ||
+             op->getName().getDialectNamespace() == "math";
+    };
+    unsigned coreOpsPerIteration = 0;
+    loop.getBody()->walk([&](Operation *op) {
+      if (isCoreOp(op)) {
+        op->setAttr(kUnrollPendingAttr, buildPoint.getUnitAttr());
+        ++coreOpsPerIteration;
+      }
+    });
+    std::optional<uint64_t> tripCount = affine::getConstantTripCount(loop);
+
     loop->setAttr(kUnrollPendingAttr, buildPoint.getUnitAttr());
+    auto clearPending = [&] {
+      for (Operation *op = prev ? prev->getNextNode() : &block->front();
+           op && op != next; op = op->getNextNode())
+        op->walk([&](Operation *inner) {
+          if (isCoreOp(inner))
+            inner->removeAttr(kUnrollPendingAttr);
+        });
+    };
     if (failed(loopUnrollByFactor(loop, factor))) {
 
       LLVM_DEBUG(llvm::dbgs() << "  loopUnrollByFactor failed\n");
       loop->removeAttr(kUnrollPendingAttr);
+      clearPending();
       markMain(loop);
       return;
     }
@@ -1193,23 +1215,42 @@ struct AutoPipelineUnrollPass
       if (auto forOp = dyn_cast<AffineForOp>(op))
         if (forOp->hasAttr(kUnrollPendingAttr))
           results.push_back(forOp);
-    bool mainLoopKept = llvm::any_of(results, [&](AffineForOp fieldValue) {
-      return fieldValue.getStepAsInt() != step;
+
+    bool cleanupLoopKept = llvm::any_of(results, [&](AffineForOp fieldValue) {
+      return fieldValue.getStepAsInt() == step;
     });
+    auto markRemainder = [&](Operation *op) {
+      op->setAttr(circt::hls_analysis::kUnrollRemainderAttr,
+                  buildPoint.getUnitAttr());
+    };
+    if (!cleanupLoopKept && tripCount && *tripCount % factor == 1) {
+      SmallVector<Operation *> straightLine;
+      for (Operation *op = prev ? prev->getNextNode() : &block->front();
+           op && op != next; op = op->getNextNode()) {
+        if (auto forOp = dyn_cast<AffineForOp>(op);
+            forOp && forOp->hasAttr(kUnrollPendingAttr))
+          continue;
+        op->walk<WalkOrder::PreOrder>([&](Operation *inner) {
+          if (isCoreOp(inner) && inner->hasAttr(kUnrollPendingAttr))
+            straightLine.push_back(inner);
+        });
+      }
+      if (coreOpsPerIteration <= straightLine.size())
+        for (Operation *op :
+             ArrayRef(straightLine).take_back(coreOpsPerIteration))
+          markRemainder(op);
+    }
+    clearPending();
     for (AffineForOp forOp : results) {
       forOp->removeAttr(kUnrollPendingAttr);
       if (forOp.getStepAsInt() != step) {
         markMain(forOp);
         continue;
       }
-
-      if (mainLoopKept)
-        forOp.getBody()->walk([&](Operation *op) {
-          if (isa<CallOpInterface>(op) ||
-              op->getName().getDialectNamespace() == "math")
-            op->setAttr(circt::hls_analysis::kUnrollRemainderAttr,
-                        buildPoint.getUnitAttr());
-        });
+      forOp.getBody()->walk([&](Operation *op) {
+        if (isCoreOp(op))
+          markRemainder(op);
+      });
       remark(forOp.getLoc(),
              "user unroll: remainder iterations unrolled completely (Vitis "
              "keeps them in the unrolled body, there is no epilogue loop)");

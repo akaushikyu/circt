@@ -63,6 +63,7 @@ import concurrent.futures as cf
 import hashlib
 import json
 import os
+import pwd
 import re
 import resource
 import shlex
@@ -80,13 +81,17 @@ import common as C                         # noqa: E402
 # CIRCT's MLIR build (the parser hls-est reads it with; RelWithDebInfo on ext4) and compiled by its llc.
 # Polygeist's own build is a Debug build on /mnt/d whose 1-3 GB binaries page in over 9P for tens of
 # seconds per process under load.
-MLIR_BIN = os.environ.get("CS_MLIR_BIN", str(Path.home() / "circt" / "llvm" / "build" / "bin"))
+# The tools are found from this file's tree and the account's own home directory, not $HOME: the
+# harness runs with a private HOME for uninstalled cgeist builds (W11 review defect 6).
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+_ACCOUNT_HOME = Path(pwd.getpwuid(os.getuid()).pw_dir)
+MLIR_BIN = os.environ.get("CS_MLIR_BIN", str(_REPO_ROOT / "llvm" / "build" / "bin"))
 MLIR_OPT = MLIR_BIN + "/mlir-opt"
 MLIR_TRANSLATE = MLIR_BIN + "/mlir-translate"
 LLC = MLIR_BIN + "/llc"
 # clang 18 (the clang cgeist embeds) for the shim reference: a stripped ext4 copy when one exists
 _CLANG18_DIR = os.environ.get("CS_CLANG18_DIR") or next(
-    (d for d in (str(Path.home() / "hls-est-work" / "llvm18-stripped"),)
+    (d for d in (str(_ACCOUNT_HOME / "hls-est-work" / "llvm18-stripped"),)
      if os.path.exists(d + "/clang-18")), "/mnt/d/HLS/Polygeist/llvm-project/build/bin")
 CLANG = _CLANG18_DIR + "/clang"
 CLANGXX = _CLANG18_DIR + "/clang++"
@@ -107,7 +112,7 @@ SAN_LINKER = os.environ.get("CS_SAN_LINKER", "/usr/bin/clang++-14")
 GCC = os.environ.get("CS_GCC", "/usr/bin/gcc-13")
 GXX = os.environ.get("CS_GXX", "/usr/bin/g++-13")
 VITIS_INCLUDE_SRC = os.environ.get("CS_VITIS_INCLUDE", C.VITIS_INCLUDE_WSL)
-VITIS_INCLUDE_MIRROR = Path.home() / "hls-est-work" / "vitis-include-mirror" / "2025.1"
+VITIS_INCLUDE_MIRROR = _ACCOUNT_HOME / "hls-est-work" / "vitis-include-mirror" / "2025.1"
 WORK_DEFAULT = Path.home() / "hls-est-work" / "semantics"
 REF_KINDS = ("real", "shim")
 REF_CACHE = Path(os.environ.get("CS_REF_CACHE", str(Path.home() / "hls-est-work" / "semantics-ref-cache")))
@@ -476,6 +481,30 @@ def cxx_name_of(top_fn, top):
 
 
 # ------------------------------------------------------------------------------- cgeist command --
+
+_CATALOGUE = None
+
+
+def complete_record(key, rec):
+    """Fill in what a run_hlsest.py record lacks and a sweep record has (W11 review defect 6): the
+    design's directory and sources from the catalogue, and the cgeist log next to the record's MLIR
+    (same cache key: <name>.<key>.mlir -> <name>.<key>.cgeist.log)."""
+    global _CATALOGUE
+    if not isinstance(rec, dict):
+        return
+    if "dir" not in rec:
+        if _CATALOGUE is None:
+            import designs as D
+            _CATALOGUE = {f"{d['dataset']}/{d['benchmark']}": d for d in D.load_designs()}
+        d = _CATALOGUE.get(key)
+        if d:
+            rec.setdefault("dir", d["dir"])
+            rec.setdefault("sources", d.get("sources"))
+    if not rec.get("cgeist_log") and rec.get("mlir"):
+        log = Path(rec["mlir"]).with_suffix(".cgeist.log")
+        if log.exists():
+            rec["cgeist_log"] = str(log)
+
 
 def cgeist_command(rec):
     """The cgeist argv of the record (first line of its log), or None."""
@@ -2290,6 +2319,8 @@ def main():
     if a.benchmarks:
         bs = set(a.benchmarks.split(","))
         keys = [k for k in keys if k.split("/", 1)[1] in bs or k in bs]
+    for k in keys:
+        complete_record(k, recs[k])
     if a.probe:
         recs = {}
         for probe_src in a.probe.split(","):

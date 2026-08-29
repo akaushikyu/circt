@@ -126,6 +126,35 @@ def check_shim_supported(shim):
     if missing:
         sys.exit(f"shim {shim} needs cgeist {' '.join(missing)}, which {C.CGEIST} does not have "
                  "(build Polygeist branch w11-integrate and point CGEIST_BIN at it)")
+    # The clang the cgeist embeds must accept the cc1 options the shim passes (-fxlx-bitwidth
+    # comes from the llvm-project patch of branch w11-xlx-bitwidth; a cgeist built against an
+    # unpatched LLVM has --xlx-headers but rejects it): compile a probe with the shim's flags.
+    if "-fxlx-bitwidth" in flags:
+        err = probe_shim_compile(shim, flags)
+        if err:
+            sys.exit(f"shim {shim}: {C.CGEIST} cannot compile with the shim's flags ({err}); it needs "
+                     "a clang with -fxlx-bitwidth (llvm-project branch w11-xlx-bitwidth)")
+
+
+def probe_shim_compile(shim, flags):
+    """'' when C.CGEIST compiles a C++ probe that uses the Xilinx bitwidth attribute with the shim's
+    flags, else the first error line."""
+    import tempfile
+    probe = "typedef int __attribute__((bitwidth(7))) i7;\ni7 f(i7 a) { return a; }\n"
+    with tempfile.TemporaryDirectory(prefix="shimprobe") as d:
+        src = Path(d) / "probe.cpp"
+        src.write_text(probe)
+        cmd = [C.CGEIST, str(src), "--function=*", "-S", *flags,
+               f"-resource-dir={C.CLANG_RESOURCE_DIR}", "-I", str(shim), "-o", str(Path(d) / "probe.mlir")]
+        try:
+            r = subprocess.run(cmd, capture_output=True, text=True, errors="replace", timeout=300)
+        except (OSError, subprocess.SubprocessError) as e:
+            return str(e)
+        if r.returncode == 0 and (Path(d) / "probe.mlir").exists():
+            return ""
+        lines = [l for l in (r.stderr or "").splitlines() if l.strip()]
+        errors = [l for l in lines if "error" in l.lower() or "unknown" in l.lower()]
+        return ((errors or lines or [f"exit {r.returncode}"])[0]).strip()[:300]
 
 
 # ---------------------------------------------------------------- cgeist ----

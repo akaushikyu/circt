@@ -400,6 +400,12 @@ struct Access {
 
 /// The memories that replace one struct variable: one per leaf (split), or
 /// one word memory (aggregated).
+/// `hls.struct_initial_value` (array, on a memref.global of llvm.struct
+/// elements): cgeist's constant of the global, one scalar attribute per
+/// scalar in memory order (elements, then members depth-first).
+constexpr llvm::StringLiteral kStructInitialValueAttr =
+    "hls.struct_initial_value";
+
 struct NewMemory {
   MemRefType type;
   std::string name;
@@ -438,6 +444,11 @@ public:
   bool analyse();
   /// The memories to create (after analyse()).
   SmallVector<NewMemory> newMemories() const;
+  /// The initial values of the newMemories() of a global whose struct value
+  /// cgeist gives as one attribute per scalar in memory order
+  /// (`hls.struct_initial_value`); empty when they cannot be split (an
+  /// aggregated variable, a member array of structs, a count mismatch).
+  SmallVector<Attribute> splitInitialValue(ArrayAttr flat) const;
   /// Rewrites the accesses onto `mems[root][i]` (newMemories() order).
   void rewrite(ArrayRef<SmallVector<Value>> mems);
   void setAggregate(bool a) { aggregate = a; }
@@ -1310,6 +1321,39 @@ llvm::BitVector StructSplitter::zeroOneLeaves() const {
       }))
     oneBit.reset();
   return oneBit;
+}
+
+SmallVector<Attribute> StructSplitter::splitInitialValue(ArrayAttr flat) const {
+  if (aggregate || leaves.empty() ||
+      llvm::any_of(leaves, [](const Leaf &l) { return l.stride != 0; }))
+    return {};
+  int64_t perElement = 0;
+  for (const Leaf &l : leaves)
+    perElement += l.count();
+  int64_t elements = type.getNumElements();
+  if (perElement == 0 ||
+      static_cast<int64_t>(flat.size()) != elements * perElement)
+    return {};
+  SmallVector<Attribute> out;
+  int64_t first = 0; // the leaf's first scalar within an element
+  for (const Leaf &l : leaves) {
+    SmallVector<Attribute> values;
+    values.reserve(elements * l.count());
+    for (int64_t e = 0; e < elements; ++e)
+      for (int64_t k = 0; k < l.count(); ++k) {
+        Attribute v = flat[e * perElement + first + k];
+        auto typed = dyn_cast<TypedAttr>(v);
+        if (!typed || typed.getType() != l.scalar)
+          return {};
+        values.push_back(v);
+      }
+    SmallVector<int64_t> shape(type.getShape().begin(), type.getShape().end());
+    shape.append(l.dims.begin(), l.dims.end());
+    out.push_back(DenseElementsAttr::get(
+        RankedTensorType::get(shape, l.scalar), values));
+    first += l.count();
+  }
+  return out;
 }
 
 SmallVector<NewMemory> StructSplitter::newMemories() const {
@@ -3060,14 +3104,22 @@ struct SplitStructMemrefsPass
         SymbolTable symbols(global->getParentOp());
         OpBuilder b(global);
         NamedAttrList attrs(global->getAttrs());
+        // cgeist's constant of a struct global (memref.global cannot hold
+        // one of llvm.struct elements): the members' initial values.
+        SmallVector<Attribute> initial;
+        if (auto flat = dyn_cast_or_null<ArrayAttr>(
+                attrs.erase(kStructInitialValueAttr)))
+          initial = s.splitInitialValue(flat);
         symbols.remove(global);
         SmallVector<memref::GlobalOp> created;
-        for (const NewMemory &mem : news) {
+        for (auto [i, mem] : llvm::enumerate(news)) {
           OperationState st(global.getLoc(), global->getName());
           st.addAttributes(attrs);
           auto g = cast<memref::GlobalOp>(b.create(st));
           g.setSymName(mem.name);
           g.setType(mem.type);
+          if (i < initial.size())
+            g.setInitialValueAttr(initial[i]);
           annotate(g, mem, aggregate);
           symbols.insert(g, Block::iterator(global));
           created.push_back(g);

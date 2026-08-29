@@ -21,7 +21,9 @@
 // Outside pipelines one instance per call that can run concurrently:
 // independent calls in one straight-line stretch are concurrent (@indep 2), a
 // chain f(f(x)) is one instance (@chain), a call in a sequential loop is one
-// (@seqloop), k unrolled copies are k (@unrolled 4), calls in the two arms
+// (@seqloop), k unrolled copies are k, but at most two of them read their
+// arguments from one memory at a time (its two ports: @unrolled, 4 copies on
+// A, 2; w11rv_r8, W11 review fixes), calls in the two arms
 // of an if share one (@excl 1). Calls in different stretches run one after
 // the other and share (@around: before and after a loop, 1), except in two
 // loops of the function body that access no common array, which Vitis runs
@@ -56,7 +58,7 @@
 // CHECK-DAG: math.core function=exp type=double func=@indep instances=2 bram=10 (exp_test_s, per_concurrent_call)
 // CHECK-DAG: math.core function=exp type=double func=@chain instances=1 bram=5 (exp_test_s, per_concurrent_call)
 // CHECK-DAG: math.core function=exp type=double func=@seqloop instances=1 bram=5 (exp_test_s, per_concurrent_call)
-// CHECK-DAG: math.core function=exp type=double func=@unrolled instances=4 bram=20 (exp_test_s, per_concurrent_call)
+// CHECK-DAG: math.core function=exp type=double func=@unrolled instances=2 bram=10 (exp_test_s, per_concurrent_call)
 // CHECK-DAG: math.core function=exp type=double func=@twoloops instances=1 bram=5 (exp_test_s, per_concurrent_call)
 // CHECK-DAG: math.core function=exp type=double func=@twoloops_disjoint instances=2 bram=10 (exp_test_s, per_concurrent_call)
 // CHECK-DAG: math.core function=exp type=double func=@excl instances=1 bram=5 (exp_test_s, per_concurrent_call)
@@ -83,7 +85,7 @@
 // CHECK-DAG: math.core function=sin type=double func=@blocked_auto instances=1 bram=8 (sin_or_cos_double_s, per_concurrent_call)
 // CHECK-DAG: math.core function=sin type=double func=@blocked_user instances=2 bram=16 (sin_or_cos_double_s, per_concurrent_call)
 // CHECK-NOT: func=@floorcall
-// CHECK: Total BRAM: 145
+// CHECK: Total BRAM: 135
 
 // WARN-DAG: warning: --bram-analysis: math-costs: no entry for atan of float in {{.*}}costs.json: unknown cost, 0 assumed
 // WARN-DAG: warning: --bram-analysis: math-costs: no entry for sin of ap_ufixed<16,5> in {{.*}}costs.json: unknown cost, 0 assumed

@@ -4,7 +4,9 @@
 
 #include "circt/Dialect/Resource/Passes/CallInstances.h"
 #include "circt/Dialect/LoopSchedule/LoopScheduleOps.h"
+#include "circt/Dialect/Resource/Config/Config.h"
 #include "circt/Dialect/Resource/Passes/LoopPragmas.h"
+#include "circt/Dialect/Resource/Passes/PartitionLayout.h"
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
@@ -377,6 +379,69 @@ readsWrites(Operation *op, const SmallVectorImpl<StorageRoot> &roots,
 }
 } // namespace
 
+static void
+dataOperandMemories(Operation *site,
+                    SmallVectorImpl<std::pair<StorageRoot, Operation *>> &out) {
+  SmallVector<Value, 8> work;
+  if (auto callSite = dyn_cast<CallOpInterface>(site))
+    work.append(callSite.getArgOperands().begin(),
+                callSite.getArgOperands().end());
+  else
+    work.append(site->getOperands().begin(), site->getOperands().end());
+  llvm::SmallPtrSet<Operation *, 32> seen;
+  constexpr unsigned kMaxOps = 256;
+  for (unsigned steps = 0; !work.empty() && steps < 4 * kMaxOps; ++steps) {
+    Value valueHandle = work.pop_back_val();
+    if (isa<BaseMemRefType>(valueHandle.getType()))
+      continue;
+    Operation *def = valueHandle.getDefiningOp();
+    if (!def)
+      continue;
+
+    if (def->getNumRegions() == 1 && def->getRegion(0).hasOneBlock()) {
+      Operation *term = def->getRegion(0).front().getTerminator();
+      if (term && term->getNumOperands() == def->getNumResults()) {
+        work.push_back(
+            term->getOperand(cast<OpResult>(valueHandle).getResultNumber()));
+        continue;
+      }
+    }
+    if (!seen.insert(def).second || seen.size() > kMaxOps)
+      continue;
+    auto effects = dyn_cast<MemoryEffectOpInterface>(def);
+    if (effects && effects.hasEffect<MemoryEffects::Read>()) {
+      for (Value operand : def->getOperands())
+        if (isa<BaseMemRefType>(operand.getType()))
+          out.push_back({storageRoot(operand), def});
+      continue;
+    }
+    if (!isMemoryEffectFree(def))
+      continue;
+    work.append(def->getOperands().begin(), def->getOperands().end());
+  }
+}
+
+static unsigned memoryReadPorts(const StorageRoot &root, unsigned ports) {
+  auto arg = dyn_cast_or_null<BlockArgument>(root.value);
+  if (!arg)
+    return ports;
+  auto fn = dyn_cast_or_null<func::FuncOp>(arg.getOwner()->getParentOp());
+  auto type = dyn_cast<MemRefType>(arg.getType());
+  if (!fn || !type || arg.getOwner() != &fn.getBody().front())
+    return ports;
+  auto spec =
+      fn.getArgAttrOfType<ArrayAttr>(arg.getArgNumber(), "hls.array_partition");
+  if (!spec)
+    return ports;
+  SmallVector<PartitionEntry, 2> entries;
+  parsePartitionEntries(spec, "", entries);
+  std::optional<BankLayout> layout = buildBankLayout(entries, type);
+  if (!layout || layout->numBanks <= 1)
+    return ports;
+  return static_cast<unsigned>(std::min<int64_t>(
+      layout->numBanks * static_cast<int64_t>(ports), 1 << 20));
+}
+
 unsigned
 groupConcurrentCalls(func::FuncOp parent, ArrayRef<Operation *> sites,
                      std::optional<int64_t> limit,
@@ -564,6 +629,53 @@ groupConcurrentCalls(func::FuncOp parent, ArrayRef<Operation *> sites,
         order(loopIndex, innerIndex, byValue);
   }
 
+  unsigned ports = static_cast<unsigned>(std::max<int64_t>(
+      0, circt::hlsest::Config::get().scheduling.callDepth.portsPerMemory));
+  unsigned byPorts = 0;
+  if (ports > 0 && elementCount > ports) {
+
+    struct Read {
+      Operation *op;
+      SmallVector<unsigned, 2> calls;
+    };
+    SmallVector<std::pair<StorageRoot, SmallVector<Read, 8>>, 4> memories;
+    for (unsigned loopIndex = 0; loopIndex < elementCount; ++loopIndex) {
+      SmallVector<std::pair<StorageRoot, Operation *>, 2> reads;
+      dataOperandMemories(sites[loopIndex], reads);
+      for (const auto &[root, op] : reads) {
+        auto *mem = llvm::find_if(memories, [&](const auto &entryValue) {
+          return entryValue.first == root;
+        });
+        if (mem == memories.end()) {
+          memories.push_back({root, {}});
+          mem = std::prev(memories.end());
+        }
+        auto *read = llvm::find_if(mem->second, [&](const Read &resultValue) {
+          return resultValue.op == op;
+        });
+        if (read == mem->second.end()) {
+          mem->second.push_back({op, {}});
+          read = std::prev(mem->second.end());
+        }
+        if (!llvm::is_contained(read->calls, loopIndex))
+          read->calls.push_back(loopIndex);
+      }
+    }
+    for (auto &[root, reads] : memories) {
+      llvm::stable_sort(
+          reads, [&](const Read &exprValue, const Read &rowValue) {
+            return ordinal.lookup(exprValue.op) < ordinal.lookup(rowValue.op);
+          });
+      unsigned portValue = memoryReadPorts(root, ports);
+      for (unsigned arrayValue = 0; arrayValue + portValue < reads.size();
+           ++arrayValue)
+        for (unsigned ci : reads[arrayValue].calls)
+          for (unsigned cj : reads[arrayValue + portValue].calls)
+            if (ci != cj)
+              order(std::min(ci, cj), std::max(ci, cj), byPorts);
+    }
+  }
+
   for (unsigned loopIndex = 0; loopIndex < elementCount; ++loopIndex)
     for (unsigned innerIndex = loopIndex + 1; innerIndex < elementCount;
          ++innerIndex)
@@ -603,6 +715,10 @@ groupConcurrentCalls(func::FuncOp parent, ArrayRef<Operation *> sites,
             ", " + std::to_string(byBranch) + " by exclusive branches";
       if (byCaller)
         stringValue += ", " + std::to_string(byCaller) + " by sequential code";
+      if (byPorts)
+        stringValue += ", " + std::to_string(byPorts) +
+                       " by the ports of a memory " +
+                       "their operands are read from";
       if (limit)
         stringValue += "; allocation limit " + std::to_string(*limit) +
                        (uncapped > groups ? " applied" : " not binding");
