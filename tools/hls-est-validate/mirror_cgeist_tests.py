@@ -41,9 +41,9 @@ Re-run after any cgeist install, any change of common.DEFAULT_PIPELINE / DEFAULT
 hls-est change that is meant to change an estimate (then review the diff of the CHECK lines).
 The script deletes Mirror files whose cgeist test no longer exists or no longer compiles.
 
---shim compiles under another shim (run_hlsest.py's names: exactclass, exact, scalar, real, or a
-directory; `real` is the real Vitis 2025.1 headers through cgeist --xlx-headers, track W11, which
-needs a cgeist from Polygeist branch w11-integrate, e.g. through CGEIST_BIN). A shim other than
+--shim compiles under another shim (run_hlsest.py's names: real, exactclass, exact, scalar, or a
+directory; `real`, the default since W11-adopt (MEMOS #67), is the real Vitis 2025.1 headers
+through cgeist --xlx-headers, which the installed cgeist has since Polygeist 483ef69c). A shim other than
 common.DEFAULT_SHIM writes a separate tree: --mirror-dir is then required and must not be the
 checked-in test/hls-est/Mirror, and hls-doc/tests.md is left alone.
 """

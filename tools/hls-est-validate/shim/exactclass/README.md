@@ -1,4 +1,4 @@
-# "exactclass" shim (the harness default; bit-exact ap_fixed / ap_int)
+# "exactclass" shim (bit-exact ap_fixed / ap_int; the harness default from W1c until W11-adopt)
 
 Stand-ins for the Vitis HLS headers in which `ap_int<W>` / `ap_uint<W>` /
 `ap_fixed<W,I,Q,O,N>` / `ap_ufixed<...>` are *classes* whose only data member
@@ -26,9 +26,9 @@ stays in the IR as `arith.divsi 4194304, 0` (Vitis: `undef`; hls-est's
 `--vitis-fold`, rule `undef` (T8), folds it the way Vitis does; it is in the
 default pipeline since W1c).
 
-Use: this is the harness default shim since W1c (MEMOS.md decision #8,
-`common.DEFAULT_SHIM`): `run_hlsest.py` and `experiment_pipeline.py` use it
-unless `--shim` names another (`scalar`, `exact`, `polygeist` or a directory).
+Use: this was the harness default shim from W1c (MEMOS.md decision #8) until
+W11-adopt made `real` the default (MEMOS #67, `common.DEFAULT_SHIM`); select it
+with `run_hlsest.py --shim exactclass` (likewise `experiment_pipeline.py`).
 Without `--scalar-wrapper-abi` (e.g. a cgeist binary that predates it) these
 classes are LLVM structs that hls-est cannot parse.
 

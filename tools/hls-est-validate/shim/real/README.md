@@ -1,4 +1,4 @@
-# "real" shim: the Vitis HLS 2025.1 headers themselves (track W11, opt-in)
+# "real" shim: the Vitis HLS 2025.1 headers themselves (track W11; the harness default since W11-adopt, MEMOS #67)
 
 This directory holds no headers. Its `cgeist_flags` make cgeist compile a design against
 the headers of the Vitis install, the way the Vitis front end does, instead of a stand-in:
@@ -21,10 +21,12 @@ like with `shim/exactclass`. The language standard (C++: gnu++14, C: gnu99) come
 `VITIS_FRONTEND=1` (run_hlsest.py), as for every other shim; without it cgeist uses clang's
 default (gnu++17 / gnu17), which already accepts the headers' `typeof`.
 
-Requirements: the Vitis install at `/mnt/a/Vitis/2025.1` and a cgeist built from Polygeist
-branch `w11-integrate` (W11 merged onto `hls-est-vitis-match`) against the patched clang
-(llvm-project branch `w11-xlx-bitwidth`; see Polygeist `patches/llvm-project/README.md`),
-given as `CGEIST_BIN`. run_hlsest.py stops before the first design when the cgeist lacks
+Requirements: the Vitis install at `/mnt/a/Vitis/2025.1` and a cgeist with the W11 Xilinx
+extensions, built against the patched clang (llvm-project branch `w11-xlx-bitwidth`; see
+Polygeist `patches/llvm-project/README.md`): the installed `/mnt/d/HLS/Polygeist/build/bin/cgeist`
+since Polygeist `hls-est-vitis-match` 483ef69c (MEMOS #66), or a private build given as
+`CGEIST_BIN`. `common.DEFAULT_SHIM` is `real` since W11-adopt (MEMOS #67); `exactclass` stays
+selectable with `--shim exactclass`. run_hlsest.py stops before the first design when the cgeist lacks
 `--xlx-headers` (the installed one does) or the Vitis install is missing.
 
 `ap_int` / `ap_fixed` constructed from a string literal (`_ssdm_string2bits`, which the

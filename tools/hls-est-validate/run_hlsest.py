@@ -10,15 +10,16 @@
                           [--hls-config <configuration json>] [--config-set key.path=value ...]
                           [--load-plugin <lib> ...]
 
---shim defaults to common.DEFAULT_SHIM = exactclass (MEMOS.md M2, decision #8): a name is a
-directory under shim/, "polygeist" Polygeist's own stand-ins, anything else a path. The shim's
-cgeist_flags file (exactclass: --scalar-wrapper-abi) is appended to the cgeist command.
+--shim defaults to common.DEFAULT_SHIM = real (MEMOS.md #67; exactclass, the default of MEMOS
+decision #8 until W11-adopt, stays selectable): a name is a directory under shim/, "polygeist"
+Polygeist's own stand-ins, anything else a path. The shim's cgeist_flags file (exactclass:
+--scalar-wrapper-abi) is appended to the cgeist command.
 --shim real is no shim: the real Vitis 2025.1 headers (the synthesis tree
 common/technology/autopilot, read from the install, never copied) with the Vitis front end's
 macros and -include, through cgeist's Xilinx extensions (--xlx-prelude --xlx-headers, clang
 -fxlx-bitwidth / -fxlx-apint-promote; MEMOS #39, M12, track W11); see shim/real/README.md. It
-needs a cgeist built from Polygeist branch w11-integrate (CGEIST_BIN) and stops at once with
-another binary.
+needs a cgeist with the W11 Xilinx extensions (the installed one since Polygeist 483ef69c,
+MEMOS #66) and stops at once with another binary.
 
 Per design:
   1. cgeist <sources> --function=<top> -S --hls-annotate --raise-scf-to-affine

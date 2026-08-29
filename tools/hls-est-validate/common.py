@@ -74,12 +74,15 @@ POLYGEIST_TEST_HLS = "/mnt/d/HLS/Polygeist/tools/cgeist/Test/HLS"
 SHIM_INCLUDE = POLYGEIST_TEST_HLS + "/Inputs/vitis"   # Polygeist's Vitis header stand-ins
 POLYBENCH_UTIL_INCLUDE = "/mnt/d/HLS/Polygeist/tools/cgeist/Test/polybench/utilities"
 
-# The harness default header shim (MEMOS.md M2, decision #8 of 2026-10-10: "Yes use exact class"):
-# shim/exactclass, ap_int / ap_fixed as classes around a _BitInt, lowered by cgeist's
-# --scalar-wrapper-abi, which the shim's cgeist_flags file supplies. "scalar" (the default
-# before W1c: widened builtin ints, ap_fixed as float) and "exact" (_BitInt, no member
-# functions) stay selectable with run_hlsest.py --shim.
-DEFAULT_SHIM = "exactclass"
+# The harness default header shim (MEMOS.md #67, 2026-10-16, applied by track W11-adopt): "real",
+# no stand-in at all: the Vitis 2025.1 headers of the install, compiled the way the Vitis front
+# end does through cgeist's Xilinx extensions (shim/real/README.md; MEMOS #39: "I do not want to
+# maintain a shim for every header"). It needs the installed cgeist (Polygeist hls-est-vitis-match
+# 483ef69c or later, linked against the patched clang of MEMOS #66); run_hlsest.py stops before
+# the first design when the binary lacks the Xilinx options. "exactclass" (the default from W1c,
+# decision #8, until W11-adopt: ap_int / ap_fixed as classes around a _BitInt, cgeist
+# --scalar-wrapper-abi), "scalar" and "exact" stay selectable with run_hlsest.py --shim.
+DEFAULT_SHIM = "real"
 
 # HLS_EST_BIN overrides the binary (e.g. a frozen copy, so that a rebuild
 # during a long run cannot mix two builds in one result file).
