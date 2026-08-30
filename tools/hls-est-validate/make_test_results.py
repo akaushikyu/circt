@@ -55,6 +55,10 @@ def run_command(test_file, hls_est):
     if toks[0] == "timeout":
         timeout = int(toks[1])
         toks = toks[2:]
+    # An XFAIL-by-error test runs hls-est under the generator's memory cap (mirror_cgeist_tests.py
+    # run_line(capped=True)); predict() applies the same cap through C.mem_limited.
+    if toks[0] == "prlimit":
+        toks = toks[toks.index("--") + 1:]
     assert toks[0] == "hls-est", toks[:3]
     pin = re.search(r"^// CHECK: Total BRAM: (\d+)\{\{\$\}\}$", text, flags=re.M)
     return [hls_est] + toks[1:], timeout, (int(pin.group(1)) if pin else None)
