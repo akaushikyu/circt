@@ -102,10 +102,15 @@ OUT_OF_MEMORY_MARKERS = ("std::bad_alloc", "out of memory", "Cannot allocate mem
 
 
 def mem_limited(cmd):
-    """cmd under `prlimit --data` (thread-safe, unlike a preexec_fn in the harness's thread pool)."""
-    if MEM_LIMIT_GB <= 0:
-        return list(cmd)
-    return ["prlimit", f"--data={int(MEM_LIMIT_GB * 2**30)}", "--", *cmd]
+    """cmd under `prlimit --data` (thread-safe, unlike a preexec_fn in the harness's thread pool),
+    and with RLIMIT_CORE = 1 byte: WSL pipes every crash to /wsl-capture-crash, which writes a full
+    dump of the process to %TEMP%\\wsl-crashes on C: (12 GB each for a run at the memory cap; 54 GB on
+    2026-10-16 left C: with 96 MB free). The kernel skips a piped core dump when the limit is exactly
+    1 (fs/coredump.c); a limit of 0 does not stop it."""
+    limits = ["--core=1"]
+    if MEM_LIMIT_GB > 0:
+        limits.append(f"--data={int(MEM_LIMIT_GB * 2**30)}")
+    return ["prlimit", *limits, "--", *cmd]
 
 
 def out_of_memory(stderr):

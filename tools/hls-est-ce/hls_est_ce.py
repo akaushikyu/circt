@@ -236,13 +236,14 @@ MEM_LIMIT_GB = float(os.environ.get("HLSEST_CE_MEM_LIMIT_GB", "12"))
 
 def run(cmd, cwd=None):
     t0 = time.time()
-    if MEM_LIMIT_GB > 0:
-        cmd = ["prlimit", f"--data={int(MEM_LIMIT_GB * 2**30)}", "--", *cmd]
+    # --core=1: no WSL crash dump on C: (see common.mem_limited in the harness).
+    limits = ["--core=1"] + ([f"--data={int(MEM_LIMIT_GB * 2**30)}"] if MEM_LIMIT_GB > 0 else [])
+    cmd = ["prlimit", *limits, "--", *cmd]
     try:
         p = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, errors="replace",
                            timeout=TIMEOUT_S, stdin=subprocess.DEVNULL)
     except subprocess.TimeoutExpired:
-        sys.exit(f"hls-est-ce: {Path(cmd[-1] if cmd[0] == 'prlimit' else cmd[0]).name} timed out after {TIMEOUT_S} s")
+        sys.exit(f"hls-est-ce: {Path(next(a for a in cmd[1:] if not a.startswith('--')) if cmd[0] == 'prlimit' else cmd[0]).name} timed out after {TIMEOUT_S} s")
     return p, time.time() - t0
 
 
