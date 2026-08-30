@@ -30,7 +30,11 @@ Per test:
      number of memrefs; then the total).
      The current hls-est output is the expectation: a regression pin, not Vitis.
      hls-est failing gives an XFAIL test; hls-est still running after --long-timeout seconds
-     gives an XFAIL test whose RUN line stops hls-est after --timeout seconds.
+     gives an XFAIL test whose RUN line stops hls-est after --timeout seconds. A test that passes
+     only in the --long-timeout retry stays a passing test, and its header records the seconds
+     hls-est took at generation (a slow lit test whose verdict may change at regeneration when it
+     comes close to --long-timeout; W11-adopt review D5). That note is the file's last line, after
+     the CHECK lines, so that it shifts no source location the CHECK lines pin.
 
 A test cgeist cannot compile with this command gets no test file (decision #47: listed, with the
 cgeist error, in the manifest and in hls-doc/tests.md). Every test, mirrored or not, is in
@@ -323,8 +327,9 @@ def run_line(top, timeout=None, capped=False):
     """The RUN line. A test that is XFAIL because hls-est failed (capped) runs hls-est under the memory
     cap it failed under at generation (C.MEM_LIMIT_GB, prlimit --data, as run_hlsest), so that lit
     reproduces the failure instead of an unbounded run that can exhaust WSL's memory (MEMOS #65):
-    hlsyn-vitis seidel-2d grows past 12 GB and is killed there. (A timed-out test is bounded by its
-    timeout.)"""
+    hlsyn-vitis seidel-2d grows past 12 GB and is killed there. Every XFAIL test is also bounded by a
+    timeout: a capped one gets --timeout as well, so that lit does not spend minutes growing hls-est to
+    the cap again (seidel-2d: 303 s to 12 GB; W11-adopt review D5)."""
     cmd = " ".join(lit_quote(a) for a in hlsest_args(top))
     lead = "hls-est"
     if capped and C.MEM_LIMIT_GB > 0:
@@ -393,7 +398,8 @@ def recheck_existing(path, timeout):
     if p.returncode != 0:
         return path, f"hls-est exit {p.returncode}"
     body = text[:text.index("\n// CHECK")] if "\n// CHECK" in text else text.rstrip("\n")
-    new_text = body.rstrip("\n") + "\n\n" + "\n".join(check_lines(p.stdout)) + "\n"
+    trailer = re.findall(r"^// slow: .*$", text, re.M)  # write_mirror's note after the CHECK lines
+    new_text = body.rstrip("\n") + "\n\n" + "\n".join([*check_lines(p.stdout), *trailer]) + "\n"
     old_total = re.search(r"^// CHECK: Total BRAM: (\S+?)\{\{\$\}\}$", text, re.M)
     total, _ = RH.parse_hlsest_output(p.stdout)
     if not old_total or old_total.group(1) != str(total):
@@ -470,20 +476,28 @@ def write_mirror(e, mlir_path, meta, args, V):
     out = mirror_path(e["test"])
     out.parent.mkdir(parents=True, exist_ok=True)
 
-    def emit(run, extra, checks):
+    def emit(run, extra, checks, trailer=()):
         lines = header(e, meta, top, vit, top_note + extra) + [f"// RUN: {run}"] + extra_directives
-        text = "\n".join(lines) + "\n\n" + body.rstrip("\n") + "\n\n" + "\n".join(checks) + "\n"
+        text = "\n".join(lines) + "\n\n" + body.rstrip("\n") + "\n\n" + "\n".join([*checks, *trailer]) + "\n"
         out.write_text(text)
 
     extra_directives = []
     emit(run_line(top), [], ["// CHECK: Total BRAM:"])
     st, stdout, el = run_hlsest(out, top, args.timeout)
-    if st.startswith("hls-est timeout"):
+    slow = st.startswith("hls-est timeout")
+    if slow:
         st, stdout, el = run_hlsest(out, top, args.long_timeout)
     res = {"top": top, "vitis": vit, "mirror": shown(out)}
     if st == "ok":
         checks = check_lines(stdout)
-        emit(run_line(top), [], checks)
+        # The slow note goes after the CHECK lines: the CHECK lines pin source locations (line:column)
+        # of the file hls-est just read, so the header must not grow by a line.
+        note = []
+        if slow:
+            note = [f"// slow: hls-est took {el:.0f} s at generation (over the {args.timeout} s timeout, inside the "
+                    f"{args.long_timeout} s retry); this test costs about as long in every lit run"]
+            res["hlsest_s"] = round(el)
+        emit(run_line(top), [], checks, note)
         total, mems = RH.parse_hlsest_output(stdout)
         res.update({"outcome": "pass", "hlsest_bram": total, "memrefs": len(mems)})
     elif st.startswith("hls-est timeout"):
@@ -495,8 +509,9 @@ def write_mirror(e, mlir_path, meta, args, V):
         res.update({"outcome": "xfail", "reason": f"hls-est timeout (> {args.long_timeout} s)"})
     else:
         extra_directives = ["// XFAIL: *"]
-        emit(run_line(top, capped=True),
-             [f"expected to fail: {st} (under a {C.MEM_LIMIT_GB:g} GB memory cap, as the RUN line)"],
+        emit(run_line(top, args.timeout, capped=True),
+             [f"expected to fail: {st} (under a {C.MEM_LIMIT_GB:g} GB memory cap, as the RUN line; "
+              f"the RUN line also stops it after {args.timeout} s)"],
              ["// CHECK: Total BRAM:"])
         res.update({"outcome": "xfail", "reason": st})
     return res

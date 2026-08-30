@@ -26,10 +26,10 @@ whetstone,1,1,1,0,0.0,16,16,16,0,0,0,0,1,0,0.0
 ALL,812,736,708,595,84.0,14744,20.8,0.0,28,76,614,19,23,71,86.7
 
 run_setting,value
-generated,2026-10-16 07:05
+generated,2026-10-16 08:53
 generator,tools/hls-est-validate/make_compare_csv.py
 hls-est run json,/home/peter/hls-est-work/coord/scratch/w11adopt/C1.json
-hls-est git,unknown (HLS_EST_BIN=/home/peter/hls-est-work/coord/scratch/w11adopt/bin/hls-est.a0)
+hls-est git,"frozen copy of build/clion/bin/hls-est (md5 021761c3, sha256 ba81739b503bd096; built 2026-10-16 01:32 from the working tree before 1f84d0f16 was committed at 03:25; recorded after the run, W11-adopt review D7)"
 hls-est binary,/home/peter/hls-est-work/coord/scratch/w11adopt/bin/hls-est.a0
 pipeline,--lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --infer-vitis-split-array=td=off --narrow-ram-widths --memory-banking-bram --convert-affine-to-loopschedule --bram-analysis
 shim,/home/peter/circt/tools/hls-est-validate/shim/real

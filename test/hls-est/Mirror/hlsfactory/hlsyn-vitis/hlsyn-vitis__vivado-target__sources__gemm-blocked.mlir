@@ -4,8 +4,8 @@
 // design: hlsyn-vitis/vivado-target__sources__gemm-blocked (harness catalogue record; compiled as run_hlsest.py does)
 // top: _Z6bbgemmPdS_S_
 // Vitis 2025.1 td=off: vitis failed: ERROR: [HLS 200-70] Failed building synthesis data model.
-// expected to fail: hls-est error: exit -6 (under a 12 GB memory cap, as the RUN line)
-// RUN: prlimit --data=12884901888 -- hls-est %s --symbol-privatize=exclude=_Z6bbgemmPdS_S_ --symbol-dce --lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --infer-vitis-split-array=td=off --narrow-ram-widths --memory-banking-bram --convert-affine-to-loopschedule '--bram-analysis=top=_Z6bbgemmPdS_S_ math-costs=%hls_est_math_costs' -o /dev/null | FileCheck %s
+// expected to fail: hls-est error: exit -6 (under a 12 GB memory cap, as the RUN line; the RUN line also stops it after 120 s)
+// RUN: timeout 120 prlimit --data=12884901888 -- hls-est %s --symbol-privatize=exclude=_Z6bbgemmPdS_S_ --symbol-dce --lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --infer-vitis-split-array=td=off --narrow-ram-widths --memory-banking-bram --convert-affine-to-loopschedule '--bram-analysis=top=_Z6bbgemmPdS_S_ math-costs=%hls_est_math_costs' -o /dev/null | FileCheck %s
 // XFAIL: *
 
 module {

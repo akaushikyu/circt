@@ -318,3 +318,4 @@ module {
 // CHECK-NEXT: kind=PIPO  bram=256{{$}}
 // CHECK-NOT: {{^memref\.}}
 // CHECK: Total BRAM: 1248{{$}}
+// slow: hls-est took 368 s at generation (over the 120 s timeout, inside the 600 s retry); this test costs about as long in every lit run

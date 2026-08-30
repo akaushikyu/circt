@@ -6630,3 +6630,4 @@ module {
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
 // CHECK: Total BRAM: 1030{{$}}
+// slow: hls-est took 168 s at generation (over the 120 s timeout, inside the 600 s retry); this test costs about as long in every lit run

@@ -37,9 +37,9 @@ under `real` only is a shim-semantics difference, track W11; one under both is a
 
 A run is valid when the reference exits 0 within the timeout and AddressSanitizer reports nothing.  A
 design is `equal` when it has a valid run and every valid run matches, `mismatch` when a valid run
-differs; then the reference is rebuilt with -ftrivial-auto-var-init=pattern and =zero (a design whose
-outputs depend on that reads uninitialised memory: `n/a: reads uninitialised memory`) and with UBSan
-(its first report is attached to the record).  Everything else is `n/a: <reason>` (no MLIR, the top has
+differs; then the reference is rebuilt with -ftrivial-auto-var-init=pattern and =zero, at its own -O
+and at -O0 (a design whose outputs depend on that reads uninitialised memory: `n/a: reads uninitialised
+memory`) and with UBSan (its first report is attached to the record).  Everything else is `n/a: <reason>` (no MLIR, the top has
 an argument type the driver cannot fill, the native build does not compile, no valid run, ...).
 
     python3 check_semantics.py --from <run json> [--datasets a,b] [--benchmarks x,y] [-j 8]
@@ -1892,20 +1892,29 @@ class Checker:
             return res
         # a mismatch: does the reference read uninitialised memory?  does it run into UB?
         mi = MODE_INDEX[bad["mode"]]
-        dumps = []
-        for init in ("pattern", "zero"):
-            exe = self.build_ref(kind, wd, ddir, rflags, srcs, top_fn, rec, plan, res, tag=f"{kind}_{init}",
-                                 extra=[f"-ftrivial-auto-var-init={init}"])
-            if exe is None:
-                return res
-            o = wd / f"{kind}_{init}.bin"
-            rc, _, _ = run_exe(exe, mi, bad["seed"], a.calls, o, a.timeout)
-            dumps.append(o.read_bytes() if (rc == 0 and o.exists()) else None)
+        # two pairs, each =pattern against =zero: at the reference's own optimisation level and at -O0 (an
+        # -O0 in `extra` overrides the real reference's -O1, the last -O wins).  At -O1 GCC can fold a read of
+        # an uninitialised local to a constant before the auto-var-init lowering, so that pair gives the same
+        # output and the read goes unseen (ap_fixed<16,5> local read into an output: -O0 =pattern 0xfefe,
+        # -O1 =pattern 0x0000; forgebench mult_op_module_dot, W11-adopt review D3); the -O1 pair stays because
+        # it sees reads the -O0 pair does not (kamya_hari lab_3: -O1 pair differs, -O0 pair equal).
         res["mismatch_run"] = bad
-        if dumps[0] is None or dumps[1] is None or dumps[0] != dumps[1]:
-            res["status"] = "n/a"
-            res["reason"] = "reads uninitialised memory (native outputs depend on -ftrivial-auto-var-init)"
-            return res
+        for opt in ([], ["-O0"]):
+            dumps = []
+            for init in ("pattern", "zero"):
+                tag = f"{kind}_{init}" + ("_O0" if opt else "")
+                exe = self.build_ref(kind, wd, ddir, rflags, srcs, top_fn, rec, plan, res, tag=tag,
+                                     extra=[*opt, f"-ftrivial-auto-var-init={init}"])
+                if exe is None:
+                    return res
+                o = wd / f"{tag}.bin"
+                rc, _, _ = run_exe(exe, mi, bad["seed"], a.calls, o, a.timeout)
+                dumps.append(o.read_bytes() if (rc == 0 and o.exists()) else None)
+            if dumps[0] is None or dumps[1] is None or dumps[0] != dumps[1]:
+                res["status"] = "n/a"
+                res["reason"] = ("reads uninitialised memory (native outputs depend on -ftrivial-auto-var-init"
+                                 + (" at -O0)" if opt else ")"))
+                return res
         exe = self.build_ref(kind, wd, ddir, rflags, srcs, top_fn, rec, plan, res, tag=f"{kind}_ubsan",
                              extra=["-fsanitize=undefined"])
         if exe is not None:
