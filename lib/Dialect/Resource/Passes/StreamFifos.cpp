@@ -632,12 +632,21 @@ std::optional<StreamHandleRecord> circt::hls_analysis::analyzeStreamHandle(
 
     std::optional<int64_t> tmplDepth;
     std::string elementMangled;
+    auto takeDepth = [&](const ReachedCall *candidateValue) {
+      tmplDepth = candidateValue->tmpl.depth;
+      elementMangled = candidateValue->tmpl.elementMangled;
+    };
     for (const ReachedCall *candidateValue : memberCalls)
-      if (candidateValue->tmpl.depth) {
-        tmplDepth = candidateValue->tmpl.depth;
-        elementMangled = candidateValue->tmpl.elementMangled;
+      if (candidateValue->tmpl.depth && *candidateValue->tmpl.depth > 0 &&
+          isConstructor(candidateValue->tmpl.method)) {
+        takeDepth(candidateValue);
         break;
       }
+    if (!tmplDepth || *tmplDepth == 0)
+      for (const ReachedCall *candidateValue : memberCalls)
+        if (candidateValue->tmpl.depth &&
+            (!tmplDepth || *candidateValue->tmpl.depth > *tmplDepth))
+          takeDepth(candidateValue);
     if (pragmaDepth && memberPragmaResolved) {
       globalOp.depth = *pragmaDepth;
       globalOp.depthSource = "pragma";
