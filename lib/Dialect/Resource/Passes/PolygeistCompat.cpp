@@ -4,6 +4,7 @@
 
 #include "circt/Dialect/Resource/Passes/PolygeistCompat.h"
 #include "circt/Dialect/Resource/Passes/CallInstances.h"
+#include "circt/Dialect/Resource/Passes/StreamFifos.h"
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
@@ -188,6 +189,83 @@ static void dropMathCoreBodies(ModuleOp module) {
       collect(resultValue);
     symbols.erase(symbolName);
   }
+}
+
+/// `s >> A[i][j]` / `s.write(A[i])`: cgeist passes the element by reference
+/// to the hls::stream method, as `polygeist.subindex` views down to a pointer
+/// to the element (`memref<?xT>` of a 1-D row). The method has no body, so
+/// that view is neither a load nor a store hls-est can see: the array's
+/// accesses go uncounted and any partition pragma on it is dropped ("used by
+/// polygeist.subindex"). Vitis sees the element access: the stream read
+/// stores into the element, the write loads it (VITIS_NOTES N47: the
+/// partitioned statics of karthikeya_sharma lab_2 / davendra_maharaj lab2
+/// filled by `s >> Q[i][j]` are banked as pragma'd). Rewritten here into the
+/// front end's own idiom for a scalar passed by reference (a one-element
+/// alloca cast to `memref<?xT>`) plus an explicit load / store of the
+/// element, which the row lowering below then turns into an access of the
+/// whole array. Only integer / float elements of a rank-1 row; anything
+/// else is left as it was.
+static unsigned lowerStreamElementViews(ModuleOp module) {
+  SmallVector<func::CallOp> calls;
+  module.walk([&](func::CallOp c) { calls.push_back(c); });
+  unsigned rewritten = 0;
+  for (func::CallOp call : calls) {
+    std::optional<StreamTemplate> t = parseStreamMethod(call.getCallee());
+    if (!t || call.getNumOperands() < 2)
+      continue;
+    StringRef m = t->method;
+    bool streamReads = (m.starts_with("4read") && !m.starts_with("4readEv")) ||
+                       m.starts_with("7read_nb") || m.starts_with("rs");
+    bool streamWrites = m.starts_with("5write") ||
+                        m.starts_with("8write_nb") || m.starts_with("ls");
+    if (!streamReads && !streamWrites)
+      continue;
+    auto si = call.getOperand(1).getDefiningOp<SubIndexOp>();
+    if (!si)
+      continue;
+    auto src = dyn_cast<MemRefType>(si.getSource().getType());
+    auto res = dyn_cast<MemRefType>(si.getResult().getType());
+    if (!src || !res || src.getRank() != 1 || res.getRank() != 1 ||
+        !src.hasStaticShape() || !ShapedType::isDynamic(res.getShape()[0]) ||
+        !src.getLayout().isIdentity() || !res.getLayout().isIdentity() ||
+        src.getElementType() != res.getElementType() ||
+        !src.getElementType().isIntOrFloat())
+      continue;
+    auto fn = call->getParentOfType<func::FuncOp>();
+    if (!fn)
+      continue;
+    Location loc = call.getLoc();
+    OpBuilder entry(&fn.getBody().front(), fn.getBody().front().begin());
+    auto tmp = memref::AllocaOp::create(
+        entry, loc, MemRefType::get({1}, src.getElementType()));
+    auto view = memref::CastOp::create(entry, loc, res, tmp);
+    Value idx = si.getIndex();
+    bool affineIdx = affine::isValidDim(idx) || affine::isValidSymbol(idx);
+    OpBuilder b(call);
+    Value zero = arith::ConstantIndexOp::create(b, loc, 0);
+    auto load = [&](OpBuilder &bb, Value mem, Value i) -> Value {
+      if (affineIdx || mem == tmp.getResult())
+        return affine::AffineLoadOp::create(bb, loc, mem, ValueRange{i});
+      return memref::LoadOp::create(bb, loc, mem, ValueRange{i});
+    };
+    auto store = [&](OpBuilder &bb, Value v, Value mem, Value i) {
+      if (affineIdx || mem == tmp.getResult())
+        affine::AffineStoreOp::create(bb, loc, v, mem, ValueRange{i});
+      else
+        memref::StoreOp::create(bb, loc, v, mem, ValueRange{i});
+    };
+    if (streamWrites)
+      store(b, load(b, si.getSource(), idx), tmp, zero);
+    call->setOperand(1, view);
+    if (streamReads) {
+      b.setInsertionPointAfter(call);
+      store(b, load(b, tmp, zero), si.getSource(), idx);
+    }
+    if (si->use_empty())
+      si->erase();
+    ++rewritten;
+  }
+  return rewritten;
 }
 
 namespace {
@@ -594,6 +672,7 @@ struct LowerSubIndexPass
     if (!checkUnmodelledOps(module))
       return signalPassFailure();
     dropMathCoreBodies(module);
+    lowerStreamElementViews(module);
     SymbolTable symbols(module);
     SmallVector<SubIndexOp> worklist;
     module.walk([&](SubIndexOp si) { worklist.push_back(si); });
