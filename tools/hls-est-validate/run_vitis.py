@@ -396,6 +396,7 @@ def reparse(designs, args):
 
 
 def main():
+    C.ensure_windows_interop()   # a stale WSL interop socket stops every cmd.exe call
     ap = argparse.ArgumentParser()
     ap.add_argument("--datasets", default="", help="comma list; default: all with sources")
     ap.add_argument("--benchmarks", default="", help="comma list of benchmark names")

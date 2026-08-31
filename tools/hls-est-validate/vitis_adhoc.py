@@ -31,6 +31,7 @@ EXP_CACHE = Path.home() / "hls-est-work" / "experiments"
 
 
 def main():
+    C.ensure_windows_interop()   # a stale WSL interop socket stops every cmd.exe call
     ap = argparse.ArgumentParser()
     ap.add_argument("--name", required=True)
     ap.add_argument("--src", required=True, nargs="+", help="source file(s) (WSL paths)")

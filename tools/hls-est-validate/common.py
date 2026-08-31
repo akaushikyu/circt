@@ -40,6 +40,35 @@ VITIS_AUTOPILOT_WSL = "/mnt/a/Vitis/2025.1/Vitis/common/technology/autopilot"
 CMD_EXE = "/mnt/c/Windows/System32/cmd.exe"
 POWERSHELL_EXE = "/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe"
 
+
+def ensure_windows_interop():
+    """Make cmd.exe / powershell.exe calls work from this process and its children.
+
+    WSL hands each session an interop socket in $WSL_INTEROP (/run/WSL/<pid>_interop). That socket
+    can go stale while the session lives on ("UtilAcceptVsock: accept4 failed 110"; 2026-10-19 it
+    broke a whole W9 round's Vitis runs), while another one, e.g. /run/WSL/2_interop, still works.
+    Probe the current one and, if it fails, switch os.environ to the first that answers. Returns
+    the socket in use, or None when none works (Windows calls will then fail as before)."""
+    import glob
+    import subprocess
+
+    def works(sock):
+        env = dict(os.environ, WSL_INTEROP=sock) if sock else dict(os.environ)
+        try:
+            return subprocess.run([CMD_EXE, "/c", "exit 0"], env=env, capture_output=True,
+                                  timeout=30, stdin=subprocess.DEVNULL).returncode == 0
+        except (OSError, subprocess.TimeoutExpired):
+            return False
+
+    current = os.environ.get("WSL_INTEROP")
+    if works(current):
+        return current
+    for sock in sorted(glob.glob("/run/WSL/*_interop")):
+        if sock != current and works(sock):
+            os.environ["WSL_INTEROP"] = sock
+            return sock
+    return None
+
 # llvm-dis able to read the 2025.1 bitcode (clang-3.9 based csynth LLVM).
 # The 2026.1 Linux one works once its private libs are on LD_LIBRARY_PATH.
 LLVM_DIS_CANDIDATES = [
