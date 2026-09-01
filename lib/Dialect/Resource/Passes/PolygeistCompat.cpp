@@ -290,7 +290,9 @@ static unsigned lowerStreamElementViews(ModuleOp module) {
 /// per argument form (N14 R4): a clone whose parameter has the array's
 /// static type; inside it, a use that needs the pointer type (a further
 /// call, a view) gets a cast of its own, which the next round specialises in
-/// turn. Returns the number of calls redirected.
+/// turn. The top's own array arguments (block arguments of a public
+/// function: ports) are left as they are. Returns the number of calls
+/// redirected.
 static unsigned
 specializeCastArguments(ModuleOp module,
                         SmallVectorImpl<func::FuncOp> &origins) {
@@ -325,6 +327,15 @@ specializeCastArguments(ModuleOp module,
             !from.getLayout().isIdentity() || !to.getLayout().isIdentity() ||
             from.getMemorySpace() != to.getMemorySpace())
           continue;
+
+        if (!from.getElementType().isIntOrFloat() || from.getNumElements() <= 1)
+          continue;
+
+        if (auto arg = dyn_cast<BlockArgument>(cast.getSource()))
+          if (auto owner =
+                  dyn_cast<func::FuncOp>(arg.getOwner()->getParentOp()))
+            if (owner.isPublic())
+              continue;
         if (!from.getElementType().isIntOrFloat() || from.getNumElements() <= 1)
           continue;
         if (auto argument = dyn_cast<BlockArgument>(cast.getSource()))
