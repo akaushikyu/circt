@@ -452,6 +452,21 @@ groupConcurrentCalls(func::FuncOp parent, ArrayRef<Operation *> sites,
   if (elementCount == 0)
     return 0;
 
+  if (parent->hasAttr("hls.dataflow") &&
+      llvm::all_of(sites, [&](Operation *stringValue) {
+        return isa<CallOpInterface>(stringValue) &&
+               stringValue->getParentOp() == parent.getOperation();
+      })) {
+    for (unsigned loopIndex = 0; loopIndex < elementCount; ++loopIndex)
+      group[loopIndex] = loopIndex;
+    if (rule)
+      *rule = std::to_string(elementCount) + " call site(s) -> " +
+              std::to_string(elementCount) +
+              " instance(s) (dataflow region: every call site is a process "
+              "of its own)";
+    return elementCount;
+  }
+
   SmallVector<llvm::BitVector> before(elementCount,
                                       llvm::BitVector(elementCount));
   unsigned byArray = 0, byValue = 0, byBranch = 0, byCaller = 0;
