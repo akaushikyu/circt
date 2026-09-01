@@ -283,11 +283,14 @@ static unsigned lowerStreamElementViews(ModuleOp module) {
 /// A static array passed to a pointer parameter (`void load(T *dst)` called
 /// as `load(buf)` with `T buf[N]`): cgeist casts it to `memref<?xT>`, and a
 /// pointer parameter is not a storage node the banking can follow, so a
-/// partition pragma on `buf` is dropped even though Vitis keeps it. The
-/// callee is cloned with the array's static type in place of the pointer
-/// parameter. Uses that still need the pointer are cast back inside the
-/// clone and handled on the next pass. Returns the number of calls
-/// redirected.
+/// partition pragma on `buf` is dropped ("used by memref.cast") although
+/// Vitis applies it (VITIS_NOTES N47: zijun_wang lab3's statics, passed by
+/// pointer into `load_matrix_*`, are banked as pragma'd). The callee is
+/// specialised per static argument form, as Vitis specialises a function
+/// per argument form (N14 R4): a clone whose parameter has the array's
+/// static type; inside it, a use that needs the pointer type (a further
+/// call, a view) gets a cast of its own, which the next round specialises in
+/// turn. Returns the number of calls redirected.
 static unsigned
 specializeCastArguments(ModuleOp module,
                         SmallVectorImpl<func::FuncOp> &origins) {

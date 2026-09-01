@@ -128,14 +128,14 @@ static Region *regionUnder(Operation *op, Operation *anc) {
 /// common ancestor: it is a conditional (scf.if, affine.if, scf.index_switch)
 /// and they lie in different regions of it (W3 review 2 D1, w3r2_k5:
 /// `if (sel) work(a, b); else work(c, d);`, Vitis 1 instance, 4 BRAM).
-static bool mutuallyExclusive(Operation *arrayValue, Operation *buildPoint) {
+static bool mutuallyExclusive(Operation *arrayValue, Operation *b) {
 
   auto armsOf = [](Operation *op) -> ArrayRef<int64_t> {
     if (auto at = op->getAttrOfType<DenseI64ArrayAttr>(kIfArmsAttr))
       return at.asArrayRef();
     return {};
   };
-  ArrayRef<int64_t> ha = armsOf(arrayValue), hb = armsOf(buildPoint);
+  ArrayRef<int64_t> ha = armsOf(arrayValue), hb = armsOf(b);
   for (size_t exprValue = 0; exprValue + 1 < ha.size(); exprValue += 2)
     for (size_t rowValue = 0; rowValue + 1 < hb.size(); rowValue += 2)
       if (ha[exprValue] == hb[rowValue] &&
@@ -143,12 +143,12 @@ static bool mutuallyExclusive(Operation *arrayValue, Operation *buildPoint) {
         return true;
   for (Operation *portValue = arrayValue->getParentOp(); portValue;
        portValue = portValue->getParentOp()) {
-    if (!portValue->isProperAncestor(buildPoint))
+    if (!portValue->isProperAncestor(b))
       continue;
     if (!isa<scf::IfOp, affine::AffineIfOp, scf::IndexSwitchOp>(portValue))
       return false;
     Region *ra = regionUnder(arrayValue, portValue),
-           *rb = regionUnder(buildPoint, portValue);
+           *rb = regionUnder(b, portValue);
     return ra && rb && ra != rb;
   }
   return false;
@@ -182,14 +182,13 @@ static unsigned chainCover(ArrayRef<llvm::BitVector> reach,
   SmallVector<int> matchR(memoryOp, -1), next(memoryOp, -1);
   SmallVector<char> visited;
   std::function<bool(unsigned)> augment = [&](unsigned arrayValue) -> bool {
-    for (unsigned buildPoint = 0; buildPoint < memoryOp; ++buildPoint) {
-      if (buildPoint == arrayValue || visited[buildPoint] ||
-          !reach[nodes[arrayValue]].test(nodes[buildPoint]))
+    for (unsigned b = 0; b < memoryOp; ++b) {
+      if (b == arrayValue || visited[b] ||
+          !reach[nodes[arrayValue]].test(nodes[b]))
         continue;
-      visited[buildPoint] = 1;
-      if (matchR[buildPoint] < 0 ||
-          augment(static_cast<unsigned>(matchR[buildPoint]))) {
-        matchR[buildPoint] = static_cast<int>(arrayValue);
+      visited[b] = 1;
+      if (matchR[b] < 0 || augment(static_cast<unsigned>(matchR[b]))) {
+        matchR[b] = static_cast<int>(arrayValue);
         return true;
       }
     }
@@ -199,16 +198,16 @@ static unsigned chainCover(ArrayRef<llvm::BitVector> reach,
     visited.assign(memoryOp, 0);
     (void)augment(arrayValue);
   }
-  for (unsigned buildPoint = 0; buildPoint < memoryOp; ++buildPoint)
-    if (matchR[buildPoint] >= 0)
-      next[matchR[buildPoint]] = static_cast<int>(buildPoint);
+  for (unsigned b = 0; b < memoryOp; ++b)
+    if (matchR[b] >= 0)
+      next[matchR[b]] = static_cast<int>(b);
 
   SmallVector<int> chainOfNode(memoryOp, -1);
   unsigned chains = 0;
-  for (unsigned buildPoint = 0; buildPoint < memoryOp; ++buildPoint) {
-    if (matchR[buildPoint] >= 0)
+  for (unsigned b = 0; b < memoryOp; ++b) {
+    if (matchR[b] >= 0)
       continue;
-    for (int candidateValue = static_cast<int>(buildPoint); candidateValue >= 0;
+    for (int candidateValue = static_cast<int>(b); candidateValue >= 0;
          candidateValue = next[candidateValue])
       chainOfNode[candidateValue] = static_cast<int>(chains);
     ++chains;
@@ -281,11 +280,9 @@ static bool mayBeWritten(Value mem, ArgWriteMemo &memo) {
       }
       SmallVector<MemoryEffects::EffectInstance> effects;
       eff.getEffects(effects);
-      for (auto &entryValue : effects)
-        if ((entryValue.getValue() == cur &&
-             !isa<MemoryEffects::Read>(entryValue.getEffect())) ||
-            (!entryValue.getValue() &&
-             isa<MemoryEffects::Write>(entryValue.getEffect())))
+      for (auto &e : effects)
+        if ((e.getValue() == cur && !isa<MemoryEffects::Read>(e.getEffect())) ||
+            (!e.getValue() && isa<MemoryEffects::Write>(e.getEffect())))
           writes = true;
     }
   }
@@ -366,14 +363,14 @@ readsWrites(Operation *op, const SmallVectorImpl<StorageRoot> &roots,
   }
   SmallVector<MemoryEffects::EffectInstance> effects;
   eff.getEffects(effects);
-  for (auto &entryValue : effects) {
-    Value valueHandle = entryValue.getValue();
+  for (auto &e : effects) {
+    Value valueHandle = e.getValue();
     if (!valueHandle || !isa<BaseMemRefType>(valueHandle.getType()) ||
         !inRoots(valueHandle))
       continue;
-    if (isa<MemoryEffects::Read>(entryValue.getEffect()))
+    if (isa<MemoryEffects::Read>(e.getEffect()))
       reads = true;
-    else if (isa<MemoryEffects::Write>(entryValue.getEffect()))
+    else if (isa<MemoryEffects::Write>(e.getEffect()))
       writes = true;
   }
 }
@@ -505,20 +502,68 @@ groupConcurrentCalls(func::FuncOp parent, ArrayRef<Operation *> sites,
     return isa<LoopLikeOpInterface>(op) ||
            isa<loopschedule::LoopSchedulePipelineOp>(op);
   };
-  auto shareLoop = [&](Operation *arrayValue, Operation *buildPoint) {
-    for (Operation *portValue = arrayValue->getParentOp();
-         portValue && portValue != parentOp;
-         portValue = portValue->getParentOp())
-      if (isLoop(portValue) && portValue->isProperAncestor(buildPoint))
-        return true;
-    return false;
+
+  DenseMap<Operation *, Operation *> outermostLoopOf;
+  DenseMap<Operation *, unsigned> lastOrdinalOf;
+  auto outermostLoop = [&](Operation *arrayValue) -> Operation * {
+    auto [it, fresh] = outermostLoopOf.try_emplace(arrayValue, nullptr);
+    if (fresh)
+      for (Operation *portValue = arrayValue->getParentOp();
+           portValue && portValue != parentOp;
+           portValue = portValue->getParentOp())
+        if (isLoop(portValue))
+          it->second = portValue;
+    return it->second;
+  };
+  auto shareLoop = [&](Operation *arrayValue, Operation *b) {
+    Operation *loop = outermostLoop(arrayValue);
+    if (!loop)
+      return false;
+    auto [it, fresh] = lastOrdinalOf.try_emplace(loop, 0);
+    if (fresh) {
+      unsigned last = ordinal.lookup(loop);
+      loop->walk(
+          [&](Operation *op) { last = std::max(last, ordinal.lookup(op)); });
+      it->second = last;
+    }
+    unsigned ob = ordinal.lookup(b);
+    return ob > ordinal.lookup(loop) && ob <= it->second;
   };
   auto mayFollow = [&](Operation *earlier, Operation *later) {
     return ordinal.lookup(earlier) < ordinal.lookup(later) ||
            shareLoop(earlier, later);
   };
 
+  struct RootAccess {
+    StorageRoot root;
+    bool reads, writes;
+  };
+  DenseMap<Operation *, SmallVector<RootAccess, 2>> rootAccessMemo;
+  auto rootAccesses = [&](Operation *op) -> ArrayRef<RootAccess> {
+    auto [it, fresh] = rootAccessMemo.try_emplace(op);
+    if (fresh) {
+      SmallVector<StorageRoot, 4> own;
+      memrefRoots(op, own);
+      for (const StorageRoot &resultValue : own) {
+        SmallVector<StorageRoot, 1> one{resultValue};
+        bool reads, writes;
+        readsWrites(op, one, reads, writes, argWrites);
+        it->second.push_back({resultValue, reads, writes});
+      }
+    }
+    return it->second;
+  };
+
   for (unsigned loopIndex = 0; loopIndex < elementCount; ++loopIndex) {
+
+    bool allOrdered = true;
+    for (unsigned innerIndex = 0; innerIndex < elementCount && allOrdered;
+         ++innerIndex)
+      if (innerIndex != loopIndex && !before[loopIndex].test(innerIndex) &&
+          !before[innerIndex].test(loopIndex))
+        allOrdered = false;
+    if (allOrdered)
+      continue;
 
     DenseSet<Value> tainted;
     auto taintValue = [&](Value valueHandle) {
@@ -534,21 +579,13 @@ groupConcurrentCalls(func::FuncOp parent, ArrayRef<Operation *> sites,
       for (Value resultValue : op->getResults())
         taintValue(resultValue);
       for (Region &region : op->getRegions())
-        for (Block &buildPoint : region)
-          for (BlockArgument arrayValue : buildPoint.getArguments())
+        for (Block &b : region)
+          for (BlockArgument arrayValue : b.getArguments())
             taintValue(arrayValue);
 
-      SmallVector<StorageRoot, 4> own;
-      memrefRoots(op, own);
-      if (own.empty())
-        return;
-      for (const StorageRoot &resultValue : own) {
-        SmallVector<StorageRoot, 1> one{resultValue};
-        bool reads, writes;
-        readsWrites(op, one, reads, writes, argWrites);
-        if (writes)
-          taintedWrites.push_back({resultValue, op});
-      }
+      for (const RootAccess &ra : rootAccesses(op))
+        if (ra.writes)
+          taintedWrites.push_back({ra.root, op});
     };
 
     auto taintForwarded = [&](Operation *term) {
@@ -595,27 +632,37 @@ groupConcurrentCalls(func::FuncOp parent, ArrayRef<Operation *> sites,
     };
 
     auto readsTaintedMemory = [&](Operation *op) {
-      SmallVector<StorageRoot, 4> own;
-      memrefRoots(op, own);
-      for (const StorageRoot &resultValue : own) {
+      for (const RootAccess &ra : rootAccesses(op)) {
+        if (!ra.reads)
+          continue;
         bool written = llvm::any_of(taintedWrites, [&](const auto &widthValue) {
-          return widthValue.first == resultValue && widthValue.second != op &&
+          return widthValue.first == ra.root && widthValue.second != op &&
                  mayFollow(widthValue.second, op);
         });
-        if (!written)
-          continue;
-        SmallVector<StorageRoot, 1> one{resultValue};
-        bool reads, writes;
-        readsWrites(op, one, reads, writes, argWrites);
-        if (reads)
+        if (written)
           return true;
       }
       return false;
     };
     Operation *site = sites[loopIndex];
     taintOp(site);
+
+    unsigned unresolved = 0;
+    for (unsigned innerIndex = 0; innerIndex < elementCount; ++innerIndex)
+      if (innerIndex != loopIndex && !before[loopIndex].test(innerIndex) &&
+          !before[innerIndex].test(loopIndex))
+        ++unresolved;
+    auto allReached = [&] {
+      unsigned reached = 0;
+      for (unsigned innerIndex = 0; innerIndex < elementCount; ++innerIndex)
+        if (innerIndex != loopIndex && !before[loopIndex].test(innerIndex) &&
+            !before[innerIndex].test(loopIndex) &&
+            taintedOps.contains(sites[innerIndex]))
+          ++reached;
+      return reached == unresolved;
+    };
     bool changed = true;
-    for (unsigned round = 0; changed && round < 8; ++round) {
+    for (unsigned round = 0; changed && round < 8 && !allReached(); ++round) {
       changed = false;
       for (Operation *op : programOrder) {
         if (op == site || !mayFollow(site, op))
@@ -658,9 +705,8 @@ groupConcurrentCalls(func::FuncOp parent, ArrayRef<Operation *> sites,
       SmallVector<std::pair<StorageRoot, Operation *>, 2> reads;
       dataOperandMemories(sites[loopIndex], reads);
       for (const auto &[root, op] : reads) {
-        auto *mem = llvm::find_if(memories, [&](const auto &entryValue) {
-          return entryValue.first == root;
-        });
+        auto *mem = llvm::find_if(
+            memories, [&](const auto &e) { return e.first == root; });
         if (mem == memories.end()) {
           memories.push_back({root, {}});
           mem = std::prev(memories.end());

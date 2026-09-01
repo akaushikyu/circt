@@ -155,6 +155,11 @@ findSameStatePair(ArrayRef<const AccessSummary *> accs,
   };
   std::vector<MemEvent> events;
   SmallVector<MemTouch, 2> touches;
+  // Events per storage key, and those touching any storage (a null key).
+  DenseMap<const void *, SmallVector<unsigned>> eventsByKey;
+  SmallVector<unsigned> anyStorageEvents, candidates;
+  SmallVector<unsigned> seenStamp; // per event: the op that listed it last
+  unsigned stamp = 0;
   for (unsigned p = lo; p <= hi; ++p) {
     Operation *op = ops[p];
     llvm::BitVector &d = deps[p - lo];
@@ -187,7 +192,35 @@ findSameStatePair(ArrayRef<const AccessSummary *> accs,
     if (!touches.empty() && !events.empty()) {
       const SeqScopeIndex::OpInfo &opInfo = s.info.find(op)->second;
       ArrayRef<int64_t> opHoisted = hoistedArmsOf(op);
-      for (const MemEvent &e : events) {
+      // Only events that can conflict with a touch of op: the same storage,
+      // or any storage (a null key) on either side (mayConflict). What d
+      // inherits is a union, so the order of the events does not matter.
+      // (Speed only: the scan over every earlier event was quadratic in the
+      // stretch, barry_walker lab_2.)
+      candidates.clear();
+      bool anyStorage = llvm::any_of(
+          touches, [](const MemTouch &t) { return t.key == nullptr; });
+      if (anyStorage) {
+        for (unsigned ei = 0; ei < events.size(); ++ei)
+          candidates.push_back(ei);
+      } else {
+        ++stamp;
+        auto add = [&](ArrayRef<unsigned> ids) {
+          for (unsigned ei : ids)
+            if (seenStamp[ei] != stamp) {
+              seenStamp[ei] = stamp;
+              candidates.push_back(ei);
+            }
+        };
+        add(anyStorageEvents);
+        for (const MemTouch &t : touches) {
+          auto it = eventsByKey.find(t.key);
+          if (it != eventsByKey.end())
+            add(it->second);
+        }
+      }
+      for (unsigned ei : candidates) {
+        const MemEvent &e = events[ei];
         if (selfAcc >= 0 && e.acc >= 0)
           continue;
         const llvm::BitVector &ed = deps[e.pos - lo];
@@ -208,8 +241,20 @@ findSameStatePair(ArrayRef<const AccessSummary *> accs,
           d.set(e.acc);
       }
     }
-    if (!touches.empty() && (selfAcc >= 0 || d.any()))
+    if (!touches.empty() && (selfAcc >= 0 || d.any())) {
+      unsigned ei = events.size();
       events.push_back({op, p, selfAcc, touches});
+      seenStamp.push_back(0);
+      if (llvm::any_of(touches,
+                       [](const MemTouch &t) { return t.key == nullptr; }))
+        anyStorageEvents.push_back(ei);
+      for (const MemTouch &t : touches)
+        if (t.key) {
+          SmallVector<unsigned> &ids = eventsByKey[t.key];
+          if (ids.empty() || ids.back() != ei)
+            ids.push_back(ei);
+        }
+    }
     if (selfAcc < 0) {
       // Another use of the bank (a call, a view): every access after it is
       // ordered after every access before it.
