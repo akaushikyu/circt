@@ -1295,7 +1295,9 @@ def cand_thunk(plan, abi="descriptor"):
             f"extern \"C\" void cs_call(void **p) {{ cs_entry({', '.join(args)}); }}\n")
 
 
-LL_DECLARE = re.compile(r"^declare\s+(?:[\w.]+\s+)*?(\S+(?:\s*\{[^}]*\})?)\s+@(_ZNK?3hls6stream\w+)\((.*)\)", re.M)
+# The result type may be a nested struct (`{ { [2 x { { float, float } }] } }`: a read() of an
+# hls::vector<std::complex<float>, 2>), hence the greedy brace group on one line.
+LL_DECLARE = re.compile(r"^declare\s+(?:[\w.]+\s+)*?(\{.*\}|\S+)\s+@(_ZNK?3hls6stream\w+)\((.*)\)", re.M)
 
 
 def _llvm_param_groups(mlir_args):
