@@ -22,7 +22,15 @@ examples menu are the demo kernels; each starts with the Vitis HLS 2025.1 csynth
 for the same source (xc7z020, 10 ns, td=off). `--tmp-dir /tmp` matters: under WSL,
 Compiler Explorer otherwise writes every compile to the Windows temp folder.
 
-## Two compilers
+## Compilers
+
+A third entry, **hls-est (current)** (`compiler.hlsestcurrent`), runs
+`~/hls-est-demo/current/hls_est_ce_current.sh`: the same driver with today's tools frozen there
+(the installed real-Vitis-headers cgeist and a round-6 hls-est), while `hls-est` keeps the demo's
+frozen tools. The instance also enables `llvm` (`--language c++ llvm`, a view-only `/bin/cat`
+entry in `etc/config/llvm.local.properties`) so a design's Vitis IR stages (`db/a.*.ll` of a
+Vitis run) can be opened next to the source.
+
 
 The compiler dropdown has **cgeist** (HLS C/C++ -> affine MLIR: the front end alone, with the
 harness's flags; its options box takes cgeist flags) and **hls-est** (the same cgeist step, then
