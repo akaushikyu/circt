@@ -99,8 +99,10 @@ DEFAULT_CATALOG = os.environ.get("HLS_EST_CATALOG") or "v2"
 # a reinstall during a long run cannot mix two cgeist versions in one result file).
 CGEIST = os.environ.get("CGEIST_BIN") or "/mnt/d/HLS/Polygeist/build/bin/cgeist"
 CLANG_RESOURCE_DIR = "/mnt/d/HLS/Polygeist/llvm-project/build/lib/clang/18"
-POLYGEIST_TEST_HLS = "/mnt/d/HLS/Polygeist/tools/cgeist/Test/HLS"
-SHIM_INCLUDE = POLYGEIST_TEST_HLS + "/Inputs/vitis"   # Polygeist's Vitis header stand-ins
+# The cgeist lit tests (mirror_cgeist_tests.py); POLYGEIST_TEST_HLS=<dir> names the tree of a private
+# Polygeist checkout whose tests are not in the installed one yet.
+POLYGEIST_TEST_HLS = os.environ.get("POLYGEIST_TEST_HLS", "/mnt/d/HLS/Polygeist/tools/cgeist/Test/HLS")
+SHIM_INCLUDE = "/mnt/d/HLS/Polygeist/tools/cgeist/Test/HLS/Inputs/vitis"   # Polygeist's Vitis header stand-ins
 POLYBENCH_UTIL_INCLUDE = "/mnt/d/HLS/Polygeist/tools/cgeist/Test/polybench/utilities"
 
 # The harness default header shim (MEMOS.md #67, 2026-10-16, applied by track W11-adopt): "real",

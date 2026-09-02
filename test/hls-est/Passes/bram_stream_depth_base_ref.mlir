@@ -5,7 +5,11 @@
 // headers `hls::stream<T, D>` derives from `hls::stream<T>`: a call through
 // the reference names `stream<T, 0>` (`Li0E`), whatever the object's D. The
 // object's depth is its constructor's (`Li256E`), else the largest D any
-// call names; the reference's 0 never wins. Corpus: barry_walker lab_3
+// call names; the reference's 0 never wins. A namespace-scope stream has no
+// constructor call in the MLIR (the translation unit's initialiser runs it);
+// cgeist keeps its D on the global as `hls.stream_depth` (kernel w9r6rev
+// n49b: `static hls::stream<W, 1024> gs;`, only base references, Vitis 2
+// BRAM). Corpus: barry_walker lab_3
 // `hls::stream<Batch, 256> accum_buffers[16]`, Vitis 16 FIFOs of depth 256
 // (24 BRAM each at 432 bits); kernels w9r6p sd_d{16,256,2048,8192}.
 
@@ -14,6 +18,8 @@ module {
   func.func private @_ZN3hls6streamIiLi0EE5writeERKi(memref<?xi32>, memref<?xi32>)
   func.func private @_ZN3hls6streamIiLi0EE4readEv(memref<?xi32>) -> i32
   func.func private @_ZN3hls6streamIiLi512EE4readEv(memref<?xi32>) -> i32
+
+  memref.global "private" @gs : memref<1xi32> = uninitialized {hls.stream_depth = 1024 : i64}
 
   func.func private @prod(%s: memref<?xi32>, %v: memref<?xi32>) {
     func.call @_ZN3hls6streamIiLi0EE5writeERKi(%s, %v) : (memref<?xi32>, memref<?xi32>) -> ()
@@ -25,6 +31,8 @@ module {
   }
 
   func.func @top(%v: memref<?xi32>) -> i32 attributes {hls.dataflow = [{disable_start_propagation = false}]} {
+    // CHECK: kind=FIFO  bram=2
+    // CHECK-NEXT: 1 FIFO(s) = 2 BRAM [1 x 1024x32 (depth template
     // hls::stream<int, 256> s[2]: the producer call (base reference, Li0E)
     // comes before the constructor in the walk; depth 256 from the
     // constructor: 2 x 256x32 = 2 x 2.
@@ -59,11 +67,18 @@ module {
     %uc = memref.cast %u : memref<1xi32> to memref<?xi32>
     func.call @prod(%uc, %v) : (memref<?xi32>, memref<?xi32>) -> ()
     %d = func.call @cons(%uc) : (memref<?xi32>) -> i32
-    %x = arith.addi %a, %b : i32
+    // The global stream @gs (reported first): its declared depth (1024),
+    // only base references: 1024x32 -> 2.
+    %g = memref.get_global @gs : memref<1xi32>
+    %gc = memref.cast %g : memref<1xi32> to memref<?xi32>
+    func.call @prod(%gc, %v) : (memref<?xi32>, memref<?xi32>) -> ()
+    %h = func.call @cons(%gc) : (memref<?xi32>) -> i32
+    %x0 = arith.addi %a, %b : i32
+    %x = arith.addi %x0, %h : i32
     %y = arith.addi %c, %d : i32
     %z = arith.addi %x, %y : i32
     return %z : i32
   }
 }
 
-// CHECK: Total BRAM: 6
+// CHECK: Total BRAM: 8

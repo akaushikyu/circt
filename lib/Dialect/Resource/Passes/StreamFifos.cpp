@@ -642,6 +642,20 @@ std::optional<StreamHandleRecord> circt::hls_analysis::analyzeStreamHandle(
         takeDepth(candidateValue);
         break;
       }
+
+    std::optional<int64_t> declaredDepth;
+    if (auto dimensionIndex =
+            storage->getAttrOfType<IntegerAttr>("hls.stream_depth"))
+      if (dimensionIndex.getInt() > 0 && memberKey < 0)
+        declaredDepth = dimensionIndex.getInt();
+    if ((!tmplDepth || *tmplDepth == 0) && declaredDepth) {
+      for (const ReachedCall *candidateValue : memberCalls)
+        if (!candidateValue->tmpl.elementMangled.empty()) {
+          elementMangled = candidateValue->tmpl.elementMangled;
+          break;
+        }
+      tmplDepth = declaredDepth;
+    }
     if (!tmplDepth || *tmplDepth == 0)
       for (const ReachedCall *candidateValue : memberCalls)
         if (candidateValue->tmpl.depth &&

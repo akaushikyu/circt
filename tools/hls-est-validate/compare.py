@@ -82,6 +82,11 @@ def vitis_array_name(m, known=None):
         root = known_root(var, known)
         if root is not None:
             return root
+        # An array of an inlined callee: Vitis writes the inline suffixes `.i` as `_i`
+        # (`current_node_embedding_in_i_i_i`, gnnbuilder gcn_qm9).
+        stripped = re.sub(r"(?:_i\d*)+$", "", var)
+        if stripped != var and stripped in known:
+            return stripped
     return m.get("array") or m.get("Memory")
 
 
@@ -140,8 +145,36 @@ def vitis_arrays(v, known=None):
     return out
 
 
+# The source name inside a mangled global: a static local `<fn>@static@_ZZ<fn>E<len><name>[_<n>]`
+# (cgeist names the global after its function and the Itanium name of the variable, `_<n>` the
+# discriminator of a second static of that name) and an internal-linkage global `_ZL<len><name>`.
+STATIC_LOCAL_RE = re.compile(r"@static@_ZZ.*E(\d+)([A-Za-z_]\w*)$")
+INTERNAL_GLOBAL_RE = re.compile(r"^_ZL(\d+)([A-Za-z_]\w*)$")
+
+
+def source_array_name(name):
+    """The C name of an hls-est memref named after a mangled global (STATIC_LOCAL_RE /
+    INTERNAL_GLOBAL_RE; the length prefix must match), else `name` unchanged.  Vitis names its
+    memory rows by the C variable (`conv_0_out`), so without this every static local of a design
+    (the gnnbuilder / flowgnn dataflow buffers) showed `vitis=None` in the per-array rows (W9
+    round 6 review defect 8; totals are unaffected)."""
+    if not isinstance(name, str):
+        return name
+    for rx in (STATIC_LOCAL_RE, INTERNAL_GLOBAL_RE):
+        m = rx.search(name)
+        if not m:
+            continue
+        ident, n = m.group(2), int(m.group(1))
+        if len(ident) == n:
+            return ident
+        if rx is STATIC_LOCAL_RE and len(ident) > n and re.fullmatch(r"_\d+", ident[n:]):
+            return ident[:n]
+    return name
+
+
 def hlsest_arrays(h):
-    """Aggregate hls-est memrefs by variable name.  Prefers the debug JSON."""
+    """Aggregate hls-est memrefs by variable name (a mangled global by its C name,
+    source_array_name).  Prefers the debug JSON."""
     out = {}
     dbg = None
     dj = h.get("debug_json")
@@ -152,7 +185,7 @@ def hlsest_arrays(h):
             dbg = None
     if dbg and "memrefs" in dbg:
         for m in dbg["memrefs"]:
-            name = m.get("varname") or m.get("name") or m.get("id")
+            name = source_array_name(m.get("varname") or m.get("name") or m.get("id"))
             a = out.setdefault(name, {"name": name, "hlsest_bram": 0, "banks": 0, "kinds": set(),
                                       "status": set(), "shape": m.get("shape"), "elem_bits": m.get("elem_bits")})
             a["hlsest_bram"] += m.get("bram") or 0
@@ -165,7 +198,7 @@ def hlsest_arrays(h):
             a["status"] = sorted(a["status"])
         return out, True
     for m in h.get("memrefs", []):
-        name = m.get("varname") or m.get("name") or m.get("head")
+        name = source_array_name(m.get("varname") or m.get("name") or m.get("head"))
         a = out.setdefault(name, {"name": name, "hlsest_bram": 0, "banks": 0, "kinds": set(), "status": set()})
         a["hlsest_bram"] += m.get("bram") or 0
         a["banks"] += 1

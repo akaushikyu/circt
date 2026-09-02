@@ -449,11 +449,16 @@ groupConcurrentCalls(func::FuncOp parent, ArrayRef<Operation *> sites,
   if (elementCount == 0)
     return 0;
 
-  if (parent->hasAttr("hls.dataflow") &&
-      llvm::all_of(sites, [&](Operation *stringValue) {
-        return isa<CallOpInterface>(stringValue) &&
-               stringValue->getParentOp() == parent.getOperation();
-      })) {
+  SmallVector<bool> isProcess(elementCount, false);
+  unsigned processes = 0;
+  if (parent->hasAttr("hls.dataflow"))
+    for (unsigned loopIndex = 0; loopIndex < elementCount; ++loopIndex)
+      if (isa<CallOpInterface>(sites[loopIndex]) &&
+          sites[loopIndex]->getParentOp() == parent.getOperation()) {
+        isProcess[loopIndex] = true;
+        ++processes;
+      }
+  if (processes == elementCount) {
     for (unsigned loopIndex = 0; loopIndex < elementCount; ++loopIndex)
       group[loopIndex] = loopIndex;
     if (rule)
@@ -750,6 +755,12 @@ groupConcurrentCalls(func::FuncOp parent, ArrayRef<Operation *> sites,
         if (alsoOrdered(loopIndex, innerIndex))
           order(loopIndex, innerIndex, byCaller);
 
+  if (processes > 0)
+    for (unsigned loopIndex = 0; loopIndex < elementCount; ++loopIndex)
+      for (unsigned innerIndex = 0; innerIndex < elementCount; ++innerIndex)
+        if (isProcess[loopIndex] || isProcess[innerIndex])
+          before[loopIndex].reset(innerIndex);
+
   for (unsigned keyValue = 0; keyValue < elementCount; ++keyValue)
     for (unsigned loopIndex = 0; loopIndex < elementCount; ++loopIndex)
       if (before[loopIndex].test(keyValue))
@@ -780,6 +791,9 @@ groupConcurrentCalls(func::FuncOp parent, ArrayRef<Operation *> sites,
         stringValue += ", " + std::to_string(byPorts) +
                        " by the ports of a memory " +
                        "their operands are read from";
+      if (processes)
+        stringValue += "; " + std::to_string(processes) +
+                       " of them dataflow processes, an instance each";
       if (limit)
         stringValue += "; allocation limit " + std::to_string(*limit) +
                        (uncapped > groups ? " applied" : " not binding");

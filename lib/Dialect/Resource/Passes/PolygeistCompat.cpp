@@ -203,8 +203,17 @@ static void dropMathCoreBodies(ModuleOp module) {
 /// front end's own idiom for a scalar passed by reference (a one-element
 /// alloca cast to `memref<?xT>`) plus an explicit load / store of the
 /// element, which the row lowering below then turns into an access of the
-/// whole array. Only integer / float elements of a rank-1 row; anything
-/// else is left as it was.
+/// whole array. The element is a scalar of a rank-1 array or a struct row
+/// of an array of structs whose members share one type (cgeist's
+/// CombinedStructABI: `struct {short a, b;} P[2048]` is memref<2048x2xi16>
+/// and `s >> P[i]` passes the row memref<?x2xi16>): the row is copied member
+/// by member, so the array's accesses are attributed and its partition
+/// pragma applies (W9 round 6 review defect 4, kernel w9r6rev n47b: before,
+/// one unpartitioned memory, "accesses not attributed"). Vitis also splits
+/// the members (P.a and P.b, each `cyclic factor=2`, four 1024x16 banks of 1
+/// BRAM); hls-est keeps them as one more dimension of each bank (1024x2,
+/// OPEN_ISSUES O54 (h)). Rows of more than kMaxRowMembers members, and
+/// anything else, are left as they were.
 static unsigned lowerStreamElementViews(ModuleOp module) {
   SmallVector<func::CallOp> calls;
   module.walk(
@@ -229,49 +238,81 @@ static unsigned lowerStreamElementViews(ModuleOp module) {
       continue;
     auto src = dyn_cast<MemRefType>(si.getSource().getType());
     auto passResult = dyn_cast<MemRefType>(si.getResult().getType());
-    if (!src || !passResult || src.getRank() != 1 ||
-        passResult.getRank() != 1 || !src.hasStaticShape() ||
+    if (!src || !passResult || src.getRank() < 1 ||
+        passResult.getRank() != src.getRank() || !src.hasStaticShape() ||
         !ShapedType::isDynamic(passResult.getShape()[0]) ||
+        passResult.getShape().drop_front() != src.getShape().drop_front() ||
         !src.getLayout().isIdentity() || !passResult.getLayout().isIdentity() ||
         src.getElementType() != passResult.getElementType() ||
         !src.getElementType().isIntOrFloat())
+      continue;
+
+    ArrayRef<int64_t> rowShape = src.getShape().drop_front();
+    int64_t members = 1;
+    for (int64_t dimensionIndex : rowShape)
+      members *= dimensionIndex;
+    constexpr int64_t kMaxRowMembers = 256;
+    if (members < 1 || members > kMaxRowMembers)
       continue;
     auto fn = call->getParentOfType<func::FuncOp>();
     if (!fn)
       continue;
     Location loc = call.getLoc();
     OpBuilder entry(&fn.getBody().front(), fn.getBody().front().begin());
+    SmallVector<int64_t> tmpShape{1};
+    tmpShape.append(rowShape.begin(), rowShape.end());
     auto tmp = memref::AllocaOp::create(
-        entry, loc, MemRefType::get({1}, src.getElementType()));
+        entry, loc, MemRefType::get(tmpShape, src.getElementType()));
     auto view = memref::CastOp::create(entry, loc, passResult, tmp);
     Value indexValue = si.getIndex();
     bool affineIdx =
         affine::isValidDim(indexValue) || affine::isValidSymbol(indexValue);
-    OpBuilder buildPoint(call);
-    Value zero = arith::ConstantIndexOp::create(buildPoint, loc, 0);
-    auto load = [&](OpBuilder &bb, Value mem, Value loopIndex) -> Value {
+    OpBuilder b(call);
+    Value zero = arith::ConstantIndexOp::create(b, loc, 0);
+
+    auto memberIndices = [&](OpBuilder &bb, Value first, int64_t memoryOp) {
+      SmallVector<Value> ivs{first};
+      SmallVector<Value> rest;
+      for (int64_t dimensionIndex : llvm::reverse(rowShape)) {
+        rest.push_back(
+            arith::ConstantIndexOp::create(bb, loc, memoryOp % dimensionIndex));
+        memoryOp /= dimensionIndex;
+      }
+      ivs.append(rest.rbegin(), rest.rend());
+      return ivs;
+    };
+    auto load = [&](OpBuilder &bb, Value mem, ValueRange ivs) -> Value {
       if (affineIdx || mem == tmp.getResult())
-        return affine::AffineLoadOp::create(bb, loc, mem,
-                                            ValueRange{loopIndex});
-      return memref::LoadOp::create(bb, loc, mem, ValueRange{loopIndex});
+        return affine::AffineLoadOp::create(bb, loc, mem, ivs);
+      return memref::LoadOp::create(bb, loc, mem, ivs);
     };
     auto store = [&](OpBuilder &bb, Value valueHandle, Value mem,
-                     Value loopIndex) {
+                     ValueRange ivs) {
       if (affineIdx || mem == tmp.getResult())
-        affine::AffineStoreOp::create(bb, loc, valueHandle, mem,
-                                      ValueRange{loopIndex});
+        affine::AffineStoreOp::create(bb, loc, valueHandle, mem, ivs);
       else
-        memref::StoreOp::create(bb, loc, valueHandle, mem,
-                                ValueRange{loopIndex});
+        memref::StoreOp::create(bb, loc, valueHandle, mem, ivs);
+    };
+
+    auto copy = [&](OpBuilder &bb, Value from, Value fromFirst, Value to,
+                    Value toFirst) {
+      SmallVector<SmallVector<Value>> fromIvs, toIvs;
+      for (int64_t memoryOp = 0; memoryOp < members; ++memoryOp) {
+        fromIvs.push_back(memberIndices(bb, fromFirst, memoryOp));
+        toIvs.push_back(memberIndices(bb, toFirst, memoryOp));
+      }
+      SmallVector<Value> vals;
+      for (int64_t memoryOp = 0; memoryOp < members; ++memoryOp)
+        vals.push_back(load(bb, from, fromIvs[memoryOp]));
+      for (int64_t memoryOp = 0; memoryOp < members; ++memoryOp)
+        store(bb, vals[memoryOp], to, toIvs[memoryOp]);
     };
     if (streamWrites)
-      store(buildPoint, load(buildPoint, si.getSource(), indexValue), tmp,
-            zero);
+      copy(b, si.getSource(), indexValue, tmp, zero);
     call->setOperand(1, view);
     if (streamReads) {
-      buildPoint.setInsertionPointAfter(call);
-      store(buildPoint, load(buildPoint, tmp, zero), si.getSource(),
-            indexValue);
+      b.setInsertionPointAfter(call);
+      copy(b, tmp, zero, si.getSource(), indexValue);
     }
     if (si->use_empty())
       si->erase();
@@ -357,7 +398,7 @@ specializeCastArguments(ModuleOp module,
         symbols.insert(clone, std::next(Block::iterator(callee)));
         clone.setPrivate();
         Block &entry = clone.getBody().front();
-        OpBuilder buildPoint(&entry, entry.begin());
+        OpBuilder b(&entry, entry.begin());
         SmallVector<Type> inputs(clone.getArgumentTypes());
         for (auto [loopIndex, memRefType] : forms) {
           BlockArgument arg = clone.getArgument(loopIndex);
@@ -378,8 +419,7 @@ specializeCastArguments(ModuleOp module,
               needPtr.push_back(&use);
           }
           if (!needPtr.empty()) {
-            Value ptr =
-                memref::CastOp::create(buildPoint, arg.getLoc(), ptrTy, arg);
+            Value ptr = memref::CastOp::create(b, arg.getLoc(), ptrTy, arg);
             for (OpOperand *use : needPtr)
               use->set(ptr);
           }
@@ -397,9 +437,8 @@ specializeCastArguments(ModuleOp module,
         operands[loopIndex] = cast.getSource();
         casts.push_back(cast);
       }
-      OpBuilder buildPoint(call);
-      auto nc =
-          func::CallOp::create(buildPoint, call.getLoc(), clone, operands);
+      OpBuilder b(call);
+      auto nc = func::CallOp::create(b, call.getLoc(), clone, operands);
       for (NamedAttribute a : call->getDiscardableAttrs())
         nc->setDiscardableAttr(a.getName(), a.getValue());
       call.replaceAllUsesWith(nc.getResults());
@@ -538,14 +577,14 @@ struct LowerSubIndexPass
       attrs.push_back(DictionaryAttr::get(context, {}));
     }
     Block &entry = clone.getBody().front();
-    OpBuilder buildPoint(&entry, entry.begin());
+    OpBuilder b(&entry, entry.begin());
     for (auto &[portValue, memRefType] : llvm::reverse(rows)) {
       BlockArgument old = entry.getArgument(portValue);
       Location loc = old.getLoc();
       BlockArgument full = entry.insertArgument(portValue + 1, memRefType, loc);
       BlockArgument row =
-          entry.insertArgument(portValue + 2, buildPoint.getIndexType(), loc);
-      auto si = SubIndexOp::create(buildPoint, loc, old.getType(), full, row);
+          entry.insertArgument(portValue + 2, b.getIndexType(), loc);
+      auto si = SubIndexOp::create(b, loc, old.getType(), full, row);
       old.replaceAllUsesWith(si.getResult());
       entry.eraseArgument(portValue);
       worklist.push_back(si);
@@ -563,7 +602,7 @@ struct LowerSubIndexPass
   bool rewriteOffsetAccess(Operation *user, SubIndexOp si) {
     Value src = si.getSource();
     Value off = si.getIndex();
-    OpBuilder buildPoint(user);
+    OpBuilder b(user);
     Location loc = user->getLoc();
     auto copyAttrs = [&](Operation *from, Operation *to) {
       for (NamedAttribute a : from->getDiscardableAttrs())
@@ -572,19 +611,18 @@ struct LowerSubIndexPass
     };
     auto shifted = [&](ValueRange indices) {
       SmallVector<Value> out(indices.begin(), indices.end());
-      out[0] = arith::AddIOp::create(buildPoint, loc, out[0], off);
+      out[0] = arith::AddIOp::create(b, loc, out[0], off);
       return out;
     };
     if (auto load = dyn_cast<memref::LoadOp>(user)) {
-      auto nl = memref::LoadOp::create(buildPoint, loc, src,
-                                       shifted(load.getIndices()));
+      auto nl = memref::LoadOp::create(b, loc, src, shifted(load.getIndices()));
       copyAttrs(user, nl);
       load.replaceAllUsesWith(nl.getResult());
       load.erase();
       return true;
     }
     if (auto store = dyn_cast<memref::StoreOp>(user)) {
-      auto ns = memref::StoreOp::create(buildPoint, loc, store.getValue(), src,
+      auto ns = memref::StoreOp::create(b, loc, store.getValue(), src,
                                         shifted(store.getIndices()));
       copyAttrs(user, ns);
       store.erase();
@@ -620,30 +658,28 @@ struct LowerSubIndexPass
       for (unsigned resultValue = 0; resultValue < map.getNumResults();
            ++resultValue)
         indices.push_back(affine::AffineApplyOp::create(
-            buildPoint, loc, map.getSubMap({resultValue}), mapOperands));
+            b, loc, map.getSubMap({resultValue}), mapOperands));
       indices = shifted(indices);
       if (isLoad) {
-        auto nl = memref::LoadOp::create(buildPoint, loc, src, indices);
+        auto nl = memref::LoadOp::create(b, loc, src, indices);
         copyAttrs(user, nl);
         user->getResult(0).replaceAllUsesWith(nl.getResult());
       } else {
         auto ns2 = memref::StoreOp::create(
-            buildPoint, loc, cast<affine::AffineStoreOp>(user).getValue(), src,
-            indices);
+            b, loc, cast<affine::AffineStoreOp>(user).getValue(), src, indices);
         copyAttrs(user, ns2);
       }
       user->erase();
       return true;
     }
     if (isLoad) {
-      auto nl =
-          affine::AffineLoadOp::create(buildPoint, loc, src, map, operands);
+      auto nl = affine::AffineLoadOp::create(b, loc, src, map, operands);
       copyAttrs(user, nl);
       user->getResult(0).replaceAllUsesWith(nl.getResult());
     } else {
       auto ns2 = affine::AffineStoreOp::create(
-          buildPoint, loc, cast<affine::AffineStoreOp>(user).getValue(), src,
-          map, operands);
+          b, loc, cast<affine::AffineStoreOp>(user).getValue(), src, map,
+          operands);
       copyAttrs(user, ns2);
     }
     user->erase();
@@ -655,7 +691,7 @@ struct LowerSubIndexPass
       return rewriteOffsetAccess(user, si);
     Value src = si.getSource();
     Value indexValue = si.getIndex();
-    OpBuilder buildPoint(user);
+    OpBuilder b(user);
     Location loc = user->getLoc();
     auto copyAttrs = [&](Operation *from, Operation *to) {
       for (NamedAttribute a : from->getDiscardableAttrs())
@@ -665,7 +701,7 @@ struct LowerSubIndexPass
     if (auto load = dyn_cast<memref::LoadOp>(user)) {
       SmallVector<Value> indices{indexValue};
       indices.append(load.getIndices().begin(), load.getIndices().end());
-      auto nl = memref::LoadOp::create(buildPoint, loc, src, indices);
+      auto nl = memref::LoadOp::create(b, loc, src, indices);
       copyAttrs(user, nl);
       load.replaceAllUsesWith(nl.getResult());
       load.erase();
@@ -674,8 +710,7 @@ struct LowerSubIndexPass
     if (auto store = dyn_cast<memref::StoreOp>(user)) {
       SmallVector<Value> indices{indexValue};
       indices.append(store.getIndices().begin(), store.getIndices().end());
-      auto ns = memref::StoreOp::create(buildPoint, loc, store.getValue(), src,
-                                        indices);
+      auto ns = memref::StoreOp::create(b, loc, store.getValue(), src, indices);
       copyAttrs(user, ns);
       store.erase();
       return true;
@@ -714,29 +749,27 @@ struct LowerSubIndexPass
       for (unsigned resultValue = 0; resultValue < map.getNumResults();
            ++resultValue)
         indices.push_back(affine::AffineApplyOp::create(
-            buildPoint, loc, map.getSubMap({resultValue}), mapOperands));
+            b, loc, map.getSubMap({resultValue}), mapOperands));
       if (isLoad) {
-        auto nl = memref::LoadOp::create(buildPoint, loc, src, indices);
+        auto nl = memref::LoadOp::create(b, loc, src, indices);
         copyAttrs(user, nl);
         user->getResult(0).replaceAllUsesWith(nl.getResult());
       } else {
         auto ns2 = memref::StoreOp::create(
-            buildPoint, loc, cast<affine::AffineStoreOp>(user).getValue(), src,
-            indices);
+            b, loc, cast<affine::AffineStoreOp>(user).getValue(), src, indices);
         copyAttrs(user, ns2);
       }
       user->erase();
       return true;
     }
     if (isLoad) {
-      auto nl =
-          affine::AffineLoadOp::create(buildPoint, loc, src, map, operands);
+      auto nl = affine::AffineLoadOp::create(b, loc, src, map, operands);
       copyAttrs(user, nl);
       user->getResult(0).replaceAllUsesWith(nl.getResult());
     } else {
       auto ns2 = affine::AffineStoreOp::create(
-          buildPoint, loc, cast<affine::AffineStoreOp>(user).getValue(), src,
-          map, operands);
+          b, loc, cast<affine::AffineStoreOp>(user).getValue(), src, map,
+          operands);
       copyAttrs(user, ns2);
     }
     user->erase();
@@ -777,8 +810,8 @@ struct LowerSubIndexPass
       operands.push_back(si.getSource());
       operands.push_back(si.getIndex());
     }
-    OpBuilder buildPoint(call);
-    auto nc = func::CallOp::create(buildPoint, call.getLoc(), clone, operands);
+    OpBuilder b(call);
+    auto nc = func::CallOp::create(b, call.getLoc(), clone, operands);
     for (NamedAttribute a : call->getDiscardableAttrs())
       nc->setDiscardableAttr(a.getName(), a.getValue());
     call.replaceAllUsesWith(nc.getResults());

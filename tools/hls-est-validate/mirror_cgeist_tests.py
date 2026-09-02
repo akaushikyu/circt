@@ -71,7 +71,10 @@ import run_hlsest as RH                  # noqa: E402
 import run_vitis as RV                   # noqa: E402
 
 TEST_HLS = Path(C.POLYGEIST_TEST_HLS)
-POLYGEIST_REPO = Path("/mnt/d/HLS")
+# The repository the tests come from: the Polygeist commit the Mirror headers name is its HEAD
+# (W9 round 6 review defect 9: the hp_fft headers named the installed checkout's 13c303fa while
+# their cgeist tests and binary came from a private branch).
+POLYGEIST_REPO = TEST_HLS.parents[3]
 DEFAULT_MIRROR = C.CIRCT / "test" / "hls-est" / "Mirror"
 MIRROR = DEFAULT_MIRROR                  # --mirror-dir replaces both
 MANIFEST = MIRROR / "manifest.json"
@@ -187,6 +190,10 @@ def inventory(designs):
     """One entry per cgeist test. A catalogue design (a record of designs.py with this test file, or
     an HLSFactory_v2-only record whose slug names it) is compiled through its record."""
     by_test = {d["test_file"]: d for d in designs if d.get("test_file")}
+    # The same tests by their path below Test/HLS: the catalogue names the installed Polygeist tree,
+    # POLYGEIST_TEST_HLS may name a private checkout of it.
+    by_rel = {d["test_file"].split("/Test/HLS/", 1)[1]: d
+              for d in designs if "/Test/HLS/" in (d.get("test_file") or "")}
     by_slug = {}
     for d in designs:
         if d.get("origin") == "hlsfactory_v2" and not d.get("test_file"):
@@ -202,7 +209,8 @@ def inventory(designs):
         cd = re.search(r'cd "%S/([^"]*)"', cmds[0]) if cmds else None
         inc, dfn, func, srcs = flags_of(toks or [], t.parent)
         fe = [x for x in (toks or []) if x.startswith("%vitis_frontend")]
-        rec = by_test.get(str(t)) or by_slug.get(str(t.relative_to(TEST_HLS / "hlsfactory")))
+        rec = (by_test.get(str(t)) or by_rel.get(rel)
+               or by_slug.get(str(t.relative_to(TEST_HLS / "hlsfactory"))))
         entries.append({
             "test": rel, "kind": "hlsfactory", "top": mtop.group(1) if mtop else None,
             "test_mode": mmode.group(1) if mmode else None,
@@ -212,7 +220,7 @@ def inventory(designs):
         })
     for t in other_tests():
         rel = str(t.relative_to(TEST_HLS))
-        rec = by_test.get(str(t))
+        rec = by_test.get(str(t)) or by_rel.get(rel)
         cmds = run_lines(t)
         chosen = None
         for c in cmds:

@@ -3,6 +3,8 @@
 // RUN: FileCheck %s --input-file=%t.err --check-prefix=DBG
 // RUN: hls-est %s --bram-analysis=top=chain_seq -o /dev/null | FileCheck %s --check-prefix=SEQ
 // RUN: hls-est %s --bram-analysis=top=loop_df -o /dev/null | FileCheck %s --check-prefix=LOOP
+// RUN: hls-est %s --bram-analysis=top=mixed_df --bram-debug -o /dev/null 2>&1 | FileCheck %s --check-prefix=MIXED
+// RUN: hls-est %s --affine-loop-normalize --auto-pipeline-unroll --bram-analysis=top=unrolled_df --bram-debug -o /dev/null 2>&1 | FileCheck %s --check-prefix=UNR
 
 // In a dataflow region every call site is a process of its own: the
 // processes overlap, so the ordering that lets sequential calls share one
@@ -65,6 +67,37 @@ module {
     affine.for %i = 0 to 4 {
       func.call @stage(%a, %e) : (memref<512xi32>, memref<512xi32>) -> ()
     }
+    return
+  }
+  // Both kinds for one callee (W9 round 6 review defect 1: one nested call
+  // site used to send every call of the region back to the sequential
+  // rule). The two processes are an instance each; the two calls of the
+  // loop are ordered (a common array) and share one: 3 instances.
+  // Unconfirmed against Vitis (no kernel mixes the two kinds yet).
+  // MIXED-DAG: in @mixed_df (x1): 4 call site(s) -> 3 instance(s) ({{.*}}2 of them dataflow processes, an instance each
+  // MIXED-DAG: 512x32b -> RAM_1P (x36/port) = 1 BRAM_18K x 3 instance(s) of @stage = 3
+  func.func @mixed_df(%a: memref<512xi32>, %e: memref<512xi32>) attributes {hls.dataflow = [{disable_start_propagation = false}]} {
+    %b = memref.alloca() : memref<512xi32>
+    %c = memref.alloca() : memref<512xi32>
+    func.call @stage(%a, %b) : (memref<512xi32>, memref<512xi32>) -> ()
+    affine.for %i = 0 to 4 {
+      func.call @stage(%b, %c) : (memref<512xi32>, memref<512xi32>) -> ()
+      func.call @stage(%c, %b) : (memref<512xi32>, memref<512xi32>) -> ()
+    }
+    func.call @stage(%b, %e) : (memref<512xi32>, memref<512xi32>) -> ()
+    return
+  }
+  // A completely unrolled loop of the region holds processes: unrolled
+  // before the instances are counted, its 4 copies are 4 processes (kernel
+  // w9r6rev n48a, four `stage` calls in a `#pragma HLS unroll` loop of a
+  // dataflow region: Vitis stage, stage_1..3, 4 BRAM; cgeist keeps such
+  // calls, HLSAutoInline).
+  // UNR: in @unrolled_df (x1): 4 call site(s) -> 4 instance(s) (dataflow region: every call site is a process of its own)
+  // UNR: Total BRAM: 4
+  func.func @unrolled_df(%a: memref<512xi32>, %e: memref<512xi32>) attributes {hls.dataflow = [{disable_start_propagation = false}]} {
+    affine.for %i = 0 to 4 {
+      func.call @stage(%a, %e) : (memref<512xi32>, memref<512xi32>) -> ()
+    } {hls.unroll = [{factor = 0 : i32, skip_exit_check = false}]}
     return
   }
 }

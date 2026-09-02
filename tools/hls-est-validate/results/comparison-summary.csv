@@ -11,7 +11,7 @@ flowgnn,5,2,2,0,0.0,734,367,367.0,0,3,1,1,0,1,50.0
 forgebench,45,44,44,35,79.5,61,1.4,0.0,0,1,40,5,3,1,90.9
 gnnbuilder,4,4,4,0,0.0,664,166,151.5,0,0,4,4,0,0,100.0
 hlsyn-vitis,42,17,16,11,68.8,75,4.7,0.0,1,25,12,1,0,4,75.0
-hp_fft_hls,16,16,8,0,0.0,304,38,36.0,8,0,1,1,6,1,12.5
+hp_fft_hls,16,16,10,1,10.0,306,30.6,28.0,6,0,2,1,6,2,20.0
 machsuite,18,18,18,16,88.9,11,0.6,0.0,0,0,16,0,1,1,88.9
 polybench,9,9,9,9,100.0,0,0,0,0,0,9,0,0,0,100.0
 polybench__reproducible,196,196,196,196,100.0,0,0,0.0,0,0,196,0,0,0,100.0
@@ -23,18 +23,18 @@ spector_hls,10,10,10,10,100.0,0,0,0.0,0,0,10,0,0,0,100.0
 stream_hls,77,77,76,73,96.1,508,6.7,0.0,1,0,73,0,0,3,96.1
 vitis_examples,23,22,21,20,95.2,1,0.0,0,1,1,20,0,0,1,95.2
 whetstone,1,1,1,0,0.0,16,16,16,0,0,0,0,1,0,0.0
-ALL,812,736,717,602,84.0,13500,18.8,0,19,76,621,19,28,68,86.6
+ALL,812,736,719,603,83.9,13502,18.8,0,17,76,622,19,28,69,86.5
 
 run_setting,value
-generated,2026-10-19 10:44
+generated,2026-10-19 15:23
 generator,tools/hls-est-validate/make_compare_csv.py
-hls-est run json,/home/peter/hls-est-work/coord/scratch/w9r6i/F1.json
-hls-est git,unknown (HLS_EST_BIN=/home/peter/hls-est-work/coord/scratch/w9r6i/bin/hls-est.final)
-hls-est binary,/home/peter/hls-est-work/coord/scratch/w9r6i/bin/hls-est.final
+hls-est run json,/home/peter/hls-est-work/coord/scratch/w9r6fix/G1.json
+hls-est git,unknown (HLS_EST_BIN=/home/peter/hls-est-work/coord/scratch/w9r6fix/bin/hls-est.fx1)
+hls-est binary,/home/peter/hls-est-work/coord/scratch/w9r6fix/bin/hls-est.fx1
 pipeline,--lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --infer-vitis-split-array=td=off --narrow-ram-widths --memory-banking-bram --convert-affine-to-loopschedule --bram-analysis
 shim,/home/peter/circt/tools/hls-est-validate/shim/real
-cgeist,/home/peter/hls-est-work/coord/scratch/w9r6i/bin/cgeist.cg1
-cgeist md5,926144d783c3ebf7d887e5c839a446bf
+cgeist,/home/peter/hls-est-work/coord/scratch/w9r6fix/bin/cgeist.fx2
+cgeist md5,3f1daae358a43dc0e765c88767df0ed4
 mlir reused from,
 vitis,"2025.1 csynth, xc7z020clg400-1, 10ns, syn.array_partition.throughput_driven=off"
 note,"designs absent from the run are listed with comparison_status 'hls-est missing'; designs without a Vitis result are 'vitis missing' (excluded, see hls-est-results.xlsx 'excluded designs')"
