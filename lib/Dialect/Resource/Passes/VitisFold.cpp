@@ -2,6 +2,7 @@
 
 #include "../Plugins/Builtin/Builtins.h"
 #include "circt/Dialect/Resource/Config/ConfigUtils.h"
+#include "circt/Dialect/Resource/Passes/ReadOnlyMemory.h"
 #include "circt/Dialect/Resource/Passes/VitisCleanup.h"
 #include "circt/Dialect/Resource/Plugins/PassPolicies.h"
 #include "circt/Dialect/Resource/Plugins/Registry.h"
@@ -9,6 +10,7 @@
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
+#include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/Matchers.h"
 #include "mlir/IR/PatternMatch.h"
@@ -486,6 +488,149 @@ static bool isSelectToMinMax(const RewritePattern &portValue) {
       });
 }
 
+/// The one value every element of `g`'s initial value holds, or null: a
+/// dense integer or float initialiser that is a splat or whose elements are
+/// all equal.
+static TypedAttr uniformInitialValue(memref::GlobalOp g) {
+  auto denseValue =
+      dyn_cast_or_null<DenseElementsAttr>(g.getInitialValueAttr());
+  if (!denseValue || denseValue.empty())
+    return {};
+  Type elt = denseValue.getElementType();
+  if (!isa<IntegerType, FloatType>(elt))
+    return {};
+  if (denseValue.isSplat())
+    return denseValue.getSplatValue<TypedAttr>();
+  auto values = denseValue.getValues<Attribute>();
+  Attribute first = *values.begin();
+  for (Attribute valueHandle : values)
+    if (valueHandle != first)
+      return {};
+  return cast<TypedAttr>(first);
+}
+
+/// A small never-written table whose elements all hold one value is that
+/// value, whatever the index: Vitis partitions an array of at most
+/// complete_threshold elements into registers ([HLS 214-421], VITIS_NOTES.md
+/// N7 (a)), and a register holding a constant folds. Kernels (N52):
+/// shafix_v3a / v3c / v3d (`cnt[2] = {256, 256}`, const global, static
+/// local, plain global; `for (j < 2) for (i < cnt[j])`) have one flattened
+/// 512-trip pipeline, shafix_v3b (`{256, 128}`) a variable 128 ~ 256 trip
+/// inner loop, and shafix_v3e (a 2913-element static table of -4096, as
+/// rosetta face-detection's weights_array0) stays a 2913 x 13 ROM;
+/// chstone/sha's `in_i = {8192, 8192}` is gone in a.o.1.ll. Only loads of
+/// the get_global result and of its views are folded (a value passed on
+/// through a call or a loop may meet another memory there); a table the user
+/// gave a storage or partition pragma is left alone (the user decided, as
+/// for N7 (a)).
+static unsigned foldUniformTableLoads(ModuleOp module, int64_t maxElements,
+                                      ArrayRef<std::string> userPragmas,
+                                      SmallVectorImpl<FoldNote> &notes) {
+  llvm::StringMap<SmallVector<Value>> sites;
+  module.walk([&](memref::GetGlobalOp globalUse) {
+    sites[globalUse.getName()].push_back(globalUse.getResult());
+  });
+  unsigned folded = 0;
+  for (auto g : module.getOps<memref::GlobalOp>()) {
+    if (g.isExternal() || g.isUninitialized() ||
+        !g.getType().hasStaticShape() ||
+        g.getType().getNumElements() > maxElements ||
+        llvm::any_of(userPragmas, [&](const std::string &arrayValue) {
+          return g->hasAttr(arrayValue);
+        }))
+      continue;
+    TypedAttr value = uniformInitialValue(g);
+    if (!value)
+      continue;
+    auto it = sites.find(g.getSymName());
+    if (it == sites.end() || !circt::hls_analysis::neverWritten(it->second))
+      continue;
+    SmallVector<Value> work(it->second.begin(), it->second.end());
+    SmallVector<Operation *> loads;
+    while (!work.empty()) {
+      Value cur = work.pop_back_val();
+      for (Operation *user : cur.getUsers()) {
+        if (auto view = dyn_cast<ViewLikeOpInterface>(user)) {
+          if (view.getViewSource() == cur)
+            for (Value resultValue : user->getResults())
+              if (isa<BaseMemRefType>(resultValue.getType()))
+                work.push_back(resultValue);
+          continue;
+        }
+        if (isa<affine::AffineLoadOp, memref::LoadOp>(user) &&
+            user->getOperand(0) == cur &&
+            user->getResult(0).getType() == value.getType())
+          loads.push_back(user);
+      }
+    }
+    for (Operation *load : loads) {
+      OpBuilder buildPoint(load);
+      Value candidateValue =
+          buildPoint.create<arith::ConstantOp>(load->getLoc(), value);
+      std::string func;
+      if (auto fn = load->getParentOfType<FunctionOpInterface>())
+        func = fn.getName().str();
+      notes.push_back({"uniform-table-load", load->getLoc(), g.getLoc(),
+                       ("@" + g.getSymName() + " holds one value").str(),
+                       func});
+      load->getResult(0).replaceAllUsesWith(candidateValue);
+      load->erase();
+      ++folded;
+    }
+  }
+  return folded;
+}
+
+/// An scf.for whose bounds and step have become constants (cgeist leaves a
+/// loop scf.for when its bound is not an affine symbol, e.g. loaded inside an
+/// enclosing loop; a fold above may make it constant) becomes the normalised
+/// affine.for over its trip count, with the original induction value
+/// recomputed by an affine.apply: the automatic pipeline decision (VITIS_NOTES
+/// N3) reads trip counts of affine loops only, and Vitis sees a counted loop.
+struct RaiseCountedScfFor : OpRewritePattern<scf::ForOp> {
+  using OpRewritePattern::OpRewritePattern;
+  LogicalResult matchAndRewrite(scf::ForOp op,
+                                PatternRewriter &rewriter) const override {
+    if (!op.getInductionVar().getType().isIndex())
+      return failure();
+    APInt lbC, ubC, stepC;
+    if (!matchPattern(op.getLowerBound(), m_ConstantInt(&lbC)) ||
+        !matchPattern(op.getUpperBound(), m_ConstantInt(&ubC)) ||
+        !matchPattern(op.getStep(), m_ConstantInt(&stepC)))
+      return failure();
+    int64_t lb = lbC.getSExtValue(), ub = ubC.getSExtValue(),
+            step = stepC.getSExtValue();
+    if (step <= 0 || ub <= lb)
+      return failure();
+
+    if (op.getUnsignedCmp() && lb < 0)
+      return failure();
+    int64_t trip = llvm::divideCeil(static_cast<uint64_t>(ub - lb),
+                                    static_cast<uint64_t>(step));
+    Location loc = op.getLoc();
+    auto loop =
+        rewriter.create<affine::AffineForOp>(loc, 0, trip, 1, op.getInitArgs());
+    loop->setDiscardableAttrs(op->getDiscardableAttrDictionary());
+    Block *body = loop.getBody();
+    if (!body->empty() && body->back().hasTrait<OpTrait::IsTerminator>())
+      rewriter.eraseOp(&body->back());
+    rewriter.setInsertionPointToStart(body);
+    AffineExpr d0 = rewriter.getAffineDimExpr(0);
+    Value iv = rewriter.create<affine::AffineApplyOp>(
+        loc, AffineMap::get(1, 0, d0 * step + lb), body->getArgument(0));
+    SmallVector<Value> replacements{iv};
+    for (BlockArgument arrayValue : body->getArguments().drop_front())
+      replacements.push_back(arrayValue);
+    rewriter.mergeBlocks(op.getBody(), body, replacements);
+    auto yield = cast<scf::YieldOp>(body->getTerminator());
+    rewriter.setInsertionPoint(yield);
+    rewriter.replaceOpWithNewOp<affine::AffineYieldOp>(yield,
+                                                       yield.getOperands());
+    rewriter.replaceOp(op, loop.getResults());
+    return success();
+  }
+};
+
 struct VitisFoldPass : PassWrapper<VitisFoldPass, OperationPass<>> {
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(VitisFoldPass)
 
@@ -507,6 +652,20 @@ struct VitisFoldPass : PassWrapper<VitisFoldPass, OperationPass<>> {
                      "extensions / mul / and fold to 0, compares to "
                      "isTrueWhenEqual, ...); false: x/0 -> 0 (the T4 rule)"),
       llvm::cl::init(true)};
+  Option<bool> uniformTables{
+      *this, "uniform-tables",
+      llvm::cl::desc("Fold a load from a never-written global of at most "
+                     "complete_threshold elements (registers, N7 (a)) whose "
+                     "initial elements all hold one value to that value, "
+                     "whatever the index (VITIS_NOTES.md N52); only when the "
+                     "pass runs on the module"),
+      llvm::cl::init(true)};
+  Option<bool> raiseCountedLoops{
+      *this, "raise-counted-loops",
+      llvm::cl::desc("Turn an scf.for whose bounds and step fold to "
+                     "constants into a normalised affine.for (the automatic "
+                     "pipeline decision reads affine trip counts)"),
+      llvm::cl::init(true)};
 
   StringRef getArgument() const final { return "vitis-fold"; }
   StringRef getDescription() const final {
@@ -515,7 +674,7 @@ struct VitisFoldPass : PassWrapper<VitisFoldPass, OperationPass<>> {
            "(VITIS_NOTES.md N1a, N13), then the canonicalization folds";
   }
   void getDependentDialects(DialectRegistry &targetRegistry) const override {
-    targetRegistry.insert<arith::ArithDialect>();
+    targetRegistry.insert<arith::ArithDialect, affine::AffineDialect>();
   }
 
   void runOnOperation() override {
@@ -541,6 +700,8 @@ struct VitisFoldPass : PassWrapper<VitisFoldPass, OperationPass<>> {
     const unsigned maxRounds = static_cast<unsigned>(fc.maxRounds);
     RewritePatternSet patterns(context);
     rules->populate(patterns, context);
+    if (raiseCountedLoops)
+      patterns.add<RaiseCountedScfFor>(context);
     if (canon) {
       for (Dialect *targetDialect : context->getLoadedDialects())
         targetDialect->getCanonicalizationPatterns(patterns);
@@ -558,6 +719,12 @@ struct VitisFoldPass : PassWrapper<VitisFoldPass, OperationPass<>> {
     GreedyRewriteConfig config;
     config.enableFolding(canon);
     SmallVector<FoldNote> notes;
+
+    if (uniformTables)
+      if (auto module = dyn_cast<ModuleOp>(getOperation()))
+        (void)foldUniformTableLoads(
+            module, cfg.tool.hls.options.arrayPartition.completeThreshold,
+            cfg.frontend.userStoragePragmas, notes);
     std::unique_ptr<circt::hlsest::RuleFolder> folder =
         rules->createFolder(getOperation());
 

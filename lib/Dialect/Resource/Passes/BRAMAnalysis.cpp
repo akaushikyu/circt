@@ -11,6 +11,7 @@
 #include "circt/Dialect/Resource/Passes/MathCores.h"
 #include "circt/Dialect/Resource/Passes/MemrefBankClassification.h"
 #include "circt/Dialect/Resource/Passes/PolygeistCompat.h"
+#include "circt/Dialect/Resource/Passes/ReadOnlyMemory.h"
 #include "circt/Dialect/Resource/Passes/StreamFifos.h"
 #include "circt/Dialect/Resource/Plugins/MemoryInterfaces.h"
 #include "circt/Dialect/Resource/Plugins/PassPolicies.h"
@@ -601,43 +602,7 @@ collectAccessSummaries(ArrayRef<Value> banks,
   return out;
 }
 
-static bool neverWritten(ArrayRef<Value> sites) {
-  SmallVector<Value> work(sites.begin(), sites.end());
-  DenseSet<Value> seen(sites.begin(), sites.end());
-  while (!work.empty()) {
-    Value cur = work.pop_back_val();
-    for (OpOperand &use : cur.getUses()) {
-      Operation *user = use.getOwner();
-      if (auto view = dyn_cast<ViewLikeOpInterface>(user))
-        if (view.getViewSource() == cur) {
-          for (Value resultValue : user->getResults())
-            if (isa<BaseMemRefType>(resultValue.getType()) &&
-                seen.insert(resultValue).second)
-              work.push_back(resultValue);
-          continue;
-        }
-      if (isa<memref::DimOp>(user))
-        continue;
-      auto eff = dyn_cast<MemoryEffectOpInterface>(user);
-      if (!eff)
-        return false;
-      SmallVector<MemoryEffects::EffectInstance> effects;
-      eff.getEffects(effects);
-      bool named = false;
-      for (auto &entryValue : effects) {
-        if (entryValue.getValue() != cur)
-          continue;
-        named = true;
-        if (isa<MemoryEffects::Write, MemoryEffects::Free>(
-                entryValue.getEffect()))
-          return false;
-      }
-      if (!named)
-        return false;
-    }
-  }
-  return true;
-}
+using circt::hls_analysis::neverWritten;
 
 static std::string scopeKindName(Operation *scope) {
   if (!scope)
@@ -1764,7 +1729,11 @@ static void printFoldSummary(const FoldSummary &fieldValue,
     os << "  " << widthValue.rule << " @ " << widthValue.loc;
     if (!widthValue.detail.empty())
       os << " (" << widthValue.detail << ")";
-    os << "; undefined value from @ " << widthValue.source << "\n";
+
+    os << (widthValue.rule == "uniform-table-load"
+               ? "; table @ "
+               : "; undefined value from @ ")
+       << widthValue.source << "\n";
   }
   if (static_cast<int64_t>(fieldValue.rewrites.size()) < elementCount)
     os << "  ... "

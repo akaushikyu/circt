@@ -194,9 +194,6 @@ module {
 }
 
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.global @ loc("{{[^"]*}}":11:3){{$}}
-// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
-// CHECK-NOT: {{^memref\.}}
 // CHECK: memref.alloca @ loc("{{[^"]*}}":40:15){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}

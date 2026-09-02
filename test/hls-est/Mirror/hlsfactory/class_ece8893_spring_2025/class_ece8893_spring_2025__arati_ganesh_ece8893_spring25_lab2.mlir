@@ -543,15 +543,6 @@ module {
 // CHECK: memref.global @ loc("{{[^"]*}}":14:3){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.global @ loc("{{[^"]*}}":15:3){{$}}
-// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
-// CHECK-NOT: {{^memref\.}}
-// CHECK: memref.global @ loc("{{[^"]*}}":16:3){{$}}
-// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
-// CHECK-NOT: {{^memref\.}}
-// CHECK: memref.global @ loc("{{[^"]*}}":17:3){{$}}
-// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
-// CHECK-NOT: {{^memref\.}}
 // CHECK: memref.alloca @ loc("{{[^"]*}}":157:9){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
