@@ -2071,195 +2071,195 @@ module {
 // CHECK-NEXT: kind=RAM_1P  bram=4{{$}}
 // CHECK-NOT: {{^memref\.}}
 // CHECK: memref.alloca @ loc("{{[^"]*}}":1217:17){{$}}
-// CHECK-NEXT: kind=PIPO  bram=1{{$}}
+// CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
 // CHECK: memref.alloca @ loc("{{[^"]*}}":1217:17){{$}}
-// CHECK-NEXT: kind=PIPO  bram=1{{$}}
+// CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
 // CHECK: memref.alloca @ loc("{{[^"]*}}":1217:17){{$}}
-// CHECK-NEXT: kind=PIPO  bram=1{{$}}
+// CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
 // CHECK: memref.alloca @ loc("{{[^"]*}}":1217:17){{$}}
-// CHECK-NEXT: kind=PIPO  bram=1{{$}}
+// CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
 // CHECK: memref.alloca @ loc("{{[^"]*}}":1217:17){{$}}
-// CHECK-NEXT: kind=PIPO  bram=1{{$}}
+// CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
 // CHECK: memref.alloca @ loc("{{[^"]*}}":1217:17){{$}}
-// CHECK-NEXT: kind=PIPO  bram=1{{$}}
+// CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
 // CHECK: memref.alloca @ loc("{{[^"]*}}":1217:17){{$}}
-// CHECK-NEXT: kind=PIPO  bram=1{{$}}
+// CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
 // CHECK: memref.alloca @ loc("{{[^"]*}}":1217:17){{$}}
-// CHECK-NEXT: kind=PIPO  bram=1{{$}}
+// CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
 // CHECK: memref.alloca @ loc("{{[^"]*}}":1217:17){{$}}
-// CHECK-NEXT: kind=PIPO  bram=1{{$}}
+// CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
 // CHECK: memref.alloca @ loc("{{[^"]*}}":1217:17){{$}}
-// CHECK-NEXT: kind=PIPO  bram=1{{$}}
+// CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
 // CHECK: memref.alloca @ loc("{{[^"]*}}":1217:17){{$}}
-// CHECK-NEXT: kind=PIPO  bram=1{{$}}
+// CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
 // CHECK: memref.alloca @ loc("{{[^"]*}}":1217:17){{$}}
-// CHECK-NEXT: kind=PIPO  bram=1{{$}}
+// CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
 // CHECK: memref.alloca @ loc("{{[^"]*}}":1217:17){{$}}
-// CHECK-NEXT: kind=PIPO  bram=1{{$}}
+// CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
 // CHECK: memref.alloca @ loc("{{[^"]*}}":1217:17){{$}}
-// CHECK-NEXT: kind=PIPO  bram=1{{$}}
+// CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
 // CHECK: memref.alloca @ loc("{{[^"]*}}":1217:17){{$}}
-// CHECK-NEXT: kind=PIPO  bram=1{{$}}
+// CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
 // CHECK: memref.alloca @ loc("{{[^"]*}}":1217:17){{$}}
-// CHECK-NEXT: kind=PIPO  bram=1{{$}}
+// CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
 // CHECK: memref.alloca @ loc("{{[^"]*}}":1217:17){{$}}
-// CHECK-NEXT: kind=PIPO  bram=1{{$}}
+// CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
 // CHECK: memref.alloca @ loc("{{[^"]*}}":1217:17){{$}}
-// CHECK-NEXT: kind=PIPO  bram=1{{$}}
+// CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
 // CHECK: memref.alloca @ loc("{{[^"]*}}":1217:17){{$}}
-// CHECK-NEXT: kind=PIPO  bram=1{{$}}
+// CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
 // CHECK: memref.alloca @ loc("{{[^"]*}}":1217:17){{$}}
-// CHECK-NEXT: kind=PIPO  bram=1{{$}}
+// CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
 // CHECK: memref.alloca @ loc("{{[^"]*}}":1217:17){{$}}
-// CHECK-NEXT: kind=PIPO  bram=1{{$}}
+// CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
 // CHECK: memref.alloca @ loc("{{[^"]*}}":1217:17){{$}}
-// CHECK-NEXT: kind=PIPO  bram=1{{$}}
+// CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
 // CHECK: memref.alloca @ loc("{{[^"]*}}":1217:17){{$}}
-// CHECK-NEXT: kind=PIPO  bram=1{{$}}
+// CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
 // CHECK: memref.alloca @ loc("{{[^"]*}}":1217:17){{$}}
-// CHECK-NEXT: kind=PIPO  bram=1{{$}}
+// CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
 // CHECK: memref.alloca @ loc("{{[^"]*}}":1217:17){{$}}
-// CHECK-NEXT: kind=PIPO  bram=1{{$}}
+// CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
 // CHECK: memref.alloca @ loc("{{[^"]*}}":1217:17){{$}}
-// CHECK-NEXT: kind=PIPO  bram=1{{$}}
+// CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
 // CHECK: memref.alloca @ loc("{{[^"]*}}":1217:17){{$}}
-// CHECK-NEXT: kind=PIPO  bram=1{{$}}
+// CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
 // CHECK: memref.alloca @ loc("{{[^"]*}}":1217:17){{$}}
-// CHECK-NEXT: kind=PIPO  bram=1{{$}}
+// CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
 // CHECK: memref.alloca @ loc("{{[^"]*}}":1217:17){{$}}
-// CHECK-NEXT: kind=PIPO  bram=1{{$}}
+// CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
 // CHECK: memref.alloca @ loc("{{[^"]*}}":1217:17){{$}}
-// CHECK-NEXT: kind=PIPO  bram=1{{$}}
+// CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
 // CHECK: memref.alloca @ loc("{{[^"]*}}":1217:17){{$}}
-// CHECK-NEXT: kind=PIPO  bram=1{{$}}
+// CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
 // CHECK: memref.alloca @ loc("{{[^"]*}}":1217:17){{$}}
-// CHECK-NEXT: kind=PIPO  bram=1{{$}}
+// CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
 // CHECK: memref.alloca @ loc("{{[^"]*}}":1217:17){{$}}
-// CHECK-NEXT: kind=PIPO  bram=1{{$}}
+// CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
 // CHECK: memref.alloca @ loc("{{[^"]*}}":1217:17){{$}}
-// CHECK-NEXT: kind=PIPO  bram=1{{$}}
+// CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
 // CHECK: memref.alloca @ loc("{{[^"]*}}":1217:17){{$}}
-// CHECK-NEXT: kind=PIPO  bram=1{{$}}
+// CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
 // CHECK: memref.alloca @ loc("{{[^"]*}}":1217:17){{$}}
-// CHECK-NEXT: kind=PIPO  bram=1{{$}}
+// CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
 // CHECK: memref.alloca @ loc("{{[^"]*}}":1217:17){{$}}
-// CHECK-NEXT: kind=PIPO  bram=1{{$}}
+// CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
 // CHECK: memref.alloca @ loc("{{[^"]*}}":1217:17){{$}}
-// CHECK-NEXT: kind=PIPO  bram=1{{$}}
+// CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
 // CHECK: memref.alloca @ loc("{{[^"]*}}":1217:17){{$}}
-// CHECK-NEXT: kind=PIPO  bram=1{{$}}
+// CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
 // CHECK: memref.alloca @ loc("{{[^"]*}}":1217:17){{$}}
-// CHECK-NEXT: kind=PIPO  bram=1{{$}}
+// CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
 // CHECK: memref.alloca @ loc("{{[^"]*}}":1217:17){{$}}
-// CHECK-NEXT: kind=PIPO  bram=1{{$}}
+// CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
 // CHECK: memref.alloca @ loc("{{[^"]*}}":1217:17){{$}}
-// CHECK-NEXT: kind=PIPO  bram=1{{$}}
+// CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
 // CHECK: memref.alloca @ loc("{{[^"]*}}":1217:17){{$}}
-// CHECK-NEXT: kind=PIPO  bram=1{{$}}
+// CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
 // CHECK: memref.alloca @ loc("{{[^"]*}}":1217:17){{$}}
-// CHECK-NEXT: kind=PIPO  bram=1{{$}}
+// CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
 // CHECK: memref.alloca @ loc("{{[^"]*}}":1217:17){{$}}
-// CHECK-NEXT: kind=PIPO  bram=1{{$}}
+// CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
 // CHECK: memref.alloca @ loc("{{[^"]*}}":1217:17){{$}}
-// CHECK-NEXT: kind=PIPO  bram=1{{$}}
+// CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
 // CHECK: memref.alloca @ loc("{{[^"]*}}":1217:17){{$}}
-// CHECK-NEXT: kind=PIPO  bram=1{{$}}
+// CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
 // CHECK: memref.alloca @ loc("{{[^"]*}}":1217:17){{$}}
-// CHECK-NEXT: kind=PIPO  bram=1{{$}}
+// CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
 // CHECK: memref.alloca @ loc("{{[^"]*}}":1217:17){{$}}
-// CHECK-NEXT: kind=PIPO  bram=1{{$}}
+// CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
 // CHECK: memref.alloca @ loc("{{[^"]*}}":1217:17){{$}}
-// CHECK-NEXT: kind=PIPO  bram=1{{$}}
+// CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
 // CHECK: memref.alloca @ loc("{{[^"]*}}":1217:17){{$}}
-// CHECK-NEXT: kind=PIPO  bram=1{{$}}
+// CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
 // CHECK: memref.alloca @ loc("{{[^"]*}}":1217:17){{$}}
-// CHECK-NEXT: kind=PIPO  bram=1{{$}}
+// CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
 // CHECK: memref.alloca @ loc("{{[^"]*}}":1217:17){{$}}
-// CHECK-NEXT: kind=PIPO  bram=1{{$}}
+// CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
 // CHECK: memref.alloca @ loc("{{[^"]*}}":1217:17){{$}}
-// CHECK-NEXT: kind=PIPO  bram=1{{$}}
+// CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
 // CHECK: memref.alloca @ loc("{{[^"]*}}":1217:17){{$}}
-// CHECK-NEXT: kind=PIPO  bram=1{{$}}
+// CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
 // CHECK: memref.alloca @ loc("{{[^"]*}}":1217:17){{$}}
-// CHECK-NEXT: kind=PIPO  bram=1{{$}}
+// CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
 // CHECK: memref.alloca @ loc("{{[^"]*}}":1217:17){{$}}
-// CHECK-NEXT: kind=PIPO  bram=1{{$}}
+// CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
 // CHECK: memref.alloca @ loc("{{[^"]*}}":1217:17){{$}}
-// CHECK-NEXT: kind=PIPO  bram=1{{$}}
+// CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
 // CHECK: memref.alloca @ loc("{{[^"]*}}":1217:17){{$}}
-// CHECK-NEXT: kind=PIPO  bram=1{{$}}
+// CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
 // CHECK: memref.alloca @ loc("{{[^"]*}}":1217:17){{$}}
-// CHECK-NEXT: kind=PIPO  bram=1{{$}}
+// CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
 // CHECK: memref.alloca @ loc("{{[^"]*}}":1217:17){{$}}
-// CHECK-NEXT: kind=PIPO  bram=1{{$}}
+// CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
 // CHECK: memref.alloca @ loc("{{[^"]*}}":1217:17){{$}}
-// CHECK-NEXT: kind=PIPO  bram=1{{$}}
+// CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
 // CHECK: memref.alloca @ loc("{{[^"]*}}":1217:17){{$}}
-// CHECK-NEXT: kind=PIPO  bram=1{{$}}
+// CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
 // CHECK: memref.alloca @ loc("{{[^"]*}}":1217:17){{$}}
-// CHECK-NEXT: kind=PIPO  bram=1{{$}}
+// CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: Total BRAM: 204{{$}}
+// CHECK: Total BRAM: 268{{$}}

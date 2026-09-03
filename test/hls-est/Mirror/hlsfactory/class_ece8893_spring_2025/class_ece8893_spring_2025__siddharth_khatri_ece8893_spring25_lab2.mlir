@@ -707,10 +707,10 @@ module {
 // CHECK-NEXT: kind=FIFO  bram=89{{$}}
 // CHECK-NOT: {{^memref\.}}
 // CHECK: memref.alloca @ loc("{{[^"]*}}":238:15){{$}}
-// CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
+// CHECK-NEXT: kind=RAM_2P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
 // CHECK: memref.alloca @ loc("{{[^"]*}}":239:17){{$}}
-// CHECK-NEXT: kind=RAM_1WNR  bram=15{{$}}
+// CHECK-NEXT: kind=RAM_T2P  bram=1  [INFEASIBLE]{{$}}
 // CHECK-NOT: {{^memref\.}}
 // CHECK: memref.alloca @ loc("{{[^"]*}}":240:17){{$}}
 // CHECK-NEXT: kind=RAM_2P  bram=64{{$}}
@@ -718,4 +718,4 @@ module {
 // CHECK: memref.alloca @ loc("{{[^"]*}}":241:17){{$}}
 // CHECK-NEXT: kind=RAM_1WNR  bram=960{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: Total BRAM: 1234{{$}}
+// CHECK: Total BRAM: 1220{{$}}

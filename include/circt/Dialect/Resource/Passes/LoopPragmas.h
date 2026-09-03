@@ -16,7 +16,9 @@
 #define CIRCT_DIALECT_RESOURCE_PASSES_LOOPPRAGMAS_H
 
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
+#include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/IR/BuiltinAttributes.h"
+#include "mlir/Interfaces/LoopLikeInterface.h"
 #include "llvm/ADT/StringRef.h"
 
 namespace circt::hls_analysis {
@@ -123,6 +125,27 @@ getFlattenedRoot(mlir::affine::AffineForOp loop) {
     root = parent;
   }
   return root;
+}
+
+/// An `scf.for` --convert-affine-to-loopschedule schedules as a pipeline: a
+/// loop with a runtime trip count (bounds that are no affine symbols) that
+/// --auto-pipeline-unroll pipelined (or the user did), with no loop left in
+/// its body and no call boundary (VITIS_NOTES.md N53). An scf.while is not
+/// scheduled (its exit condition is computed in its own region).
+inline bool isScheduledRuntimeFor(mlir::Operation *op) {
+  auto forOp = llvm::dyn_cast<mlir::scf::ForOp>(op);
+  if (!forOp || !forOp->hasAttr(kLoopPipelineAttr) ||
+      forOp->hasAttr(kLoopPipelineOffAttr) ||
+      forOp->hasAttr(kLoopCallBoundaryAttr))
+    return false;
+  bool nested = false;
+  forOp.getBody()->walk([&](mlir::Operation *inner) {
+    if (!llvm::isa<mlir::LoopLikeOpInterface>(inner))
+      return mlir::WalkResult::advance();
+    nested = true;
+    return mlir::WalkResult::interrupt();
+  });
+  return !nested;
 }
 
 } // namespace circt::hls_analysis

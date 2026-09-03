@@ -138,10 +138,10 @@ module {
 // CHECK-NEXT: kind=RAM_2P  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
 // CHECK: memref.alloca @ loc("{{[^"]*}}":21:17){{$}}
-// CHECK-NEXT: kind=RAM_1P  bram=3{{$}}
+// CHECK-NEXT: kind=RAM_2P  bram=3{{$}}
 // CHECK-NOT: {{^memref\.}}
 // CHECK: memref.alloca @ loc("{{[^"]*}}":22:17){{$}}
-// CHECK-NEXT: kind=RAM_1P  bram=4{{$}}
+// CHECK-NEXT: kind=RAM_2P  bram=4{{$}}
 // CHECK-NOT: {{^memref\.}}
 // CHECK: memref.alloca @ loc("{{[^"]*}}":23:17){{$}}
 // CHECK-NEXT: kind=RAM_2P  bram=2{{$}}

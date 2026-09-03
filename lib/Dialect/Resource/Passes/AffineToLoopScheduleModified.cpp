@@ -109,13 +109,17 @@ private:
   LogicalResult
   lowerAffineStructures(MemoryDependenceAnalysis &dependenceAnalysis);
 
-  LogicalResult populateOperatorTypes(AffineForOp forOp, ModuloProblem &problem,
+  LogicalResult populateOperatorTypes(Operation *loop, ModuloProblem &problem,
                                       const BRAMClassification &bramClass);
 
-  LogicalResult solveSchedulingProblem(AffineForOp forOp,
-                                       ModuloProblem &problem);
-  LogicalResult createLoopSchedulePipeline(AffineForOp forOp,
+  LogicalResult solveSchedulingProblem(Operation *loop, ModuloProblem &problem);
+  LogicalResult createLoopSchedulePipeline(Operation *loop,
                                            ModuloProblem &problem);
+  /// Schedules one loop and replaces it by its pipeline; false leaves it
+  /// sequential, failure fails the pass.
+  FailureOr<bool>
+  pipelineLoop(Operation *loop, const BRAMClassification &bramClass,
+               InnermostLoopDependenceAnalysis &dependenceAnalysis);
 
   void coalescePerfectNests();
 
@@ -1009,6 +1013,14 @@ void AffineToLoopSchedule::mergeIfElseAccesses() {
                           << " loads, sank " << sunk << " stores\n");
 }
 
+/// The body of a loop the pass schedules: an affine.for or a pipelined
+/// runtime-trip scf.for (isScheduledRuntimeFor).
+static Block *loopBody(Operation *loop) {
+  if (auto forOp = dyn_cast<AffineForOp>(loop))
+    return forOp.getBody();
+  return cast<scf::ForOp>(loop).getBody();
+}
+
 /// Returns true if `forOp` contains no loop of any kind anywhere in its body
 /// (including inside ifs). MODIFIED (T3): an scf.for / scf.while inside an
 /// affine.for used to make that affine.for "innermost" and sent it to the
@@ -1035,18 +1047,18 @@ static bool isInnermostAffineFor(AffineForOp forOp) {
 /// yields one of its own iter_args or a value defined outside it (a shift
 /// register: `affine.yield %new, %prev`) and the promoted `acc[k] +=`
 /// accumulators of an unrolled body are both handled by that.
-static void materializeYieldedValues(AffineForOp forOp) {
-  auto yield = cast<AffineYieldOp>(forOp.getBody()->getTerminator());
+static void materializeYieldedValues(Operation *loop) {
+  Operation *yield = loopBody(loop)->getTerminator();
   Value trueVal;
   OpBuilder buildPoint(yield);
   for (OpOperand &opd : yield->getOpOperands()) {
     Value valueHandle = opd.get();
     if (!trueVal) {
-      OpBuilder ob(forOp);
+      OpBuilder ob(loop);
       trueVal =
-          arith::ConstantOp::create(ob, forOp.getLoc(), ob.getBoolAttr(true));
+          arith::ConstantOp::create(ob, loop->getLoc(), ob.getBoolAttr(true));
     }
-    opd.set(arith::SelectOp::create(buildPoint, yield.getLoc(), trueVal,
+    opd.set(arith::SelectOp::create(buildPoint, yield->getLoc(), trueVal,
                                     valueHandle, valueHandle));
   }
 }
@@ -1179,9 +1191,9 @@ void AffineToLoopSchedule::coalescePerfectNests() {
   }
 }
 
-static void anchorUntrackedSideEffects(AffineForOp forOp,
+static void anchorUntrackedSideEffects(Operation *loop,
                                        ModuloProblem &problem) {
-  Operation *anchor = forOp.getBody()->getTerminator();
+  Operation *anchor = loopBody(loop)->getTerminator();
 
   SmallVector<Operation *> ops(problem.getOperations().begin(),
                                problem.getOperations().end());
@@ -1202,13 +1214,13 @@ static void anchorUntrackedSideEffects(AffineForOp forOp,
   }
 }
 
-static void chainSharedCalleeInstances(AffineForOp forOp,
+static void chainSharedCalleeInstances(Operation *loop,
                                        ModuloProblem &problem) {
-  auto parent = forOp->getParentOfType<func::FuncOp>();
+  auto parent = loop->getParentOfType<func::FuncOp>();
   if (!parent)
     return;
   llvm::MapVector<Operation *, SmallVector<Operation *>> byCallee;
-  forOp.getBody()->walk([&](CallOpInterface call) {
+  loopBody(loop)->walk([&](CallOpInterface call) {
     if (!problem.hasOperation(call.getOperation()))
       return;
     if (func::FuncOp callee = resolveDefinedCallee(call))
@@ -1268,8 +1280,8 @@ static void chainSharedCalleeInstances(AffineForOp forOp,
   }
 }
 
-static void anchorRegionCaptures(AffineForOp forOp, ModuloProblem &problem) {
-  Block *body = forOp.getBody();
+static void anchorRegionCaptures(Operation *loop, ModuloProblem &problem) {
+  Block *body = loopBody(loop);
   for (Operation &regionOp : body->without_terminator()) {
     if (regionOp.getNumRegions() == 0 || !problem.hasOperation(&regionOp))
       continue;
@@ -1753,9 +1765,8 @@ LogicalResult AffineToLoopSchedule::createPlugins() {
 /// delivers: the implicit value flow from an if's yields to its results, and
 /// every store before the loop's terminator (the anchor of the schedule).
 /// Re-inserting an edge the problem already holds changes nothing.
-static void addStructuralDependences(AffineForOp forOp,
-                                     ModuloProblem &problem) {
-  forOp.getBody()->walk([&](Operation *op) {
+static void addStructuralDependences(Operation *loop, ModuloProblem &problem) {
+  loopBody(loop)->walk([&](Operation *op) {
     Block *thenBlock = nullptr, *elseBlock = nullptr;
     if (auto ifOp = dyn_cast<scf::IfOp>(op)) {
       thenBlock = ifOp.thenBlock();
@@ -1776,8 +1787,8 @@ static void addStructuralDependences(AffineForOp forOp,
           Problem::Dependence(elseBlock->getTerminator(), op));
     return WalkResult::advance();
   });
-  Operation *anchor = forOp.getBody()->getTerminator();
-  forOp.getBody()->walk([&](Operation *op) {
+  Operation *anchor = loopBody(loop)->getTerminator();
+  loopBody(loop)->walk([&](Operation *op) {
     if (isa<AffineStoreOp, memref::StoreOp>(op))
       (void)problem.insertDependence(Problem::Dependence(op, anchor));
   });
@@ -1815,6 +1826,11 @@ void AffineToLoopSchedule::runOnOperation() {
 
   getOperation().walk([&](AffineForOp forOp) {
     if (isInnermostAffineFor(forOp))
+      materializeYieldedValues(forOp);
+  });
+
+  getOperation().walk([&](scf::ForOp forOp) {
+    if (isScheduledRuntimeFor(forOp))
       materializeYieldedValues(forOp);
   });
 
@@ -1856,27 +1872,19 @@ void AffineToLoopSchedule::runOnOperation() {
       innermostLoops.push_back(forOp);
   });
 
+  SmallVector<Operation *> runtimeLoops;
+  getOperation().walk([&](scf::ForOp forOp) {
+    if (isScheduledRuntimeFor(forOp))
+      runtimeLoops.push_back(forOp);
+  });
+
   scheduleCache.clear();
-  for (AffineForOp loop : innermostLoops) {
-
-    circt::hlsest::DependenceInputs inputs{*schedulingAnalysis,
-                                           dependenceAnalysis};
-    ModuloProblem moduloProblem = dependenceModel->populate(loop, inputs);
-    addStructuralDependences(loop, moduloProblem);
-
-    if (failed(populateOperatorTypes(loop, moduloProblem, bramClass)))
-      continue;
-
-    anchorRegionCaptures(loop, moduloProblem);
-    chainSharedCalleeInstances(loop, moduloProblem);
-    anchorUntrackedSideEffects(loop, moduloProblem);
-
-    if (failed(solveSchedulingProblem(loop, moduloProblem)))
+  for (AffineForOp loop : innermostLoops)
+    if (failed(pipelineLoop(loop, bramClass, dependenceAnalysis)))
       return signalPassFailure();
-
-    if (failed(createLoopSchedulePipeline(loop, moduloProblem)))
+  for (Operation *loop : runtimeLoops)
+    if (failed(pipelineLoop(loop, bramClass, dependenceAnalysis)))
       return signalPassFailure();
-  }
 
   SmallVector<Block *> sequentialRegions;
   if (!getOperation().getBody().empty())
@@ -1901,6 +1909,43 @@ void AffineToLoopSchedule::runOnOperation() {
     for (auto &[op, unit] : binding.opToUnit)
       op->setAttr("hls.unit", buildPoint.getI64IntegerAttr(unit));
   }
+}
+
+FailureOr<bool> AffineToLoopSchedule::pipelineLoop(
+    Operation *loop, const BRAMClassification &bramClass,
+    InnermostLoopDependenceAnalysis &dependenceAnalysis) {
+
+  std::optional<ModuloProblem> populated;
+  if (auto forOp = dyn_cast<AffineForOp>(loop)) {
+    circt::hlsest::DependenceInputs inputs{*schedulingAnalysis,
+                                           dependenceAnalysis};
+    populated.emplace(dependenceModel->populate(forOp, inputs));
+  } else {
+    if (dependenceModel->name() != "cached-o1") {
+      loop->emitWarning("not pipelined (left as a sequential loop): the "
+                        "dependence model ")
+          << dependenceModel->name() << " takes affine.for loops only";
+      return false;
+    }
+    populated.emplace(
+        copyToModuloProblem(schedulingAnalysis->getProblem(loop)));
+  }
+  ModuloProblem &moduloProblem = *populated;
+  addStructuralDependences(loop, moduloProblem);
+
+  if (failed(populateOperatorTypes(loop, moduloProblem, bramClass)))
+    return false;
+
+  anchorRegionCaptures(loop, moduloProblem);
+  chainSharedCalleeInstances(loop, moduloProblem);
+  anchorUntrackedSideEffects(loop, moduloProblem);
+
+  if (failed(solveSchedulingProblem(loop, moduloProblem)))
+    return failure();
+
+  if (failed(createLoopSchedulePipeline(loop, moduloProblem)))
+    return failure();
+  return true;
 }
 
 /// Apply the affine map from an 'affine.load' operation to its operands, and
@@ -2271,7 +2316,7 @@ static Value accessedMemref(Operation *op, bool &isLoad) {
 /// the one operator type of its memref and the port pools of its bank. An
 /// operation the model does not support leaves the loop sequential.
 LogicalResult AffineToLoopSchedule::populateOperatorTypes(
-    AffineForOp forOp, ModuloProblem &problem,
+    Operation *loop, ModuloProblem &problem,
     const BRAMClassification &bramClass) {
   SmallVector<circt::hlsest::OperatorTiming> library;
   timingModel->library(library);
@@ -2284,7 +2329,7 @@ LogicalResult AffineToLoopSchedule::populateOperatorTypes(
   llvm::StringMap<unsigned> latencyOfClass;
   Operation *unsupported = nullptr;
   Operation *inconsistent = nullptr;
-  WalkResult result = forOp.getBody()->walk([&](Operation *op) {
+  WalkResult result = loopBody(loop)->walk([&](Operation *op) {
     std::optional<circt::hlsest::OperatorTiming> t =
         timingModel->timing(op, schedulingContext);
     if (!t) {
@@ -2325,13 +2370,13 @@ LogicalResult AffineToLoopSchedule::populateOperatorTypes(
   });
 
   if (inconsistent) {
-    forOp.emitError("--convert-affine-to-loopschedule: the timing model gives "
+    loop->emitError("--convert-affine-to-loopschedule: the timing model gives "
                     "operations of one class different latencies: ")
         << *inconsistent;
     return failure();
   }
   if (result.wasInterrupted()) {
-    forOp.emitWarning("not pipelined (left as a sequential loop): "
+    loop->emitWarning("not pipelined (left as a sequential loop): "
                       "unsupported operation ")
         << *unsupported;
     return failure();
@@ -2341,9 +2386,9 @@ LogicalResult AffineToLoopSchedule::populateOperatorTypes(
 
 /// The II a user `#pragma HLS pipeline II=N` asks for on `forOp` (N > 1),
 /// else 0. --auto-pipeline-unroll's own tag (source "auto") asks for none.
-static unsigned userTargetII(AffineForOp forOp) {
+static unsigned userTargetII(Operation *loop) {
   auto arr =
-      forOp->getAttrOfType<ArrayAttr>(circt::hls_analysis::kLoopPipelineAttr);
+      loop->getAttrOfType<ArrayAttr>(circt::hls_analysis::kLoopPipelineAttr);
   if (!arr || arr.empty())
     return 0;
   auto dict = dyn_cast<DictionaryAttr>(arr[0]);
@@ -2355,10 +2400,10 @@ static unsigned userTargetII(AffineForOp forOp) {
 
 /// Solve the pre-computed scheduling problem.
 LogicalResult
-AffineToLoopSchedule::solveSchedulingProblem(AffineForOp forOp,
+AffineToLoopSchedule::solveSchedulingProblem(Operation *loop,
                                              ModuloProblem &problem) {
 
-  LLVM_DEBUG(forOp.getBody()->walk<WalkOrder::PreOrder>([&](Operation *op) {
+  LLVM_DEBUG(loopBody(loop)->walk<WalkOrder::PreOrder>([&](Operation *op) {
     llvm::dbgs() << "Scheduling inputs for " << *op;
     auto opr = problem.getLinkedOperatorType(op);
     llvm::dbgs() << "\n  opr = " << opr->getAttr();
@@ -2373,10 +2418,10 @@ AffineToLoopSchedule::solveSchedulingProblem(AffineForOp forOp,
   if (failed(problem.check()))
     return failure();
 
-  auto *anchor = forOp.getBody()->getTerminator();
+  auto *anchor = loopBody(loop)->getTerminator();
 
   const bool reuse = reuseSchedules && moduloScheduler->isFunctionOfProblem();
-  unsigned targetII = userIITarget ? userTargetII(forOp) : 0u;
+  unsigned targetII = userIITarget ? userTargetII(loop) : 0u;
 
   SmallVector<int64_t> signature;
   size_t signatureHash = 0;
@@ -2392,7 +2437,7 @@ AffineToLoopSchedule::solveSchedulingProblem(AffineForOp forOp,
         if (candidateValue.signature == signature)
           reused = &candidateValue;
     DEBUG_WITH_TYPE("schedule-reuse", {
-      llvm::dbgs() << "schedule signature " << forOp.getLoc() << " ops "
+      llvm::dbgs() << "schedule signature " << loop->getLoc() << " ops "
                    << problem.getOperations().size() << " hash "
                    << signatureHash << (reused ? " reused" : " new") << ":";
       for (int64_t exprValue : signature)
@@ -2409,10 +2454,10 @@ AffineToLoopSchedule::solveSchedulingProblem(AffineForOp forOp,
     applyReused();
     if (succeeded(problem.verify())) {
       ++numSchedulesReused;
-      forOp->setAttr(circt::hls_analysis::kLoopSchedulerAttr,
-                     StringAttr::get(forOp.getContext(),
-                                     reused->scheduler + " (reused from " +
-                                         reused->loc + ")"));
+      loop->setAttr(circt::hls_analysis::kLoopSchedulerAttr,
+                    StringAttr::get(loop->getContext(), reused->scheduler +
+                                                            " (reused from " +
+                                                            reused->loc + ")"));
       return success();
     }
 
@@ -2433,8 +2478,8 @@ AffineToLoopSchedule::solveSchedulingProblem(AffineForOp forOp,
   if (failed(problem.verify()))
     return failure();
   ++numSchedulesSolved;
-  forOp->setAttr(circt::hls_analysis::kLoopSchedulerAttr,
-                 StringAttr::get(forOp.getContext(), scheduler));
+  loop->setAttr(circt::hls_analysis::kLoopSchedulerAttr,
+                StringAttr::get(loop->getContext(), scheduler));
 
   if (reuse) {
     SmallVector<unsigned> startTimes;
@@ -2445,7 +2490,7 @@ AffineToLoopSchedule::solveSchedulingProblem(AffineForOp forOp,
       if (reused->ii != *problem.getInitiationInterval() ||
           reused->startTimes != startTimes) {
         ++numReuseMismatches;
-        forOp.emitWarning()
+        loop->emitWarning()
             << "schedule reuse mismatch: the identical loop at " << reused->loc
             << " has II " << reused->ii << ", this one solves to II "
             << *problem.getInitiationInterval();
@@ -2453,11 +2498,11 @@ AffineToLoopSchedule::solveSchedulingProblem(AffineForOp forOp,
     } else {
       std::string loc;
       llvm::raw_string_ostream os(loc);
-      if (auto fl = dyn_cast<FileLineColLoc>(forOp.getLoc()))
+      if (auto fl = dyn_cast<FileLineColLoc>(loop->getLoc()))
         os << fl.getFilename().getValue() << ":" << fl.getLine() << ":"
            << fl.getColumn();
       else
-        forOp.getLoc().print(os);
+        loop->getLoc().print(os);
       scheduleCache[signatureHash].push_back(
           {std::move(signature), *problem.getInitiationInterval(),
            std::move(startTimes), scheduler, std::move(loc)});
@@ -2467,7 +2512,7 @@ AffineToLoopSchedule::solveSchedulingProblem(AffineForOp forOp,
   LLVM_DEBUG({
     llvm::dbgs() << "Scheduled initiation interval = "
                  << problem.getInitiationInterval() << "\n\n";
-    forOp.getBody()->walk<WalkOrder::PreOrder>([&](Operation *op) {
+    loopBody(loop)->walk<WalkOrder::PreOrder>([&](Operation *op) {
       llvm::dbgs() << "Scheduling outputs for " << *op;
       llvm::dbgs() << "\n  start = " << problem.getStartTime(op);
       llvm::dbgs() << "\n\n";
@@ -2486,27 +2531,44 @@ AffineToLoopSchedule::solveSchedulingProblem(AffineForOp forOp,
 /// cloned ops may keep references to outer induction variables and other
 /// dominating values without extra plumbing.
 LogicalResult
-AffineToLoopSchedule::createLoopSchedulePipeline(AffineForOp forOp,
+AffineToLoopSchedule::createLoopSchedulePipeline(Operation *loop,
                                                  ModuloProblem &problem) {
-  ImplicitLocOpBuilder builder(forOp.getLoc(), forOp);
+  ImplicitLocOpBuilder builder(loop->getLoc(), loop);
+  Block *body = loopBody(loop);
 
-  Value lowerBound = lowerAffineLowerBound(forOp, builder);
-  Value upperBound = lowerAffineUpperBound(forOp, builder);
-  int64_t stepValue = forOp.getStep().getSExtValue();
-  auto step = arith::ConstantOp::create(
-      builder, IntegerAttr::get(builder.getIndexType(), stepValue));
+  Value lowerBound, upperBound, step;
+  ValueRange inits;
+  std::optional<uint64_t> constantTrip;
+  arith::CmpIPredicate continuePredicate = arith::CmpIPredicate::ult;
+  if (auto forOp = dyn_cast<AffineForOp>(loop)) {
+    lowerBound = lowerAffineLowerBound(forOp, builder);
+    upperBound = lowerAffineUpperBound(forOp, builder);
+    int64_t stepValue = forOp.getStep().getSExtValue();
+    step = arith::ConstantOp::create(
+        builder, IntegerAttr::get(builder.getIndexType(), stepValue));
+    inits = forOp.getInits();
+    constantTrip = getConstantTripCount(forOp);
+  } else {
+    auto scfFor = cast<scf::ForOp>(loop);
+    lowerBound = scfFor.getLowerBound();
+    upperBound = scfFor.getUpperBound();
+    step = scfFor.getStep();
+    inits = scfFor.getInitArgs();
+    if (!scfFor.getUnsignedCmp())
+      continuePredicate = arith::CmpIPredicate::slt;
+  }
 
-  TypeRange resultTypes = forOp.getResultTypes();
+  TypeRange resultTypes = loop->getResultTypes();
 
   auto ii = builder.getI64IntegerAttr(problem.getInitiationInterval().value());
 
   SmallVector<Value> iterArgs;
   iterArgs.push_back(lowerBound);
-  iterArgs.append(forOp.getInits().begin(), forOp.getInits().end());
+  iterArgs.append(inits.begin(), inits.end());
 
   std::optional<IntegerAttr> tripCountAttr;
-  if (auto tripCount = getConstantTripCount(forOp))
-    tripCountAttr = builder.getI64IntegerAttr(*tripCount);
+  if (constantTrip)
+    tripCountAttr = builder.getI64IntegerAttr(*constantTrip);
 
   auto pipeline = LoopSchedulePipelineOp::create(builder, resultTypes, ii,
                                                  tripCountAttr, iterArgs);
@@ -2516,14 +2578,14 @@ AffineToLoopSchedule::createLoopSchedulePipeline(AffineForOp forOp,
                          circt::hls_analysis::kLoopAutoUnrolledAttr,
                          circt::hls_analysis::kLoopUnrollPartialAttr,
                          circt::hls_analysis::kLoopSchedulerAttr})
-    if (Attribute a = forOp->getAttr(name))
+    if (Attribute a = loop->getAttr(name))
       pipeline->setAttr(name, a);
 
   Block &condBlock = pipeline.getCondBlock();
   builder.setInsertionPointToStart(&condBlock);
-  auto cmpResult = arith::CmpIOp::create(builder, builder.getI1Type(),
-                                         arith::CmpIPredicate::ult,
-                                         condBlock.getArgument(0), upperBound);
+  auto cmpResult =
+      arith::CmpIOp::create(builder, builder.getI1Type(), continuePredicate,
+                            condBlock.getArgument(0), upperBound);
   condBlock.getTerminator()->insertOperands(0, {cmpResult});
 
   DenseMap<unsigned, SmallVector<Operation *>> startGroups;
@@ -2541,7 +2603,7 @@ AffineToLoopSchedule::createLoopSchedulePipeline(AffineForOp forOp,
     maxStartTime = std::max(maxStartTime, *problem.getStartTime(op));
   }
 
-  if (auto termStart = problem.getStartTime(forOp.getBody()->getTerminator());
+  if (auto termStart = problem.getStartTime(body->getTerminator());
       termStart && *termStart > 0)
     maxStartTime = std::max(maxStartTime, *termStart - 1);
   for (unsigned t = 0; t <= maxStartTime; ++t)
@@ -2549,9 +2611,9 @@ AffineToLoopSchedule::createLoopSchedulePipeline(AffineForOp forOp,
       startGroups.try_emplace(t, SmallVector<Operation *>());
 
   IRMapping valueMap;
-  assert(iterArgs.size() == forOp.getBody()->getNumArguments());
+  assert(iterArgs.size() == body->getNumArguments());
   for (size_t loopIndex = 0; loopIndex < iterArgs.size(); ++loopIndex)
-    valueMap.map(forOp.getBody()->getArgument(loopIndex),
+    valueMap.map(body->getArgument(loopIndex),
                  pipeline.getStagesBlock().getArgument(loopIndex));
 
   Block &stagesBlock = pipeline.getStagesBlock();
@@ -2574,8 +2636,8 @@ AffineToLoopSchedule::createLoopSchedulePipeline(AffineForOp forOp,
   for (auto startTime : startTimes) {
     auto group = startGroups[startTime];
 
-    auto isLoopTerminator = [forOp](Operation *op) {
-      return isa<AffineYieldOp>(op) && op->getParentOp() == forOp;
+    auto isLoopTerminator = [loop](Operation *op) {
+      return isa<AffineYieldOp, scf::YieldOp>(op) && op->getParentOp() == loop;
     };
 
     for (unsigned loopIndex = registerValues.size(); loopIndex <= startTime;
@@ -2589,7 +2651,7 @@ AffineToLoopSchedule::createLoopSchedulePipeline(AffineForOp forOp,
       unsigned pipeEndTime = 0;
       for (auto *rawUser : op->getUsers()) {
 
-        Operation *user = forOp.getBody()->findAncestorOpInBlock(*rawUser);
+        Operation *user = body->findAncestorOpInBlock(*rawUser);
         if (!user)
           user = rawUser;
         unsigned userStartTime = *problem.getStartTime(user);
@@ -2696,7 +2758,7 @@ AffineToLoopSchedule::createLoopSchedulePipeline(AffineForOp forOp,
   termIterArgs.push_back(
       stagesBlock.front().getResult(stagesBlock.front().getNumResults() - 1));
 
-  for (auto value : forOp.getBody()->getTerminator()->getOperands()) {
+  for (auto value : body->getTerminator()->getOperands()) {
     unsigned lookupTime = std::min((unsigned)(stageValueMaps.size() - 1),
                                    pipeTimes[value.getDefiningOp()].second);
 
@@ -2707,11 +2769,11 @@ AffineToLoopSchedule::createLoopSchedulePipeline(AffineForOp forOp,
   stagesTerminator.getIterArgsMutable().append(termIterArgs);
   stagesTerminator.getResultsMutable().append(termResults);
 
-  for (size_t loopIndex = 0; loopIndex < forOp.getNumResults(); ++loopIndex)
-    forOp.getResult(loopIndex).replaceAllUsesWith(
+  for (size_t loopIndex = 0; loopIndex < loop->getNumResults(); ++loopIndex)
+    loop->getResult(loopIndex).replaceAllUsesWith(
         pipeline.getResult(loopIndex));
 
-  forOp.walk([](Operation *op) {
+  loop->walk([](Operation *op) {
     op->dropAllUses();
     op->dropAllDefinedValueUses();
     op->dropAllReferences();

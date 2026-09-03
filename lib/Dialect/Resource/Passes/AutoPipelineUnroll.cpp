@@ -16,6 +16,7 @@
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/Math/IR/Math.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
+#include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/Diagnostics.h"
@@ -80,7 +81,7 @@ static bool isAutoPipelineTag(Attribute attr) {
 }
 
 /// A `hls.pipeline` the user wrote (not this pass's own tag).
-static bool isUserPipelined(AffineForOp loop) {
+static bool isUserPipelined(Operation *loop) {
   Attribute attr = loop->getAttr(kLoopPipelineAttr);
   return attr && !isAutoPipelineTag(attr) &&
          !loop->hasAttr(kLoopPipelineOffAttr);
@@ -101,14 +102,28 @@ static std::optional<uint64_t> userUnrollFactor(AffineForOp loop) {
   return 0;
 }
 
-static void tagAutoPipeline(AffineForOp loop) {
-  Builder buildPoint(loop.getContext());
+static void tagAutoPipeline(Operation *loop) {
+  Builder buildPoint(loop->getContext());
   loop->setAttr(
       kLoopPipelineAttr,
       buildPoint.getArrayAttr({buildPoint.getDictionaryAttr(
           {buildPoint.getNamedAttr("II", buildPoint.getI32IntegerAttr(0)),
            buildPoint.getNamedAttr("source", buildPoint.getStringAttr(
                                                  kLoopPipelineAutoSource))})}));
+}
+
+/// A loop whose trip count is not known when the decision is made: an
+/// `scf.for` whose bounds are no affine symbols (a bound loaded inside an
+/// enclosing loop, `count = n[j]; while (count >= 16)`, which cgeist cannot
+/// raise to an affine.for) or an `scf.while` (an exit that depends on data).
+/// Vitis pipelines such a loop like any other when every loop inside it has
+/// a constant trip count and the trip-count products inside it are <= T
+/// (VITIS_NOTES.md N53: kernels o72_fa / o72_fe / o72_wa / o72_xw /
+/// shafix_v4, trip `?` or `1 ~ 268435456`, inner and callee loops unrolled).
+/// A constant-bound scf.for is raised to an affine.for by --vitis-fold
+/// (raise-counted-loops) before this pass.
+static bool isRuntimeLoop(Operation *op) {
+  return isa<scf::ForOp, scf::WhileOp>(op);
 }
 
 static void addFlattenedParents(AffineForOp loop, unsigned count) {
@@ -400,6 +415,10 @@ struct Node {
   /// Some chain member has no constant trip count, carries `hls.unroll_off`,
   /// or the node stands for a loop that is not an affine.for at all.
   bool dynamic = false;
+  /// The node is one runtime loop (isRuntimeLoop: scf.for / scf.while; the
+  /// chain is empty): a pipeline candidate of its own, never collapsed or
+  /// flattened with another loop, dynamic for every loop around it.
+  Operation *runtimeLoop = nullptr;
   /// Some chain member keeps a partial user unroll (`hls.unroll_partial`):
   /// never unrolled by an enclosing pipeline, pipelined on its own.
   bool userFixed = false;
@@ -489,15 +508,21 @@ public:
   Forest(LicmModel &licm) : licm(licm) {}
 
   /// Loops directly inside `region` (not nested in another loop), following
-  /// calls into their callees. `opaqueLoop` is set when a loop that is not
-  /// an affine.for is met.
-  void collectChildren(Region &region, bool viaCall,
-                       SmallVector<std::pair<AffineForOp, bool>, 4> &loops,
-                       bool &opaqueLoop,
-                       SmallPtrSetImpl<Operation *> &callStack) {
+  /// calls into their callees: the affine.for loops in `loops`, the runtime
+  /// loops (isRuntimeLoop) in `runtimeLoops`. `opaqueLoop` is set when any
+  /// other loop is met.
+  void
+  collectChildren(Region &region, bool viaCall,
+                  SmallVector<std::pair<AffineForOp, bool>, 4> &loops,
+                  SmallVector<std::pair<Operation *, bool>, 2> &runtimeLoops,
+                  bool &opaqueLoop, SmallPtrSetImpl<Operation *> &callStack) {
     region.walk<WalkOrder::PreOrder>([&](Operation *op) {
       if (auto forOp = dyn_cast<AffineForOp>(op)) {
         loops.emplace_back(forOp, viaCall);
+        return WalkResult::skip();
+      }
+      if (isRuntimeLoop(op)) {
+        runtimeLoops.emplace_back(op, viaCall);
         return WalkResult::skip();
       }
       if (isa<LoopLikeOpInterface>(op)) {
@@ -510,7 +535,8 @@ public:
         if (!callee || callee.isExternal() ||
             !callStack.insert(callee.getOperation()).second)
           return WalkResult::advance();
-        collectChildren(callee.getBody(), true, loops, opaqueLoop, callStack);
+        collectChildren(callee.getBody(), true, loops, runtimeLoops, opaqueLoop,
+                        callStack);
         callStack.erase(callee.getOperation());
       }
       return WalkResult::advance();
@@ -524,13 +550,16 @@ public:
     node->chain.push_back(root);
     AffineForOp cur = root;
     SmallVector<std::pair<AffineForOp, bool>, 4> childLoops;
+    SmallVector<std::pair<Operation *, bool>, 2> runtimeChildren;
     bool opaqueLoop = false;
     while (true) {
       childLoops.clear();
+      runtimeChildren.clear();
       opaqueLoop = false;
-      collectChildren(cur.getRegion(), false, childLoops, opaqueLoop,
-                      callStack);
-      if (childLoops.size() != 1 || opaqueLoop || childLoops[0].second)
+      collectChildren(cur.getRegion(), false, childLoops, runtimeChildren,
+                      opaqueLoop, callStack);
+      if (childLoops.size() != 1 || opaqueLoop || !runtimeChildren.empty() ||
+          childLoops[0].second)
         break;
       AffineForOp child = childLoops[0].first;
 
@@ -560,16 +589,7 @@ public:
         node->userFixed = true;
     }
     node->pipelineOff = node->chain.back()->hasAttr(kLoopPipelineOffAttr);
-    for (auto [loop, childViaCall] : childLoops) {
-
-      Operation *owner = nullptr;
-      if (auto fn = loop->getParentOfType<func::FuncOp>())
-        owner = fn.getOperation();
-      bool pushed = owner && callStack.insert(owner).second;
-      node->children.push_back(build(loop, childViaCall, callStack));
-      if (pushed)
-        callStack.erase(owner);
-    }
+    buildChildren(*node, childLoops, runtimeChildren, callStack);
     if (opaqueLoop) {
 
       auto opaque = std::make_unique<Node>();
@@ -577,18 +597,75 @@ public:
       opaque->constInside = false;
       node->children.push_back(std::move(opaque));
     }
-    node->constInside = !node->dynamic;
     node->hasUserPipeline = node->userPipelineIdx >= 0;
-    node->hasUserFixed = node->userFixed;
+    summarize(*node);
+    return node;
+  }
+
+  /// A runtime loop (isRuntimeLoop) and the loops inside it: it is decided
+  /// like a one-loop chain whose trip count is unknown (N53), so it is
+  /// dynamic for every loop around it, and the loops of all its regions (an
+  /// scf.while's condition region included) are its children.
+  std::unique_ptr<Node> buildRuntime(Operation *loop, bool viaCall,
+                                     SmallPtrSetImpl<Operation *> &callStack) {
+    auto node = std::make_unique<Node>();
+    node->viaCall = viaCall;
+    node->runtimeLoop = loop;
+    node->dynamic = true;
+    node->pipelineOff = loop->hasAttr(kLoopPipelineOffAttr);
+    node->hasUserPipeline = isUserPipelined(loop);
+    SmallVector<std::pair<AffineForOp, bool>, 4> childLoops;
+    SmallVector<std::pair<Operation *, bool>, 2> runtimeChildren;
+    bool opaqueLoop = false;
+    for (Region &region : loop->getRegions())
+      collectChildren(region, false, childLoops, runtimeChildren, opaqueLoop,
+                      callStack);
+    buildChildren(*node, childLoops, runtimeChildren, callStack);
+    if (opaqueLoop) {
+      auto opaque = std::make_unique<Node>();
+      opaque->dynamic = true;
+      opaque->constInside = false;
+      node->children.push_back(std::move(opaque));
+    }
+    summarize(*node);
+    return node;
+  }
+
+  /// The subtrees of the loops collectChildren found, affine loops first.
+  void buildChildren(Node &node,
+                     ArrayRef<std::pair<AffineForOp, bool>> childLoops,
+                     ArrayRef<std::pair<Operation *, bool>> runtimeChildren,
+                     SmallPtrSetImpl<Operation *> &callStack) {
+
+    auto withOwner = [&](Operation *loop, auto buildFn) {
+      Operation *owner = nullptr;
+      if (auto fn = loop->getParentOfType<func::FuncOp>())
+        owner = fn.getOperation();
+      bool pushed = owner && callStack.insert(owner).second;
+      node.children.push_back(buildFn());
+      if (pushed)
+        callStack.erase(owner);
+    };
+    for (auto [loop, childViaCall] : childLoops)
+      withOwner(loop, [&] { return build(loop, childViaCall, callStack); });
+    for (auto [loop, childViaCall] : runtimeChildren)
+      withOwner(loop,
+                [&] { return buildRuntime(loop, childViaCall, callStack); });
+  }
+
+  /// The properties derived over the subtree (hasUserPipeline holds the
+  /// node's own on entry).
+  static void summarize(Node &node) {
+    node.constInside = !node.dynamic;
+    node.hasUserFixed = node.userFixed;
     uint64_t maxChild = 1;
-    for (auto &candidateValue : node->children) {
-      node->constInside &= candidateValue->constInside;
-      node->hasUserPipeline |= candidateValue->hasUserPipeline;
-      node->hasUserFixed |= candidateValue->hasUserFixed;
+    for (auto &candidateValue : node.children) {
+      node.constInside &= candidateValue->constInside;
+      node.hasUserPipeline |= candidateValue->hasUserPipeline;
+      node.hasUserFixed |= candidateValue->hasUserFixed;
       maxChild = std::max(maxChild, candidateValue->maxPath);
     }
-    node->maxPath = saturatingMul(node->trip, maxChild);
-    return node;
+    node.maxPath = saturatingMul(node.trip, maxChild);
   }
 
   LicmModel &licm;
@@ -1277,21 +1354,23 @@ struct AutoPipelineUnrollPass
     });
   }
 
-  /// Everything inside the pipelined loop is unrolled completely. Each
-  /// unrolled loop is recorded on `pipelined` in `hls.auto_unrolled`.
-  void unrollInside(AffineForOp pipelined, SymbolTableCollection &symbolTable) {
+  /// Everything inside the pipelined loop (an affine.for or a runtime loop)
+  /// is unrolled completely. Each unrolled loop is recorded on `pipelined`
+  /// in `hls.auto_unrolled`.
+  void unrollInside(Operation *pipelined, SymbolTableCollection &symbolTable) {
     SmallVector<AffineForOp> inner;
     SmallPtrSet<Operation *, 4> visitedCallees;
 
     if (auto owner = pipelined->getParentOfType<func::FuncOp>())
       visitedCallees.insert(owner.getOperation());
-    collectInner(pipelined.getRegion(), inner, visitedCallees, symbolTable);
-    Builder buildPoint(pipelined.getContext());
+    for (Region &region : pipelined->getRegions())
+      collectInner(region, inner, visitedCallees, symbolTable);
+    Builder buildPoint(pipelined->getContext());
     SmallVector<Attribute> record;
     if (auto prev = pipelined->getAttrOfType<ArrayAttr>(kLoopAutoUnrolledAttr))
       record.append(prev.begin(), prev.end());
     for (AffineForOp loop : inner) {
-      if (loop == pipelined || loop->isProperAncestor(pipelined))
+      if (loop.getOperation() == pipelined || loop->isProperAncestor(pipelined))
         continue;
       std::optional<uint64_t> trip = getConstantTripCount(loop);
       if (!trip) {
@@ -1304,7 +1383,7 @@ struct AutoPipelineUnrollPass
       remark(loop.getLoc(), "unrolling loop completely with a factor of " +
                                 Twine(*trip) +
                                 " (implied by the pipeline of the loop at " +
-                                locString(pipelined.getLoc()) + "; hoisted " +
+                                locString(pipelined->getLoc()) + "; hoisted " +
                                 Twine(hoisted) + " invariant op(s), promoted " +
                                 Twine(promoted) + " memory(ies) to registers)");
       loop->removeAttr(kLoopPipelineAttr);
@@ -1340,6 +1419,8 @@ struct AutoPipelineUnrollPass
   }
 
   void decide(Node &n, SymbolTableCollection &symbolTable) {
+    if (n.runtimeLoop)
+      return decideRuntime(n, symbolTable);
     if (n.chain.empty())
       return;
     unsigned T = pipelineLoopsValue;
@@ -1398,6 +1479,40 @@ struct AutoPipelineUnrollPass
            "flattening the loop (and " + Twine(n.chain.size() - 1) +
                " perfect inner loop(s)) into the pipelined loop at " +
                locString(candidateValue.tagged.getLoc()));
+  }
+
+  /// A runtime loop (N53) is pipelined under the test of an affine one: its
+  /// own trip count does not matter, every loop inside it (callee loops
+  /// included) must have a constant trip count with products <= T. It is
+  /// never flattened with another loop (a variable bound is allowed on the
+  /// outermost loop of a flattened nest only, and its parent's trip count is
+  /// unknown to it), and promoteOutOfPipeline, an affine transform, is not
+  /// applied to it.
+  void decideRuntime(Node &n, SymbolTableCollection &symbolTable) {
+    Operation *loop = n.runtimeLoop;
+    unsigned T = pipelineLoopsValue;
+    if (isUserPipelined(loop)) {
+      remark(loop->getLoc(), "user pipeline of a runtime-trip loop: "
+                             "unrolling everything inside");
+      unrollInside(loop, symbolTable);
+      return;
+    }
+    bool feasible = T > 0 && !n.pipelineOff;
+    for (auto &candidateValue : n.children)
+      feasible &= candidateValue->constInside && candidateValue->maxPath <= T &&
+                  !candidateValue->hasUserPipeline &&
+                  !candidateValue->hasUserFixed;
+    if (feasible) {
+      tagAutoPipeline(loop);
+      remark(loop->getLoc(),
+             "automatically set the pipeline for the runtime-trip loop (" +
+                 Twine(n.children.size()) + " inner loop(s) to unroll)");
+      unrollInside(loop, symbolTable);
+      return;
+    }
+    for (auto &candidateValue : n.children)
+      if (!candidateValue->viaCall)
+        decide(*candidateValue, symbolTable);
   }
 
   /// The functions with a body, every caller before its callees (reverse
@@ -1535,7 +1650,11 @@ struct AutoPipelineUnrollPass
           callSite.resolveCallableInTable(&symbolTable));
       if (!callee || callee.isExternal())
         return;
-      auto loop = callSite->getParentOfType<AffineForOp>();
+
+      Operation *loop = callSite->getParentOfType<AffineForOp>();
+      if (auto inner = callSite->getParentOfType<LoopLikeOpInterface>();
+          inner && isRuntimeLoop(inner) && inner->hasAttr(kLoopPipelineAttr))
+        loop = inner;
       if (!loop)
         return;
       OpBuilder buildPoint(callSite.getContext());
@@ -1611,6 +1730,13 @@ struct AutoPipelineUnrollPass
     floatLoadsPerfectValue = o.floatLoadsPerfect;
     remarkFn = o.remark;
 
+    module.walk([&](Operation *op) {
+      if (isRuntimeLoop(op)) {
+        if (isAutoPipelineTag(op->getAttr(kLoopPipelineAttr)))
+          op->removeAttr(kLoopPipelineAttr);
+        op->removeAttr(kLoopAutoUnrolledAttr);
+      }
+    });
     module.walk([&](AffineForOp loop) {
       if (isAutoPipelineTag(loop->getAttr(kLoopPipelineAttr)))
         loop->removeAttr(kLoopPipelineAttr);
@@ -1633,16 +1759,22 @@ struct AutoPipelineUnrollPass
       LicmModel licm(floatLoadsPerfectValue);
       Forest forest(licm);
 
-      SmallVector<AffineForOp, 8> roots;
-      func.getBody().walk<WalkOrder::PreOrder>([&](AffineForOp loop) {
-        roots.push_back(loop);
+      SmallVector<Operation *, 8> roots;
+      func.getBody().walk<WalkOrder::PreOrder>([&](Operation *op) {
+        if (!isa<AffineForOp>(op) && !isRuntimeLoop(op))
+          return WalkResult::advance();
+        roots.push_back(op);
         return WalkResult::skip();
       });
       SmallVector<std::unique_ptr<Node>> nodes;
       SmallPtrSet<Operation *, 4> callStack;
       callStack.insert(func.getOperation());
-      for (AffineForOp loop : roots)
-        nodes.push_back(forest.build(loop, false, callStack));
+      for (Operation *loop : roots) {
+        if (auto forOp = dyn_cast<AffineForOp>(loop))
+          nodes.push_back(forest.build(forOp, false, callStack));
+        else
+          nodes.push_back(forest.buildRuntime(loop, false, callStack));
+      }
       for (auto &node : nodes)
         decide(*node, symbolTable);
     }

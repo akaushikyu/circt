@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/Resource/Passes/CyclicSchedulingAnalysisModified.h"
+#include "circt/Dialect/Resource/Passes/LoopPragmas.h"
 #include "circt/Analysis/DependenceAnalysis.h"
 #include "circt/Scheduling/Problems.h"
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
@@ -52,17 +53,32 @@ circt::hls_analysis::CyclicSchedulingAnalysis::CyclicSchedulingAnalysis(
       visited.insert(l);
     analyzeForOp(nestedLoops.back(), memoryAnalysis);
   });
+  // The pipelined runtime-trip scf.for loops (VITIS_NOTES.md N53). Their
+  // accesses are outside every innermost affine.for, so the memory analysis
+  // has no dependences for them (none reach the scheduler anyway, O1).
+  funcOp.walk([&](scf::ForOp forOp) {
+    if (isScheduledRuntimeFor(forOp))
+      analyzeLoop(forOp, forOp.getBody(), forOp.getRegionIterArgs(),
+                  memoryAnalysis);
+  });
 }
 
 // The analysis is taken by reference: the previous by-value parameter copied
 // the whole dependence map once per innermost loop.
 void circt::hls_analysis::CyclicSchedulingAnalysis::analyzeForOp(
     AffineForOp forOp, analysis::MemoryDependenceAnalysis &memoryAnalysis) {
+  analyzeLoop(forOp, forOp.getBody(), forOp.getRegionIterArgs(),
+              memoryAnalysis);
+}
+
+void circt::hls_analysis::CyclicSchedulingAnalysis::analyzeLoop(
+    Operation *loop, Block *body, ValueRange regionIterArgs,
+    analysis::MemoryDependenceAnalysis &memoryAnalysis) {
   // Create a cyclic scheduling problem.
-  CyclicProblem problem(forOp);
+  CyclicProblem problem(loop);
 
   // Insert memory dependences into the problem.
-  forOp.getBody()->walk([&](Operation *op) {
+  body->walk([&](Operation *op) {
     // Insert every operation into the problem.
     problem.insertOperation(op);
 
@@ -92,7 +108,7 @@ void circt::hls_analysis::CyclicSchedulingAnalysis::analyzeForOp(
   });
 
   // Insert conditional dependences into the problem.
-  forOp.getBody()->walk([&](Operation *op) {
+  body->walk([&](Operation *op) {
     Block *thenBlock = nullptr;
     Block *elseBlock = nullptr;
     if (auto ifOp = dyn_cast<scf::IfOp>(op)) {
@@ -128,8 +144,8 @@ void circt::hls_analysis::CyclicSchedulingAnalysis::analyzeForOp(
 
   // Set the anchor for scheduling. Insert dependences from all stores to the
   // terminator to ensure the problem schedules them before the terminator.
-  auto *anchor = forOp.getBody()->getTerminator();
-  forOp.getBody()->walk([&](Operation *op) {
+  auto *anchor = body->getTerminator();
+  body->walk([&](Operation *op) {
     if (!isa<AffineStoreOp, memref::StoreOp>(op))
       return;
     Problem::Dependence dep(op, anchor);
@@ -142,7 +158,7 @@ void circt::hls_analysis::CyclicSchedulingAnalysis::analyzeForOp(
   // induction variable. Insert inter-iteration dependences from the definers of
   // "iter_args" to their users.
   if (unsigned nIterArgs = anchor->getNumOperands(); nIterArgs > 0) {
-    auto iterArgs = forOp.getRegionIterArgs();
+    ValueRange iterArgs = regionIterArgs;
     for (unsigned i = 0; i < nIterArgs; ++i) {
       Operation *iterArgDefiner = anchor->getOperand(i).getDefiningOp();
       // If it's not an operation, we don't need to model the dependence.
@@ -162,12 +178,17 @@ void circt::hls_analysis::CyclicSchedulingAnalysis::analyzeForOp(
   }
 
   // Store the partially complete problem.
-  problems.insert(std::pair<Operation *, CyclicProblem>(forOp, problem));
+  problems.insert(std::pair<Operation *, CyclicProblem>(loop, problem));
 }
 
 CyclicProblem &
 circt::hls_analysis::CyclicSchedulingAnalysis::getProblem(AffineForOp forOp) {
-  auto problem = problems.find(forOp);
+  return getProblem(forOp.getOperation());
+}
+
+CyclicProblem &
+circt::hls_analysis::CyclicSchedulingAnalysis::getProblem(Operation *loop) {
+  auto problem = problems.find(loop);
   assert(problem != problems.end() && "expected problem to exist");
   return problem->second;
 }
