@@ -273,7 +273,7 @@ static void analyzeAddress(AffineMap map, ValueRange mapOperands,
   canonicalizeMapAndOperands(&map, &operands);
   map = simplifyAffineMap(map);
 
-  AffineForOp root = getFlattenedRoot(loop);
+  LoopLikeOpInterface root = getFlattenedRoot(loop);
   loopInvariant = llvm::all_of(
       operands, [&](Value v) { return root.isDefinedOutsideOfLoop(v); });
   for (AffineExpr expr : map.getResults())
@@ -304,11 +304,11 @@ static std::string addressKey(const Access &access) {
 /// or uses it opaquely: Vitis sinks that code into the pipelined loop, so a
 /// read of `mem` there cannot be hoisted.
 static bool isWrittenInFlattenedParents(Value mem, AffineForOp loop) {
-  AffineForOp root = getFlattenedRoot(loop);
-  if (root == loop)
+  LoopLikeOpInterface root = getFlattenedRoot(loop);
+  if (root.getOperation() == loop.getOperation())
     return false;
   bool written = false;
-  root.getBody()->walk([&](Operation *op) {
+  root->walk([&](Operation *op) {
     if (loop->isAncestor(op) || !llvm::is_contained(op->getOperands(), mem))
       return WalkResult::advance();
     auto eff = dyn_cast<MemoryEffectOpInterface>(op);

@@ -194,10 +194,13 @@ static bool isInvariantIn(const Access &arrayValue, AffineForOp loop) {
   });
 }
 
-/// True if some op inside `loop` may write `mem`, or uses it opaquely.
-static bool isMemrefWrittenInLoop(Value mem, AffineForOp loop) {
+/// True if some op inside `loop` (an affine.for or a runtime loop) may write
+/// `mem`, or uses it opaquely.
+static bool isMemrefWrittenInLoop(Value mem, Operation *loop) {
   bool written = false;
-  loop.getBody()->walk([&](Operation *op) {
+  loop->walk([&](Operation *op) {
+    if (op == loop)
+      return WalkResult::advance();
     if (!llvm::is_contained(op->getOperands(), mem))
       return WalkResult::advance();
     auto eff = dyn_cast<MemoryEffectOpInterface>(op);
@@ -419,6 +422,10 @@ struct Node {
   /// chain is empty): a pipeline candidate of its own, never collapsed or
   /// flattened with another loop, dynamic for every loop around it.
   Operation *runtimeLoop = nullptr;
+  /// The runtime loop is an scf.for whose body is a perfect nest over its
+  /// only child, an affine chain of constant trip counts
+  /// (isPerfectRuntimePair): flattened into that chain's pipeline.
+  bool perfectRuntime = false;
   /// Some chain member keeps a partial user unroll (`hls.unroll_partial`):
   /// never unrolled by an enclosing pipeline, pipelined on its own.
   bool userFixed = false;
@@ -446,9 +453,9 @@ struct Node {
 /// before the j loop, pf_srchoist_m8_n64), but Vitis converts such a nest
 /// into a perfect one and flattens it (see the file header), so under
 /// float-loads-perfect the load is judged as if it were in the inner loop.
-static bool isSinkableFloatLoad(Operation *op, AffineForOp outer,
+static bool isSinkableFloatLoad(Operation *op, Block *outerBody,
                                 AffineForOp inner) {
-  if (op->getBlock() != outer.getBody())
+  if (op->getBlock() != outerBody)
     return false;
   std::optional<Access> arrayValue = getAccess(op);
   if (!arrayValue || arrayValue->isWrite || !hasFloatElement(arrayValue->mem))
@@ -476,7 +483,8 @@ static bool isPerfectPair(AffineForOp outer, AffineForOp inner,
       return WalkResult::advance();
     if (licm.effectiveLoop(op) != outer)
       return WalkResult::advance();
-    if (licm.floatLoadsPerfect && isSinkableFloatLoad(op, outer, inner))
+    if (licm.floatLoadsPerfect &&
+        isSinkableFloatLoad(op, outer.getBody(), inner))
       return WalkResult::advance();
     perfect = false;
     return WalkResult::interrupt();
@@ -492,6 +500,62 @@ static bool isPerfectPair(AffineForOp outer, AffineForOp inner,
       return WalkResult::interrupt();
     }
     return WalkResult::advance();
+  });
+  return perfect;
+}
+
+/// Does the runtime-trip scf.for `outer` (isRuntimeLoop) form a perfect nest
+/// with `inner`, the only loop directly in its body? Judged as isPerfectPair
+/// judges an affine pair, with what LICM cannot see through an scf.for
+/// treated conservatively: a memory operation in outer's body (other than a
+/// sinkable float load) makes the nest imperfect, and so does an access of
+/// the inner nest that LICM / promotion move out of `inner` unless it is a
+/// read of a memory outer never writes at an address that does not change
+/// with outer (hoisted past outer as well). Vitis flattens such a nest into
+/// `inner`'s pipeline (VITIS_NOTES.md N53 (b): o72r_pf / pf2 / pf3 / pf4 /
+/// acc / s65, o72f_pf7: flatten `VITIS_LOOP_<outer>`, trip `?`); a distance-1
+/// recurrence of the inner loop (`buf[i][k] = buf[i][k-1] ..`, o72r_raw /
+/// o72f_rawm) is not flattened, as for an affine nest (o72f_rawc; O8, not
+/// modelled for either).
+static bool isPerfectRuntimePair(scf::ForOp outer, AffineForOp inner,
+                                 LicmModel &licm) {
+  if (inner->getBlock() != outer.getBody())
+    return false;
+  bool perfect = true;
+  outer.getBody()->walk<WalkOrder::PreOrder>([&](Operation *op) {
+    if (op == inner.getOperation())
+      return WalkResult::skip();
+    if (isa<LoopLikeOpInterface>(op) || isa<CallOpInterface>(op)) {
+      perfect = false;
+      return WalkResult::interrupt();
+    }
+    if (op->getNumRegions() > 0 || isMemoryEffectFree(op))
+      return WalkResult::advance();
+    if (licm.floatLoadsPerfect &&
+        isSinkableFloatLoad(op, outer.getBody(), inner))
+      return WalkResult::advance();
+    perfect = false;
+    return WalkResult::interrupt();
+  });
+  if (!perfect)
+    return false;
+  auto definedOutside = [&](Value valueHandle) {
+    return !outer->isAncestor(valueHandle.getParentRegion()->getParentOp());
+  };
+  inner->walk([&](Operation *op) {
+    std::optional<Access> arrayValue = getAccess(op);
+    if (!arrayValue)
+      return WalkResult::advance();
+    AffineForOp eff = licm.effectiveLoop(op);
+    if (eff && inner->isAncestor(eff))
+      return WalkResult::advance();
+    bool pastOuter = !arrayValue->isWrite && definedOutside(arrayValue->mem) &&
+                     llvm::all_of(arrayValue->operands, definedOutside) &&
+                     !isMemrefWrittenInLoop(arrayValue->mem, outer);
+    if (pastOuter)
+      return WalkResult::advance();
+    perfect = false;
+    return WalkResult::interrupt();
   });
   return perfect;
 }
@@ -620,6 +684,13 @@ public:
     for (Region &region : loop->getRegions())
       collectChildren(region, false, childLoops, runtimeChildren, opaqueLoop,
                       callStack);
+    if (auto forOp = dyn_cast<scf::ForOp>(loop))
+      node->perfectRuntime =
+          !node->pipelineOff && !opaqueLoop && runtimeChildren.empty() &&
+          childLoops.size() == 1 && !childLoops[0].second &&
+          getConstantTripCount(childLoops[0].first) &&
+          !childLoops[0].first->hasAttr(kLoopUnrollOffAttr) &&
+          isPerfectRuntimePair(forOp, childLoops[0].first, licm);
     buildChildren(*node, childLoops, runtimeChildren, callStack);
     if (opaqueLoop) {
       auto opaque = std::make_unique<Node>();
@@ -1356,8 +1427,9 @@ struct AutoPipelineUnrollPass
 
   /// Everything inside the pipelined loop (an affine.for or a runtime loop)
   /// is unrolled completely. Each unrolled loop is recorded on `pipelined`
-  /// in `hls.auto_unrolled`.
-  void unrollInside(Operation *pipelined, SymbolTableCollection &symbolTable) {
+  /// in `hls.auto_unrolled`. Returns the number of loops unrolled.
+  unsigned unrollInside(Operation *pipelined,
+                        SymbolTableCollection &symbolTable) {
     SmallVector<AffineForOp> inner;
     SmallPtrSet<Operation *, 4> visitedCallees;
 
@@ -1369,6 +1441,7 @@ struct AutoPipelineUnrollPass
     SmallVector<Attribute> record;
     if (auto prev = pipelined->getAttrOfType<ArrayAttr>(kLoopAutoUnrolledAttr))
       record.append(prev.begin(), prev.end());
+    unsigned unrolled = 0;
     for (AffineForOp loop : inner) {
       if (loop.getOperation() == pipelined || loop->isProperAncestor(pipelined))
         continue;
@@ -1398,10 +1471,12 @@ struct AutoPipelineUnrollPass
           {buildPoint.getNamedAttr("factor", buildPoint.getI64IntegerAttr(
                                                  static_cast<int64_t>(*trip))),
            buildPoint.getNamedAttr("loc", loc)}));
+      ++unrolled;
     }
     if (!record.empty())
       pipelined->setAttr(kLoopAutoUnrolledAttr,
                          buildPoint.getArrayAttr(record));
+    return unrolled;
   }
 
   /// LLVM LICM also promotes the accesses that became loop-invariant in the
@@ -1483,11 +1558,14 @@ struct AutoPipelineUnrollPass
 
   /// A runtime loop (N53) is pipelined under the test of an affine one: its
   /// own trip count does not matter, every loop inside it (callee loops
-  /// included) must have a constant trip count with products <= T. It is
-  /// never flattened with another loop (a variable bound is allowed on the
-  /// outermost loop of a flattened nest only, and its parent's trip count is
-  /// unknown to it), and promoteOutOfPipeline, an affine transform, is not
-  /// applied to it.
+  /// included) must have a constant trip count with products <= T. An
+  /// scf.for whose body is a perfect nest (isPerfectRuntimePair) is instead
+  /// collapsed with it as a perfect affine parent is (step 1; a variable
+  /// bound is allowed on the outermost loop of a flattened nest): the nest
+  /// is decided as its inner chain and the runtime loop is flattened into
+  /// that chain's pipeline (N53 (b)). Otherwise it is never flattened with
+  /// another loop (its parent's trip count is unknown to it), and
+  /// promoteOutOfPipeline, an affine transform, is not applied to it.
   void decideRuntime(Node &n, SymbolTableCollection &symbolTable) {
     Operation *loop = n.runtimeLoop;
     unsigned T = pipelineLoopsValue;
@@ -1497,6 +1575,20 @@ struct AutoPipelineUnrollPass
       unrollInside(loop, symbolTable);
       return;
     }
+    if (n.perfectRuntime && T > 0) {
+      Node &candidateValue = *n.children.front();
+      decide(candidateValue, symbolTable);
+      if (candidateValue.tagged &&
+          llvm::is_contained(candidateValue.chain, candidateValue.tagged)) {
+        addFlattenedParents(candidateValue.tagged, 1);
+        n.tagged = candidateValue.tagged;
+        remark(loop->getLoc(),
+               "flattening the runtime-trip loop (perfect nest) into the "
+               "pipelined loop at " +
+                   locString(candidateValue.tagged.getLoc()));
+      }
+      return;
+    }
     bool feasible = T > 0 && !n.pipelineOff;
     for (auto &candidateValue : n.children)
       feasible &= candidateValue->constInside && candidateValue->maxPath <= T &&
@@ -1504,10 +1596,11 @@ struct AutoPipelineUnrollPass
                   !candidateValue->hasUserFixed;
     if (feasible) {
       tagAutoPipeline(loop);
+      unsigned unrolled = unrollInside(loop, symbolTable);
       remark(loop->getLoc(),
-             "automatically set the pipeline for the runtime-trip loop (" +
-                 Twine(n.children.size()) + " inner loop(s) to unroll)");
-      unrollInside(loop, symbolTable);
+             "automatically set the pipeline for the runtime-trip loop "
+             "(unrolled " +
+                 Twine(unrolled) + " inner loop(s))");
       return;
     }
     for (auto &candidateValue : n.children)

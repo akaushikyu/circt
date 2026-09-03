@@ -18,6 +18,12 @@
 //                  innermost is pipelined.
 //   @runtime_off   `#pragma HLS pipeline off` on the runtime loop (kernel
 //                  o72_fpo): its inner loop is pipelined instead.
+//   @runtime_perfect kernel o72r_pf3 (O72 review D2): the runtime loop's
+//                  body is a perfect nest over a 16-trip loop: Vitis
+//                  flattens the runtime loop into the inner loop's pipeline
+//                  (inner loop not unrolled), so the inner loop is tagged
+//                  with hls.flattened_parents = 1 and the scf.for is not
+//                  pipelined.
 
 // CHECK-LABEL: func.func @runtime_for(
 // CHECK:         affine.for
@@ -49,6 +55,12 @@
 // CHECK:           affine.for %{{.*}} = 0 to 16
 // CHECK:           } {hls.pipeline = [{II = 0 : i32, source = "auto"}]}
 // CHECK:         } {hls.pipeline_off}
+
+// CHECK-LABEL: func.func @runtime_perfect(
+// CHECK:         scf.for
+// CHECK:           affine.for %{{.*}} = 0 to 16
+// CHECK:           } {hls.flattened_parents = 1 : i64, hls.pipeline = [{II = 0 : i32, source = "auto"}]}
+// CHECK-NEXT:    }{{$}}
 
 module {
   memref.global @dat : memref<16xi32> = uninitialized
@@ -161,6 +173,25 @@ module {
         }
         memref.store %s, %out[%i] : memref<64xi32>
       } {hls.pipeline_off}
+    }
+    return
+  }
+  func.func @runtime_perfect(%buf: memref<64x16xi32>, %res: memref<64x16xi32>, %n: memref<2xi32>) {
+    %c0 = arith.constant 0 : index
+    %c1 = arith.constant 1 : index
+    %c63 = arith.constant 63 : index
+    %c3_i32 = arith.constant 3 : i32
+    affine.for %j = 0 to 2 {
+      %b = affine.load %n[%j] : memref<2xi32>
+      %ub = arith.index_cast %b : i32 to index
+      scf.for %i = %c0 to %ub step %c1 {
+        %r = arith.andi %i, %c63 : index
+        affine.for %k = 0 to 16 {
+          %v = memref.load %buf[%r, %k] : memref<64x16xi32>
+          %w = arith.muli %v, %c3_i32 : i32
+          memref.store %w, %res[%r, %k] : memref<64x16xi32>
+        }
+      }
     }
     return
   }

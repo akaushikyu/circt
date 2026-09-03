@@ -356,7 +356,7 @@ static MemrefAliasInfo collectMemrefAliases(Value mem) {
 /// on-board `v_ref_buf`, is read through hoisted loads in Vitis: a plain
 /// RAM of 4 BRAM, not 15 copies).
 static bool isMemrefWrittenInLoop(const MemrefAliasInfo &alias,
-                                  AffineForOp forOp,
+                                  Operation *forOp,
                                   bool callsOnlyInLoop = false) {
   if (alias.escaped)
     return true;
@@ -365,7 +365,7 @@ static bool isMemrefWrittenInLoop(const MemrefAliasInfo &alias,
       return true;
 
     bool hasCall = false;
-    forOp.getBody()->walk([&](CallOpInterface) {
+    forOp->walk([&](CallOpInterface) {
       hasCall = true;
       return WalkResult::interrupt();
     });
@@ -373,7 +373,7 @@ static bool isMemrefWrittenInLoop(const MemrefAliasInfo &alias,
       return true;
   }
   bool written = false;
-  forOp.getBody()->walk([&](Operation *op) {
+  forOp->walk([&](Operation *op) {
     if (isa<ViewLikeOpInterface>(op))
       return WalkResult::advance();
     for (Value opd : op->getOperands()) {
@@ -421,7 +421,7 @@ void AffineToLoopSchedule::hoistInvariantLoads() {
   unsigned hoistedLoads = 0, hoistedPure = 0;
   for (AffineForOp forOp : loops) {
 
-    AffineForOp root = circt::hls_analysis::getFlattenedRoot(forOp);
+    LoopLikeOpInterface root = circt::hls_analysis::getFlattenedRoot(forOp);
     DenseSet<Value> invariant;
     auto isInvariantValue = [&](Value valueHandle) {
       return root.isDefinedOutsideOfLoop(valueHandle) ||

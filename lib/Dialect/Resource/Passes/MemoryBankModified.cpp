@@ -16,12 +16,14 @@
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
+#include "mlir/Dialect/Utils/StaticValueUtils.h"
 #include "mlir/IR/AffineExpr.h"
 #include "mlir/IR/AffineMap.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/IRMapping.h"
 #include "mlir/IR/IntegerSet.h"
 #include "mlir/IR/SymbolTable.h"
+#include "mlir/Interfaces/SideEffectInterfaces.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Support/LLVM.h"
 #include "llvm/ADT/MapVector.h"
@@ -259,6 +261,51 @@ struct MemrefBanking {
   Value rotIdx;
 };
 
+/// The value of an integer or index `v` computed from constants only, through
+/// side-effect-free single-result ops (their folders): the `affine.apply` of
+/// a constant and the arithmetic on it a complete unroll leaves in the body
+/// of a pipelined loop whose accesses are memref ops (a runtime-trip scf.for,
+/// VITIS_NOTES.md N53, or a non-affine index in an affine loop). Vitis' bank
+/// index of such an access is a constant: o72r_bank / o72r_banka, a
+/// `res[i & 63][k]` store with k unrolled writes one bank of 16 (Vitis 16;
+/// read as a rotating bank every store became a store_enable on every bank,
+/// 32). The IR is not changed (folding it would also change the scheduler's
+/// input). Depth-limited.
+static std::optional<int64_t> evaluateConstantInt(Value valueHandle,
+                                                  unsigned depth = 0) {
+  if (std::optional<int64_t> candidateValue = getConstantIntValue(valueHandle))
+    return candidateValue;
+  Operation *def = valueHandle.getDefiningOp();
+  if (!def || depth >= 16 || def->getNumResults() != 1 ||
+      def->getNumRegions() != 0 || !isMemoryEffectFree(def) ||
+      !valueHandle.getType().isIntOrIndex())
+    return std::nullopt;
+  SmallVector<Attribute, 4> operands;
+  for (Value o : def->getOperands()) {
+    if (!o.getType().isIntOrIndex())
+      return std::nullopt;
+    std::optional<int64_t> candidateValue = evaluateConstantInt(o, depth + 1);
+    if (!candidateValue)
+      return std::nullopt;
+    operands.push_back(IntegerAttr::get(o.getType(), *candidateValue));
+  }
+  SmallVector<OpFoldResult, 1> results;
+  if (failed(def->fold(operands, results)) || results.size() != 1)
+    return std::nullopt;
+  if (auto attr = dyn_cast<Attribute>(results.front()))
+    if (auto ia = dyn_cast<IntegerAttr>(attr))
+      return ia.getValue().getSExtValue();
+  return std::nullopt;
+}
+
+/// A memref index that is a constant or computed from constants only
+/// (evaluateConstantInt): such an access addresses one bank.
+static std::optional<int64_t> constantIndexOf(Value indexValue) {
+  if (std::optional<int64_t> candidateValue = getConstantIndexValue(indexValue))
+    return candidateValue;
+  return evaluateConstantInt(indexValue);
+}
+
 static MemrefBanking resolveMemref(OpBuilder &buildPoint, Location loc,
                                    ValueRange indices,
                                    const BankLayout &lowerIndex) {
@@ -269,8 +316,8 @@ static MemrefBanking resolveMemref(OpBuilder &buildPoint, Location loc,
        ++innerIndex) {
     const DimPartition &portValue = lowerIndex.dims[innerIndex];
     Value indexValue = indices[portValue.dim];
-    if (auto candidateValue = getConstantIndexValue(indexValue)) {
-      auto [bank, off] = bankAndOffset(*candidateValue, portValue);
+    if (std::optional<int64_t> constIdx = constantIndexOf(indexValue)) {
+      auto [bank, off] = bankAndOffset(*constIdx, portValue);
       mb.choice.constBank.push_back(bank);
       mb.bankedIndices[portValue.dim] =
           arith::ConstantIndexOp::create(buildPoint, loc, off);
@@ -639,7 +686,7 @@ static void steerLoadGroups(Value site, ArrayRef<Value> banks,
   for (Operation *user : site.getUsers()) {
     auto ld = dyn_cast<memref::LoadOp>(user);
     if (!ld || ld.getMemRef() != site ||
-        getConstantIndexValue(ld.getIndices()[portValue.dim]))
+        constantIndexOf(ld.getIndices()[portValue.dim]))
       continue;
     auto [base, candidateValue] =
         residueBase(ld.getIndices()[portValue.dim], fieldValue);

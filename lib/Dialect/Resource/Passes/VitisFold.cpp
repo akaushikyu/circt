@@ -12,6 +12,7 @@
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/IR/BuiltinOps.h"
+#include "mlir/IR/IRMapping.h"
 #include "mlir/IR/Matchers.h"
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/Interfaces/FunctionInterfaces.h"
@@ -669,6 +670,150 @@ struct RaiseCountedScfFor : OpRewritePattern<scf::ForOp> {
   }
 };
 
+/// The trip count of an scf.while whose exit test can be computed at
+/// compile time: the loop is executed symbolically, the iteration values
+/// that start as constants (its init operands) are carried through the
+/// arith operations of both regions by their folders, and the count is
+/// returned once the condition folds to false. Anything else (a load, a
+/// call, a nested loop, a value never constant) is unknown; a condition that
+/// reads an unknown value makes the trip count unknown. Bounded by
+/// kMaxTrips iterations and kMaxSteps evaluated operations.
+static std::optional<uint64_t> constantWhileTripCount(scf::WhileOp op) {
+  constexpr uint64_t kMaxTrips = uint64_t(1) << 16;
+  constexpr uint64_t kMaxSteps = uint64_t(1) << 22;
+  if (!op.getBefore().hasOneBlock() || !op.getAfter().hasOneBlock())
+    return std::nullopt;
+  Block &before = op.getBefore().front();
+  Block &after = op.getAfter().front();
+  auto cond = cast<scf::ConditionOp>(before.getTerminator());
+  auto yield = cast<scf::YieldOp>(after.getTerminator());
+  DenseMap<Value, Attribute> env;
+  auto valueOf = [&](Value valueHandle) -> Attribute {
+    auto it = env.find(valueHandle);
+    if (it != env.end())
+      return it->second;
+    if (op->isAncestor(valueHandle.getParentRegion()->getParentOp()))
+      return {};
+    Attribute candidateValue;
+    if (matchPattern(valueHandle, m_Constant(&candidateValue)))
+      return candidateValue;
+    return {};
+  };
+  auto evaluate = [&](Block &block) {
+    for (Operation &o : block.without_terminator()) {
+      SmallVector<Attribute, 4> operands;
+      bool known =
+          isa<arith::ArithDialect>(o.getDialect()) && o.getNumRegions() == 0;
+      for (Value valueHandle : o.getOperands()) {
+        if (!known)
+          break;
+        operands.push_back(valueOf(valueHandle));
+        known = static_cast<bool>(operands.back());
+      }
+      SmallVector<OpFoldResult, 2> results;
+      if (known && (failed(o.fold(operands, results)) ||
+                    results.size() != o.getNumResults()))
+        known = false;
+      for (auto [loopIndex, resultValue] : llvm::enumerate(o.getResults())) {
+        Attribute arrayValue;
+        if (known) {
+          if (auto valueHandle = dyn_cast<Value>(results[loopIndex]))
+            arrayValue =
+                valueHandle == resultValue ? Attribute() : valueOf(valueHandle);
+          else
+            arrayValue = cast<Attribute>(results[loopIndex]);
+        }
+        env[resultValue] = arrayValue;
+      }
+    }
+  };
+  SmallVector<Attribute, 4> state;
+  for (Value valueHandle : op.getInits())
+    state.push_back(valueOf(valueHandle));
+  const uint64_t stepsPerTrip =
+      before.getOperations().size() + after.getOperations().size();
+  uint64_t steps = 0;
+  for (uint64_t trip = 0;; ++trip) {
+    for (auto [arg, arrayValue] : llvm::zip(before.getArguments(), state))
+      env[arg] = arrayValue;
+    evaluate(before);
+    auto candidateValue =
+        dyn_cast_or_null<IntegerAttr>(valueOf(cond.getCondition()));
+    if (!candidateValue)
+      return std::nullopt;
+    if (candidateValue.getValue().isZero())
+      return trip;
+    steps += stepsPerTrip;
+    if (trip >= kMaxTrips || steps > kMaxSteps)
+      return std::nullopt;
+    SmallVector<Attribute, 4> forwarded;
+    for (Value valueHandle : cond.getArgs())
+      forwarded.push_back(valueOf(valueHandle));
+    for (auto [arg, arrayValue] : llvm::zip(after.getArguments(), forwarded))
+      env[arg] = arrayValue;
+    evaluate(after);
+    state.clear();
+    for (Value valueHandle : yield.getOperands())
+      state.push_back(valueOf(valueHandle));
+  }
+}
+
+/// An scf.while with a constant trip count N >= 1 (constantWhileTripCount)
+/// becomes `affine.for 0 to N` carrying the while's values: its body is the
+/// before region (the exit test, now dead) followed by the after region, and
+/// the before region is cloned once more after the loop for the values the
+/// while forwarded at its exit. The loop keeps the while's attributes (user
+/// pragmas). Iteration-dependent indices stay as they are (computed from the
+/// carried values); once the loop is unrolled they fold to constants.
+struct RaiseCountedScfWhile : OpRewritePattern<scf::WhileOp> {
+  using OpRewritePattern::OpRewritePattern;
+  LogicalResult matchAndRewrite(scf::WhileOp op,
+                                PatternRewriter &rewriter) const override {
+    std::optional<uint64_t> trip = constantWhileTripCount(op);
+    if (!trip || *trip == 0)
+      return failure();
+    Block &before = op.getBefore().front();
+    Block &after = op.getAfter().front();
+    auto cond = cast<scf::ConditionOp>(before.getTerminator());
+    auto yield = cast<scf::YieldOp>(after.getTerminator());
+    Location loc = op.getLoc();
+    auto loop = rewriter.create<affine::AffineForOp>(
+        loc, 0, static_cast<int64_t>(*trip), 1, op.getInits());
+    loop->setDiscardableAttrs(op->getDiscardableAttrDictionary());
+    Block *body = loop.getBody();
+    if (!body->empty() && body->back().hasTrait<OpTrait::IsTerminator>())
+      rewriter.eraseOp(&body->back());
+    rewriter.setInsertionPointToEnd(body);
+    IRMapping inLoop;
+    for (auto [arg, carried] :
+         llvm::zip(before.getArguments(), body->getArguments().drop_front()))
+      inLoop.map(arg, carried);
+    for (Operation &o : before.without_terminator())
+      rewriter.clone(o, inLoop);
+    for (auto [arg, valueHandle] :
+         llvm::zip(after.getArguments(), cond.getArgs()))
+      inLoop.map(arg, inLoop.lookupOrDefault(valueHandle));
+    for (Operation &o : after.without_terminator())
+      rewriter.clone(o, inLoop);
+    SmallVector<Value> next;
+    for (Value valueHandle : yield.getOperands())
+      next.push_back(inLoop.lookupOrDefault(valueHandle));
+    rewriter.create<affine::AffineYieldOp>(loc, next);
+    rewriter.setInsertionPointAfter(loop);
+    IRMapping atExit;
+    for (auto [arg, resultValue] :
+         llvm::zip(before.getArguments(), loop.getResults()))
+      atExit.map(arg, resultValue);
+    for (Operation &o : before.without_terminator())
+      rewriter.clone(o, atExit);
+    SmallVector<Value> results;
+    for (Value valueHandle : cond.getArgs())
+      results.push_back(atExit.lookupOrDefault(valueHandle));
+    rewriter.replaceOp(op, results);
+    return success();
+  }
+};
+
 struct VitisFoldPass : PassWrapper<VitisFoldPass, OperationPass<>> {
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(VitisFoldPass)
 
@@ -702,7 +847,9 @@ struct VitisFoldPass : PassWrapper<VitisFoldPass, OperationPass<>> {
       llvm::cl::desc("Turn an scf.for whose bounds and step fold to "
                      "constants into a normalised affine.for with affine "
                      "accesses (the automatic pipeline decision reads affine "
-                     "trip counts, partitioning and banking affine indices)"),
+                     "trip counts, partitioning and banking affine indices), "
+                     "and an scf.while whose exit test folds to a constant "
+                     "trip count into an affine.for over it"),
       llvm::cl::init(true)};
 
   StringRef getArgument() const final { return "vitis-fold"; }
@@ -739,7 +886,7 @@ struct VitisFoldPass : PassWrapper<VitisFoldPass, OperationPass<>> {
     RewritePatternSet patterns(context);
     rules->populate(patterns, context);
     if (raiseCountedLoops)
-      patterns.add<RaiseCountedScfFor>(context);
+      patterns.add<RaiseCountedScfFor, RaiseCountedScfWhile>(context);
     if (canon) {
       for (Dialect *targetDialect : context->getLoadedDialects())
         targetDialect->getCanonicalizationPatterns(patterns);

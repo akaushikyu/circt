@@ -3665,55 +3665,55 @@ module {
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
 // CHECK: memref.global @ loc("{{[^"]*}}":28:3){{$}}
-// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
 // CHECK: memref.global @ loc("{{[^"]*}}":28:3){{$}}
-// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
 // CHECK: memref.global @ loc("{{[^"]*}}":28:3){{$}}
-// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
 // CHECK: memref.global @ loc("{{[^"]*}}":28:3){{$}}
-// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
 // CHECK: memref.global @ loc("{{[^"]*}}":28:3){{$}}
-// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
 // CHECK: memref.global @ loc("{{[^"]*}}":28:3){{$}}
-// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
 // CHECK: memref.global @ loc("{{[^"]*}}":28:3){{$}}
-// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
 // CHECK: memref.global @ loc("{{[^"]*}}":28:3){{$}}
-// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
 // CHECK: memref.global @ loc("{{[^"]*}}":29:3){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
 // CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
-// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
 // CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
-// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
 // CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
-// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
 // CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
-// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
 // CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
-// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
 // CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
-// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
 // CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
-// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
 // CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
-// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
 // CHECK: memref.alloca @ loc("{{[^"]*}}":169:7){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
@@ -4321,4 +4321,4 @@ module {
 // CHECK: memref.alloca @ loc("{{[^"]*}}":2712:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: Total BRAM: 176{{$}}
+// CHECK: Total BRAM: 144{{$}}

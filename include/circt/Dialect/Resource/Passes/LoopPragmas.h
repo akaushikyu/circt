@@ -111,15 +111,18 @@ inline unsigned getFlattenedParents(mlir::affine::AffineForOp loop) {
   return attr && attr.getInt() > 0 ? static_cast<unsigned>(attr.getInt()) : 0;
 }
 
-/// The outermost affine.for whose iteration space belongs to `loop`'s
-/// pipeline: `loop` itself, or its N-th enclosing affine.for when `loop`
-/// carries `hls.flattened_parents = N`. A value is invariant for the pipeline
-/// iff it is defined outside this loop.
-inline mlir::affine::AffineForOp
+/// The outermost loop whose iteration space belongs to `loop`'s pipeline:
+/// `loop` itself, or its N-th enclosing loop when `loop` carries
+/// `hls.flattened_parents = N`. A value is invariant for the pipeline iff it
+/// is defined outside this loop. Every loop-like op counts as a level: a
+/// flattened parent is an affine.for, or a runtime-trip scf.for whose body is
+/// a perfect nest (--auto-pipeline-unroll, VITIS_NOTES.md N53).
+inline mlir::LoopLikeOpInterface
 getFlattenedRoot(mlir::affine::AffineForOp loop) {
-  mlir::affine::AffineForOp root = loop;
+  mlir::LoopLikeOpInterface root =
+      llvm::cast<mlir::LoopLikeOpInterface>(loop.getOperation());
   for (unsigned n = getFlattenedParents(loop); n > 0; --n) {
-    auto parent = root->getParentOfType<mlir::affine::AffineForOp>();
+    auto parent = root->getParentOfType<mlir::LoopLikeOpInterface>();
     if (!parent)
       break;
     root = parent;
