@@ -124,7 +124,7 @@ const KeySpec kSchema[] = {
   {"tool.hls.options.pipeline_loops", KeyKind::UInt, "iterations", "config_compile -pipeline_loops: a loop whose nested trip-count products are all <= this is pipelined and everything inside it unrolled; 0 disables the automatic decision", "D-01", APU, "", 0, kNoLimit, false},
   {"tool.hls.options.array_partition", KeyKind::Section, "", "syn.array_partition settings", "Q-01, Q-02, Q-09", SPLIT, "", kNoLimit, kNoLimit, false},
   {"tool.hls.options.array_partition.throughput_driven", KeyKind::Enum, "", "auto: port-pressure partitioning; off: only the automatic partitions (the ground truth); a bare --infer-vitis-split-array takes this value", "Q-01", SPLIT, "auto|off", kNoLimit, kNoLimit, false},
-  {"tool.hls.options.array_partition.complete_threshold", KeyKind::UInt, "elements", "Arrays of at most this many elements are completely partitioned (registers)", "Q-02", SPLIT ", " FOLD, "", 0, kNoLimit, false},
+  {"tool.hls.options.array_partition.complete_threshold", KeyKind::UInt, "elements", "Arrays of at most this many elements are completely partitioned (registers)", "Q-02", SPLIT, "", 0, kNoLimit, false},
   {"tool.hls.options.array_partition.include_ports", KeyKind::Bool, "", "Interface arrays are partitioned too", "Q-09", SPLIT, "", kNoLimit, kNoLimit, false},
   {"tool.hls.timing_margin", KeyKind::Section, "", "Clock uncertainty subtracted from the period (one of fraction or ns)", "S-20", APU ", operator timing models", "", kNoLimit, kNoLimit, false},
   {"tool.hls.timing_margin.fraction", KeyKind::Number, "", "Fraction of the period (Vitis default 27%)", "S-20", APU, "", 0, 0.999, true},

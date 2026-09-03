@@ -509,21 +509,20 @@ static TypedAttr uniformInitialValue(memref::GlobalOp g) {
   return cast<TypedAttr>(first);
 }
 
-/// A small never-written table whose elements all hold one value is that
-/// value, whatever the index: Vitis partitions an array of at most
-/// complete_threshold elements into registers ([HLS 214-421], VITIS_NOTES.md
-/// N7 (a)), and a register holding a constant folds. Kernels (N52):
-/// shafix_v3a / v3c / v3d (`cnt[2] = {256, 256}`, const global, static
-/// local, plain global; `for (j < 2) for (i < cnt[j])`) have one flattened
-/// 512-trip pipeline, shafix_v3b (`{256, 128}`) a variable 128 ~ 256 trip
-/// inner loop, and shafix_v3e (a 2913-element static table of -4096, as
-/// rosetta face-detection's weights_array0) stays a 2913 x 13 ROM;
-/// chstone/sha's `in_i = {8192, 8192}` is gone in a.o.1.ll. Only loads of
-/// the get_global result and of its views are folded (a value passed on
-/// through a call or a loop may meet another memory there); a table the user
-/// gave a storage or partition pragma is left alone (the user decided, as
-/// for N7 (a)).
-static unsigned foldUniformTableLoads(ModuleOp module, int64_t maxElements,
+/// A never-written one-element global (a scalar global) is its initial
+/// value. Vitis folds it before the automatic pipeline decision (N52:
+/// rvsf_g1 / rvsf_g2, `int ksz = 16` as an inner bound: the outer loop is
+/// pipelined and k unrolled, 30 = hls-est). A multi-element table whose
+/// elements all hold one value folds in Vitis only after the pipeline
+/// decision, once the pipeline pragma has completely partitioned it
+/// (`partition_inferred: cnt, 'pipeline pragma'`): rvsf_rc16 / rc4 / rc2nc
+/// (`cnt[2|4]` all 16 as the inner bound) pipeline the inner loop (2), and
+/// folding them here would pipeline the outer loop instead (30). So only one
+/// element is folded. Only loads of the get_global result and of its views
+/// are folded (a value passed on through a call or a loop may meet another
+/// memory there); a global the user gave a storage or partition pragma is
+/// left alone (the user decided, as for N7 (a)).
+static unsigned foldUniformTableLoads(ModuleOp module,
                                       ArrayRef<std::string> userPragmas,
                                       SmallVectorImpl<FoldNote> &notes) {
   llvm::StringMap<SmallVector<Value>> sites;
@@ -533,8 +532,7 @@ static unsigned foldUniformTableLoads(ModuleOp module, int64_t maxElements,
   unsigned folded = 0;
   for (auto g : module.getOps<memref::GlobalOp>()) {
     if (g.isExternal() || g.isUninitialized() ||
-        !g.getType().hasStaticShape() ||
-        g.getType().getNumElements() > maxElements ||
+        !g.getType().hasStaticShape() || g.getType().getNumElements() != 1 ||
         llvm::any_of(userPragmas, [&](const std::string &arrayValue) {
           return g->hasAttr(arrayValue);
         }))
@@ -627,7 +625,47 @@ struct RaiseCountedScfFor : OpRewritePattern<scf::ForOp> {
     rewriter.replaceOpWithNewOp<affine::AffineYieldOp>(yield,
                                                        yield.getOperands());
     rewriter.replaceOp(op, loop.getResults());
+    affinizeAccesses(loop, rewriter);
     return success();
+  }
+
+  /// The memref.load / memref.store in the raised loop whose indices are all
+  /// valid affine dimensions or symbols become affine.load / affine.store:
+  /// constant-index partitioning (VITIS_NOTES N7 (b)), banking and the
+  /// scheduler's dependence analysis read affine accesses only, as for a loop
+  /// cgeist raised itself (kernels rvsf_g3 / rvsf_g3c: the same body under a
+  /// one-element-global bound and under a #define bound, both Vitis 16).
+  /// Accesses indexed by a value of an enclosing non-affine loop stay.
+  static void affinizeAccesses(affine::AffineForOp loop,
+                               PatternRewriter &rewriter) {
+    auto allAffine = [](ValueRange indices) {
+      return llvm::all_of(indices, [](Value valueHandle) {
+        return affine::isValidDim(valueHandle) ||
+               affine::isValidSymbol(valueHandle);
+      });
+    };
+    SmallVector<Operation *> accesses;
+    loop.walk([&](Operation *op) {
+      if (isa<memref::LoadOp, memref::StoreOp>(op))
+        accesses.push_back(op);
+    });
+    for (Operation *op : accesses) {
+      rewriter.setInsertionPoint(op);
+      DictionaryAttr attrs = op->getDiscardableAttrDictionary();
+      Operation *replacementValue = nullptr;
+      if (auto load = dyn_cast<memref::LoadOp>(op)) {
+        if (allAffine(load.getIndices()))
+          replacementValue = rewriter.replaceOpWithNewOp<affine::AffineLoadOp>(
+              load, load.getMemRef(), load.getIndices());
+      } else if (auto store = dyn_cast<memref::StoreOp>(op)) {
+        if (allAffine(store.getIndices()))
+          replacementValue = rewriter.replaceOpWithNewOp<affine::AffineStoreOp>(
+              store, store.getValueToStore(), store.getMemRef(),
+              store.getIndices());
+      }
+      if (replacementValue)
+        replacementValue->setDiscardableAttrs(attrs);
+    }
   }
 };
 
@@ -654,17 +692,17 @@ struct VitisFoldPass : PassWrapper<VitisFoldPass, OperationPass<>> {
       llvm::cl::init(true)};
   Option<bool> uniformTables{
       *this, "uniform-tables",
-      llvm::cl::desc("Fold a load from a never-written global of at most "
-                     "complete_threshold elements (registers, N7 (a)) whose "
-                     "initial elements all hold one value to that value, "
-                     "whatever the index (VITIS_NOTES.md N52); only when the "
-                     "pass runs on the module"),
+      llvm::cl::desc("Fold a load from a never-written one-element global "
+                     "(a scalar global) to its initial value, as Vitis does "
+                     "before its pipeline decision (VITIS_NOTES.md N52); "
+                     "only when the pass runs on the module"),
       llvm::cl::init(true)};
   Option<bool> raiseCountedLoops{
       *this, "raise-counted-loops",
       llvm::cl::desc("Turn an scf.for whose bounds and step fold to "
-                     "constants into a normalised affine.for (the automatic "
-                     "pipeline decision reads affine trip counts)"),
+                     "constants into a normalised affine.for with affine "
+                     "accesses (the automatic pipeline decision reads affine "
+                     "trip counts, partitioning and banking affine indices)"),
       llvm::cl::init(true)};
 
   StringRef getArgument() const final { return "vitis-fold"; }
@@ -722,9 +760,8 @@ struct VitisFoldPass : PassWrapper<VitisFoldPass, OperationPass<>> {
 
     if (uniformTables)
       if (auto module = dyn_cast<ModuleOp>(getOperation()))
-        (void)foldUniformTableLoads(
-            module, cfg.tool.hls.options.arrayPartition.completeThreshold,
-            cfg.frontend.userStoragePragmas, notes);
+        (void)foldUniformTableLoads(module, cfg.frontend.userStoragePragmas,
+                                    notes);
     std::unique_ptr<circt::hlsest::RuleFolder> folder =
         rules->createFolder(getOperation());
 
