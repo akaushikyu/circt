@@ -378,6 +378,10 @@ struct HlsToolConfig {
   bool globalsAttributeAccesses = false;
   std::string groupingPlugin;
   std::string mathLibraryTable;
+  /// A cos / sin table filled into a local struct array (std::complex) is
+  /// computed at run time (a core); a plain local or a global is a ROM
+  /// (VITIS_NOTES N60).
+  bool localStructTablesAtRunTime = true;
 
   /// The implicit buffer of `protocol` (e.g. "axi4-mm"), or null.
   const ImplicitBufferConfig *implicitBuffer(llvm::StringRef protocol) const;

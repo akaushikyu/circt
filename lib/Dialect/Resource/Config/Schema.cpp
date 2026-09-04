@@ -245,6 +245,7 @@ const KeySpec kSchema[] = {
   {"tool.hls.grouping.plugin", KeyKind::PluginName, "", "The MemoryGrouping (identity: one memref, one memory)", "N-11", BA, "memory_grouping", kNoLimit, kNoLimit, false},
   {"tool.hls.math_library", KeyKind::Section, "", "Cost table of the math cores", "N-15", BA, "", kNoLimit, kNoLimit, false},
   {"tool.hls.math_library.table", KeyKind::String, "", "Path of the math-core cost table (math_costs.json format; relative to the file that sets it); empty: math calls cost nothing (--bram-analysis=math-costs= overrides)", "S-04, N-15", BA, "", kNoLimit, kNoLimit, false},
+  {"tool.hls.math_library.local_struct_tables_at_run_time", KeyKind::Bool, "", "A table filled from math calls of the loop index is evaluated at compile time when it is a plain local or a global (also through one-element register temporaries and per-bank stores), but computed at run time (a core) when it is a member memory of a local struct array (VITIS_NOTES N60); off: the stores are judged as before W9r7", "N-15", BA, "", kNoLimit, kNoLimit, true},
 
   //===----------------------------------------------------------- backend
   {"tool.backend", KeyKind::Section, "", "What maps memories to primitives (the HLS tool itself for Vitis, logic synthesis for other flows)", "", BA, "", kNoLimit, kNoLimit, false},

@@ -4,6 +4,8 @@
 
 #include "circt/Dialect/Resource/Passes/MathCores.h"
 #include "circt/Dialect/LoopSchedule/LoopScheduleOps.h"
+#include "circt/Dialect/Resource/Config/Config.h"
+#include "circt/Dialect/Resource/Interfaces/MemoryDS.h"
 #include "circt/Dialect/Resource/Passes/CallInstances.h"
 #include "circt/Dialect/Resource/Passes/LoopPragmas.h"
 
@@ -462,6 +464,36 @@ private:
 
 } // namespace
 
+/// A one-element register a value passes through on its way to the table: a
+/// struct temporary or a single struct variable --split-struct-memrefs made
+/// registers, a scalar local (`auto t = complex<float>(cos(a), sin(a));
+/// tw[i] = t;`).
+static bool n60() {
+  return circt::hlsest::Config::get().tool.hls.localStructTablesAtRunTime;
+}
+
+static bool isPassThroughRegister(Operation *storage) {
+  if (!n60())
+    return false;
+  auto localAlloca = dyn_cast_or_null<memref::AllocaOp>(storage);
+  return localAlloca && localAlloca.getType().hasStaticShape() &&
+         localAlloca.getType().getNumElements() == 1 &&
+         (localAlloca->hasAttr("hls.struct_temporary") ||
+          localAlloca->hasAttr(circt::hls_analysis::kRegistersAttrName));
+}
+
+static Operation *storageOf(Value mem) {
+  while (Operation *def = mem.getDefiningOp()) {
+    if (isa<memref::AllocaOp, memref::AllocOp, memref::GetGlobalOp>(def))
+      return def;
+    auto view = dyn_cast<ViewLikeOpInterface>(def);
+    if (!view)
+      return nullptr;
+    mem = view.getViewSource();
+  }
+  return nullptr;
+}
+
 namespace {
 class IndexOnlyValues {
 public:
@@ -509,6 +541,17 @@ private:
     }
     if (op->getNumRegions() != 0)
       return false;
+
+    if (isa<affine::AffineLoadOp, memref::LoadOp>(op)) {
+      Operation *storage = storageOf(op->getOperand(0));
+      if (isPassThroughRegister(storage)) {
+        for (Operation *useValue : storage->getResult(0).getUsers())
+          if (isa<affine::AffineStoreOp, memref::StoreOp>(useValue) &&
+              !of(useValue->getOperand(0), depth + 1))
+            return false;
+        return true;
+      }
+    }
     if (!isMemoryEffectFree(op) && !isPureCall(op))
       return false;
     for (Value exprValue : op->getOperands())
@@ -566,6 +609,13 @@ private:
 
 static bool storesToLocalArray(Value mem) {
   while (Operation *def = mem.getDefiningOp()) {
+
+    if (n60() && isa<memref::AllocaOp, memref::AllocOp>(def) &&
+        (def->hasAttr("hls.struct_member") || def->hasAttr("hls.aggregated"))) {
+      auto type = cast<MemRefType>(def->getResult(0).getType());
+      if (!type.hasStaticShape() || type.getNumElements() > 1)
+        return false;
+    }
     if (isa<memref::AllocaOp, memref::AllocOp, memref::GetGlobalOp>(def))
       return true;
     auto view = dyn_cast<ViewLikeOpInterface>(def);
@@ -580,6 +630,17 @@ static bool onlyFillsArrays(Operation *site, IndexOnlyValues &indexValue) {
   SmallVector<Value> work(site->getResults().begin(), site->getResults().end());
   llvm::DenseSet<Value> seen(work.begin(), work.end());
   bool stored = false;
+
+  auto throughTemporary = [&](Value mem) {
+    Operation *storage = storageOf(mem);
+    if (!isPassThroughRegister(storage))
+      return false;
+    for (Operation *useValue : storage->getResult(0).getUsers())
+      if (isa<affine::AffineLoadOp, memref::LoadOp>(useValue))
+        if (seen.insert(useValue->getResult(0)).second)
+          work.push_back(useValue->getResult(0));
+    return true;
+  };
   while (!work.empty()) {
     Value valueHandle = work.pop_back_val();
     if (!indexValue.of(valueHandle))
@@ -587,13 +648,29 @@ static bool onlyFillsArrays(Operation *site, IndexOnlyValues &indexValue) {
     for (OpOperand &use : valueHandle.getUses()) {
       Operation *user = use.getOwner();
       if (auto st = dyn_cast<affine::AffineStoreOp>(user)) {
-        if (use.getOperandNumber() != 0 || !storesToLocalArray(st.getMemRef()))
+        if (use.getOperandNumber() != 0)
+          return false;
+        if (throughTemporary(st.getMemRef()))
+          continue;
+        if (!storesToLocalArray(st.getMemRef()))
           return false;
         stored = true;
         continue;
       }
       if (auto st = dyn_cast<memref::StoreOp>(user)) {
-        if (use.getOperandNumber() != 0 || !storesToLocalArray(st.getMemRef()))
+        if (use.getOperandNumber() != 0)
+          return false;
+        if (throughTemporary(st.getMemRef()))
+          continue;
+        if (!storesToLocalArray(st.getMemRef()))
+          return false;
+        stored = true;
+        continue;
+      }
+
+      if (n60() && user->getName().getStringRef() == "hls.store_enable") {
+        if (use.getOperandNumber() != 0 ||
+            !storesToLocalArray(user->getOperand(2)))
           return false;
         stored = true;
         continue;

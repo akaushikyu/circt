@@ -562,7 +562,9 @@
         "honour_inline_off": true
       },
       "math_library": {
+        "_local_struct_tables_at_run_time": "bool: A table filled from math calls of the loop index is evaluated at compile time when it is a plain local or a global (also through one-element register temporaries and per-bank stores), but computed at run time (a core) when it is a member memory of a local struct array (VITIS_NOTES N60); off: the stores are judged as before W9r7 [N-15]",
         "_table": "string: Path of the math-core cost table (math_costs.json format; relative to the file that sets it); empty: math calls cost nothing (--bram-analysis=math-costs= overrides) [S-04, N-15]",
+        "local_struct_tables_at_run_time": true,
         "table": ""
       },
       "memory_architecture": {

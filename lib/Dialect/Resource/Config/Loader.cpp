@@ -972,6 +972,8 @@ void fillTool(const json::Object &t, ToolProfile &tool) {
       boolean(obj(hls, "globals"), "attribute_accesses");
   h.groupingPlugin = str(obj(hls, "grouping"), "plugin");
   h.mathLibraryTable = str(obj(hls, "math_library"), "table");
+  h.localStructTablesAtRunTime =
+      boolean(obj(hls, "math_library"), "local_struct_tables_at_run_time", true);
 
   const json::Object &be = obj(t, "backend");
   tool.backend.id = str(be, "id");

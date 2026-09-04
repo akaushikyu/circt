@@ -96,7 +96,7 @@
       "narrowing": { "stored_ranges": true, "load_demand": true, "full_address_interface_modes": ["m_axi"] },
       "globals": { "attribute_accesses": false },
       "grouping": { "plugin": "identity" },
-      "math_library": { "table": "" }
+      "math_library": { "table": "", "local_struct_tables_at_run_time": true }
     },
     "backend": {
       "id": "vitis-internal",
