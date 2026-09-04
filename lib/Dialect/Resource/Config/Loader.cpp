@@ -920,6 +920,8 @@ void fillTool(const json::Object &t, ToolProfile &tool) {
   h.partitioning.policy = str(pa, "policy");
   h.partitioning.constantIndexMinExtent =
       integer(obj(pa, "constant_index"), "min_extent");
+  h.partitioning.compoundAssignTwoStores =
+      boolean(pa, "compound_assign_two_stores", true);
   const json::Object &inf = obj(pa, "inference");
   PartitionInferenceConfig &pi = h.partitioning.inference;
   pi.targetII = integer(inf, "target_ii");

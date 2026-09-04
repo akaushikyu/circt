@@ -73,7 +73,8 @@
           "rotating_banks": false,
           "max_scanned_factor": 65536
         },
-        "steer_affine_loads": true
+        "steer_affine_loads": true,
+        "compound_assign_two_stores": true
       },
       "folding": { "rule_set": "vitis-undef", "canonicalize": true, "max_rounds": 16 },
       "middle_end": {
@@ -152,7 +153,7 @@
       "fast_threshold": 150,
       "fast_ops_threshold": 16384,
       "max_ii_bumps": 4096,
-      "recurrence_repair_rounds": 0,
+      "recurrence_repair_rounds": 64,
       "user_ii_target": true
     },
     "sequential": { "model": "none" },

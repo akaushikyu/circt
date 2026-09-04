@@ -218,6 +218,20 @@ static void rewriteAffineLoad(affine::AffineLoadOp loadOp,
   loadOp.erase();
 }
 
+/// An ap_fixed compound assignment (`A[b][i] /= c`, marked by cgeist) to a
+/// bank chosen at run time: Vitis keeps two stores per bank, the
+/// `if (!op) V = 0` at the head of the cross-format ap_fixed_base::operator=
+/// and the final store; its DSE does not remove the first across the per-bank
+/// switch (VITIS_NOTES N38 R-cmpd, kernels w9r_d1div / d2mul / d3add,
+/// w9v_r_cyc; corpus nayan / sreenidhi / vishnu / kamya / pengzhao lab2).
+/// So the array is never RAM_1WNR and the loop has two writes per bank.
+/// cgeist's store forwarding leaves one store; the mark restores the other.
+static bool compoundAssignTwoStores(Operation *store) {
+  return store->hasAttr("hls.ap_compound_assign") &&
+         circt::hlsest::Config::get()
+             .tool.hls.partitioning.compoundAssignTwoStores;
+}
+
 static void rewriteAffineStore(affine::AffineStoreOp storeOp,
                                ArrayRef<Value> banks,
                                const BankLayout &lowerIndex) {
@@ -248,6 +262,13 @@ static void rewriteAffineStore(affine::AffineStoreOp storeOp,
       eqFlags.push_back(true);
     }
     IntegerSet cond = IntegerSet::get(nDims, nSyms, constraints, eqFlags);
+    if (compoundAssignTwoStores(storeOp)) {
+      auto extra = AffineStoreEnableOp::create(
+          buildPoint, loc, operandValue,
+          banks[ab.choice.bank(lowerIndex, keyValue)], operands, operands,
+          ab.bankedMap, cond);
+      extra->setAttr("hls.compound_assign_store", buildPoint.getUnitAttr());
+    }
     AffineStoreEnableOp::create(buildPoint, loc, operandValue,
                                 banks[ab.choice.bank(lowerIndex, keyValue)],
                                 operands, operands, ab.bankedMap, cond);
@@ -719,6 +740,12 @@ static void rewriteMemrefStore(memref::StoreOp storeOp, ArrayRef<Value> banks,
       Value en = arith::CmpIOp::create(buildPoint, loc,
                                        arith::CmpIPredicate::eq, mb.rotIdx, kc);
 
+      if (compoundAssignTwoStores(storeOp)) {
+        auto extra = StoreEnableOp::create(
+            buildPoint, loc, operandValue, en,
+            banks[mb.choice.bank(lowerIndex, keyValue)], mb.bankedIndices);
+        extra->setAttr("hls.compound_assign_store", buildPoint.getUnitAttr());
+      }
       StoreEnableOp::create(buildPoint, loc, operandValue, en,
                             banks[mb.choice.bank(lowerIndex, keyValue)],
                             mb.bankedIndices);

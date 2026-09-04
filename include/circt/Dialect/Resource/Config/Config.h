@@ -316,6 +316,9 @@ struct PartitionInferenceConfig {
 struct PartitioningConfig {
   std::string policy;
   int64_t constantIndexMinExtent = 2;
+  /// An ap_fixed compound assignment (cgeist's hls.ap_compound_assign) to a
+  /// bank chosen at run time writes that bank twice (VITIS_NOTES N38 R-cmpd).
+  bool compoundAssignTwoStores = true;
   PartitionInferenceConfig inference;
   bool steerAffineLoads = true;
 };
@@ -472,7 +475,7 @@ struct SchedulingConfig {
   int64_t fastThreshold = 150;
   int64_t fastOpsThreshold = 16384;
   int64_t maxIIBumps = 4096;
-  int64_t recurrenceRepairRounds = 0;
+  int64_t recurrenceRepairRounds = 64;
   bool userIITarget = true;
   std::string sequentialModel;
   std::string bindingModel;

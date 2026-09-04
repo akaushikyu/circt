@@ -207,6 +207,7 @@ const KeySpec kSchema[] = {
   {"tool.hls.partitioning.inference.rotating_banks", KeyKind::Bool, "", "A rotating access is charged to one bank (off: to every bank)", "Q-08", SPLIT, "", kNoLimit, kNoLimit, false},
   {"tool.hls.partitioning.inference.max_scanned_factor", KeyKind::UInt, "", "Factors above this are not scanned one by one (a guard)", "Q-08", SPLIT, "", 1, kNoLimit, false},
   {"tool.hls.partitioning.steer_affine_loads", KeyKind::Bool, "", "Unrolled copies of a partitioned load with distinct constant offsets read each bank once", "", BANK, "", kNoLimit, kNoLimit, false},
+  {"tool.hls.partitioning.compound_assign_two_stores", KeyKind::Bool, "", "An ap_fixed compound assignment (/=, *=, +=, -=; cgeist marks its store hls.ap_compound_assign) to a bank chosen at run time writes that bank twice: never RAM_1WNR, two writes per iteration (VITIS_NOTES N38 R-cmpd)", "", BANK, "", kNoLimit, kNoLimit, true},
 
   {"tool.hls.folding", KeyKind::Section, "", "The tool's constant folding", "F-01..F-03", FOLD, "", kNoLimit, kNoLimit, false},
   {"tool.hls.folding.rule_set", KeyKind::PluginName, "", "The FoldRuleSet: vitis-undef (Vitis' undefined value of x / 0) or zero (x / 0 -> 0)", "F-01, F-02", FOLD, "fold_rule_set", kNoLimit, kNoLimit, false},
@@ -296,7 +297,7 @@ const KeySpec kSchema[] = {
   {"scheduling.modulo.fast_threshold", KeyKind::UInt, "ops", "greedy-simplex: more resource-limited operations than this go to the greedy scheduler (0: always)", "S-08", A2L, "", 0, kNoLimit, false},
   {"scheduling.modulo.fast_ops_threshold", KeyKind::UInt, "ops", "greedy-simplex: more operations than this go to the greedy scheduler (0: no rule)", "S-08", A2L, "", 0, kNoLimit, false},
   {"scheduling.modulo.max_ii_bumps", KeyKind::UInt, "", "II increments the greedy scheduler tries", "S-08, R-06", A2L, "", 0, kNoLimit, false},
-  {"scheduling.modulo.recurrence_repair_rounds", KeyKind::UInt, "", "greedy scheduler: times a loop-carried edge broken by resource delays may move its destination later before the II is bumped (0: bump at once, the default until R-cmpd is modelled, OPEN_ISSUES O56 / O51 (a)); VITIS_NOTES N39", "S-08", A2L, "", 0, kNoLimit, false},
+  {"scheduling.modulo.recurrence_repair_rounds", KeyKind::UInt, "", "greedy scheduler: times a loop-carried edge broken by resource delays may move its destination later before the II is bumped (0: bump at once; 64 since R-cmpd is modelled, W9r7, OPEN_ISSUES O56); VITIS_NOTES N39", "S-08", A2L, "", 0, kNoLimit, false},
   {"scheduling.modulo.user_ii_target", KeyKind::Bool, "", "A loop with a user pipeline II=N > 1 is scheduled at N when it could start more often", "P-14", A2L, "", kNoLimit, kNoLimit, false},
   {"scheduling.sequential", KeyKind::Section, "", "The scheduler of non-pipelined regions", "K-12..K-14, S-22", A2L, "", kNoLimit, kNoLimit, false},
   {"scheduling.sequential.model", KeyKind::PluginName, "", "The SequentialScheduler (none: the stretch-pair rule applies)", "S-22", A2L, "sequential_scheduler", kNoLimit, kNoLimit, false},

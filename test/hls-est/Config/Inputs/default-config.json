@@ -349,13 +349,13 @@
       "_fast_threshold": "uint, ops: greedy-simplex: more resource-limited operations than this go to the greedy scheduler (0: always) [S-08]",
       "_max_ii_bumps": "uint: II increments the greedy scheduler tries [S-08, R-06]",
       "_model": "plugin name (a modulo_scheduler): The ModuloScheduler [S-10]",
-      "_recurrence_repair_rounds": "uint: greedy scheduler: times a loop-carried edge broken by resource delays may move its destination later before the II is bumped (0: bump at once, the default until R-cmpd is modelled, OPEN_ISSUES O56 / O51 (a)); VITIS_NOTES N39 [S-08]",
+      "_recurrence_repair_rounds": "uint: greedy scheduler: times a loop-carried edge broken by resource delays may move its destination later before the II is bumped (0: bump at once; 64 since R-cmpd is modelled, W9r7, OPEN_ISSUES O56); VITIS_NOTES N39 [S-08]",
       "_user_ii_target": "bool: A loop with a user pipeline II=N > 1 is scheduled at N when it could start more often [P-14]",
       "fast_ops_threshold": 16384,
       "fast_threshold": 150,
       "max_ii_bumps": 4096,
       "model": "greedy-simplex",
-      "recurrence_repair_rounds": 0,
+      "recurrence_repair_rounds": 64,
       "user_ii_target": true
     },
     "sequential": {
@@ -658,10 +658,12 @@
         "pipeline_loops": 64
       },
       "partitioning": {
+        "_compound_assign_two_stores": "bool: An ap_fixed compound assignment (/=, *=, +=, -=; cgeist marks its store hls.ap_compound_assign) to a bank chosen at run time writes that bank twice: never RAM_1WNR, two writes per iteration (VITIS_NOTES N38 R-cmpd)",
         "_constant_index": "object: Rule (b): a dimension every access indexes with a constant [Q-03]",
         "_inference": "object: The td=auto port-pressure search [Q-06..Q-08]",
         "_policy": "plugin name (a partition_policy): The PartitionPolicy [Q-03, Q-04, Q-08, Q-15]",
         "_steer_affine_loads": "bool: Unrolled copies of a partitioned load with distinct constant offsets read each bank once",
+        "compound_assign_two_stores": true,
         "constant_index": {
           "_min_extent": "uint, elements: Smallest extent of such a dimension that is partitioned [Q-03]",
           "min_extent": 2
