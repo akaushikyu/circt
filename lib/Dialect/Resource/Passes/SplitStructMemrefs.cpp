@@ -1629,6 +1629,32 @@ static bool wordReadInvariant(ArrayRef<Value> indices, Operation *loop,
   return llvm::all_of(indices, visit);
 }
 
+/// Whether every index is a valid affine dimension where `b` inserts.
+static bool affineIndices(ValueRange indices) {
+  return llvm::all_of(indices,
+                      [](Value v) { return affine::isValidDim(v); });
+}
+
+/// A word read of an aggregated variable: an affine.load when every index is
+/// a valid affine dimension, so that --convert-affine-to-loopschedule's
+/// redundant-load merge and invariant-load hoist (which track affine
+/// accesses only) see the unrolled copies of one word read as one read
+/// (VITIS_NOTES N44: the word is read once and shifted), else a memref.load.
+static Value createWordLoad(OpBuilder &b, Location loc, Value mem,
+                            ValueRange indices) {
+  if (affineIndices(indices))
+    return b.create<affine::AffineLoadOp>(loc, mem, indices);
+  return b.create<memref::LoadOp>(loc, mem, indices);
+}
+
+/// A word write; affine when the indices allow it (createWordLoad).
+static Operation *createWordStore(OpBuilder &b, Location loc, Value v,
+                                  Value mem, ValueRange indices) {
+  if (affineIndices(indices))
+    return b.create<affine::AffineStoreOp>(loc, v, mem, indices);
+  return b.create<memref::StoreOp>(loc, v, mem, indices);
+}
+
 void StructSplitter::rewriteAggregated(ArrayRef<SmallVector<Value>> mems) {
   auto word = IntegerType::get(type.getContext(), wordBits);
   // Stores: the stores of one block to the same element with no other access
@@ -1760,13 +1786,25 @@ void StructSplitter::rewriteAggregated(ArrayRef<SmallVector<Value>> mems) {
             w = pw;
             break;
           }
+        // The same word read earlier in the block the loop is in (lane 0
+        // of a vector read before the loop over the other lanes).
+        if (!w)
+          for (auto &[prev, pw] : llvm::reverse(wordReads)) {
+            Operation *anchor = pw.getDefiningOp();
+            if (anchor->getBlock() != before->getBlock())
+              break;
+            if (sameElement(prev, &acc) && !storeBetween(anchor, before)) {
+              w = pw;
+              break;
+            }
+          }
         if (!w) {
           OpBuilder hb(before);
-          w = hb.create<memref::LoadOp>(l, mems[acc.root][0], acc.element);
+          w = createWordLoad(hb, l, mems[acc.root][0], acc.element);
           hoistedReads.push_back({&acc, before, w});
         }
       } else {
-        w = ob.create<memref::LoadOp>(l, mems[acc.root][0], acc.element);
+        w = createWordLoad(ob, l, mems[acc.root][0], acc.element);
         wordReads.push_back({&acc, w});
       }
     }
@@ -1810,9 +1848,8 @@ void StructSplitter::rewriteAggregated(ArrayRef<SmallVector<Value>> mems) {
     Value w;
     if (!written.all()) {
       OpBuilder ob(first);
-      w = ob.create<memref::LoadOp>(first->getLoc(),
-                                    mems[group.front()->root][0],
-                                    group.front()->element);
+      w = createWordLoad(ob, first->getLoc(), mems[group.front()->root][0],
+                         group.front()->element);
       w.getDefiningOp()->setAttr("hls.read_modify_write", ob.getUnitAttr());
     }
     OpBuilder ob(last);
@@ -1834,8 +1871,8 @@ void StructSplitter::rewriteAggregated(ArrayRef<SmallVector<Value>> mems) {
           w = wb.insert(w, leaf, wb.shift(leaf, Value(), f), v);
         }
     }
-    auto st = ob.create<memref::StoreOp>(l, w, mems[group.back()->root][0],
-                                         group.back()->element);
+    Operation *st = createWordStore(ob, l, w, mems[group.back()->root][0],
+                                    group.back()->element);
     if (group.size() > 1)
       st->setAttr("hls.merged_member_stores",
                   ob.getI64IntegerAttr(group.size()));
@@ -2216,6 +2253,153 @@ static bool inlineCallsOnStruct(Value root) {
       refused.insert(found);
   }
   return changed;
+}
+
+/// The struct type of the element `ptr` points to the start of, or null:
+/// `ptr` is a polygeist.memref2pointer of a memref of structs (or of a row
+/// view of one, through polygeist.subindex / memref.cast), moved by
+/// getelementptrs whose byte offsets are whole elements (a getelementptr over
+/// the struct type itself, or a byte offset that is a constant multiple of
+/// the element size).
+static LLVM::LLVMStructType elementStartStruct(Value ptr) {
+  SmallVector<LLVM::GEPOp> geps;
+  while (auto gep = ptr.getDefiningOp<LLVM::GEPOp>()) {
+    geps.push_back(gep);
+    ptr = gep.getBase();
+  }
+  auto m2p = ptr.getDefiningOp<Memref2PointerOp>();
+  if (!m2p)
+    return {};
+  Value src = m2p.getSource();
+  for (;;) {
+    if (auto sub = src.getDefiningOp<SubIndexOp>())
+      src = sub->getOperand(0);
+    else if (auto cast = src.getDefiningOp<memref::CastOp>())
+      src = cast.getSource();
+    else
+      break;
+  }
+  auto mt = dyn_cast<MemRefType>(src.getType());
+  auto st = mt ? dyn_cast<LLVM::LLVMStructType>(mt.getElementType())
+               : LLVM::LLVMStructType();
+  auto size = st ? layoutOf(st) : std::nullopt;
+  if (!size || size->size <= 0)
+    return {};
+  for (LLVM::GEPOp gep : geps) {
+    if (gep.getIndices().size() != 1)
+      return {};
+    if (gep.getElemType() == st)
+      continue;
+    auto elem = layoutOf(gep.getElemType());
+    if (!elem)
+      return {};
+    auto idx = gep.getIndices()[0];
+    int64_t k = 0;
+    if (auto attr = idx.dyn_cast<IntegerAttr>()) {
+      k = attr.getInt();
+    } else {
+      Value v = idx.get<Value>();
+      while (auto c = v.getDefiningOp<arith::IndexCastOp>())
+        v = c.getIn();
+      if (!matchMulConst(v, k))
+        return {};
+    }
+    if ((k * elem->size) % size->size)
+      return {};
+  }
+  return st;
+}
+
+/// Replaces every loop `for iv in [0, n) to[iv] = from[iv]` (one scalar load
+/// and store per iteration, getelementptrs of the iv over one scalar type)
+/// that copies exactly one whole struct element, from the start of one
+/// element to the start of another of the same struct type, by one load and
+/// one store of the element. cgeist emits the implicit copy constructor and
+/// assignment of a struct with an array member (hls::vector, std::array) as
+/// such a byte loop, inlined wherever the copy happens; clang emits one
+/// memcpy, which Vitis turns into one aggregate copy (VITIS_NOTES N44: an
+/// aggregated hls::vector array is accessed one word per element; N51: the
+/// lanes of a disaggregated one are copied in parallel). The struct splitter
+/// then sees one whole-element access instead of n accesses of a type that
+/// is not the member's. The memory effect is the same (the n bytes copied).
+static void fuseElementCopyLoops(ModuleOp module) {
+  SmallVector<affine::AffineForOp> loops;
+  module.walk([&](affine::AffineForOp loop) { loops.push_back(loop); });
+  for (affine::AffineForOp loop : loops) {
+    if (!loop.hasConstantBounds() || loop.getConstantLowerBound() != 0 ||
+        loop.getStepAsInt() != 1 || loop.getNumIterOperands() != 0 ||
+        loop->getNumResults() != 0)
+      continue;
+    int64_t trips = loop.getConstantUpperBound();
+    Value iv = loop.getInductionVar();
+    auto isIv = [&](Value v) {
+      while (auto c = v.getDefiningOp<arith::IndexCastOp>())
+        v = c.getIn();
+      return v == iv;
+    };
+    // gep(base)[iv] over one scalar type, with a base defined outside.
+    auto scalarAt = [&](Value ptr, Type &elem) -> Value {
+      auto gep = ptr.getDefiningOp<LLVM::GEPOp>();
+      if (!gep || gep.getIndices().size() != 1)
+        return {};
+      auto idx = gep.getIndices()[0];
+      if (!idx.is<Value>() || !isIv(idx.get<Value>()))
+        return {};
+      Value base = gep.getBase();
+      if (loop.getRegion().isAncestor(base.getParentRegion()))
+        return {};
+      elem = gep.getElemType();
+      return base;
+    };
+    LLVM::LoadOp load;
+    LLVM::StoreOp store;
+    bool shape = true;
+    for (Operation &op : loop.getBody()->without_terminator()) {
+      if (isa<arith::IndexCastOp, LLVM::GEPOp>(op))
+        continue;
+      if (auto l = dyn_cast<LLVM::LoadOp>(op)) {
+        shape &= !load;
+        load = l;
+        continue;
+      }
+      if (auto st = dyn_cast<LLVM::StoreOp>(op)) {
+        shape &= !store;
+        store = st;
+        continue;
+      }
+      shape = false;
+    }
+    // A loop with a pragma (hls.unroll, hls.pipeline, ...) is the user's.
+    bool pragma = llvm::any_of(loop->getAttrs(), [](NamedAttribute a) {
+      return a.getName().getValue().starts_with("hls.");
+    });
+    if (!shape || !load || !store || store.getValue() != load.getResult() ||
+        pragma)
+      continue;
+    // Every other op of the body only computes these two addresses.
+    bool onlyAddresses = true;
+    for (Operation &op : loop.getBody()->without_terminator())
+      if (isa<arith::IndexCastOp, LLVM::GEPOp>(op))
+        for (Operation *u : op.getUsers())
+          onlyAddresses &= u == load || u == store ||
+                           isa<arith::IndexCastOp, LLVM::GEPOp>(u);
+    if (!onlyAddresses)
+      continue;
+    Type loadElem, storeElem;
+    Value from = scalarAt(load.getAddr(), loadElem);
+    Value to = scalarAt(store.getAddr(), storeElem);
+    if (!from || !to || loadElem != storeElem ||
+        loadElem != load.getType() || !isScalar(loadElem))
+      continue;
+    LLVM::LLVMStructType st = elementStartStruct(from);
+    if (!st || st != elementStartStruct(to) ||
+        layoutOf(loadElem)->size * trips != layoutOf(st)->size)
+      continue;
+    OpBuilder b(loop);
+    Value v = b.create<LLVM::LoadOp>(loop.getLoc(), st, from);
+    b.create<LLVM::StoreOp>(loop.getLoc(), v, to);
+    loop.erase();
+  }
 }
 
 } // namespace
@@ -2738,6 +2922,9 @@ struct VariableNode {
   bool analysed = false;
   std::string reason;
   unsigned group = 0;
+  /// A one-element storage without a source variable name: a C++ temporary
+  /// cgeist materializes; split into registers, never a memory.
+  bool temporary = false;
 
   Location loc() const {
     return kind == Argument ? argValue.getLoc() : op->getLoc();
@@ -2780,6 +2967,23 @@ struct SplitStructMemrefsPass
                      "calls together with the callees' parameters (one "
                      "variable, as Vitis sees it across `inline off` and "
                      "dataflow processes)"),
+      llvm::cl::init(true)};
+  Option<bool> temporaryRegisters{
+      *this, "temporary-registers",
+      llvm::cl::desc("Split a one-element struct temporary (an alloca "
+                     "without polygeist.varname: a by-value operand, a "
+                     "returned struct) into registers instead of leaving "
+                     "its member accesses as llvm.load / llvm.store "
+                     "(VITIS_NOTES N51)"),
+      llvm::cl::init(true)};
+  Option<bool> elementCopyLoops{
+      *this, "element-copy-loops",
+      llvm::cl::desc("Replace a loop that copies one whole struct element "
+                     "byte by byte or scalar by scalar (an inlined copy "
+                     "constructor / assignment of an hls::vector or "
+                     "std::array) by one load and one store of the element, "
+                     "as Vitis turns the memcpy into one aggregate copy "
+                     "(VITIS_NOTES N44 / N51)"),
       llvm::cl::init(true)};
 
   StringRef getArgument() const final { return "split-struct-memrefs"; }
@@ -2872,8 +3076,12 @@ struct SplitStructMemrefsPass
     circt::hlsest::applyConfigured(globals, sc.globals);
     circt::hlsest::applyConfigured(scalarRegisters, sc.scalarRegisters);
     circt::hlsest::applyConfigured(throughCalls, sc.throughCalls);
+    circt::hlsest::applyConfigured(elementCopyLoops, sc.elementCopyLoops);
+    circt::hlsest::applyConfigured(temporaryRegisters, sc.temporaryRegisters);
     ModuleOp module = getOperation();
     inlineMemberCalls(module);
+    if (elementCopyLoops)
+      fuseElementCopyLoops(module);
     argNode.clear();
     memsOf.clear();
     rewritten.clear();
@@ -2890,10 +3098,22 @@ struct SplitStructMemrefsPass
         // hls::stream::read(), before it is copied into the variable). The
         // Vitis front end elides it or keeps it in registers: no memory
         // (hyungseok_bae_lab2, arati_ganesh lab2: no Vitis row for them).
-        if (!op->hasAttr("polygeist.varname"))
+        //
+        // With temporary-registers, a one-element temporary (the by-value
+        // operand of an hls::vector operator, a struct returned by value) is
+        // split like a variable, into registers (hls.registers): its member
+        // accesses become plain loads and stores the later passes can
+        // schedule, instead of llvm.load / llvm.store / llvm.insertvalue
+        // chains that stop a loop from being pipelined (VITIS_NOTES N51
+        // kernels w9r7_vx_swap / vx_var: Vitis pipelines the loop at II 1).
+        auto mt = cast<MemRefType>(op->getResult(0).getType());
+        bool temporary = !op->hasAttr("polygeist.varname");
+        if (temporary && (!temporaryRegisters || !mt.hasStaticShape() ||
+                          mt.getNumElements() != 1))
           return;
         auto n = std::make_unique<VariableNode>();
         n->kind = VariableNode::Allocation;
+        n->temporary = temporary;
         n->op = op;
         n->splitter = std::make_unique<StructSplitter>(
             SmallVector<Value>{op->getResult(0)},
@@ -3026,7 +3246,7 @@ struct SplitStructMemrefsPass
                   "aggregated word";
       if (!why.empty()) {
         for (VariableNode *n : group)
-          if (n->kind != VariableNode::Argument)
+          if (n->kind != VariableNode::Argument && !n->temporary)
             emitWarning(n->loc(), n->kind == VariableNode::Global
                                       ? "struct global not split into "
                                         "members: "
@@ -3091,8 +3311,13 @@ struct SplitStructMemrefsPass
           st.addTypes(mem.type);
           st.addAttributes(n->op->getAttrs());
           Operation *m = b.create(st);
-          m->setAttr("polygeist.varname", b.getStringAttr(mem.name));
+          if (!n->temporary)
+            m->setAttr("polygeist.varname", b.getStringAttr(mem.name));
           annotate(m, mem, aggregate);
+          if (n->temporary) {
+            m->setAttr(kRegistersAttrName, b.getUnitAttr());
+            m->setAttr("hls.struct_temporary", b.getUnitAttr());
+          }
           perRoot.push_back(m->getResult(0));
         }
         mems.push_back(std::move(perRoot));

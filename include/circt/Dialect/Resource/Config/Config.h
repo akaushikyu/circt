@@ -351,6 +351,8 @@ struct StructConfig {
   bool globals = true;
   bool scalarRegisters = true;
   bool throughCalls = true;
+  bool elementCopyLoops = true;
+  bool temporaryRegisters = true;
 };
 
 struct NarrowingConfig {
