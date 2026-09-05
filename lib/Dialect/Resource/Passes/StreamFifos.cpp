@@ -673,7 +673,27 @@ std::optional<StreamHandleRecord> circt::hls_analysis::analyzeStreamHandle(
           tmplDepth ? "default" : "default (template unparsed)";
     }
 
-    if (auto bits = mangledElementBits(elementMangled)) {
+    std::optional<unsigned> declaredBits;
+    for (const ReachedCall *candidateValue : memberCalls) {
+      if (!streamRules().declaredElementBits)
+        break;
+      auto call = dyn_cast<CallOpInterface>(candidateValue->call);
+      auto callee = call
+                        ? dyn_cast_or_null<func::FuncOp>(call.resolveCallable())
+                        : func::FuncOp();
+      if (!callee)
+        continue;
+      if (auto a =
+              callee->getAttrOfType<IntegerAttr>("hls.stream_element_bits"))
+        if (a.getInt() > 0) {
+          declaredBits = static_cast<unsigned>(a.getInt());
+          break;
+        }
+    }
+    if (declaredBits) {
+      globalOp.bits = *declaredBits;
+      globalOp.bitsSource = "cgeist hls.stream_element_bits";
+    } else if (auto bits = mangledElementBits(elementMangled)) {
       globalOp.bits = *bits;
       globalOp.bitsSource = "mangled " + elementMangled;
     } else {

@@ -1,8 +1,8 @@
-// RUN: hls-est %s '--infer-vitis-split-array=td=off annotate-pressure=false' | FileCheck %s --check-prefix=OFF
-// RUN: hls-est %s '--infer-vitis-split-array=td=auto annotate-pressure=false' | FileCheck %s --check-prefix=AUTO
-// RUN: hls-est %s '--infer-vitis-split-array=td=auto auto-partitions=true annotate-pressure=false' | FileCheck %s --check-prefix=AUTOP
+// RUN: hls-est %s '--infer-vitis-split-array=td=off annotate-pressure=false' --config-set tool.hls.partitioning.constant_index.non_affine_arrays=false --config-set tool.hls.partitioning.constant_index.after_user_partition=false | FileCheck %s --check-prefix=OFF
+// RUN: hls-est %s '--infer-vitis-split-array=td=auto annotate-pressure=false' --config-set tool.hls.partitioning.constant_index.non_affine_arrays=false --config-set tool.hls.partitioning.constant_index.after_user_partition=false | FileCheck %s --check-prefix=AUTO
+// RUN: hls-est %s '--infer-vitis-split-array=td=auto auto-partitions=true annotate-pressure=false' --config-set tool.hls.partitioning.constant_index.non_affine_arrays=false --config-set tool.hls.partitioning.constant_index.after_user_partition=false | FileCheck %s --check-prefix=AUTOP
 // RUN: not hls-est %s --infer-vitis-split-array=td=on 2>&1 | FileCheck %s --check-prefix=BAD
-// RUN: hls-est %s '--infer-vitis-split-array=td=off annotate-pressure=false emit-remarks=true' 2>&1 | FileCheck %s --check-prefix=REMARK
+// RUN: hls-est %s '--infer-vitis-split-array=td=off annotate-pressure=false emit-remarks=true' 2>&1 --config-set tool.hls.partitioning.constant_index.non_affine_arrays=false --config-set tool.hls.partitioning.constant_index.after_user_partition=false | FileCheck %s --check-prefix=REMARK
 
 // --infer-vitis-split-array td=off: only the automatic partitions Vitis 2025.1
 // still makes with syn.array_partition.throughput_driven=off (VITIS_NOTES.md

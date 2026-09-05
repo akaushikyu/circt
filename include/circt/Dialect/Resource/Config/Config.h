@@ -300,6 +300,9 @@ struct StreamConfig {
   int64_t srlMaxDepth = 2;
   int64_t srlMaxBits = 1024;
   std::string mapper, pricedConfig;
+  /// A stream's width is cgeist's hls.stream_element_bits when present (the
+  /// packed C++ element: bool 1 bit, VITIS_NOTES N58).
+  bool declaredElementBits = true;
 };
 
 /// Dataflow ping-pong channels.

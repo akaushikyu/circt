@@ -909,6 +909,8 @@ void fillTool(const json::Object &t, ToolProfile &tool) {
   h.streams.srlMaxBits = integer(st, "srl_max_bits");
   h.streams.mapper = str(st, "mapper");
   h.streams.pricedConfig = str(st, "priced_config");
+  h.streams.declaredElementBits =
+      boolean(st, "declared_element_bits", true);
   const json::Object &dc = obj(hls, "dataflow_channels");
   h.dataflowChannels.enabled = boolean(dc, "enabled");
   h.dataflowChannels.defaultBlocks = integer(dc, "default_blocks");

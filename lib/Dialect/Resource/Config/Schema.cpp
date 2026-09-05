@@ -185,6 +185,7 @@ const KeySpec kSchema[] = {
   {"tool.hls.streams.srl_max_bits", KeyKind::UInt, "bits", "FIFOs of at most this many bits (depth x width) are shift registers", "P-06", BA, "", 0, kNoLimit, false},
   {"tool.hls.streams.mapper", KeyKind::PluginName, "", "The MemoryMapper that prices a block-RAM FIFO", "P-06", BA, "memory_mapper", kNoLimit, kNoLimit, false},
   {"tool.hls.streams.priced_config", KeyKind::String, "", "The port configuration a FIFO is priced at (never x36)", "P-06", BA, "", kNoLimit, kNoLimit, false},
+  {"tool.hls.streams.declared_element_bits", KeyKind::Bool, "", "A FIFO is as wide as the packed C++ element cgeist records (hls.stream_element_bits: a struct is the sum of its members, bool 1 bit), else the IR type's packed bits (VITIS_NOTES N58)", "P-06", BA, "", kNoLimit, kNoLimit, true},
   {"tool.hls.dataflow_channels", KeyKind::Section, "", "Ping-pong channels of a dataflow region", "P-08", BA, "", kNoLimit, kNoLimit, false},
   {"tool.hls.dataflow_channels.enabled", KeyKind::Bool, "", "Price an array one process writes and a later one reads as a PIPO (--bram-dataflow-channels overrides)", "P-08", BA, "", kNoLimit, kNoLimit, false},
   {"tool.hls.dataflow_channels.default_blocks", KeyKind::UInt, "blocks", "Blocks of a channel without a stream type=pipo depth", "P-08", BA, "", 1, kNoLimit, false},

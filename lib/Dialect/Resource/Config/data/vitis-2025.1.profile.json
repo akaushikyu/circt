@@ -54,7 +54,8 @@
         "srl_max_depth": 2,
         "srl_max_bits": 1024,
         "mapper": "vitis-band7",
-        "priced_config": "tdp"
+        "priced_config": "tdp",
+        "declared_element_bits": true
       },
       "dataflow_channels": { "enabled": true, "default_blocks": 2 },
       "pipeline_decision": {
