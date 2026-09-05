@@ -3217,6 +3217,49 @@ struct BRAMAnalysisLoopSchedule
         records.push_back(std::move(rec));
       }
 
+    if (streamFifos && config().tool.hls.streams.dataflowArgumentFifos)
+      module.walk([&](func::FuncOp fn) {
+        if (scope.active() && fn.getName() != scope.symbol)
+          return;
+        for (DataflowArgumentFifo &fieldValue :
+             processMerges.argumentFifos(fn)) {
+          FifoPrice portValue = priceFifo(
+              fieldValue.depth, fieldValue.bits, "",
+              [&](int64_t depth, unsigned bits) {
+                return mapBlocks(*models.streamMapper, *models.block,
+                                 config().tool.hls.streams.pricedConfig, depth,
+                                 bits);
+              });
+          circt::hlsest::ResourceVector passResult =
+              blockResources(models.block, portValue.bram);
+          totalResources.add(passResult);
+          llvm::outs() << "dataflow.arg_fifo name=" << fieldValue.name
+                       << " func=@" << fn.getName()
+                       << " bram=" << portValue.bram << " (depth "
+                       << fieldValue.depth << " x " << fieldValue.bits
+                       << "b)\n";
+          total += portValue.bram;
+          MemrefRecord rec;
+          rec.id = fn.getName().str() + "#arg_fifo:" + fieldValue.name;
+          rec.kind = "dataflow_arg_fifo";
+          rec.name = fieldValue.name;
+          rec.varname = fieldValue.name;
+          rec.func = fn.getName().str();
+          rec.locText = locString(fn.getLoc());
+          rec.shape = {fieldValue.depth};
+          rec.elemType = "i" + std::to_string(fieldValue.bits);
+          rec.elemBits = fieldValue.bits;
+          rec.words = fieldValue.depth;
+          rec.status = "counted";
+          rec.ramType = "FIFO";
+          rec.ramReason = "dataflow argument FIFO (N54): " + fieldValue.reason +
+                          "; " + portValue.reason;
+          rec.bram = portValue.bram;
+          rec.resources = passResult;
+          records.push_back(std::move(rec));
+        }
+      });
+
     if (!mathCostsPath.empty())
       for (MathCoreRecord &memoryOp : analyzeMathCores(
                module, mathCosts,

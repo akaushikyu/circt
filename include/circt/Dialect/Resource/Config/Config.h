@@ -300,6 +300,9 @@ struct StreamConfig {
   int64_t srlMaxDepth = 2;
   int64_t srlMaxBits = 1024;
   std::string mapper, pricedConfig;
+  /// The `<arg>_c` FIFOs a dataflow function forwards its scalar and m_axi
+  /// pointer arguments through (VITIS_NOTES N54).
+  bool dataflowArgumentFifos = true;
   /// A stream's width is cgeist's hls.stream_element_bits when present (the
   /// packed C++ element: bool 1 bit, VITIS_NOTES N58).
   bool declaredElementBits = true;

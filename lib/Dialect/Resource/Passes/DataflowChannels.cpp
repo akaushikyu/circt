@@ -407,10 +407,17 @@ static SmallVector<Operation *> producerProcesses(Operation &consumer,
   return producers;
 }
 
-void ProcessMerges::mergeWritersAndPaths(Operation *region, RegionMerges &m) {
+// The region-local storages of `region` (allocas of the region function and
+// globals only it uses, a static local) whose every access lies in the
+// region, with the processes that touch them; only those touched by at
+// least two processes.
+static SmallVector<StorageUse>
+collectStorageUses(Operation *region,
+                   const ProcessMerges::AccessesFn &accessesOf) {
+  SmallVector<StorageUse> used;
   func::FuncOp fn = regionFunction(region);
   if (!fn || fn.isExternal())
-    return;
+    return used;
   auto module = fn->getParentOfType<ModuleOp>();
 
   // The region-local storages: allocas of the region function and globals
@@ -440,7 +447,6 @@ void ProcessMerges::mergeWritersAndPaths(Operation *region, RegionMerges &m) {
     }
   }
 
-  SmallVector<StorageUse> used;
   for (auto &[storage, sites] : storages) {
     StorageUse su;
     su.name = storageName(storage);
@@ -476,6 +482,12 @@ void ProcessMerges::mergeWritersAndPaths(Operation *region, RegionMerges &m) {
     if (local && su.uses.size() >= 2)
       used.push_back(std::move(su));
   }
+
+  return used;
+}
+
+void ProcessMerges::mergeWritersAndPaths(Operation *region, RegionMerges &m) {
+  SmallVector<StorageUse> used = collectStorageUses(region, accessesOf);
 
   // The writers of one storage become one process.
   for (const StorageUse &su : used) {
@@ -572,6 +584,122 @@ void ProcessMerges::mergeWritersAndPaths(Operation *region, RegionMerges &m) {
     if (!m.reason.count(p))
       m.reason[p] = "on a dependence path from one process of the merged "
                     "group to another";
+}
+
+SmallVector<DataflowArgumentFifo>
+ProcessMerges::argumentFifos(Operation *op) {
+  SmallVector<DataflowArgumentFifo> out;
+  auto fn = dyn_cast<func::FuncOp>(op);
+  if (!fn || fn.isExternal() || !isDataflowRegion(fn))
+    return out;
+  // The processes, in program order.
+  SmallVector<Operation *> procs;
+  llvm::DenseMap<Operation *, unsigned> index;
+  // A call of a function without a body (a stream constructor, a library
+  // call) is not a process.
+  for (Operation &o : fn.getBody().front()) {
+    if (!isProcessOp(o) || o.hasTrait<OpTrait::IsTerminator>())
+      continue;
+    if (auto call = dyn_cast<CallOpInterface>(o)) {
+      auto callee = dyn_cast_or_null<func::FuncOp>(call.resolveCallable());
+      if (!callee || callee.isExternal())
+        continue;
+    }
+    index[&o] = procs.size();
+    procs.push_back(&o);
+  }
+  if (procs.size() < 2)
+    return out;
+  // Channel edges: a process that writes a storage before one that reads it.
+  SmallVector<SmallVector<unsigned>> preds(procs.size());
+  for (const StorageUse &su : collectStorageUses(fn, accessesOf))
+    for (const StorageUse::Use &w : su.uses)
+      for (const StorageUse::Use &r : su.uses) {
+        auto wi = index.find(w.process), ri = index.find(r.process);
+        if (!w.writes || !r.reads || wi == index.end() ||
+            ri == index.end() || wi->second >= ri->second)
+          continue;
+        preds[ri->second].push_back(wi->second);
+      }
+  // Processes on the longest path ending at each process (itself included).
+  SmallVector<int64_t> chain(procs.size(), 1);
+  for (unsigned i = 0; i < procs.size(); ++i)
+    for (unsigned q : preds[i])
+      chain[i] = std::max(chain[i], chain[q] + 1);
+
+  for (BlockArgument arg : fn.getArguments()) {
+    Type t = arg.getType();
+    unsigned bits = 0;
+    if (t.isIntOrFloat()) {
+      bits = t.getIntOrFloatBitWidth();
+    } else if (isa<BaseMemRefType>(t)) {
+      // A pointer argument: forwarded as its 64-bit offset when it is an
+      // m_axi port (a plain array port is an interface, not a value).
+      bool maxi = false;
+      if (auto ifaces = fn.getArgAttrOfType<ArrayAttr>(arg.getArgNumber(),
+                                                       "hls.interface"))
+        for (Attribute a : ifaces)
+          if (auto d = dyn_cast<DictionaryAttr>(a))
+            if (auto mode = d.getAs<StringAttr>("mode"))
+              maxi |= mode.getValue() == "m_axi";
+      if (!maxi)
+        continue;
+      bits = 64;
+    } else {
+      continue;
+    }
+    llvm::SmallDenseSet<unsigned, 4> readers;
+    SmallVector<Value> work{arg};
+    llvm::DenseSet<Value> seen{arg};
+    while (!work.empty()) {
+      Value v = work.pop_back_val();
+      for (Operation *user : v.getUsers()) {
+        // A view or cast in the region body itself: follow it to the
+        // processes that use it.
+        if (user->getParentOp() == fn.getOperation() &&
+            (isa<memref::CastOp>(user) ||
+             user->getName().getStringRef() == "polygeist.memref2pointer" ||
+             user->getName().getStringRef() == "polygeist.subindex")) {
+          for (Value r : user->getResults())
+            if (seen.insert(r).second)
+              work.push_back(r);
+          continue;
+        }
+        Operation *p = processOf(user, fn);
+        auto it = p ? index.find(p) : index.end();
+        if (it != index.end())
+          readers.insert(it->second);
+      }
+    }
+    if (readers.empty() ||
+        llvm::all_of(readers, [](unsigned r) { return r == 0; }))
+      continue;
+    unsigned last = *llvm::max_element(readers, [&](unsigned a, unsigned b) {
+      return chain[a] < chain[b] || (chain[a] == chain[b] && a < b);
+    });
+    DataflowArgumentFifo f;
+    f.argIndex = arg.getArgNumber();
+    std::string port;
+    if (auto ifaces = fn.getArgAttrOfType<ArrayAttr>(arg.getArgNumber(),
+                                                     "hls.interface"))
+      for (Attribute a : ifaces)
+        if (auto d = dyn_cast<DictionaryAttr>(a))
+          if (auto pn = d.getAs<StringAttr>("port"))
+            port = pn.getValue().str();
+    if (port.empty())
+      port = "arg" + std::to_string(arg.getArgNumber());
+    f.name = port + "_c";
+    f.bits = bits;
+    bool firstReads = readers.contains(0);
+    f.depth = chain[last] + (firstReads ? 0 : 1);
+    f.reason = "read by " + processName(procs[last]) + ", " +
+               std::to_string(chain[last]) +
+               " process(es) on the longest channel path to it" +
+               (firstReads ? "" : ", +1: the first process does not read it "
+                                  "(the entry process forwards it)");
+    out.push_back(std::move(f));
+  }
+  return out;
 }
 
 ProcessMerges::RegionMerges &ProcessMerges::compute(Operation *region) {

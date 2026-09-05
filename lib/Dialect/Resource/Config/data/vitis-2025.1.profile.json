@@ -55,6 +55,7 @@
         "srl_max_bits": 1024,
         "mapper": "vitis-band7",
         "priced_config": "tdp",
+        "dataflow_argument_fifos": true,
         "declared_element_bits": true
       },
       "dataflow_channels": { "enabled": true, "default_blocks": 2 },

@@ -91,6 +91,17 @@ struct ChannelVerdict {
 ///   - the processes that access one array a non-top region function
 ///     receives from its caller (a top-level argument is a port, which two
 ///     processes share).
+/// A FIFO through which a dataflow region forwards one of its function's
+/// scalar or pointer arguments to a later process (Vitis `<arg>_c`,
+/// VITIS_NOTES N54).
+struct DataflowArgumentFifo {
+  unsigned argIndex = 0;
+  std::string name;   ///< `<port>_c`
+  unsigned bits = 0;  ///< the argument's width; a pointer is 64
+  int64_t depth = 0;
+  std::string reason; ///< how the depth was found
+};
+
 class ProcessMerges {
 public:
   /// Every access of a memref value, seen from its function.
@@ -110,6 +121,14 @@ public:
 
   /// Whether `process` shares its group with another process.
   bool isMerged(mlir::Operation *region, mlir::Operation *process);
+
+  /// The `<arg>_c` FIFOs of the dataflow function `fn` (N54): every scalar
+  /// argument and every m_axi pointer argument a process after the first
+  /// reads; depth = the processes on the longest channel path (streams and
+  /// arrays, program order) to its last reader, plus one when the first
+  /// process does not read it (Vitis' entry process forwards it).
+  llvm::SmallVector<DataflowArgumentFifo>
+  argumentFifos(mlir::Operation *fn);
 
 private:
   struct RegionMerges {
