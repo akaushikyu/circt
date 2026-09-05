@@ -52,6 +52,30 @@ inline std::optional<int64_t> getConstantIndexValue(mlir::Value v) {
       return c;
     return std::nullopt;
   }
+  // An affine.apply whose operands all fold to constants (unrolling leaves
+  // `affine.apply (d0 + 1)(%c0)` as the index of a memref.load).
+  if (auto apply = v.getDefiningOp<mlir::affine::AffineApplyOp>()) {
+    mlir::AffineMap map = apply.getAffineMap();
+    if (map.getNumResults() != 1)
+      return std::nullopt;
+    llvm::SmallVector<int64_t, 4> operands;
+    for (mlir::Value o : apply.getMapOperands()) {
+      std::optional<int64_t> c = getConstantIndexValue(o);
+      if (!c)
+        return std::nullopt;
+      operands.push_back(*c);
+    }
+    llvm::SmallVector<mlir::AffineExpr, 4> repl;
+    for (int64_t c : operands)
+      repl.push_back(mlir::getAffineConstantExpr(c, map.getContext()));
+    unsigned nd = map.getNumDims();
+    mlir::AffineExpr e = map.getResult(0).replaceDimsAndSymbols(
+        llvm::ArrayRef(repl).take_front(nd), llvm::ArrayRef(repl).drop_front(nd));
+    e = mlir::simplifyAffineExpr(e, 0, 0);
+    if (auto ce = llvm::dyn_cast<mlir::AffineConstantExpr>(e))
+      return ce.getValue();
+    return std::nullopt;
+  }
   if (mlir::affine::isAffineForInductionVar(v)) {
     mlir::affine::AffineForOp owner = mlir::affine::getForInductionVarOwner(v);
     if (owner.hasConstantLowerBound() &&

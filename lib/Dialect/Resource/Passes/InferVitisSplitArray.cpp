@@ -864,7 +864,24 @@ struct AutomaticRules {
   int64_t completeThreshold = 4;           ///< (a), elements
   int64_t constantIndexMinExtent = 2;      ///< (b), elements
   ArrayRef<std::string> userStoragePragmas; ///< arrays the user decided
+  /// (b) also on an array with a user cyclic / block array_partition
+  /// (VITIS_NOTES N57: 214-270 completes each part).
+  bool afterUserPartition = true;
+  /// (b) also on an array without an affine access (N57).
+  bool nonAffineArrays = true;
 };
+
+/// Whether the only user storage pragma on `def` is an array_partition (rule
+/// (b) may still add complete entries to it).
+static bool hasOnlyUserPartition(Operation *def,
+                                 const AutomaticRules &rules) {
+  if (!def->hasAttr(kPartitionAttr))
+    return false;
+  for (StringRef pragma : rules.userStoragePragmas)
+    if (pragma != kPartitionAttr && def->hasAttr(pragma))
+      return false;
+  return true;
+}
 
 /// Whether rules (a)-(c) may look at an array `def` of type `ty` at all: a
 /// static array of words the user has not given a storage pragma.
@@ -903,16 +920,28 @@ static AutomaticPartition decideSmallArray(MemRefType ty,
 }
 
 static AutomaticPartition decideAutomaticPartition(memref::AllocaOp alloca,
-                                                   const AutomaticRules &rules) {
+                                                   const AutomaticRules &rules,
+                                                   bool &afterUser) {
   AutomaticPartition decision;
   MemRefType ty = alloca.getType();
-  if (!isAutomaticCandidate(alloca.getOperation(), ty, rules))
+  // A user cyclic / block partition: Vitis still completes each part along
+  // a dimension every access indexes with a constant after the implied
+  // unroll (N57, kernels w9r7_ap_cyc / ap_blk: 4 user banks -> 32). Only
+  // rule (b) is applied on top of the user's pragma.
+  afterUser = rules.afterUserPartition &&
+              hasOnlyUserPartition(alloca.getOperation(), rules) &&
+              ty.hasStaticShape() &&
+              (ty.getElementType().isIntOrFloat() ||
+               isa<IndexType>(ty.getElementType()));
+  if (!afterUser && !isAutomaticCandidate(alloca.getOperation(), ty, rules))
     return decision;
 
   // (a) Small arrays.
-  decision = decideSmallArray(ty, rules);
-  if (decision.kind != AutomaticPartition::None)
-    return decision;
+  if (!afterUser) {
+    decision = decideSmallArray(ty, rules);
+    if (decision.kind != AutomaticPartition::None)
+      return decision;
+  }
 
   unsigned rank = ty.getRank();
   ConstantIndexInfo info = analyzeConstantIndices(alloca.getResult(), rank);
@@ -920,7 +949,7 @@ static AutomaticPartition decideAutomaticPartition(memref::AllocaOp alloca,
     return decision; // escapes, or nothing to look at (dead: not ours)
 
   // (c) Every access constant in every dimension: scalarised.
-  if (llvm::all_of(info.constantDim, [](bool c) { return c; })) {
+  if (!afterUser && llvm::all_of(info.constantDim, [](bool c) { return c; })) {
     decision.kind = AutomaticPartition::Registers;
     decision.reason = "every one of the " + std::to_string(info.accesses) +
                       " access(es) uses a constant index in every dimension: "
@@ -940,7 +969,7 @@ static AutomaticPartition decideAutomaticPartition(memref::AllocaOp alloca,
   llvm::interleave(
       decision.parts, os,
       [&](const PartitionChoice &p) { os << (p.dim + 1); }, ", ");
-  if (info.affineAccesses == 0) {
+  if (info.affineAccesses == 0 && !rules.nonAffineArrays) {
     // Vitis would split it, but memory banking never rewrites an array
     // without an affine access: a spec would only be priced as one memory
     // carrying a partition nobody applied. Leave it whole, and say so.
@@ -958,6 +987,9 @@ static AutomaticPartition decideAutomaticPartition(memref::AllocaOp alloca,
                     " with a constant: complete partition (Vitis [HLS "
                     "214-449] 'Automatically partitioning array ... dimension "
                     "d completely based on constant index')";
+  if (afterUser)
+    decision.reason += ", on every part of the user's array_partition (Vitis "
+                       "[HLS 214-270] after the user pragma, VITIS_NOTES N57)";
   if (decision.parts.size() > 1)
     decision.reason += "; memory banking applies only the first entry";
   return decision;
@@ -1095,6 +1127,9 @@ struct InferVitisSplitArray
     rules.completeThreshold = completeThresholdValue;
     rules.constantIndexMinExtent = cfgPartitioning->constantIndexMinExtent;
     rules.userStoragePragmas = userStoragePragmas;
+    rules.afterUserPartition =
+        cfgPartitioning->constantIndexAfterUserPartition;
+    rules.nonAffineArrays = cfgPartitioning->constantIndexNonAffineArrays;
     DenseSet<Value> decided;
     Builder builder(func.getContext());
     func.walk([&](memref::AllocaOp alloca) {
@@ -1103,8 +1138,9 @@ struct InferVitisSplitArray
         decided.insert(alloca.getResult());
         return;
       }
+      bool afterUser = false;
       AutomaticPartition decision =
-          decideAutomaticPartition(alloca, rules);
+          decideAutomaticPartition(alloca, rules, afterUser);
       auto varName = def->getAttrOfType<StringAttr>(kVarNameAttr);
       std::string name =
           varName ? varName.getValue().str() : std::string("<unnamed>");
@@ -1133,9 +1169,19 @@ struct InferVitisSplitArray
         return;
       }
       ArrayRef<int64_t> shape = alloca.getType().getShape();
-      def->setAttr(kPartitionAttr,
-                   buildPartitionAttr(builder, decision.parts, shape, varName,
-                                      kSourceConstantIndex));
+      ArrayAttr automatic = buildPartitionAttr(builder, decision.parts, shape,
+                                               varName, kSourceConstantIndex);
+      if (afterUser) {
+        // Appended to the user's entries; memory banking merges entries on
+        // one dimension by the larger factor (N17 (c)), so a complete entry
+        // on the user's own dimension makes it complete.
+        SmallVector<Attribute> merged;
+        if (auto user = def->getAttrOfType<ArrayAttr>(kPartitionAttr))
+          llvm::append_range(merged, user.getValue());
+        llvm::append_range(merged, automatic.getValue());
+        automatic = builder.getArrayAttr(merged);
+      }
+      def->setAttr(kPartitionAttr, automatic);
       def->setAttr(kReasonAttr, builder.getStringAttr(decision.reason));
       ++runStats.constantDims;
       if (decision.parts.size() > 1)

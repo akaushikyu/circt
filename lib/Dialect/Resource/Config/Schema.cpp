@@ -199,6 +199,8 @@ const KeySpec kSchema[] = {
   {"tool.hls.partitioning.policy", KeyKind::PluginName, "", "The PartitionPolicy", "Q-03, Q-04, Q-08, Q-15", SPLIT, "partition_policy", kNoLimit, kNoLimit, false},
   {"tool.hls.partitioning.constant_index", KeyKind::Section, "", "Rule (b): a dimension every access indexes with a constant", "Q-03", SPLIT, "", kNoLimit, kNoLimit, false},
   {"tool.hls.partitioning.constant_index.min_extent", KeyKind::UInt, "elements", "Smallest extent of such a dimension that is partitioned", "Q-03", SPLIT, "", 1, kNoLimit, false},
+  {"tool.hls.partitioning.constant_index.after_user_partition", KeyKind::Bool, "", "Rule (b) also applies to an array with a user cyclic / block array_partition, on every part (VITIS_NOTES N57)", "Q-03", SPLIT, "", kNoLimit, kNoLimit, true},
+  {"tool.hls.partitioning.constant_index.non_affine_arrays", KeyKind::Bool, "", "Rule (b) also applies to an array none of whose accesses is affine (VITIS_NOTES N57)", "Q-03", SPLIT, "", kNoLimit, kNoLimit, true},
   {"tool.hls.partitioning.inference", KeyKind::Section, "", "The td=auto port-pressure search", "Q-06..Q-08", SPLIT, "", kNoLimit, kNoLimit, false},
   {"tool.hls.partitioning.inference.target_ii", KeyKind::UInt, "cycles", "II of a loop without its own", "Q-07", SPLIT, "", 1, kNoLimit, false},
   {"tool.hls.partitioning.inference.ports", KeyKind::Section, "", "Port model of the search, per bank and cycle", "Q-06", SPLIT, "", kNoLimit, kNoLimit, false},

@@ -326,6 +326,12 @@ struct PartitionInferenceConfig {
 struct PartitioningConfig {
   std::string policy;
   int64_t constantIndexMinExtent = 2;
+  /// Rule (b) also after a user cyclic / block partition, on every part
+  /// (VITIS_NOTES N57).
+  bool constantIndexAfterUserPartition = true;
+  /// Rule (b) also for an array without an affine access (every index a
+  /// memref.load operand; N57: the other indices need not be affine).
+  bool constantIndexNonAffineArrays = true;
   /// An ap_fixed compound assignment (cgeist's hls.ap_compound_assign) to a
   /// bank chosen at run time writes that bank twice (VITIS_NOTES N38 R-cmpd).
   bool compoundAssignTwoStores = true;

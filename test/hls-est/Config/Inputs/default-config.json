@@ -673,8 +673,12 @@
         "_steer_affine_loads": "bool: Unrolled copies of a partitioned load with distinct constant offsets read each bank once",
         "compound_assign_two_stores": true,
         "constant_index": {
+          "_after_user_partition": "bool: Rule (b) also applies to an array with a user cyclic / block array_partition, on every part (VITIS_NOTES N57) [Q-03]",
           "_min_extent": "uint, elements: Smallest extent of such a dimension that is partitioned [Q-03]",
-          "min_extent": 2
+          "_non_affine_arrays": "bool: Rule (b) also applies to an array none of whose accesses is affine (VITIS_NOTES N57) [Q-03]",
+          "after_user_partition": true,
+          "min_extent": 2,
+          "non_affine_arrays": true
         },
         "inference": {
           "_max_dims": "uint: Dimensions partitioned per array [Q-08]",

@@ -65,7 +65,7 @@
       },
       "partitioning": {
         "policy": "vitis-td",
-        "constant_index": { "min_extent": 2 },
+        "constant_index": { "min_extent": 2, "after_user_partition": true, "non_affine_arrays": true },
         "inference": {
           "target_ii": 1,
           "ports": { "any": 2, "read": 1, "write": 1 },

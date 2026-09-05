@@ -923,6 +923,10 @@ void fillTool(const json::Object &t, ToolProfile &tool) {
   h.partitioning.policy = str(pa, "policy");
   h.partitioning.constantIndexMinExtent =
       integer(obj(pa, "constant_index"), "min_extent");
+  h.partitioning.constantIndexAfterUserPartition =
+      boolean(obj(pa, "constant_index"), "after_user_partition", true);
+  h.partitioning.constantIndexNonAffineArrays =
+      boolean(obj(pa, "constant_index"), "non_affine_arrays", true);
   h.partitioning.compoundAssignTwoStores =
       boolean(pa, "compound_assign_two_stores", true);
   const json::Object &inf = obj(pa, "inference");
