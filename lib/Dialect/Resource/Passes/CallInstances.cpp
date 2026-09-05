@@ -5,8 +5,11 @@
 #include "circt/Dialect/Resource/Passes/CallInstances.h"
 #include "circt/Dialect/LoopSchedule/LoopScheduleOps.h"
 #include "circt/Dialect/Resource/Config/Config.h"
+#include "circt/Dialect/Resource/Passes/ConstantIndex.h"
 #include "circt/Dialect/Resource/Passes/LoopPragmas.h"
 #include "circt/Dialect/Resource/Passes/PartitionLayout.h"
+#include "circt/Dialect/Resource/Passes/PolygeistCompat.h"
+#include "circt/Dialect/Resource/Passes/StreamFifos.h"
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
@@ -228,6 +231,132 @@ static void memrefRoots(Operation *op, SmallVectorImpl<StorageRoot> &out) {
   for (Value valueHandle : op->getOperands())
     if (isa<BaseMemRefType>(valueHandle.getType()))
       out.push_back(storageRoot(valueHandle));
+}
+
+static std::optional<SmallVector<int64_t, 2>> constantElementPath(Value mem) {
+  SmallVector<int64_t, 2> path;
+  while (Operation *def = mem.getDefiningOp()) {
+    if (isa<memref::GetGlobalOp>(def))
+      break;
+    auto view = dyn_cast<ViewLikeOpInterface>(def);
+    if (!view)
+      break;
+
+    if (isa<memref::CastOp>(def)) {
+      mem = view.getViewSource();
+      continue;
+    }
+    if (!isa<circt::hls_analysis::SubIndexOp>(def))
+      return std::nullopt;
+    std::optional<int64_t> keyValue = getConstantIndexValue(def->getOperand(1));
+    if (!keyValue)
+      return std::nullopt;
+    path.insert(path.begin(), *keyValue);
+    mem = view.getViewSource();
+  }
+  return path;
+}
+
+static bool isStreamArray(Value root) {
+  SmallVector<Value> work{root};
+  DenseSet<Value> seen{root};
+  while (!work.empty() && seen.size() < 256) {
+    Value valueHandle = work.pop_back_val();
+    for (OpOperand &use : valueHandle.getUses()) {
+      Operation *user = use.getOwner();
+      if (auto callSite = dyn_cast<CallOpInterface>(user)) {
+        if (auto symbolName = dyn_cast_if_present<SymbolRefAttr>(
+                callSite.getCallableForCallee()))
+          if (parseStreamMethod(symbolName.getLeafReference().getValue()))
+            return true;
+        auto args = callSite.getArgOperands();
+        unsigned first = args.getBeginOperandIndex();
+        unsigned keyValue = use.getOperandNumber();
+        auto callee =
+            dyn_cast_or_null<func::FuncOp>(callSite.resolveCallable());
+        if (callee && !callee.isExternal() && keyValue >= first &&
+            keyValue - first < callee.getNumArguments() &&
+            seen.insert(callee.getArgument(keyValue - first)).second)
+          work.push_back(callee.getArgument(keyValue - first));
+        continue;
+      }
+      if (isa<ViewLikeOpInterface>(user))
+        for (Value resultValue : user->getResults())
+          if (isa<BaseMemRefType>(resultValue.getType()) &&
+              seen.insert(resultValue).second)
+            work.push_back(resultValue);
+    }
+  }
+  return false;
+}
+
+static bool sharesObject(Operation *arrayValue, Operation *b,
+                         DenseMap<Value, bool> &streamArrays) {
+  for (Value exprValue : arrayValue->getOperands()) {
+    if (!isa<BaseMemRefType>(exprValue.getType()))
+      continue;
+    StorageRoot rx = storageRoot(exprValue);
+    for (Value rowValue : b->getOperands()) {
+      if (!isa<BaseMemRefType>(rowValue.getType()) ||
+          storageRoot(rowValue) != rx)
+        continue;
+      if (rx.value) {
+        auto [it, fresh] = streamArrays.try_emplace(rx.value, false);
+        if (fresh)
+          it->second = isStreamArray(rx.value);
+        if (it->second) {
+          auto px = constantElementPath(exprValue),
+               py = constantElementPath(rowValue);
+          if (px && py) {
+            bool differ = false;
+            for (size_t keyValue = 0, e = std::min(px->size(), py->size());
+                 keyValue < e; ++keyValue)
+              differ |= (*px)[keyValue] != (*py)[keyValue];
+            if (differ)
+              continue;
+          }
+        }
+      }
+      return true;
+    }
+  }
+  return false;
+}
+
+static bool distinctStreamElements(Operation *arrayValue, Operation *b,
+                                   const StorageRoot &root,
+                                   DenseMap<Value, bool> &streamArrays) {
+  if (!root.value)
+    return false;
+  auto [it, fresh] = streamArrays.try_emplace(root.value, false);
+  if (fresh)
+    it->second = isStreamArray(root.value);
+  if (!it->second)
+    return false;
+  SmallVector<SmallVector<int64_t, 2>> pa, pb;
+  for (auto [op, paths] :
+       {std::make_pair(arrayValue, &pa), std::make_pair(b, &pb)})
+    for (Value valueHandle : op->getOperands()) {
+      if (!isa<BaseMemRefType>(valueHandle.getType()) ||
+          storageRoot(valueHandle) != root)
+        continue;
+      auto path = constantElementPath(valueHandle);
+      if (!path)
+        return false;
+      paths->push_back(*path);
+    }
+  if (pa.empty() || pb.empty())
+    return false;
+  for (const auto &exprValue : pa)
+    for (const auto &rowValue : pb) {
+      bool differ = false;
+      for (size_t keyValue = 0, e = std::min(exprValue.size(), rowValue.size());
+           keyValue < e; ++keyValue)
+        differ |= exprValue[keyValue] != rowValue[keyValue];
+      if (!differ)
+        return false;
+    }
+  return true;
 }
 
 static bool hasRootIn(ArrayRef<StorageRoot> roots,
@@ -490,10 +619,16 @@ groupConcurrentCalls(func::FuncOp parent, ArrayRef<Operation *> sites,
       SmallPtrSet<Operation *, 8> stack;
       writesGlobal = calleeWritesGlobal(callee, argWrites, stack);
     }
+  DenseMap<Value, bool> streamArrays;
+  bool distinctStreams =
+      circt::hlsest::Config::get().tool.hls.streams.distinctElementInstances;
   for (unsigned loopIndex = 0; loopIndex < elementCount; ++loopIndex)
     for (unsigned innerIndex = loopIndex + 1; innerIndex < elementCount;
          ++innerIndex)
-      if (writesGlobal || hasRootIn(roots[loopIndex], roots[innerIndex]))
+      if (writesGlobal ||
+          (hasRootIn(roots[loopIndex], roots[innerIndex]) &&
+           (!distinctStreams ||
+            sharesObject(sites[loopIndex], sites[innerIndex], streamArrays))))
         order(loopIndex, innerIndex, byArray);
 
   SmallVector<Operation *> programOrder;
@@ -642,7 +777,10 @@ groupConcurrentCalls(func::FuncOp parent, ArrayRef<Operation *> sites,
           continue;
         bool written = llvm::any_of(taintedWrites, [&](const auto &widthValue) {
           return widthValue.first == ra.root && widthValue.second != op &&
-                 mayFollow(widthValue.second, op);
+                 mayFollow(widthValue.second, op) &&
+                 !(distinctStreams &&
+                   distinctStreamElements(widthValue.second, op, ra.root,
+                                          streamArrays));
         });
         if (written)
           return true;

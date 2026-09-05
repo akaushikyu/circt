@@ -303,6 +303,9 @@ struct StreamConfig {
   /// The `<arg>_c` FIFOs a dataflow function forwards its scalar and m_axi
   /// pointer arguments through (VITIS_NOTES N54).
   bool dataflowArgumentFifos = true;
+  /// Calls on distinct constant elements of an array of streams are not
+  /// ordered by that array: each is its own instance (VITIS_NOTES N59).
+  bool distinctElementInstances = true;
   /// A stream's width is cgeist's hls.stream_element_bits when present (the
   /// packed C++ element: bool 1 bit, VITIS_NOTES N58).
   bool declaredElementBits = true;
