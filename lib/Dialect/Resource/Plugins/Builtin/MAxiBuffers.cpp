@@ -19,7 +19,10 @@
 //     ceil(W / port_width_bits (18)) from a burst of 32 (17 .. 31
 //     unconfirmed);
 //   - the data width is max(min_bus_bits (32), the widest element of the
-//     bundle); the burst settings are the largest any port states, else the
+//     bundle), at most max_bus_bits (1024, the AXI4 limit); the read FIFO is also as wide as the widest load through a
+//     pointer cast (read_fifo.cast_load_width), and there is one read FIFO
+//     per distinct `channel=` of the reading ports (read_fifo.per_channel;
+//     both VITIS_NOTES N56, kernels w9r7_mx_*); the burst settings are the largest any port states, else the
 //     interface pragma defaults (16 / 16 / 16 / 16);
 //   - a port no access reads (writes) has no read FIFO (write buffer); an
 //     argument passed to a defined callee is followed into it, and a port
@@ -73,6 +76,15 @@ static void scanArgUses(Value v, ImplicitBuffer &a,
       }
       if (auto ld = dyn_cast<LLVM::LoadOp>(user)) {
         a.hasRead = true;
+        // A load of another type through cgeist's memref2pointer / GEP is
+        // a pointer cast in the source (`*reinterpret_cast<ap_uint<512> *>
+        // (&a[i])`); Vitis sizes the read FIFO by it (VITIS_NOTES N56).
+        Type t = ld.getType();
+        unsigned bits = t.isIntOrFloat() ? t.getIntOrFloatBitWidth() : 0;
+        if (!bits)
+          if (auto storage = llvmStorageBits(t))
+            bits = static_cast<unsigned>(*storage);
+        a.castLoadBits = std::max(a.castLoadBits, bits);
         continue;
       }
       if (auto st = dyn_cast<LLVM::StoreOp>(user)) {
@@ -137,6 +149,8 @@ public:
                llvm::function_ref<int64_t(int64_t, unsigned)> mapFifo,
                SmallVectorImpl<ImplicitBuffer> &out) const override {
     SmallVector<ImplicitBuffer> bundles;
+    // The `channel=` values of each bundle's reading ports (-1: none given).
+    SmallVector<llvm::SmallDenseSet<int64_t, 4>> readChannels;
     for (unsigned i = 0, e = fn.getNumArguments(); i < e; ++i) {
       auto ifaces = fn.getArgAttrOfType<ArrayAttr>(i, "hls.interface");
       if (!ifaces)
@@ -150,10 +164,15 @@ public:
         if (auto b = d.getAs<StringAttr>("bundle"))
           bundle = b.getValue().str();
         ImplicitBuffer *a = nullptr;
-        for (ImplicitBuffer &x : bundles)
-          if (x.bundle == bundle)
-            a = &x;
+        unsigned index = 0;
+        for (unsigned k = 0; k < bundles.size(); ++k)
+          if (bundles[k].bundle == bundle) {
+            a = &bundles[k];
+            index = k;
+          }
         if (!a) {
+          index = bundles.size();
+          readChannels.emplace_back();
           bundles.emplace_back();
           a = &bundles.back();
           a->bundle = bundle;
@@ -194,7 +213,18 @@ public:
                                  intField(d, "max_write_burst_length", 0));
         a->writeOutstanding = std::max(
             a->writeOutstanding, intField(d, "num_write_outstanding", 0));
-        scanArgUses(arg, *a, mc);
+        // Scan the port on its own first: its channel has a read FIFO only
+        // when the port itself reads.
+        ImplicitBuffer port;
+        scanArgUses(arg, port, mc);
+        a->hasRead |= port.hasRead;
+        a->hasWrite |= port.hasWrite;
+        a->passedToCall |= port.passedToCall;
+        a->unresolvedCall |= port.unresolvedCall;
+        if (port.hasRead) {
+          a->castLoadBits = std::max(a->castLoadBits, port.castLoadBits);
+          readChannels[index].insert(intField(d, "channel", -1));
+        }
       }
     }
     for (ImplicitBuffer &a : bundles) {
@@ -207,6 +237,20 @@ public:
       if (!a.writeOutstanding)
         a.writeOutstanding = mc.defaults.numWriteOutstanding;
       a.readDepth = a.readBurst * a.readOutstanding;
+      // AXI4 moves at most max_bus_bits (1024) per beat: a wider element
+      // takes several beats through a 1024-bit adapter (connor_talley lab2:
+      // 2048-bit hls::vector ports, 3 channels x 57 = 3 x ceil(1024 / 18);
+      // kernel w9r7i_mx_w2048).
+      unsigned maxBits = static_cast<unsigned>(mc.maxBusBits);
+      a.busBits = std::min(a.busBits, maxBits);
+      a.readBits = a.busBits;
+      if (mc.readFifoCastLoadWidth)
+        a.readBits = std::max(a.readBits, std::min(a.castLoadBits, maxBits));
+      size_t index = &a - bundles.data();
+      a.readChannels =
+          mc.readFifoPerChannel
+              ? std::max<unsigned>(1, readChannels[index].size())
+              : 1;
       // Read data FIFO: confirmed at depth 2 .. 32 -> 0 (SRL) and 40, 48,
       // 64, 256, 1024 -> ceil(W/18), 2048 -> ceil(W/9), 4096 -> 8 (W = 32),
       // for W = 32 (int, and ap_int<16> widened) and W = 64.
@@ -218,10 +262,17 @@ public:
         a.readRule = "depth <= " + std::to_string(mc.readFifoSrlMaxDepth) +
                      ": shift-register FIFO, 0 BRAM";
       } else {
-        a.readBram = static_cast<unsigned>(mapFifo(a.readDepth, a.busBits));
+        a.readBram = a.readChannels *
+                     static_cast<unsigned>(mapFifo(a.readDepth, a.readBits));
         a.readRule = "depth > " + std::to_string(mc.readFifoSrlMaxDepth) +
                      ": BRAM FIFO, two ports (x" +
                      std::to_string(fifoWidth) + " bands of N8)";
+        if (a.readBits != a.busBits)
+          a.readRule += "; " + std::to_string(a.readBits) +
+                        " bits wide: a load through a pointer cast (N56)";
+        if (a.readChannels > 1)
+          a.readRule += "; " + std::to_string(a.readChannels) +
+                        " FIFOs, one per channel (N56)";
         if (a.readDepth > mc.readFifoConfirmedMaxDepth)
           a.readRule += "; depth > " +
                         std::to_string(mc.readFifoConfirmedMaxDepth) +

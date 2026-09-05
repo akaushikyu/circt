@@ -227,6 +227,13 @@ struct ImplicitBuffer {
   bool passedToCall = false;   ///< an argument reaches a call
   bool unresolvedCall = false; ///< ... whose body is unknown
   int64_t readDepth = 0;
+  /// Width of the read FIFO (>= busBits: a load through a pointer cast can
+  /// be wider than the declared element) and how many read FIFOs there are
+  /// (one per distinct `channel=` of the reading ports).
+  unsigned readBits = 0;
+  unsigned readChannels = 1;
+  /// The widest `llvm.load` through the port (a pointer cast), 0 if none.
+  unsigned castLoadBits = 0;
   unsigned readBram = 0, writeBram = 0; ///< blocks of the block memory
   std::string readRule, writeRule;
 };

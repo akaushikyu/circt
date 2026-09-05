@@ -881,6 +881,7 @@ void fillTool(const json::Object &t, ToolProfile &tool) {
     ib.enabled = boolean(b, "enabled", true);
     ib.defaultBundle = str(b, "default_bundle");
     ib.minBusBits = integer(b, "min_bus_bits", 32);
+    ib.maxBusBits = integer(b, "max_bus_bits", 1024);
     const json::Object &d = obj(b, "defaults");
     ib.defaults.maxReadBurstLength = integer(d, "max_read_burst_length", 16);
     ib.defaults.numReadOutstanding = integer(d, "num_read_outstanding", 16);
@@ -891,6 +892,8 @@ void fillTool(const json::Object &t, ToolProfile &tool) {
     ib.readFifoMapper = str(rf, "mapper", "vitis-band7");
     ib.readFifoPricedConfig = str(rf, "priced_config", "tdp");
     ib.readFifoConfirmedMaxDepth = integer(rf, "confirmed_max_depth", 4096);
+    ib.readFifoPerChannel = boolean(rf, "per_channel", true);
+    ib.readFifoCastLoadWidth = boolean(rf, "cast_load_width", true);
     const json::Object &wb = obj(b, "write_buffer");
     ib.writeBufferFreeMaxBurst = integer(wb, "free_max_burst", 16);
     ib.writeBufferPortWidthBits = integer(wb, "port_width_bits", 18);

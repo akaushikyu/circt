@@ -273,10 +273,20 @@ struct ImplicitBufferConfig {
   bool enabled = true;
   std::string defaultBundle;
   int64_t minBusBits = 32;
+  /// The widest AXI4 data bus (the protocol allows 8 .. 1024 bits); a wider
+  /// element is moved in several beats (VITIS_NOTES N56).
+  int64_t maxBusBits = 1024;
   AxiDefaults defaults;
   int64_t readFifoSrlMaxDepth = 32;
   std::string readFifoMapper, readFifoPricedConfig;
   int64_t readFifoConfirmedMaxDepth = 4096;
+  /// One read FIFO per distinct `channel=` of the bundle's reading ports
+  /// (VITIS_NOTES N56, kernels w9r7_mx_ch2 / mx_ch3); off: one per bundle.
+  bool readFifoPerChannel = true;
+  /// The read FIFO is as wide as the widest load through the port after a
+  /// pointer cast (`*reinterpret_cast<ap_uint<512>*>(&a[i])`, N56, kernels
+  /// w9r7_mx_cast512 / mx_cast256); off: the declared element widths only.
+  bool readFifoCastLoadWidth = true;
   int64_t writeBufferFreeMaxBurst = 16;
   int64_t writeBufferPortWidthBits = 18;
   int64_t writeBufferConfirmedMinBurst = 32;

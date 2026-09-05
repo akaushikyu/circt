@@ -2182,6 +2182,8 @@ static llvm::json::Object toJson(const MemrefRecord &resultValue) {
     ad["num_read_outstanding"] = a.readOutstanding;
     ad["read_depth"] = a.readDepth;
     ad["read_bram"] = static_cast<int64_t>(a.readBram);
+    ad["read_bits"] = static_cast<int64_t>(a.readBits);
+    ad["read_channels"] = static_cast<int64_t>(a.readChannels);
     ad["read_rule"] = a.readRule;
     ad["max_write_burst_length"] = a.writeBurst;
     ad["num_write_outstanding"] = a.writeOutstanding;
@@ -3181,9 +3183,11 @@ struct BRAMAnalysisLoopSchedule
             blockResources(models.block, bram);
         totalResources.add(adapterResources);
         llvm::outs() << "m_axi.adapter bundle=" << a.bundle << " func=@"
-                     << fn.getName() << " bram=" << bram << " (read FIFO "
-                     << a.readDepth << "x" << a.busBits << "b -> " << a.readBram
-                     << ", write burst " << a.writeBurst << " -> "
+                     << fn.getName() << " bram=" << bram << " (read FIFO ";
+        if (a.readChannels > 1)
+          llvm::outs() << a.readChannels << "x";
+        llvm::outs() << a.readDepth << "x" << a.readBits << "b -> "
+                     << a.readBram << ", write burst " << a.writeBurst << " -> "
                      << a.writeBram << ")\n";
         total += bram;
         MemrefRecord rec;
