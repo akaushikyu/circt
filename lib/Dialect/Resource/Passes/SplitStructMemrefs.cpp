@@ -2948,7 +2948,10 @@ static void placeMemberPartitions(Operation *m, unsigned memoryIndex,
   for (Attribute a : arr) {
     auto d = dyn_cast<DictionaryAttr>(a);
     auto var = d ? d.getAs<StringAttr>("variable") : StringAttr();
-    if (!var || !var.getValue().contains('.')) {
+    // A plain member path only (`row.data`); a path with a subscript
+    // (`t.rows[1]`, `tiles[2].rows`) is left as it was (unconfirmed).
+    if (!var || !var.getValue().contains('.') ||
+        var.getValue().contains('[')) {
       kept.push_back(a);
       continue;
     }
