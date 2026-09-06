@@ -507,6 +507,11 @@ struct SchedulingConfig {
   int64_t fastThreshold = 150;
   int64_t fastOpsThreshold = 16384;
   int64_t maxIIBumps = 4096;
+  /// A pipelined loop whose body (after the implied unroll) has more ops
+  /// than this is left sequential with a warning: a guard against bodies the
+  /// pipeline construction cannot hold in memory (OPEN_ISSUES O76:
+  /// hlsyn-vitis seidel-2d, 40 x 118 x 118 unrolled; 0: no guard).
+  int64_t maxPipelineBodyOps = 250000;
   int64_t recurrenceRepairRounds = 64;
   bool userIITarget = true;
   std::string sequentialModel;

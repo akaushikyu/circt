@@ -1915,6 +1915,19 @@ FailureOr<bool> AffineToLoopSchedule::pipelineLoop(
     Operation *loop, const BRAMClassification &bramClass,
     InnermostLoopDependenceAnalysis &dependenceAnalysis) {
 
+  if (int64_t cap =
+          circt::hlsest::Config::get().scheduling.maxPipelineBodyOps) {
+    int64_t ops = 0;
+    loop->walk([&](Operation *) { ++ops; });
+    if (ops > cap) {
+      loop->emitWarning("not pipelined (left as a sequential loop): the body "
+                        "has ")
+          << ops << " operations, more than "
+          << "scheduling.modulo.max_pipeline_body_ops = " << cap;
+      return false;
+    }
+  }
+
   std::optional<ModuloProblem> populated;
   if (auto forOp = dyn_cast<AffineForOp>(loop)) {
     circt::hlsest::DependenceInputs inputs{*schedulingAnalysis,

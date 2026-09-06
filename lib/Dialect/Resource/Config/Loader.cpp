@@ -1038,6 +1038,7 @@ void fillScheduling(const json::Object &s, SchedulingConfig &sc) {
   sc.moduloModel = str(mo, "model");
   sc.fastThreshold = integer(mo, "fast_threshold");
   sc.fastOpsThreshold = integer(mo, "fast_ops_threshold");
+  sc.maxPipelineBodyOps = integer(mo, "max_pipeline_body_ops", 250000);
   sc.maxIIBumps = integer(mo, "max_ii_bumps");
   sc.recurrenceRepairRounds = integer(mo, "recurrence_repair_rounds");
   sc.userIITarget = boolean(mo, "user_ii_target");

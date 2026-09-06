@@ -309,6 +309,7 @@ const KeySpec kSchema[] = {
   {"scheduling.modulo.fast_threshold", KeyKind::UInt, "ops", "greedy-simplex: more resource-limited operations than this go to the greedy scheduler (0: always)", "S-08", A2L, "", 0, kNoLimit, false},
   {"scheduling.modulo.fast_ops_threshold", KeyKind::UInt, "ops", "greedy-simplex: more operations than this go to the greedy scheduler (0: no rule)", "S-08", A2L, "", 0, kNoLimit, false},
   {"scheduling.modulo.max_ii_bumps", KeyKind::UInt, "", "II increments the greedy scheduler tries", "S-08, R-06", A2L, "", 0, kNoLimit, false},
+  {"scheduling.modulo.max_pipeline_body_ops", KeyKind::UInt, "ops", "A pipelined loop whose body has more operations is left sequential with a warning (a memory guard, designer knob; 0: none)", "S-08", A2L, "", 0, kNoLimit, true},
   {"scheduling.modulo.recurrence_repair_rounds", KeyKind::UInt, "", "greedy scheduler: times a loop-carried edge broken by resource delays may move its destination later before the II is bumped (0: bump at once; 64 since R-cmpd is modelled, W9r7, OPEN_ISSUES O56); VITIS_NOTES N39", "S-08", A2L, "", 0, kNoLimit, false},
   {"scheduling.modulo.user_ii_target", KeyKind::Bool, "", "A loop with a user pipeline II=N > 1 is scheduled at N when it could start more often", "P-14", A2L, "", kNoLimit, kNoLimit, false},
   {"scheduling.sequential", KeyKind::Section, "", "The scheduler of non-pipelined regions", "K-12..K-14, S-22", A2L, "", kNoLimit, kNoLimit, false},
