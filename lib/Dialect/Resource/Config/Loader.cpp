@@ -976,6 +976,7 @@ void fillTool(const json::Object &t, ToolProfile &tool) {
   h.structs.throughCalls = boolean(sc, "through_calls");
   h.structs.elementCopyLoops = boolean(sc, "element_copy_loops", true);
   h.structs.temporaryRegisters = boolean(sc, "temporary_registers", true);
+  h.structs.memberPartitions = boolean(sc, "member_partitions", true);
   const json::Object &na = obj(hls, "narrowing");
   h.narrowing.storedRanges = boolean(na, "stored_ranges");
   h.narrowing.loadDemand = boolean(na, "load_demand");

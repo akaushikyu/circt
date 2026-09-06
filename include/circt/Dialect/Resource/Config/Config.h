@@ -378,6 +378,7 @@ struct StructConfig {
   bool throughCalls = true;
   bool elementCopyLoops = true;
   bool temporaryRegisters = true;
+  bool memberPartitions = true;
 };
 
 struct NarrowingConfig {

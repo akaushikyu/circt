@@ -96,7 +96,7 @@
         }
       },
       "inlining": { "honour_inline_off": true },
-      "structs": { "aggregate": true, "globals": true, "scalar_registers": true, "through_calls": true, "element_copy_loops": true, "temporary_registers": true },
+      "structs": { "aggregate": true, "globals": true, "scalar_registers": true, "through_calls": true, "element_copy_loops": true, "temporary_registers": true, "member_partitions": true },
       "narrowing": { "stored_ranges": true, "load_demand": true, "full_address_interface_modes": ["m_axi"] },
       "globals": { "attribute_accesses": false },
       "grouping": { "plugin": "identity" },

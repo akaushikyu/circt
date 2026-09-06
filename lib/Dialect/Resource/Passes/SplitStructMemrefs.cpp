@@ -62,6 +62,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "circt/Dialect/Resource/Config/Config.h"
 #include "circt/Dialect/Resource/Config/ConfigUtils.h"
 #include "circt/Dialect/Resource/Interfaces/MemoryDS.h"
 #include "circt/Dialect/Resource/Passes/CallInstances.h"
@@ -495,6 +496,22 @@ public:
   SmallVector<MemberCall> memberCalls;
   /// Whether the call rewrite selects rows of the new memories.
   bool hasMemberCalls() const { return !memberCalls.empty(); }
+  /// The memory index (newMemories() order) of the only leaf that is an
+  /// array member, when exactly one leaf is (`struct { T data[N]; }`, an
+  /// hls::vector); none when aggregated.
+  std::optional<unsigned> soleArrayLeaf() const {
+    if (aggregate)
+      return std::nullopt;
+    std::optional<unsigned> found;
+    for (auto [i, l] : llvm::enumerate(leaves))
+      if (!l.dims.empty()) {
+        if (found)
+          return std::nullopt;
+        found = static_cast<unsigned>(i);
+      }
+    return found;
+  }
+  unsigned variableRank() const { return type.getRank(); }
   bool selectsRows() const {
     return llvm::any_of(edges, [](const CallEdge &e) { return !e.lead.empty(); });
   }
@@ -2911,6 +2928,48 @@ namespace {
 
 /// One storage of a struct-typed variable: an allocation, a global, or a
 /// parameter of a function that a call passes the variable to whole.
+/// The array_partition entries of a struct variable that name a member path
+/// (`#pragma HLS array_partition variable=row.data complete`: cgeist records
+/// `variable = "row.data"` with the member's own dim) belong to that
+/// member's memory, whose dimensions are the variable's, then the member's:
+/// dim d becomes d + rank(variable). The IR has no member names (OPEN_ISSUES
+/// O54 (b)), so only a struct with one array member is resolved; a member
+/// entry on any other memory is dropped (OPEN_ISSUES O78: barry_walker
+/// lab_2 `Q_row_local.data`, Vitis registers).
+static void placeMemberPartitions(Operation *m, unsigned memoryIndex,
+                                  std::optional<unsigned> soleArrayLeaf,
+                                  unsigned variableRank) {
+  auto arr = m->getAttrOfType<ArrayAttr>("hls.array_partition");
+  if (!arr)
+    return;
+  Builder b(m->getContext());
+  SmallVector<Attribute> kept;
+  bool changed = false;
+  for (Attribute a : arr) {
+    auto d = dyn_cast<DictionaryAttr>(a);
+    auto var = d ? d.getAs<StringAttr>("variable") : StringAttr();
+    if (!var || !var.getValue().contains('.')) {
+      kept.push_back(a);
+      continue;
+    }
+    changed = true;
+    if (!soleArrayLeaf || *soleArrayLeaf != memoryIndex)
+      continue;
+    NamedAttrList fields(d);
+    if (auto dim = d.getAs<IntegerAttr>("dim"))
+      if (dim.getInt() > 0)
+        fields.set("dim", b.getI32IntegerAttr(
+                              static_cast<int32_t>(dim.getInt() + variableRank)));
+    kept.push_back(fields.getDictionary(m->getContext()));
+  }
+  if (!changed)
+    return;
+  if (kept.empty())
+    m->removeAttr("hls.array_partition");
+  else
+    m->setAttr("hls.array_partition", b.getArrayAttr(kept));
+}
+
 struct VariableNode {
   enum Kind { Allocation, Global, Argument } kind;
   Operation *op = nullptr; // the allocation or the memref.global
@@ -3306,11 +3365,14 @@ struct SplitStructMemrefsPass
       case VariableNode::Allocation: {
         OpBuilder b(n->op);
         SmallVector<Value> perRoot;
-        for (const NewMemory &mem : news) {
+        for (auto [memIndex, mem] : llvm::enumerate(news)) {
           OperationState st(n->op->getLoc(), n->op->getName());
           st.addTypes(mem.type);
           st.addAttributes(n->op->getAttrs());
           Operation *m = b.create(st);
+          if (circt::hlsest::Config::get().tool.hls.structs.memberPartitions)
+            placeMemberPartitions(m, static_cast<unsigned>(memIndex),
+                                  s.soleArrayLeaf(), s.variableRank());
           if (!n->temporary)
             m->setAttr("polygeist.varname", b.getStringAttr(mem.name));
           annotate(m, mem, aggregate);
