@@ -181,16 +181,16 @@ auto_ntt,fwd_load_inv_store_poly_1_limbs,0,0,0,0,True,exact,compared,ok,ok,
 auto_ntt,fwd_store_inv_load_poly_1_limbs,0,0,0,0,True,exact,compared,ok,ok,
 auto_ntt,input_selector_single,0,0,0,0,True,exact,compared,ok,ok,
 auto_ntt,output_slector_single,0,0,0,0,True,exact,compared,ok,ok,
-auto_ntt,shuffler_buf,16,32,16,16,False,over>15%,compared,ok,ok,poly_buf: hls-est 32 vs Vitis 16
+auto_ntt,shuffler_buf,16,16,0,0,True,exact,compared,ok,ok,
 auto_ntt,shuffler_in,0,0,0,0,True,exact,compared,ok,ok,
 auto_ntt,shuffler_out_shift,0,0,0,0,True,exact,compared,ok,ok,
-auto_ntt,shuffler_out_shuff,0,2,2,2,False,over>15%,compared,ok,ok,inValRegArr: hls-est 1 vs Vitis None; outValRegArr: hls-est 1 vs Vitis None
+auto_ntt,shuffler_out_shuff,0,0,0,0,True,exact,compared,ok,ok,
 basic,arraypartition_block,,4,,,False,,vitis missing,missing,ok,
 basic,arraypartition_complete,,0,,,False,,vitis missing,missing,ok,
 basic,arraypartition_cyclic,,2,,,False,,vitis missing,missing,ok,
 basic,arraypartition_multidim,,8,,,False,,vitis missing,missing,ok,
 chstone,gsm,2,1,-1,1,False,under,compared,ok,ok,bitoff: hls-est 1 vs Vitis 2
-chstone,sha,7,16,9,9,False,over>15%,compared,ok,ok,W: hls-est 8 vs Vitis None; indata: hls-est 8 vs Vitis 7
+chstone,sha,7,7,0,0,True,exact,compared,ok,ok,
 class_ece8893_2022_fall,Dehazing-denoising__source_code__src,93,23,-70,70,False,under,compared,ok,ok,Min_RGB_Tile: hls-est 4 vs Vitis 56; in_tile: hls-est 4 vs Vitis 16; Median_Tile: hls-est 1 vs Vitis 4
 class_ece8893_2022_fall,Dehazing-denoising__source_code__src__debayer_csynth,,,,,False,,vitis missing,vitis failed,top not found,
 class_ece8893_2022_fall,Dehazing-denoising__source_code__src__script,,,,,False,,vitis missing,vitis failed,top not found,
@@ -251,7 +251,7 @@ class_ece8893_spring_2025,NeuroFPGA_Project__neural_hls_NeuroFPGA,,,,,False,,vit
 class_ece8893_spring_2025,NeuroFPGA_Project__symbolic_HLS,272,256,-16,16,False,under,compared,ok,ok,padded_A: hls-est 240 vs Vitis 256
 class_ece8893_spring_2025,Sunchips_Topic5_Modular_Multiplication,0,0,0,0,True,exact,compared,ok,ok,
 class_ece8893_spring_2025,Xiyin_Xue_Lab2_2025,137,137,0,0,True,exact,compared,ok,ok,math_core:exp_33_9_s: hls-est 7 vs Vitis None; exp_x_msb_1_table: hls-est None vs Vitis 2; f_x_msb_2_table: hls-est None vs Vitis 2
-class_ece8893_spring_2025,Xiyin_xue_lab3,250,196,-54,54,False,under,compared,ok,ok,mem1_m_axi: hls-est 2 vs Vitis 29; mem2_m_axi: hls-est 2 vs Vitis 29
+class_ece8893_spring_2025,Xiyin_xue_lab3,250,250,0,0,True,exact,compared,ok,ok,
 class_ece8893_spring_2025,adithi_upadhya_ece8893_spring25_lab2,2057,2057,0,0,True,exact,compared,ok,ok,
 class_ece8893_spring_2025,adithi_upadhya_ece8893_spring25_lab3,212,196,-16,16,False,under,compared,ok,ok,local_C: hls-est 32 vs Vitis 64; local_column_indices_A: hls-est 32 vs Vitis 16
 class_ece8893_spring_2025,akshaya_shivprasad_ece8893_spring25_lab2,473,545,72,72,False,over>15%,compared,ok,ok,V_local: hls-est 256 vs Vitis None; K_local: hls-est 240 vs Vitis None; K_local_0_i: hls-est None vs Vitis 30
@@ -261,25 +261,25 @@ class_ece8893_spring_2025,anirudh_tulasi_ece8893_spring25_lab3,,28,,,False,,viti
 class_ece8893_spring_2025,anuvab_sen_ece_8893_spring_29__Anuvab_Sen_lab_2_ECE_8893_spring_29,1353,1318,-35,35,False,under,compared,ok,ok,k_fifo: hls-est 114 vs Vitis None; out_fifo: hls-est 114 vs Vitis None; q_fifo: hls-est 114 vs Vitis None
 class_ece8893_spring_2025,anuvab_sen_ece_8893_spring_29__Anuvab_Sen_lab_3_ECE_8893_spring_29,86,86,0,0,True,exact,compared,ok,ok,a_stream: hls-est 5 vs Vitis None; mult_stream: hls-est 5 vs Vitis None
 class_ece8893_spring_2025,apurba_prasad_padhy_ece8893_spring25_lab2,362,362,0,0,True,exact,compared,ok,ok,K_local: hls-est 128 vs Vitis None; Q_local: hls-est 128 vs Vitis None; V_local: hls-est 100 vs Vitis None
-class_ece8893_spring_2025,arati_ganesh_ece8893_spring25_lab2,1228,1228,0,0,True,exact,compared,ok,ok,att_stream_raw: hls-est 356 vs Vitis None; att_stream_soft: hls-est 356 vs Vitis None; p_ZZ21compute_attention_HLSPA100_A128_8ap_fixedILi16ELi5EL9ap_q_mode5EL9ap_o_mode: hls-est None vs Vitis 256
+class_ece8893_spring_2025,arati_ganesh_ece8893_spring25_lab2,1228,1229,1,1,False,over<=15%,compared,ok,ok,att_stream_raw: hls-est 356 vs Vitis None; att_stream_soft: hls-est 356 vs Vitis None; p_ZZ21compute_attention_HLSPA100_A128_8ap_fixedILi16ELi5EL9ap_q_mode5EL9ap_o_mode: hls-est None vs Vitis 256
 class_ece8893_spring_2025,arati_ganesh_ece8893_spring25_lab3,24,92,68,68,False,over>15%,compared,ok,ok,local_C: hls-est 64 vs Vitis None; local_column_indices_A: hls-est 8 vs Vitis 4
 class_ece8893_spring_2025,ayush_saxena_ece_8893_spring_26__Ayush_Saxena_lab_2_ECE_8893_spring_26,1361,1346,-15,15,False,under,compared,ok,ok,k_fifo: hls-est 114 vs Vitis None; out_fifo: hls-est 114 vs Vitis None; q_fifo: hls-est 114 vs Vitis None
 class_ece8893_spring_2025,ayush_saxena_ece_8893_spring_26__Ayush_Saxena_lab_3_ECE_8893_spring_26,247,249,2,2,False,over<=15%,compared,ok,ok,a_fifo: hls-est 173 vs Vitis None; c_fifo: hls-est 57 vs Vitis None; row_a_1: hls-est 2 vs Vitis None
-class_ece8893_spring_2025,barry_walker_lab_2,830,934,104,104,False,over<=15%,compared,ok,ok,K_row_buffer: hls-est 114 vs Vitis None; Q_row_buffer: hls-est 114 vs Vitis None; V_row_buffer: hls-est 114 vs Vitis None
+class_ece8893_spring_2025,barry_walker_lab_2,830,930,100,100,False,over<=15%,compared,ok,ok,K_row_buffer: hls-est 114 vs Vitis None; Q_row_buffer: hls-est 114 vs Vitis None; V_row_buffer: hls-est 114 vs Vitis None
 class_ece8893_spring_2025,barry_walker_lab_3,624,624,0,0,True,exact,compared,ok,ok,accum_buffers: hls-est 384 vs Vitis None; write_buffers: hls-est 144 vs Vitis None; B_local_0: hls-est 16 vs Vitis None
-class_ece8893_spring_2025,connor_talley_lab_2,513,342,-171,171,False,under,compared,ok,ok,K_buffer: hls-est 114 vs Vitis None; V_buffer: hls-est 114 vs Vitis None; K_mat: hls-est 0 vs Vitis 57
-class_ece8893_spring_2025,connor_talley_lab_3,57,6,-51,51,False,under,compared,ok,ok,B_local: hls-est 0 vs Vitis 57; col_ptr_B: hls-est 4 vs Vitis None; row_ptr_A: hls-est 2 vs Vitis None
+class_ece8893_spring_2025,connor_talley_lab_2,513,513,0,0,True,exact,compared,ok,ok,K_buffer: hls-est 114 vs Vitis None; V_buffer: hls-est 114 vs Vitis None
+class_ece8893_spring_2025,connor_talley_lab_3,57,57,0,0,True,exact,compared,ok,ok,
 class_ece8893_spring_2025,davendra_maharaj_ece8893_spring25_lab2,238,238,0,0,True,exact,compared,ok,ok,p_ZZ16computeAttentionRN3hls6streamI8ap_fixedILi16ELi5EL9ap_q_mode5EL9ap_o_mode3E: hls-est None vs Vitis 188; K: hls-est 64 vs Vitis None; Q: hls-est 64 vs Vitis None
 class_ece8893_spring_2025,davendra_maharaj_ece8893_spring25_lab3,106,105,-1,1,False,under,compared,ok,ok,dense_row: hls-est 57 vs Vitis None; column_indices_A_row_stream: hls-est 2 vs Vitis None; mem3_m_axi: hls-est 2 vs Vitis 1
 class_ece8893_spring_2025,ece8893_dataset_lab_1__0001,,,,,False,,vitis missing,vitis failed,cgeist error: top.cpp:137:5: error: no matching function for call to 'softmax_HLS',
 class_ece8893_spring_2025,ece8893_dataset_lab_1__0002,82,82,0,0,True,exact,compared,ok,ok,
-class_ece8893_spring_2025,gabriel_lopez_lugo_ece8893_spring2025__gabriel_lopez_lugo_lab2,203,0,-203,203,False,under,compared,ok,ok,v_buf: hls-est 0 vs Vitis 72; q_buf: hls-est 0 vs Vitis 64; k_buf: hls-est 0 vs Vitis 58
+class_ece8893_spring_2025,gabriel_lopez_lugo_ece8893_spring2025__gabriel_lopez_lugo_lab2,203,,,,False,,hls-est missing,ok,hls-est timeout 120s,v_buf: hls-est None vs Vitis 72; q_buf: hls-est None vs Vitis 64; k_buf: hls-est None vs Vitis 58
 class_ece8893_spring_2025,gabriel_lopez_lugo_ece8893_spring2025__gabriel_lopez_lugo_lab3,44,44,0,0,True,exact,compared,ok,ok,C_local: hls-est 8 vs Vitis None; sparse_matrix_multiply_HLS_vector_vector_int_vector_vector_int_vector_C_l: hls-est None vs Vitis 8
 class_ece8893_spring_2025,hyungseok_bae_lab2_2025,232,237,5,5,False,over<=15%,compared,ok,ok,fifo_softmax2av: hls-est 89 vs Vitis None; pkt_0: hls-est 2 vs Vitis None; pkt_1: hls-est 2 vs Vitis None
-class_ece8893_spring_2025,hyungseok_bae_lab3_2025,322,130,-192,192,False,under,compared,ok,ok,p_ZZ26sparse_matrix_multiply_HLSPKN3hls6vectorI8ap_fixedILi16ELi5EL9ap_q_mode5EL9: hls-est None vs Vitis 192; idx_stream: hls-est 15 vs Vitis None; val_stream: hls-est 8 vs Vitis None
-class_ece8893_spring_2025,kaihong_lin_lab2,460,433,-27,27,False,under,compared,ok,ok,mem1_m_axi: hls-est 2 vs Vitis 29
+class_ece8893_spring_2025,hyungseok_bae_lab3_2025,322,154,-168,168,False,under,compared,ok,ok,p_ZZ26sparse_matrix_multiply_HLSPKN3hls6vectorI8ap_fixedILi16ELi5EL9ap_q_mode5EL9: hls-est None vs Vitis 192; local_row_idx_B: hls-est 16 vs Vitis None; idx_stream: hls-est 15 vs Vitis None
+class_ece8893_spring_2025,kaihong_lin_lab2,460,460,0,0,True,exact,compared,ok,ok,
 class_ece8893_spring_2025,kaihong_lin_lab3,,,,,False,,vitis missing,vitis failed,top not found,
-class_ece8893_spring_2025,kamya_hari_lab_2_2025,2056,3970,1914,1914,False,over>15%,compared,ok,ok,V_local: hls-est 1024 vs Vitis 64; attention_local: hls-est 1024 vs Vitis 64; exp_x_msb_1_table: hls-est None vs Vitis 2
+class_ece8893_spring_2025,kamya_hari_lab_2_2025,2056,2050,-6,6,False,under,compared,ok,ok,exp_x_msb_1_table: hls-est None vs Vitis 2; f_x_msb_2_table: hls-est None vs Vitis 2; f_x_msb_3_table: hls-est None vs Vitis 2
 class_ece8893_spring_2025,kamya_hari_lab_3_2025,,51,,,False,,vitis missing,vitis timeout,ok,result: hls-est 16 vs Vitis None; local_B: hls-est 8 vs Vitis None; local_B_colptrs: hls-est 8 vs Vitis None
 class_ece8893_spring_2025,karthikeya_sharma_ece8893_spring_25_lab_2,383,383,0,0,True,exact,compared,ok,ok,p_ZZ16computeAttentionRN3hls6streamI8ap_fixedILi16ELi5EL9ap_q_mode5EL9ap_o_mode3E: hls-est None vs Vitis 316; K_BRAM: hls-est 128 vs Vitis None; Q_BRAM: hls-est 128 vs Vitis None
 class_ece8893_spring_2025,karthikeya_sharma_ece8893_spring_25_lab_3,104,104,0,0,True,exact,compared,ok,ok,dense_row: hls-est 57 vs Vitis None; column_indices_A_row_stream: hls-est 2 vs Vitis None; mem3_m_axi: hls-est 2 vs Vitis 1
@@ -288,57 +288,57 @@ class_ece8893_spring_2025,lab2_sushkrutha,,4109,,,False,,vitis missing,vitis tim
 class_ece8893_spring_2025,lab3_hanchen,16,16,0,0,True,exact,compared,ok,ok,
 class_ece8893_spring_2025,lab3_sushkrutha,46,46,0,0,True,exact,compared,ok,ok,
 class_ece8893_spring_2025,matrix_methods__ben_hall_lab2_2025_attention,432,416,-16,16,False,under,compared,ok,ok,output_local: hls-est 16 vs Vitis 32
-class_ece8893_spring_2025,matrix_methods__ben_hall_lab3_sparse_matrix_multiplication,132,,,,False,,hls-est missing,ok,cgeist crash,C_local: hls-est None vs Vitis 64; B: hls-est None vs Vitis 60; A: hls-est None vs Vitis 4
+class_ece8893_spring_2025,matrix_methods__ben_hall_lab3_sparse_matrix_multiplication,132,76,-56,56,False,under,compared,ok,ok,B: hls-est 4 vs Vitis 60
 class_ece8893_spring_2025,max_beaulieu_Lab_3_2025,35,69,34,34,False,over>15%,compared,ok,ok,mem1_m_axi: hls-est 16 vs Vitis None; mem2_m_axi: hls-est 16 vs Vitis None; colIdxA_stream: hls-est 2 vs Vitis None
 class_ece8893_spring_2025,michael_meng_ece_8893_spring_25__lab2,73,73,0,0,True,exact,compared,ok,ok,
 class_ece8893_spring_2025,michael_meng_ece_8893_spring_25__lab3,,,,,False,,vitis missing,vitis failed,top not found,
 class_ece8893_spring_2025,minjun_kim_Lab2_2025,709,245,-464,464,False,under,compared,ok,ok,V_buffer: hls-est 16 vs Vitis 256; K_buffer: hls-est 16 vs Vitis 240; k_stream: hls-est 64 vs Vitis None
 class_ece8893_spring_2025,minjun_kim_Lab3_2025,20,20,0,0,True,exact,compared,ok,ok,
 class_ece8893_spring_2025,mizanur_Lab2_2025,968,852,-116,116,False,under,compared,ok,ok,mat_V: hls-est 112 vs Vitis 256; attention_prob: hls-est 128 vs Vitis 100
-class_ece8893_spring_2025,mizanur_Lab3_2025,,204,,,False,,vitis missing,vitis failed,ok,column_indices_A_loc: hls-est 64 vs Vitis None; local_C: hls-est 64 vs Vitis None; row_indices_B_loc: hls-est 64 vs Vitis None
+class_ece8893_spring_2025,mizanur_Lab3_2025,,268,,,False,,vitis missing,vitis failed,ok,local_C: hls-est 128 vs Vitis None; column_indices_A_loc: hls-est 64 vs Vitis None; row_indices_B_loc: hls-est 64 vs Vitis None
 class_ece8893_spring_2025,mohammad_zain_lab_2,113,113,0,0,True,exact,compared,ok,ok,attention_softmax_fifo: hls-est 1 vs Vitis None
-class_ece8893_spring_2025,mohammad_zain_lab_3,425,117,-308,308,False,under,compared,ok,ok,mem2_m_axi: hls-est 57 vs Vitis 171; mem1_m_axi: hls-est 57 vs Vitis 114; C_local: hls-est 0 vs Vitis 29
-class_ece8893_spring_2025,nayan_nair_ece8893_spring25_lab2,2114,834,-1280,1280,False,under,compared,ok,ok,K_local: hls-est 192 vs Vitis 960; Q_local: hls-est 192 vs Vitis 960; V_local: hls-est 192 vs Vitis 64
+class_ece8893_spring_2025,mohammad_zain_lab_3,425,453,28,28,False,over<=15%,compared,ok,ok,C_local: hls-est 57 vs Vitis 29
+class_ece8893_spring_2025,nayan_nair_ece8893_spring25_lab2,2114,2114,0,0,True,exact,compared,ok,ok,
 class_ece8893_spring_2025,nayan_nair_ece8893_spring25_lab3,25,25,0,0,True,exact,compared,ok,ok,
 class_ece8893_spring_2025,neuro_monarchs_neural_kernel_ece8893_spring_2025,,36121,,,False,,vitis missing,vitis timeout,ok,padded: hls-est 32768 vs Vitis None; f1: hls-est 1024 vs Vitis None; f2: hls-est 1024 vs Vitis None
-class_ece8893_spring_2025,neuro_monarchs_symbolic_kernel_ece8893_spring_2025,973,749,-224,224,False,under,compared,ok,ok,A_buffers: hls-est 232 vs Vitis None; B_buffers: hls-est 232 vs Vitis None; C_buffers: hls-est 232 vs Vitis None
+class_ece8893_spring_2025,neuro_monarchs_symbolic_kernel_ece8893_spring_2025,973,917,-56,56,False,under,compared,ok,ok,A_buffers: hls-est 232 vs Vitis None; B_buffers: hls-est 232 vs Vitis None; C_buffers: hls-est 232 vs Vitis None
 class_ece8893_spring_2025,nikhil_p_ece8893_spring25_lab2,95,128,33,33,False,over>15%,compared,ok,ok,K_lcl: hls-est 16 vs Vitis None; V_lcl: hls-est 96 vs Vitis 84; mem2_m_axi: hls-est 4 vs Vitis 0
-class_ece8893_spring_2025,nikhil_p_ece8893_spring25_lab3,743,,,,False,,hls-est missing,ok,"cgeist error: top.cpp:187:33: error: '#pragma HLS array_partition' requires an array or pointer, but 'col_ptr_B_local' has type 'hls::vector<int, 64 + 1>'",row_indices_B_local: hls-est None vs Vitis 228; mem1_m_axi: hls-est None vs Vitis 171; mem2_m_axi: hls-est None vs Vitis 171
+class_ece8893_spring_2025,nikhil_p_ece8893_spring25_lab3,743,686,-57,57,False,under,compared,ok,ok,row_indices_B_local: hls-est 114 vs Vitis 228; col_ptr_B_local: hls-est 58 vs Vitis None; values_B_local: hls-est 58 vs Vitis 116
 class_ece8893_spring_2025,nikhil_s_ece8893_sp25_lab2,521,521,0,0,True,exact,compared,ok,ok,
 class_ece8893_spring_2025,nikhil_s_ece8893_sp25_lab3,25,25,0,0,True,exact,compared,ok,ok,
-class_ece8893_spring_2025,oscar_baglivio_lab_2,242,,,,False,,hls-est missing,ok,cgeist error: top.cpp:63:5: error: use of undeclared identifier 'memcpy'; did you mean 'wmemcpy'?,K_loc: hls-est None vs Vitis 128; V_loc: hls-est None vs Vitis 100; math_core:exp_33_9_s: hls-est None vs Vitis 7
-class_ece8893_spring_2025,oscar_baglivio_lab_3,95,,,,False,,hls-est missing,ok,cgeist error: top.cpp:44:3: error: use of undeclared identifier 'memcpy'; did you mean 'wmemcpy'?,p_ZZ26sparse_matrix_multiply_HLSP8ap_fixedILi16ELi5EL9ap_q_mode5EL9ap_o_mode3ELi0: hls-est None vs Vitis 54; sparse_matrix_multiply_HLS_ap_fixed_int_int_ap_fixed_int_int_ap_fixed: hls-est None vs Vitis 9; column_indices_A_loc: hls-est None vs Vitis 8
-class_ece8893_spring_2025,pengzhao_liu_Lab2_2025,178,402,224,224,False,over>15%,compared,ok,ok,V_buf: hls-est 192 vs Vitis 48; att_buf: hls-est 96 vs Vitis 16
+class_ece8893_spring_2025,oscar_baglivio_lab_2,242,431,189,189,False,over>15%,compared,ok,ok,K_loc: hls-est 240 vs Vitis 128; V_loc: hls-est 176 vs Vitis 100; Q_loc: hls-est 1 vs Vitis None
+class_ece8893_spring_2025,oscar_baglivio_lab_3,95,95,0,0,True,exact,compared,ok,ok,B_T: hls-est 64 vs Vitis None; p_ZZ26sparse_matrix_multiply_HLSP8ap_fixedILi16ELi5EL9ap_q_mode5EL9ap_o_mode3ELi0: hls-est None vs Vitis 54; sparse_matrix_multiply_HLS_ap_fixed_int_int_ap_fixed_int_int_ap_fixed: hls-est None vs Vitis 9
+class_ece8893_spring_2025,pengzhao_liu_Lab2_2025,178,178,0,0,True,exact,compared,ok,ok,
 class_ece8893_spring_2025,pengzhao_liu_Lab3_2025,31,30,-1,1,False,under,compared,ok,ok,ArowStream: hls-est 5 vs Vitis None; CrowStream: hls-est 5 vs Vitis None; local_rowPtrA: hls-est 2 vs Vitis 1
 class_ece8893_spring_2025,pranay_kamineny_lab2,394,426,32,32,False,over<=15%,compared,ok,ok,K_local: hls-est 32 vs Vitis 0; math_core:exp_33_9_s: hls-est 7 vs Vitis None; exp_x_msb_1_table: hls-est None vs Vitis 2
 class_ece8893_spring_2025,pranay_kamineny_lab3,26,26,0,0,True,exact,compared,ok,ok,
 class_ece8893_spring_2025,ritik_raj_lab2,797,854,57,57,False,over<=15%,compared,ok,ok,mem2_m_axi: hls-est 57 vs Vitis 0
 class_ece8893_spring_2025,ritik_raj_lab3,184,184,0,0,True,exact,compared,ok,ok,
 class_ece8893_spring_2025,sahith_lab2_2025,,,,,False,,vitis missing,vitis failed,"cgeist error: top.cpp:11:55: error: conditional expression is ambiguous; 'ap_fixed<16, 5>' can be converted to 'ap_fixed<32, 8>' and vice versa",
-class_ece8893_spring_2025,sahith_lab3_2025,284,276,-8,8,False,under,compared,ok,ok,C_l: hls-est 8 vs Vitis 16
+class_ece8893_spring_2025,sahith_lab3_2025,284,284,0,0,True,exact,compared,ok,ok,
 class_ece8893_spring_2025,shengxi_liang_ece8893_spring_25__Shengxi_Liang_LAB2,,,,,False,,vitis missing,vitis failed,cgeist error: top.cpp:29:42: error: use of undeclared variable 'V_local' in '#pragma HLS array_partition',
-class_ece8893_spring_2025,shengxi_liang_ece8893_spring_25__Shengxi_Liang_LAB3,263,258,-5,5,False,under,compared,ok,ok,a_row_stream: hls-est 173 vs Vitis None; row_stream: hls-est 57 vs Vitis None; local_row_indices_B: hls-est 8 vs Vitis 16
+class_ece8893_spring_2025,shengxi_liang_ece8893_spring_25__Shengxi_Liang_LAB3,263,265,2,2,False,over<=15%,compared,ok,ok,a_row_stream: hls-est 173 vs Vitis None; row_stream: hls-est 57 vs Vitis None; a_row_2: hls-est 4 vs Vitis None
 class_ece8893_spring_2025,shibao_su_ece8893_lab2,,302,,,False,,vitis missing,vitis timeout,ok,K_local: hls-est 60 vs Vitis None; Output_local: hls-est 60 vs Vitis None; Q_local: hls-est 60 vs Vitis None
 class_ece8893_spring_2025,shibao_su_ece8893_lab3,41,41,0,0,True,exact,compared,ok,ok,fifo_C: hls-est 1 vs Vitis None
 class_ece8893_spring_2025,shreesahitya_balaje_lab2,,32779,,,False,,vitis missing,vitis timeout,ok,attention_local: hls-est 8704 vs Vitis None; V_local: hls-est 8192 vs Vitis None; K_local: hls-est 7680 vs Vitis None
 class_ece8893_spring_2025,shreesahitya_balaje_lab3,54,54,0,0,True,exact,compared,ok,ok,
-class_ece8893_spring_2025,siddharth_khatri_ece8893_spring25_lab2,1283,1234,-49,49,False,under,compared,ok,ok,V_local: hls-est 64 vs Vitis 1024; K_local: hls-est 960 vs Vitis 64; qk_out: hls-est 89 vs Vitis None
+class_ece8893_spring_2025,siddharth_khatri_ece8893_spring25_lab2,1283,1220,-63,63,False,under,compared,ok,ok,V_local: hls-est 64 vs Vitis 1024; K_local: hls-est 960 vs Vitis 64; qk_out: hls-est 89 vs Vitis None
 class_ece8893_spring_2025,siddharth_khatri_ece8893_spring25_lab3,54,54,0,0,True,exact,compared,ok,ok,stream_j: hls-est 8 vs Vitis None; stream_A_elem: hls-est 4 vs Vitis None; stream_B_val: hls-est 4 vs Vitis None
-class_ece8893_spring_2025,sreenidhireddy_bommu_ece8893_spring25_lab2,2114,834,-1280,1280,False,under,compared,ok,ok,K_local: hls-est 192 vs Vitis 960; Q_local: hls-est 192 vs Vitis 960; V_local: hls-est 192 vs Vitis 64
+class_ece8893_spring_2025,sreenidhireddy_bommu_ece8893_spring25_lab2,2114,2114,0,0,True,exact,compared,ok,ok,
 class_ece8893_spring_2025,sreenidhireddy_bommu_ece8893_spring25_lab3,,,,,False,,vitis missing,vitis failed,top not found,
 class_ece8893_spring_2025,stefan_test_design,0,0,0,0,True,exact,compared,ok,ok,
 class_ece8893_spring_2025,suyeon_yoon_lab3_spring25,68,68,0,0,True,exact,compared,ok,ok,
-class_ece8893_spring_2025,vishnu_varma_venkata_ece8893_spring25_lab2,2114,834,-1280,1280,False,under,compared,ok,ok,K_local: hls-est 192 vs Vitis 960; Q_local: hls-est 192 vs Vitis 960; V_local: hls-est 192 vs Vitis 64
+class_ece8893_spring_2025,vishnu_varma_venkata_ece8893_spring25_lab2,2114,2114,0,0,True,exact,compared,ok,ok,
 class_ece8893_spring_2025,vishnu_varma_venkata_ece8893_spring25_lab3,340,340,0,0,True,exact,compared,ok,ok,
-class_ece8893_spring_2025,zihan_qi_lab2,207,91,-116,116,False,under,compared,ok,ok,K_local: hls-est 0 vs Vitis 60; V_local: hls-est 0 vs Vitis 60; Output_temp: hls-est 4 vs Vitis None
+class_ece8893_spring_2025,zihan_qi_lab2,207,211,4,4,False,over<=15%,compared,ok,ok,Output_temp: hls-est 4 vs Vitis None
 class_ece8893_spring_2025,zihan_qi_lab3,1920,1920,0,0,True,exact,compared,ok,ok,C_stream: hls-est 1856 vs Vitis None
-class_ece8893_spring_2025,zijun_wang_ece8893_spring25_lab2,457,238,-219,219,False,under,compared,ok,ok,math_core:exp_33_9_s: hls-est 175 vs Vitis None; K_l: hls-est 32 vs Vitis 128; V_l: hls-est 25 vs Vitis 100
-class_ece8893_spring_2025,zijun_wang_ece8893_spring25_lab3,270,108,-162,162,False,under,compared,ok,ok,p_ZZ26sparse_matrix_multiply_HLSP8ap_fixedILi16ELi5EL9ap_q_mode5EL9ap_o_mode3ELi0: hls-est None vs Vitis 56; sparse_matrix_multiply_HLS_ap_fixed_int_int_ap_fixed_int_int_ap_fixed: hls-est None vs Vitis 39; buf_A_vals: hls-est 32 vs Vitis None
+class_ece8893_spring_2025,zijun_wang_ece8893_spring25_lab2,457,463,6,6,False,over<=15%,compared,ok,ok,math_core:exp_33_9_s: hls-est 175 vs Vitis None; exp_x_msb_1_table: hls-est None vs Vitis 52; f_x_msb_2_table: hls-est None vs Vitis 52
+class_ece8893_spring_2025,zijun_wang_ece8893_spring25_lab3,270,270,0,0,True,exact,compared,ok,ok,p_ZZ26sparse_matrix_multiply_HLSP8ap_fixedILi16ELi5EL9ap_q_mode5EL9ap_o_mode3ELi0: hls-est None vs Vitis 56; sparse_matrix_multiply_HLS_ap_fixed_int_int_ap_fixed_int_int_ap_fixed: hls-est None vs Vitis 39; buf_A_vals: hls-est 32 vs Vitis None
 flowgnn,dgn,,12959,,,False,,vitis missing,vitis failed,ok,messages_ping: hls-est 4096 vs Vitis None; messages_pong: hls-est 4096 vs Vitis None; h_node: hls-est 2048 vs Vitis None
 flowgnn,gat,,,,,False,,vitis missing,vitis timeout,hls-est timeout 120s,
-flowgnn,gcn,,8798,,,False,,vitis missing,vitis failed,ok,h_node: hls-est 2048 vs Vitis None; messages_ping: hls-est 2048 vs Vitis None; messages_pong: hls-est 2048 vs Vitis None
-flowgnn,gin,1158,590,-568,568,False,under,compared,ok,ok,node_mlp_1_weights: hls-est 128 vs Vitis 400; node_mlp_2_weights: hls-est 128 vs Vitis 400; mp_in: hls-est 64 vs Vitis None
-flowgnn,pna,20600,20766,166,166,False,over<=15%,compared,ok,ok,neighbor_tables: hls-est 1024 vs Vitis 416; node_conv_weights: hls-est 512 vs Vitis 880; mp_in: hls-est 64 vs Vitis None
+flowgnn,gcn,,13034,,,False,,vitis missing,vitis failed,ok,edge_attrs: hls-est 4096 vs Vitis None; h_node: hls-est 2048 vs Vitis None; messages_ping: hls-est 2048 vs Vitis None
+flowgnn,gin,1158,1146,-12,12,False,under,compared,ok,ok,mp_in: hls-est 64 vs Vitis None; mem_m_axi: hls-est 16 vs Vitis 29; edge_attrs: hls-est 12 vs Vitis 8
+flowgnn,pna,20600,20734,134,134,False,over<=15%,compared,ok,ok,neighbor_tables: hls-est 1024 vs Vitis 416; node_conv_weights: hls-est 480 vs Vitis 880; mp_in: hls-est 64 vs Vitis None
 forgebench,Llama_GPT_module,30,30,0,0,True,exact,compared,ok,ok,
 forgebench,activation_module,258,258,0,0,True,exact,compared,ok,ok,
 forgebench,activation_op1,178,178,0,0,True,exact,compared,ok,ok,
@@ -430,21 +430,21 @@ hlsyn-vitis,vivado-target__sources__syr2k,,,,,False,,vitis missing,missing,hls-e
 hlsyn-vitis,vivado-target__sources__syrk,,,,,False,,vitis missing,missing,hls-est timeout 120s,
 hlsyn-vitis,vivado-target__sources__trmm,,,,,False,,vitis missing,missing,hls-est timeout 120s,
 hlsyn-vitis,vivado-target__sources__trmm-opt,,,,,False,,vitis missing,missing,hls-est timeout 120s,
-hp_fft_hls,n1024__UF1,96,120,24,24,False,over>15%,compared,ok,ok,data: hls-est 0 vs Vitis 80; math_core:sin_or_cos_double_s: hls-est 16 vs Vitis None; _Z24reverse_input_stream_UF1RN3hls6streamINS_6vectorISt7complexIfELm2EEELi0EEES6_@static@_ZZ24reverse_input_stream_UF1RN3hls6streamINS_6vectorISt7complexIfELm2EEELi0EEES6_E14data_in_cyclic_0_0: hls-est 8 vs Vitis None
+hp_fft_hls,n1024__UF1,96,96,0,0,True,exact,compared,ok,ok,data: hls-est 0 vs Vitis 80; _Z24reverse_input_stream_UF1RN3hls6streamINS_6vectorISt7complexIfELm2EEELi0EEES6_@static@_ZZ24reverse_input_stream_UF1RN3hls6streamINS_6vectorISt7complexIfELm2EEELi0EEES6_E14data_in_cyclic_0_0: hls-est 4 vs Vitis None; _Z24reverse_input_stream_UF1RN3hls6streamINS_6vectorISt7complexIfELm2EEELi0EEES6_@static@_ZZ24reverse_input_stream_UF1RN3hls6streamINS_6vectorISt7complexIfELm2EEELi0EEES6_E14data_in_cyclic_0_1: hls-est 4 vs Vitis None
 hp_fft_hls,n1024__UF16,640,,,,False,,hls-est missing,ok,hls-est timeout 120s,FFT_DIT_spatial_unroll_CY_stream_vector_stream_stream_vector_0_data_4_0: hls-est None vs Vitis 64; FFT_DIT_spatial_unroll_CY_stream_vector_stream_stream_vector_0_data_4_1: hls-est None vs Vitis 64; FFT_DIT_spatial_unroll_CY_stream_vector_stream_stream_vector_0_data_5_0: hls-est None vs Vitis 64
-hp_fft_hls,n1024__UF2,176,216,40,40,False,over>15%,compared,ok,ok,_Z24reverse_input_stream_UF2RN3hls6streamINS_6vectorISt7complexIfELm4EEELi0EEES6_@static@_ZZ24reverse_input_stream_UF2RN3hls6streamINS_6vectorISt7complexIfELm4EEELi0EEES6_E14data_in_cyclic_0_0: hls-est 32 vs Vitis None; _Z24reverse_input_stream_UF2RN3hls6streamINS_6vectorISt7complexIfELm4EEELi0EEES6_@static@_ZZ24reverse_input_stream_UF2RN3hls6streamINS_6vectorISt7complexIfELm4EEELi0EEES6_E14data_in_cyclic_0_1: hls-est 32 vs Vitis None; math_core:sin_or_cos_double_s: hls-est 16 vs Vitis None
+hp_fft_hls,n1024__UF2,176,168,-8,8,False,under,compared,ok,ok,_Z24reverse_input_stream_UF2RN3hls6streamINS_6vectorISt7complexIfELm4EEELi0EEES6_@static@_ZZ24reverse_input_stream_UF2RN3hls6streamINS_6vectorISt7complexIfELm4EEELi0EEES6_E14data_in_cyclic_0_0: hls-est 16 vs Vitis None; _Z24reverse_input_stream_UF2RN3hls6streamINS_6vectorISt7complexIfELm4EEELi0EEES6_@static@_ZZ24reverse_input_stream_UF2RN3hls6streamINS_6vectorISt7complexIfELm4EEELi0EEES6_E14data_in_cyclic_0_1: hls-est 16 vs Vitis None; FFT_DIT_spatial_unroll_CY_stream_vector_stream_stream_vector_0_data_1_0: hls-est None vs Vitis 8
 hp_fft_hls,n1024__UF32,1024,,,,False,,hls-est missing,ok,hls-est timeout 120s,FFT_DIT_spatial_unroll_CY_stream_vector_stream_stream_vector_0_data_5_0: hls-est None vs Vitis 128; FFT_DIT_spatial_unroll_CY_stream_vector_stream_stream_vector_0_data_5_1: hls-est None vs Vitis 128; FFT_DIT_spatial_unroll_CY_stream_vector_stream_stream_vector_0_data_6_0: hls-est None vs Vitis 128
-hp_fft_hls,n1024__UF4,304,384,80,80,False,over>15%,compared,ok,ok,data_in_cyclic: hls-est None vs Vitis 64; data_in_cyclic_0_0: hls-est 64 vs Vitis None; data_in_cyclic_0_1: hls-est 64 vs Vitis None
-hp_fft_hls,n1024__UF8,448,408,-40,40,False,under,compared,ok,ok,FFT_DIT_spatial_unroll_CY_stream_vector_stream_stream_vector_0_data_3_0: hls-est None vs Vitis 32; FFT_DIT_spatial_unroll_CY_stream_vector_stream_stream_vector_0_data_3_1: hls-est None vs Vitis 32; FFT_DIT_spatial_unroll_CY_stream_vector_stream_stream_vector_0_data_4_0: hls-est None vs Vitis 32
-hp_fft_hls,n1024__no_StagePipeline,11,,,,False,,hls-est missing,ok,cgeist crash,FFT_TOP_complex_float_complex_float_data_0: hls-est None vs Vitis 4; FFT_TOP_complex_float_complex_float_data_1: hls-est None vs Vitis 4; twiddles: hls-est None vs Vitis 2
+hp_fft_hls,n1024__UF4,304,304,0,0,True,exact,compared,ok,ok,data_in_cyclic: hls-est None vs Vitis 64; data_in_cyclic_0_0: hls-est 32 vs Vitis None; data_in_cyclic_0_1: hls-est 32 vs Vitis None
+hp_fft_hls,n1024__UF8,448,392,-56,56,False,under,compared,ok,ok,FFT_DIT_spatial_unroll_CY_stream_vector_stream_stream_vector_0_data_3_0: hls-est None vs Vitis 32; FFT_DIT_spatial_unroll_CY_stream_vector_stream_stream_vector_0_data_3_1: hls-est None vs Vitis 32; FFT_DIT_spatial_unroll_CY_stream_vector_stream_stream_vector_0_data_4_0: hls-est None vs Vitis 32
+hp_fft_hls,n1024__no_StagePipeline,11,11,0,0,True,exact,compared,ok,ok,FFT_TOP_complex_float_complex_float_data_0: hls-est None vs Vitis 4; FFT_TOP_complex_float_complex_float_data_1: hls-est None vs Vitis 4; _Z7FFT_TOPPSt7complexIfES1_@static@_ZZ7FFT_TOPPSt7complexIfES1_E4data_0_0: hls-est 4 vs Vitis None
 hp_fft_hls,n1024__original_C_style,27,27,0,0,True,exact,compared,ok,ok,data: hls-est None vs Vitis 4; dataBuf: hls-est None vs Vitis 4; _Z7FFT_TOPPSt7complexIfES1_@static@_ZZ7FFT_TOPPSt7complexIfES1_E4data_0_0: hls-est 2 vs Vitis None
-hp_fft_hls,n256__UF1,80,104,24,24,False,over>15%,compared,ok,ok,data: hls-est 0 vs Vitis 64; math_core:sin_or_cos_double_s: hls-est 16 vs Vitis None; _Z24reverse_input_stream_UF1RN3hls6streamINS_6vectorISt7complexIfELm2EEELi0EEES6_@static@_ZZ24reverse_input_stream_UF1RN3hls6streamINS_6vectorISt7complexIfELm2EEELi0EEES6_E14data_in_cyclic_0_0: hls-est 8 vs Vitis None
-hp_fft_hls,n256__UF16,0,,,,False,,hls-est missing,ok,hls-est timeout 120s,
-hp_fft_hls,n256__UF2,128,176,48,48,False,over>15%,compared,ok,ok,_Z24reverse_input_stream_UF2RN3hls6streamINS_6vectorISt7complexIfELm4EEELi0EEES6_@static@_ZZ24reverse_input_stream_UF2RN3hls6streamINS_6vectorISt7complexIfELm4EEELi0EEES6_E14data_in_cyclic_0_0: hls-est 16 vs Vitis None; _Z24reverse_input_stream_UF2RN3hls6streamINS_6vectorISt7complexIfELm4EEELi0EEES6_@static@_ZZ24reverse_input_stream_UF2RN3hls6streamINS_6vectorISt7complexIfELm4EEELi0EEES6_E14data_in_cyclic_0_1: hls-est 16 vs Vitis None; _Z24reverse_input_stream_UF2RN3hls6streamINS_6vectorISt7complexIfELm4EEELi0EEES6_@static@_ZZ24reverse_input_stream_UF2RN3hls6streamINS_6vectorISt7complexIfELm4EEELi0EEES6_E15data_rev_stream_0_0: hls-est 16 vs Vitis None
+hp_fft_hls,n256__UF1,80,80,0,0,True,exact,compared,ok,ok,data: hls-est 0 vs Vitis 64; _Z24reverse_input_stream_UF1RN3hls6streamINS_6vectorISt7complexIfELm2EEELi0EEES6_@static@_ZZ24reverse_input_stream_UF1RN3hls6streamINS_6vectorISt7complexIfELm2EEELi0EEES6_E14data_in_cyclic_0_0: hls-est 4 vs Vitis None; _Z24reverse_input_stream_UF1RN3hls6streamINS_6vectorISt7complexIfELm2EEELi0EEES6_@static@_ZZ24reverse_input_stream_UF1RN3hls6streamINS_6vectorISt7complexIfELm2EEELi0EEES6_E14data_in_cyclic_0_1: hls-est 4 vs Vitis None
+hp_fft_hls,n256__UF16,0,0,0,0,True,exact,compared,ok,ok,
+hp_fft_hls,n256__UF2,128,128,0,0,True,exact,compared,ok,ok,FFT_DIT_spatial_unroll_CY_stream_vector_stream_stream_vector_0_data_1_0: hls-est None vs Vitis 8; FFT_DIT_spatial_unroll_CY_stream_vector_stream_stream_vector_0_data_1_1: hls-est None vs Vitis 8; FFT_DIT_spatial_unroll_CY_stream_vector_stream_stream_vector_0_data_2_0: hls-est None vs Vitis 8
 hp_fft_hls,n256__UF32,0,,,,False,,hls-est missing,ok,hls-est timeout 120s,
-hp_fft_hls,n256__UF4,176,208,32,32,False,over>15%,compared,ok,ok,FFT_DIT_spatial_unroll_CY_stream_vector_stream_stream_vector_0_data_2_0: hls-est None vs Vitis 16; FFT_DIT_spatial_unroll_CY_stream_vector_stream_stream_vector_0_data_2_1: hls-est None vs Vitis 16; FFT_DIT_spatial_unroll_CY_stream_vector_stream_stream_vector_0_data_3_0: hls-est None vs Vitis 16
-hp_fft_hls,n256__UF8,256,272,16,16,False,over<=15%,compared,ok,ok,FFT_DIT_spatial_unroll_CY_stream_vector_stream_stream_vector_0_data_3_0: hls-est None vs Vitis 32; FFT_DIT_spatial_unroll_CY_stream_vector_stream_stream_vector_0_data_3_1: hls-est None vs Vitis 32; FFT_DIT_spatial_unroll_CY_stream_vector_stream_stream_vector_0_data_4_0: hls-est None vs Vitis 32
-hp_fft_hls,n256__no_StagePipeline,11,,,,False,,hls-est missing,ok,cgeist crash,FFT_TOP_complex_float_complex_float_data_0: hls-est None vs Vitis 4; FFT_TOP_complex_float_complex_float_data_1: hls-est None vs Vitis 4; twiddles: hls-est None vs Vitis 2
+hp_fft_hls,n256__UF4,176,176,0,0,True,exact,compared,ok,ok,FFT_DIT_spatial_unroll_CY_stream_vector_stream_stream_vector_0_data_2_0: hls-est None vs Vitis 16; FFT_DIT_spatial_unroll_CY_stream_vector_stream_stream_vector_0_data_2_1: hls-est None vs Vitis 16; FFT_DIT_spatial_unroll_CY_stream_vector_stream_stream_vector_0_data_3_0: hls-est None vs Vitis 16
+hp_fft_hls,n256__UF8,256,256,0,0,True,exact,compared,ok,ok,FFT_DIT_spatial_unroll_CY_stream_vector_stream_stream_vector_0_data_3_0: hls-est None vs Vitis 32; FFT_DIT_spatial_unroll_CY_stream_vector_stream_stream_vector_0_data_3_1: hls-est None vs Vitis 32; FFT_DIT_spatial_unroll_CY_stream_vector_stream_stream_vector_0_data_4_0: hls-est None vs Vitis 32
+hp_fft_hls,n256__no_StagePipeline,11,7,-4,4,False,under,compared,ok,ok,FFT_TOP_complex_float_complex_float_data_0: hls-est None vs Vitis 4; FFT_TOP_complex_float_complex_float_data_1: hls-est None vs Vitis 4; _Z7FFT_TOPPSt7complexIfES1_@static@_ZZ7FFT_TOPPSt7complexIfES1_E4data_0_0: hls-est 2 vs Vitis None
 hp_fft_hls,n256__original_C_style,25,23,-2,2,False,under,compared,ok,ok,data: hls-est None vs Vitis 4; dataBuf: hls-est None vs Vitis 2; twiddles: hls-est None vs Vitis 2
 machsuite,aes_table,8,1,-7,7,False,under,compared,ok,ok,sbox: hls-est 1 vs Vitis 8
 machsuite,aes_tableless,0,0,0,0,True,exact,compared,ok,ok,
@@ -690,16 +690,16 @@ rosetta,optical-flow__src__sdsoc,,,,,False,,vitis missing,vitis failed,cgeist er
 rosetta,optical-flow__src__sdsoc__hls_template,,,,,False,,vitis missing,vitis failed,cgeist error: optical_flow.cpp:11:10: fatal error: 'hls_video.h' file not found,
 rosetta,spam-filter__src__sdsoc,,12,,,False,,vitis missing,vitis failed,ok,label_local: hls-est 4 vs Vitis None; gradient: hls-est 2 vs Vitis None; lut: hls-est 2 vs Vitis None
 soda,soda__blur,77,77,0,0,True,exact,compared,ok,ok,bank_0_input_buf: hls-est 15 vs Vitis None; bank_1_blur_y_buf: hls-est 15 vs Vitis None
-soda,soda__contrast,290,571,281,281,False,over>15%,compared,ok,ok,bank_0_input_buf: hls-est 4 vs Vitis None; bank_1_output_buf: hls-est 4 vs Vitis None; from_cr_var_2_offset_0_to_output_pe_1: hls-est 3 vs Vitis None
-soda,soda__denoise2d,48,40,-8,8,False,under,compared,ok,ok,bank_0_f_buf: hls-est 8 vs Vitis None; bank_1_u_buf: hls-est 8 vs Vitis None; bank_2_output_buf: hls-est 8 vs Vitis None
-soda,soda__denoise3d,38,30,-8,8,False,under,compared,ok,ok,bank_0_f_buf: hls-est 4 vs Vitis None; bank_1_u_buf: hls-est 4 vs Vitis None; bank_2_output_buf: hls-est 4 vs Vitis None
-soda,soda__erosion,92,84,-8,8,False,under,compared,ok,ok,bank_0_input_buf: hls-est 4 vs Vitis None; bank_1_output_buf: hls-est 4 vs Vitis None
-soda,soda__heat3d,28,20,-8,8,False,under,compared,ok,ok,bank_0_in_buf: hls-est 4 vs Vitis None; bank_1_out_buf: hls-est 4 vs Vitis None
+soda,soda__contrast,290,290,0,0,True,exact,compared,ok,ok,bank_0_input_buf: hls-est 4 vs Vitis None; bank_1_output_buf: hls-est 4 vs Vitis None; bank_1_output_c: hls-est 4 vs Vitis None
+soda,soda__denoise2d,48,48,0,0,True,exact,compared,ok,ok,bank_0_f_buf: hls-est 8 vs Vitis None; bank_1_u_buf: hls-est 8 vs Vitis None; bank_2_output_buf: hls-est 8 vs Vitis None
+soda,soda__denoise3d,38,38,0,0,True,exact,compared,ok,ok,bank_0_f_buf: hls-est 4 vs Vitis None; bank_1_u_buf: hls-est 4 vs Vitis None; bank_2_output_buf: hls-est 4 vs Vitis None
+soda,soda__erosion,92,92,0,0,True,exact,compared,ok,ok,bank_0_input_buf: hls-est 4 vs Vitis None; bank_1_output_buf: hls-est 4 vs Vitis None; bank_1_output_c: hls-est 4 vs Vitis None
+soda,soda__heat3d,28,28,0,0,True,exact,compared,ok,ok,bank_0_in_buf: hls-est 4 vs Vitis None; bank_1_out_buf: hls-est 4 vs Vitis None; bank_1_out_c: hls-est 4 vs Vitis None
 soda,soda__jacobi2d,12,12,0,0,True,exact,compared,ok,ok,bank_0_t1_buf: hls-est 4 vs Vitis None; bank_1_t0_buf: hls-est 4 vs Vitis None
-soda,soda__jacobi3d,28,20,-8,8,False,under,compared,ok,ok,bank_0_t1_buf: hls-est 4 vs Vitis None; bank_1_t0_buf: hls-est 4 vs Vitis None
-soda,soda__seidel2d,20,12,-8,8,False,under,compared,ok,ok,bank_0_input_buf: hls-est 4 vs Vitis None; bank_1_output_buf: hls-est 4 vs Vitis None
+soda,soda__jacobi3d,28,28,0,0,True,exact,compared,ok,ok,bank_0_t1_buf: hls-est 4 vs Vitis None; bank_1_t0_buf: hls-est 4 vs Vitis None; bank_1_t0_c: hls-est 4 vs Vitis None
+soda,soda__seidel2d,20,20,0,0,True,exact,compared,ok,ok,bank_0_input_buf: hls-est 4 vs Vitis None; bank_1_output_buf: hls-est 4 vs Vitis None; bank_1_output_c: hls-est 4 vs Vitis None
 soda,soda__sobel2d,12,12,0,0,True,exact,compared,ok,ok,bank_0_img_buf: hls-est 4 vs Vitis None; bank_1_mag_buf: hls-est 4 vs Vitis None
-soda,soda__xcorr,92,84,-8,8,False,under,compared,ok,ok,bank_0_input_buf: hls-est 4 vs Vitis None; bank_1_tmp3_buf: hls-est 4 vs Vitis None
+soda,soda__xcorr,92,92,0,0,True,exact,compared,ok,ok,bank_0_input_buf: hls-est 4 vs Vitis None; bank_1_tmp3_buf: hls-est 4 vs Vitis None; bank_1_tmp3_c: hls-est 4 vs Vitis None
 spector_hls,dct,0,0,0,0,True,exact,compared,ok,ok,
 spector_hls,fir,4,4,0,0,True,exact,compared,ok,ok,
 spector_hls,histogram,8,8,0,0,True,exact,compared,ok,ok,
@@ -809,5 +809,5 @@ vitis_examples,19_basic_examples_vhls_multi_array_access_bottleneck,0,0,0,0,True
 vitis_examples,20_basic_examples_vhls_resolved_array_access_bottleneck,0,0,0,0,True,exact,compared,ok,ok,
 vitis_examples,21_basic_examples_vhls_uram_ecc,,0,,,False,,vitis missing,vitis failed,ok,
 vitis_examples,22_basic_examples_vhls_fixed_point_hamming_window,1,1,0,0,True,exact,compared,ok,ok,hamming_window@static@window_coeff: hls-est 1 vs Vitis None; window_coeff: hls-est None vs Vitis 1
-vitis_examples,28_vitis_accel_examples_streaming_vadd,58,,,,False,,hls-est missing,ok,cgeist error: vadd.cpp:75:36: error: use of undeclared identifier 'uint32_t',gmem0_m_axi: hls-est None vs Vitis 29; gmem1_m_axi: hls-est None vs Vitis 29
+vitis_examples,28_vitis_accel_examples_streaming_vadd,58,58,0,0,True,exact,compared,ok,ok,
 whetstone,whetstone,0,16,16,16,False,over>15%,compared,ok,ok,math_core:sin_or_cos_double_s: hls-est 16 vs Vitis None
