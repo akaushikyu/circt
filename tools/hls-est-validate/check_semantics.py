@@ -1858,12 +1858,17 @@ class Checker:
             else:
                 crc, ct = (wd / f"cand.{mode}.{seed}.rc").read_text().strip(), 0.0
                 crc = int(crc) if crc.lstrip("-").isdigit() else crc
-            if crc == -8:
-                # SIGFPE: an integer division by zero (or INT_MIN / -1) in the candidate. That is
-                # undefined in C and C++, so the native build's result for these inputs means nothing
-                # (it need not trap: the reference took its value from whatever its division gave).
+            if crc == -8 and self.reference_divides_by_zero(kind, wd, ddir, rflags, srcs, top_fn, rec, plan,
+                                                             res, mi, seed):
+                # SIGFPE: an integer division by zero (or INT_MIN / -1) in the candidate, and the source
+                # divides by zero on these inputs too (UBSan says so). That is undefined in C and C++, so
+                # the native build's result for these inputs means nothing (it need not trap: the
+                # reference took its value from whatever its division gave). A candidate that traps where
+                # the source does not divide by zero is a mismatch (a trip count computed above its guard,
+                # W9r7 review defect 1).
                 r.update(cand_rc=crc, cand_s=round(ct, 2), valid=False,
-                         why="candidate divides by zero (SIGFPE; undefined behaviour in C)")
+                         why="candidate divides by zero (SIGFPE; the source divides by zero too: undefined "
+                             "behaviour in C)")
                 runs.append(r)
                 ro.unlink(missing_ok=True)
                 continue
@@ -1933,6 +1938,22 @@ class Checker:
         res["status"] = "mismatch"
         res["reason"] = (f"{bad['mode']} seed {bad['seed']}: " + (bad.get("why") or json.dumps(bad.get("diff"))))[:400]
         return res
+
+    def reference_divides_by_zero(self, kind, wd, ddir, rflags, srcs, top_fn, rec, plan, res, mi, seed):
+        """Whether the source itself divides by zero on this mode and seed: a reference built with
+        -fsanitize=integer-divide-by-zero reports it (or traps). Unknown (no build) counts as yes, the
+        earlier rule."""
+        a = self.a
+        tag = f"{kind}_divz"
+        scratch = {}                    # a failed build must not set the design's status
+        exe = self.build_ref(kind, wd, ddir, rflags, srcs, top_fn, rec, plan, scratch, tag=tag,
+                             extra=["-fsanitize=integer-divide-by-zero"])
+        res.setdefault("ref_cache_hits", []).extend(scratch.get("ref_cache_hits", []))
+        if exe is None:
+            return True
+        rc, err, _ = run_exe(exe, mi, seed, a.calls, wd / f"{tag}.bin", a.timeout,
+                             {"UBSAN_OPTIONS": "print_stacktrace=0"})
+        return rc == -8 or "division by zero" in err
 
     # ---------------------------------------------------------------------- reference build cache --
     # A reference depends on the design's files, its flags, the headers and compilers, and the plan (the

@@ -90,6 +90,29 @@ def vitis_array_name(m, known=None):
     return m.get("array") or m.get("Memory")
 
 
+def module_multiplicity(v):
+    """How many times each Vitis module is instantiated in the design: the sum over its instance
+    rows of its parent's multiplicity (the top and any module without an instance row: 1). The
+    memory table lists each memory once per module, not per instance: neuro_monarchs' 8
+    `org_mult_HLS` instances x 31 BRAM are 248 in the total (W9r7 review defect 11)."""
+    parents = {}
+    for inst in v.get("instances", []):
+        mod, par = inst.get("Module"), inst.get("parent")
+        if mod and par:
+            parents.setdefault(mod, []).append(par)
+    memo = {}
+
+    def mult(mod, depth=0):
+        if mod in memo:
+            return memo[mod]
+        if mod not in parents or depth > 64:
+            return 1
+        memo[mod] = 1                    # cycle guard
+        memo[mod] = sum(mult(p, depth + 1) for p in parents[mod])
+        return memo[mod]
+    return {mod: mult(mod) for mod in parents}
+
+
 def vitis_arrays(v, known=None):
     """Aggregate the Vitis per-memory rows by C array name (banks and module copies summed;
     `known` = the hls-est array names, see `vitis_array_name`).
@@ -100,6 +123,7 @@ def vitis_arrays(v, known=None):
     table row is `math_core:<table>`: the names hls-est's math_core records carry
     (--bram-analysis math-costs=)."""
     out = {}
+    copies = module_multiplicity(v)
     for m in v.get("memories", []):
         if m.get("module") in MATH_CORES["modules"]:
             continue
@@ -108,7 +132,8 @@ def vitis_arrays(v, known=None):
             name = "math_core:" + m["array"]
         a = out.setdefault(name, {"name": name, "vitis_bram": 0, "banks": 0, "rows": 0,
                                   "words": 0, "bits": m.get("Bits"), "cores": set(), "modules": set()})
-        a["vitis_bram"] += m.get("bram") or 0
+        # once per instance of the memory's module (module_multiplicity)
+        a["vitis_bram"] += (m.get("bram") or 0) * copies.get(m.get("module"), 1)
         a["banks"] += 1
         a["rows"] += 1
         a["words"] += m.get("Words") or 0
