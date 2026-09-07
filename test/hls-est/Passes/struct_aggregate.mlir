@@ -2,13 +2,16 @@
 // RUN: hls-est %s --symbol-privatize=exclude=_Z4aggrPKsPsi --symbol-dce --lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --narrow-ram-widths --memory-banking-bram --convert-affine-to-loopschedule --bram-analysis=top=_Z4aggrPKsPsi --bram-debug -o /dev/null 2>&1 | FileCheck %s --check-prefix=BRAM
 // RUN: hls-est %s --symbol-privatize=exclude=_Z4aggrPKsPsi --symbol-dce --lower-polygeist-subindex --inline --split-struct-memrefs=aggregate=false -o - 2>/dev/null | FileCheck %s --check-prefix=OFF
 
-// AGGREGATE:
+// AGGREGATE (VITIS_NOTES.md N37 S2 / S3, kernels w9s_a `ma`, w9s_c `mc`):
 // `struct M { int a; short b; ap_int<5> c[2]; }` with the pragma is one
 // memory of 400 x 58 bits (32 + 16 + 2 x 5, no padding). An iteration that
 // writes every leaf is one word store (`ma`: store i58, ram_1p, x36, 2
 // BRAM_18K); writing some leaves reads the word first (`mc`: ram_2p, x18,
 // 4). Two members of one element read in one iteration share one word read.
-// Vitis reports the same totals for both arrays.
+// Source: ~/hls-est-work/coord/scratch/n37impl/lit_k/aggr.cpp. Vitis
+// (n37i_aggr): ma 400x58 2, mc 400x58 4, 6 in all = hls-est per array.
+// The word reads / writes are affine where the indices allow it (W9r7-impl
+// 2/10: the load CSE and the invariant hoist then see them).
 
 // CHECK-DAG: %[[MC:.*]] = memref.alloca() {hls.aggregate = [{compact = "auto", variable = "mc"}], hls.aggregated = "aggregated (AGGREGATE pragma): 400 words x 58 bits, 3 leaves packed without padding{{.*}}polygeist.varname = "mc"} : memref<400xi58>
 // CHECK-DAG: %[[MA:.*]] = memref.alloca() {hls.aggregate = [{compact = "auto", variable = "ma"}], hls.aggregated = {{.*}}polygeist.varname = "ma"} : memref<400xi58>

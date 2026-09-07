@@ -1,4 +1,7 @@
 // RUN: hls-est %s '--infer-vitis-split-array=td=off annotate-pressure=false' --config-set tool.hls.partitioning.constant_index.non_affine_arrays=false --config-set tool.hls.partitioning.constant_index.after_user_partition=false | FileCheck %s --check-prefix=OFF
+// The RUN lines pin the rule (b) of before W9r7-impl 5/10 (no rule (b) on
+// non-affine arrays or after a user partition); the new rule is tested in
+// w9r7_partition_{after_user,non_affine}.mlir.
 // RUN: hls-est %s '--infer-vitis-split-array=td=auto annotate-pressure=false' --config-set tool.hls.partitioning.constant_index.non_affine_arrays=false --config-set tool.hls.partitioning.constant_index.after_user_partition=false | FileCheck %s --check-prefix=AUTO
 // RUN: hls-est %s '--infer-vitis-split-array=td=auto auto-partitions=true annotate-pressure=false' --config-set tool.hls.partitioning.constant_index.non_affine_arrays=false --config-set tool.hls.partitioning.constant_index.after_user_partition=false | FileCheck %s --check-prefix=AUTOP
 // RUN: not hls-est %s --infer-vitis-split-array=td=on 2>&1 | FileCheck %s --check-prefix=BAD

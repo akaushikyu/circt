@@ -1,4 +1,7 @@
 // RUN: hls-est %s --affine-loop-normalize --auto-pipeline-unroll --infer-vitis-split-array=td=off --memory-banking-bram --config-set tool.hls.partitioning.constant_index.non_affine_arrays=false --config-set tool.hls.partitioning.constant_index.after_user_partition=false | FileCheck %s --check-prefix=IR
+// The RUN lines pin the rule (b) of before W9r7-impl 5/10 (no rule (b) on
+// non-affine arrays or after a user partition); the new rule is tested in
+// w9r7_partition_{after_user,non_affine}.mlir.
 // RUN: hls-est %s --affine-loop-normalize --auto-pipeline-unroll --infer-vitis-split-array=td=off --memory-banking-bram --convert-affine-to-loopschedule --bram-analysis --bram-debug --config-set tool.hls.partitioning.constant_index.non_affine_arrays=false --config-set tool.hls.partitioning.constant_index.after_user_partition=false > %t.out 2> %t.err
 // RUN: FileCheck %s --input-file=%t.out --check-prefix=REPORT
 // RUN: FileCheck %s --input-file=%t.err
