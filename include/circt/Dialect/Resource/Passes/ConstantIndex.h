@@ -52,6 +52,36 @@ inline std::optional<int64_t> getConstantIndexValue(mlir::Value v) {
       return c;
     return std::nullopt;
   }
+  // Integer arithmetic on constants, which LLVM's constant folding removes
+  // before Vitis looks at the indices: unrolling a loop over `worker(s[id],
+  // s[id + 4])` leaves `index_cast(addi(index_cast %c, 4))` as the element
+  // index of a stream array (W9r7 review defect 6). The result wraps to the
+  // operation's width like the hardware value.
+  if (mlir::Operation *def = v.getDefiningOp())
+    if (mlir::isa<mlir::arith::AddIOp, mlir::arith::SubIOp,
+                  mlir::arith::MulIOp>(def)) {
+      std::optional<int64_t> a = getConstantIndexValue(def->getOperand(0));
+      std::optional<int64_t> b =
+          a ? getConstantIndexValue(def->getOperand(1)) : std::nullopt;
+      if (!a || !b)
+        return std::nullopt;
+      uint64_t ua = static_cast<uint64_t>(*a), ub = static_cast<uint64_t>(*b);
+      uint64_t r = mlir::isa<mlir::arith::AddIOp>(def)   ? ua + ub
+                   : mlir::isa<mlir::arith::SubIOp>(def) ? ua - ub
+                                                         : ua * ub;
+      unsigned width = 64;
+      if (auto it = mlir::dyn_cast<mlir::IntegerType>(v.getType()))
+        width = it.getWidth();
+      if (width == 0 || width > 64)
+        return std::nullopt;
+      if (width < 64) {
+        uint64_t mask = (uint64_t(1) << width) - 1;
+        r &= mask;
+        if (r >> (width - 1)) // sign-extend
+          r |= ~mask;
+      }
+      return static_cast<int64_t>(r);
+    }
   // An affine.apply whose operands all fold to constants (unrolling leaves
   // `affine.apply (d0 + 1)(%c0)` as the index of a memref.load).
   if (auto apply = v.getDefiningOp<mlir::affine::AffineApplyOp>()) {

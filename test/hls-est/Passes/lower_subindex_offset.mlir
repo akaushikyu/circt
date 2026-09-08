@@ -10,7 +10,7 @@
 // halves of the code write).
 
 // CHECK-LABEL: func.func private @fill_off_0(
-// CHECK-SAME:    %[[P:.*]]: memref<512xi32>, %[[O:.*]]: index, %{{.*}}: i32)
+// CHECK-SAME:    %[[P:.*]]: memref<512xi32>, %[[O:.*]]: index {hls.view_index}, %{{.*}}: i32)
 // CHECK:         affine.store %{{.*}}, %[[P]][%{{.*}} + symbol(%[[O]])] : memref<512xi32>
 // CHECK-LABEL: func.func @offsets
 // CHECK:         call @fill(%{{.*}}, %{{.*}}) : (memref<256xi32>, i32) -> ()

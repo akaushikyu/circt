@@ -257,6 +257,27 @@ static std::optional<SmallVector<int64_t, 2>> constantElementPath(Value mem) {
   return path;
 }
 
+static std::optional<SmallVector<int64_t, 2>>
+constantElementPathAt(Operation *callSite, unsigned index) {
+  std::optional<SmallVector<int64_t, 2>> path =
+      constantElementPath(callSite->getOperand(index));
+  if (!path)
+    return path;
+  auto ci = dyn_cast<CallOpInterface>(callSite);
+  auto callee = ci ? dyn_cast_or_null<func::FuncOp>(ci.resolveCallable())
+                   : func::FuncOp();
+  if (!callee || index + 1 >= callee.getNumArguments() ||
+      index + 1 >= callSite->getNumOperands() ||
+      !callee.getArgAttr(index + 1, circt::hls_analysis::kViewIndexArgAttr))
+    return path;
+  std::optional<int64_t> keyValue =
+      getConstantIndexValue(callSite->getOperand(index + 1));
+  if (!keyValue)
+    return std::nullopt;
+  path->push_back(*keyValue);
+  return path;
+}
+
 static bool isStreamArray(Value root) {
   SmallVector<Value> work{root};
   DenseSet<Value> seen{root};
@@ -292,11 +313,13 @@ static bool isStreamArray(Value root) {
 
 static bool sharesObject(Operation *arrayValue, Operation *b,
                          DenseMap<Value, bool> &streamArrays) {
-  for (Value exprValue : arrayValue->getOperands()) {
+  for (OpOperand &ox : arrayValue->getOpOperands()) {
+    Value exprValue = ox.get();
     if (!isa<BaseMemRefType>(exprValue.getType()))
       continue;
     StorageRoot rx = storageRoot(exprValue);
-    for (Value rowValue : b->getOperands()) {
+    for (OpOperand &oy : b->getOpOperands()) {
+      Value rowValue = oy.get();
       if (!isa<BaseMemRefType>(rowValue.getType()) ||
           storageRoot(rowValue) != rx)
         continue;
@@ -305,8 +328,8 @@ static bool sharesObject(Operation *arrayValue, Operation *b,
         if (fresh)
           it->second = isStreamArray(rx.value);
         if (it->second) {
-          auto px = constantElementPath(exprValue),
-               py = constantElementPath(rowValue);
+          auto px = constantElementPathAt(arrayValue, ox.getOperandNumber()),
+               py = constantElementPathAt(b, oy.getOperandNumber());
           if (px && py) {
             bool differ = false;
             for (size_t keyValue = 0, e = std::min(px->size(), py->size());
@@ -336,11 +359,12 @@ static bool distinctStreamElements(Operation *arrayValue, Operation *b,
   SmallVector<SmallVector<int64_t, 2>> pa, pb;
   for (auto [op, paths] :
        {std::make_pair(arrayValue, &pa), std::make_pair(b, &pb)})
-    for (Value valueHandle : op->getOperands()) {
+    for (OpOperand &opHandle : op->getOpOperands()) {
+      Value valueHandle = opHandle.get();
       if (!isa<BaseMemRefType>(valueHandle.getType()) ||
           storageRoot(valueHandle) != root)
         continue;
-      auto path = constantElementPath(valueHandle);
+      auto path = constantElementPathAt(op, opHandle.getOperandNumber());
       if (!path)
         return false;
       paths->push_back(*path);

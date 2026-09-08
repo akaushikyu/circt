@@ -574,7 +574,10 @@ struct LowerSubIndexPass
               ? shiftPartitionDims(a, context, dyn_cast<MemRefType>(it->second))
               : (a ? a : DictionaryAttr::get(context, {})));
       types.push_back(IndexType::get(context));
-      attrs.push_back(DictionaryAttr::get(context, {}));
+
+      attrs.push_back(DictionaryAttr::get(
+          context, {NamedAttribute(StringAttr::get(context, kViewIndexArgAttr),
+                                   UnitAttr::get(context))}));
     }
     Block &entry = clone.getBody().front();
     OpBuilder b(&entry, entry.begin());

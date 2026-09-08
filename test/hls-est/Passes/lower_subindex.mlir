@@ -12,18 +12,19 @@
 //     call of that form (Vitis clones `work` into `work.1` per array
 //     argument form, VITIS_NOTES.md N14 R4; inl_c10: two forms, 10 BRAM);
 //     a partition pragma of the row parameter moves to the whole array with
-//     its dimension shifted;
+//     its dimension shifted; the added index parameter carries
+//     hls.view_index (--bram-analysis's call instances read it);
 //   - the original callee is erased when private and no call is left.
 // A view that is not a row of a static array stays, with a warning.
 
 // CHECK-LABEL: func.func private @work_row_0(
-// CHECK-SAME:    %[[A:.*]]: memref<4x1024xi32> {hls.array_partition = [{dim = 2 : i32, factor = 2 : i32, kind = "cyclic"}]}, %[[K:.*]]: index, %[[O:.*]]: memref<1024xi32>)
+// CHECK-SAME:    %[[A:.*]]: memref<4x1024xi32> {hls.array_partition = [{dim = 2 : i32, factor = 2 : i32, kind = "cyclic"}]}, %[[K:.*]]: index {hls.view_index}, %[[O:.*]]: memref<1024xi32>)
 // CHECK-SAME:    attributes {hls.inline_off, hls.orig_name = "work"}
 // CHECK:         memref.alloca
 // CHECK:         affine.load %[[A]][symbol(%[[K]]), %{{.*}}] : memref<4x1024xi32>
 // CHECK:         affine.store %{{.*}}, %[[O]][%{{.*}}] : memref<1024xi32>
 // CHECK-LABEL: func.func private @work_row_1(
-// CHECK-SAME:    %{{.*}}: memref<1024xi32> {hls.array_partition = [{dim = 1 : i32, factor = 2 : i32, kind = "cyclic"}]}, %[[B:.*]]: memref<4x1024xi32>, %[[L:.*]]: index)
+// CHECK-SAME:    %{{.*}}: memref<1024xi32> {hls.array_partition = [{dim = 1 : i32, factor = 2 : i32, kind = "cyclic"}]}, %[[B:.*]]: memref<4x1024xi32>, %[[L:.*]]: index {hls.view_index})
 // CHECK:         affine.store %{{.*}}, %[[B]][symbol(%[[L]]), %{{.*}}] : memref<4x1024xi32>
 // CHECK-NOT:   func.func private @work(
 // CHECK-LABEL: func.func @rows

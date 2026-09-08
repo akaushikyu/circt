@@ -43,6 +43,11 @@
 
 namespace circt::hls_analysis {
 
+/// The argument attribute --lower-polygeist-subindex puts on the index
+/// parameter it adds to a callee clone (the parameter after the whole array
+/// that replaced a row / element view): the view's index.
+inline constexpr llvm::StringLiteral kViewIndexArgAttr = "hls.view_index";
+
 /// Polygeist ops hls-est does not model (e.g. `polygeist.get_func`, the
 /// address of a function passed as a value, as in `std::cout << std::endl`,
 /// console output Vitis ignores in synthesis) parse as unregistered ops of
