@@ -3035,7 +3035,7 @@ public:
 
 private:
   Kind kind;
-  unsigned fastThreshold = 150, fastOpsThreshold = 16384, maxIIBumps = 4096;
+  unsigned fastThreshold = 150, fastOpsThreshold = 4096, maxIIBumps = 4096;
   unsigned recurrenceRepairRounds = 0;
 };
 

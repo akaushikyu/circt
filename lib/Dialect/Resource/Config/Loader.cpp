@@ -929,6 +929,8 @@ void fillTool(const json::Object &t, ToolProfile &tool) {
   h.partitioning.policy = str(pa, "policy");
   h.partitioning.constantIndexMinExtent =
       integer(obj(pa, "constant_index"), "min_extent");
+  h.partitioning.constantIndexMaxExtent =
+      integer(obj(pa, "constant_index"), "max_extent", 0);
   h.partitioning.constantIndexAfterUserPartition =
       boolean(obj(pa, "constant_index"), "after_user_partition", true);
   h.partitioning.constantIndexNonAffineArrays =

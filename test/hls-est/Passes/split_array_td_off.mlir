@@ -4,6 +4,9 @@
 // w9r7_partition_{after_user,non_affine}.mlir.
 // RUN: hls-est %s '--infer-vitis-split-array=td=auto annotate-pressure=false' --config-set tool.hls.partitioning.constant_index.non_affine_arrays=false --config-set tool.hls.partitioning.constant_index.after_user_partition=false | FileCheck %s --check-prefix=AUTO
 // RUN: hls-est %s '--infer-vitis-split-array=td=auto auto-partitions=true annotate-pressure=false' --config-set tool.hls.partitioning.constant_index.non_affine_arrays=false --config-set tool.hls.partitioning.constant_index.after_user_partition=false | FileCheck %s --check-prefix=AUTOP
+// The defaults (rule (b) also on arrays without an affine access, N57)
+// differ from the pinned lines only in @memref_only:
+// RUN: hls-est %s '--infer-vitis-split-array=td=off annotate-pressure=false' | FileCheck %s --check-prefix=DEF
 // RUN: not hls-est %s --infer-vitis-split-array=td=on 2>&1 | FileCheck %s --check-prefix=BAD
 // RUN: hls-est %s '--infer-vitis-split-array=td=off annotate-pressure=false emit-remarks=true' 2>&1 --config-set tool.hls.partitioning.constant_index.non_affine_arrays=false --config-set tool.hls.partitioning.constant_index.after_user_partition=false | FileCheck %s --check-prefix=REMARK
 
@@ -283,6 +286,8 @@ func.func @left_alone(%in: memref<4xi32>) {
 // reached only through memref.load / memref.store gets no spec - it would be
 // priced as one memory anyway - and the decision is reported as a remark.
 // Rule (c) needs no banking and still applies to such an array.
+// DEF-LABEL: func.func @memref_only
+// DEF: memref.alloca() {hls.array_partition = [{dim = 2 : i32, factor = 8 : i32, kind = "complete", source = "constant-index", variable = "M"}]{{.*}} : memref<64x8xi32>
 // OFF-LABEL: func.func @memref_only
 // OFF: memref.alloca() {polygeist.varname = "M"} : memref<64x8xi32>
 // OFF: memref.alloca() {hls.registers, {{.*}}polygeist.varname = "N"} : memref<8xi32>

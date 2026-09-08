@@ -202,6 +202,7 @@ const KeySpec kSchema[] = {
   {"tool.hls.partitioning.policy", KeyKind::PluginName, "", "The PartitionPolicy", "Q-03, Q-04, Q-08, Q-15", SPLIT, "partition_policy", kNoLimit, kNoLimit, false},
   {"tool.hls.partitioning.constant_index", KeyKind::Section, "", "Rule (b): a dimension every access indexes with a constant", "Q-03", SPLIT, "", kNoLimit, kNoLimit, false},
   {"tool.hls.partitioning.constant_index.min_extent", KeyKind::UInt, "elements", "Smallest extent of such a dimension that is partitioned", "Q-03", SPLIT, "", 1, kNoLimit, false},
+  {"tool.hls.partitioning.constant_index.max_extent", KeyKind::UInt, "elements", "Largest extent of such a dimension that is partitioned; a larger one stays whole (VITIS_NOTES N61; 0 or absent: no limit)", "Q-03", SPLIT, "", 0, kNoLimit, true},
   {"tool.hls.partitioning.constant_index.after_user_partition", KeyKind::Bool, "", "Rule (b) also applies to an array with a user cyclic / block array_partition, on every part (VITIS_NOTES N57)", "Q-03", SPLIT, "", kNoLimit, kNoLimit, true},
   {"tool.hls.partitioning.constant_index.non_affine_arrays", KeyKind::Bool, "", "Rule (b) also applies to an array none of whose accesses is affine (VITIS_NOTES N57)", "Q-03", SPLIT, "", kNoLimit, kNoLimit, true},
   {"tool.hls.partitioning.inference", KeyKind::Section, "", "The td=auto port-pressure search", "Q-06..Q-08", SPLIT, "", kNoLimit, kNoLimit, false},

@@ -863,6 +863,7 @@ struct AutomaticPartition {
 struct AutomaticRules {
   int64_t completeThreshold = 4;           ///< (a), elements
   int64_t constantIndexMinExtent = 2;      ///< (b), elements
+  int64_t constantIndexMaxExtent = 64;     ///< (b), elements; 0: no limit
   ArrayRef<std::string> userStoragePragmas; ///< arrays the user decided
   /// (b) also on an array with a user cyclic / block array_partition
   /// (VITIS_NOTES N57: 214-270 completes each part).
@@ -881,6 +882,32 @@ static bool hasOnlyUserPartition(Operation *def,
     if (pragma != kPartitionAttr && def->hasAttr(pragma))
       return false;
   return true;
+}
+
+/// The extent of each part of dimension `d` of `def` after the user's cyclic
+/// / block array_partition on that dimension (dim = d + 1, or 0 for every
+/// dimension); the whole extent without one. Rule (b)'s max_extent compares
+/// this: zijun_wang lab2 `K_l[N][128]` with `cyclic factor=32 dim=2` gets
+/// 128 banks in Vitis (parts of 4), while A[64][256] with a user cyclic 2 on
+/// dim 1 keeps dim 2 whole (kernel w9r7rev_ap_big; VITIS_NOTES N61).
+static int64_t partExtent(Operation *def, MemRefType ty, unsigned d) {
+  int64_t extent = ty.getDimSize(d);
+  auto entries = def->getAttrOfType<ArrayAttr>(kPartitionAttr);
+  if (!entries)
+    return extent;
+  for (Attribute a : entries) {
+    auto entry = dyn_cast<DictionaryAttr>(a);
+    auto dim = entry ? entry.getAs<IntegerAttr>("dim") : IntegerAttr();
+    auto kind = entry ? entry.getAs<StringAttr>("kind") : StringAttr();
+    auto factor = entry ? entry.getAs<IntegerAttr>("factor") : IntegerAttr();
+    if (!dim || !kind || !factor || factor.getInt() <= 1)
+      continue;
+    if (dim.getInt() != static_cast<int64_t>(d) + 1 && dim.getInt() != 0)
+      continue;
+    if (kind.getValue() == "cyclic" || kind.getValue() == "block")
+      extent = (extent + factor.getInt() - 1) / factor.getInt();
+  }
+  return extent;
 }
 
 /// Whether rules (a)-(c) may look at an array `def` of type `ty` at all: a
@@ -958,12 +985,34 @@ static AutomaticPartition decideAutomaticPartition(memref::AllocaOp alloca,
     return decision;
   }
 
-  // (b) Dimensions that only ever see constants, extent >= min_extent (2).
-  for (unsigned d = 0; d < rank; ++d)
-    if (info.constantDim[d] && ty.getDimSize(d) >= rules.constantIndexMinExtent)
-      decision.parts.push_back({d, ty.getDimSize(d)});
-  if (decision.parts.empty())
+  // (b) Dimensions that only ever see constants, min_extent (2) <= extent <=
+  // max_extent (64): Vitis leaves a larger one whole (kernels w9r7fix_ap_e65
+  // .. e128, e65w8, e128k64 against e64r256 / e64w32; VITIS_NOTES N61).
+  SmallVector<unsigned, 2> tooLarge;
+  for (unsigned d = 0; d < rank; ++d) {
+    if (!info.constantDim[d] || ty.getDimSize(d) < rules.constantIndexMinExtent)
+      continue;
+    if (rules.constantIndexMaxExtent > 0 &&
+        partExtent(alloca.getOperation(), ty, d) >
+            rules.constantIndexMaxExtent) {
+      tooLarge.push_back(d);
+      continue;
+    }
+    decision.parts.push_back({d, ty.getDimSize(d)});
+  }
+  if (decision.parts.empty()) {
+    if (!tooLarge.empty())
+      decision.reason =
+          "dimension " + std::to_string(tooLarge.front() + 1) +
+          " is indexed only by constants, but its extent (per part of a "
+          "user partition) " +
+          std::to_string(partExtent(alloca.getOperation(), ty,
+                                    tooLarge.front())) +
+          " exceeds constant_index.max_extent " +
+          std::to_string(rules.constantIndexMaxExtent) +
+          ": left whole (Vitis does not partition it; VITIS_NOTES N61)";
     return decision;
+  }
   std::string dims;
   llvm::raw_string_ostream os(dims);
   llvm::interleave(
@@ -1126,6 +1175,7 @@ struct InferVitisSplitArray
     AutomaticRules rules;
     rules.completeThreshold = completeThresholdValue;
     rules.constantIndexMinExtent = cfgPartitioning->constantIndexMinExtent;
+    rules.constantIndexMaxExtent = cfgPartitioning->constantIndexMaxExtent;
     rules.userStoragePragmas = userStoragePragmas;
     rules.afterUserPartition =
         cfgPartitioning->constantIndexAfterUserPartition;
@@ -1152,8 +1202,13 @@ struct InferVitisSplitArray
           mlir::emitRemark(alloca.getLoc())
               << "array '" << name << "' left whole: " << decision.reason;
       }
-      if (decision.kind == AutomaticPartition::None)
+      if (decision.kind == AutomaticPartition::None) {
+        // A rule that matched and declined (rule (b)'s max_extent).
+        if (!decision.unbankable && !decision.reason.empty() && emitRemarks)
+          mlir::emitRemark(alloca.getLoc())
+              << "array '" << name << "' left whole: " << decision.reason;
         return;
+      }
       decided.insert(alloca.getResult());
       if (decision.kind == AutomaticPartition::Registers) {
         def->setAttr(kRegistersAttrName, builder.getUnitAttr());

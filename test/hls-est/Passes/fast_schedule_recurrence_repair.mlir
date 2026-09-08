@@ -1,5 +1,7 @@
 // RUN: hls-est %s --affine-loop-normalize --memory-banking-bram --convert-affine-to-loopschedule=fast-threshold=0 --config-set scheduling.modulo.recurrence_repair_rounds=64 -o - | FileCheck %s
 // RUN: hls-est %s --affine-loop-normalize --memory-banking-bram --convert-affine-to-loopschedule -o - | FileCheck %s
+// The default rounds (64) with the greedy scheduler:
+// RUN: hls-est %s --affine-loop-normalize --memory-banking-bram --convert-affine-to-loopschedule=fast-threshold=0 -o - | FileCheck %s
 // RUN: hls-est %s --affine-loop-normalize --memory-banking-bram --convert-affine-to-loopschedule=fast-threshold=0 --config-set scheduling.modulo.recurrence_repair_rounds=0 -o - | FileCheck %s --check-prefix=NOREPAIR
 //
 // The greedy modulo scheduler (fast-threshold=0) places a loop-carried

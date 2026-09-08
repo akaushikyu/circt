@@ -352,7 +352,7 @@
       "_model": "plugin name (a modulo_scheduler): The ModuloScheduler [S-10]",
       "_recurrence_repair_rounds": "uint: greedy scheduler: times a loop-carried edge broken by resource delays may move its destination later before the II is bumped (0: bump at once; 64 since R-cmpd is modelled, W9r7, OPEN_ISSUES O56); VITIS_NOTES N39 [S-08]",
       "_user_ii_target": "bool: A loop with a user pipeline II=N > 1 is scheduled at N when it could start more often [P-14]",
-      "fast_ops_threshold": 16384,
+      "fast_ops_threshold": 4096,
       "fast_threshold": 150,
       "max_ii_bumps": 4096,
       "max_pipeline_body_ops": 250000,
@@ -676,9 +676,11 @@
         "compound_assign_two_stores": true,
         "constant_index": {
           "_after_user_partition": "bool: Rule (b) also applies to an array with a user cyclic / block array_partition, on every part (VITIS_NOTES N57) [Q-03]",
+          "_max_extent": "uint, elements: Largest extent of such a dimension that is partitioned; a larger one stays whole (VITIS_NOTES N61; 0 or absent: no limit) [Q-03]",
           "_min_extent": "uint, elements: Smallest extent of such a dimension that is partitioned [Q-03]",
           "_non_affine_arrays": "bool: Rule (b) also applies to an array none of whose accesses is affine (VITIS_NOTES N57) [Q-03]",
           "after_user_partition": true,
+          "max_extent": 64,
           "min_extent": 2,
           "non_affine_arrays": true
         },

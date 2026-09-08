@@ -335,6 +335,10 @@ struct PartitionInferenceConfig {
 struct PartitioningConfig {
   std::string policy;
   int64_t constantIndexMinExtent = 2;
+  /// Largest extent of a dimension rule (b) partitions: Vitis leaves a
+  /// constant-indexed dimension of more than 64 elements whole, whatever the
+  /// element width or the number of rows (VITIS_NOTES N61; 0: no limit).
+  int64_t constantIndexMaxExtent = 64;
   /// Rule (b) also after a user cyclic / block partition, on every part
   /// (VITIS_NOTES N57).
   bool constantIndexAfterUserPartition = true;
@@ -505,7 +509,7 @@ struct SchedulingConfig {
   std::string dependenceModel;
   std::string moduloModel;
   int64_t fastThreshold = 150;
-  int64_t fastOpsThreshold = 16384;
+  int64_t fastOpsThreshold = 4096;
   int64_t maxIIBumps = 4096;
   /// A pipelined loop whose body (after the implied unroll) has more ops
   /// than this is left sequential with a warning: a guard against bodies the

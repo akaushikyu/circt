@@ -68,7 +68,7 @@
       },
       "partitioning": {
         "policy": "vitis-td",
-        "constant_index": { "min_extent": 2, "after_user_partition": true, "non_affine_arrays": true },
+        "constant_index": { "min_extent": 2, "max_extent": 64, "after_user_partition": true, "non_affine_arrays": true },
         "inference": {
           "target_ii": 1,
           "ports": { "any": 2, "read": 1, "write": 1 },
@@ -155,7 +155,7 @@
     "modulo": {
       "model": "greedy-simplex",
       "fast_threshold": 150,
-      "fast_ops_threshold": 16384,
+      "fast_ops_threshold": 4096,
       "max_ii_bumps": 4096,
       "max_pipeline_body_ops": 250000,
       "recurrence_repair_rounds": 64,
