@@ -38,6 +38,7 @@
 
 #include "circt/Dialect/Resource/Model/AccessOrder.h"
 #include "circt/Dialect/Resource/Passes/PolygeistCompat.h"
+#include "circt/Dialect/Resource/Passes/StreamFifos.h"
 #include "circt/Dialect/Resource/Plugins/MemoryInterfaces.h"
 #include "circt/Dialect/Resource/Plugins/Registry.h"
 
@@ -113,6 +114,22 @@ static void scanArgUses(Value v, ImplicitBuffer &a,
             work.push_back(inner);
           continue;
         }
+        // The data argument of an hls::stream method: `s >> C[i]` /
+        // `s.read(C[i])` writes the port's element, `s << C[i]` reads it
+        // (class_ece8893 nikhil_p lab3 `mem3`, written only through
+        // `C_local >> C[i]`: Vitis has no read FIFO; W9r7 review defect 8b).
+        if (auto sym = dyn_cast_if_present<SymbolRefAttr>(
+                call.getCallableForCallee()))
+          if (auto stream = circt::hls_analysis::parseStreamMethod(
+                  sym.getLeafReference().getValue()))
+            if (n == first + 1)
+              if (auto kind =
+                      circt::hls_analysis::streamDataAccess(stream->method)) {
+                (*kind == circt::hls_analysis::StreamData::WritesElement
+                     ? a.hasWrite
+                     : a.hasRead) = true;
+                continue;
+              }
         // tool.hls.implicit_buffers[axi4-mm].unresolved_call: what a port
         // passed to a call without a body is assumed to do (rw).
         a.unresolvedCall = true;
@@ -149,7 +166,10 @@ public:
                llvm::function_ref<int64_t(int64_t, unsigned)> mapFifo,
                SmallVectorImpl<ImplicitBuffer> &out) const override {
     SmallVector<ImplicitBuffer> bundles;
-    // The `channel=` values of each bundle's reading ports (-1: none given).
+    // The `channel=` values of each bundle's reading ports. A port without
+    // `channel=` is on channel 0: it shares the read FIFO of an explicit
+    // `channel=0` (kernel w9r7rev_mx_chdef: a channel=0 port and two ports
+    // without one, Vitis 39 = one FIFO, not two; W9r7 review defect 9).
     SmallVector<llvm::SmallDenseSet<int64_t, 4>> readChannels;
     for (unsigned i = 0, e = fn.getNumArguments(); i < e; ++i) {
       auto ifaces = fn.getArgAttrOfType<ArrayAttr>(i, "hls.interface");
@@ -223,7 +243,7 @@ public:
         a->unresolvedCall |= port.unresolvedCall;
         if (port.hasRead) {
           a->castLoadBits = std::max(a->castLoadBits, port.castLoadBits);
-          readChannels[index].insert(intField(d, "channel", -1));
+          readChannels[index].insert(intField(d, "channel", 0));
         }
       }
     }

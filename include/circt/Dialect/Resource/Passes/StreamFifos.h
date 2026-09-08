@@ -44,6 +44,21 @@ struct StreamTemplate {
 /// otherwise nullopt. `depth` is unset when the arguments cannot be parsed.
 std::optional<StreamTemplate> parseStreamMethod(llvm::StringRef symbol);
 
+/// How an hls::stream method moves the object its data argument refers to:
+/// `write` / `write_nb` / `<<` read it, `read(T&)` / `read_nb` / `>>` write
+/// it (StreamFifos.cpp ioType names the same methods). `method` is
+/// StreamTemplate::method.
+enum class StreamData { ReadsElement, WritesElement };
+inline std::optional<StreamData> streamDataAccess(llvm::StringRef method) {
+  if (method.starts_with("5write") || method.starts_with("8write_nb") ||
+      method.starts_with("ls"))
+    return StreamData::ReadsElement;
+  if ((method.starts_with("4read") && !method.starts_with("4readEv")) ||
+      method.starts_with("7read_nb") || method.starts_with("rs"))
+    return StreamData::WritesElement;
+  return std::nullopt;
+}
+
 /// Bits of the element type T from its mangling, for the types whose width
 /// the IR does not carry exactly (bool is an i8 in memory, a 1-bit FIFO in
 /// Vitis) and the arbitrary-precision types; nullopt otherwise.

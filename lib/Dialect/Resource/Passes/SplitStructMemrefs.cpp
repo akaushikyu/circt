@@ -416,20 +416,6 @@ struct NewMemory {
   bool registers = false;
 };
 
-/// How an hls::stream method moves the struct its data argument refers to:
-/// `write` / `write_nb` / `<<` read it, `read(T&)` / `read_nb` / `>>` write
-/// it (StreamFifos.cpp ioType names the same methods).
-enum class StreamData { ReadsElement, WritesElement };
-std::optional<StreamData> streamDataAccess(StringRef method) {
-  if (method.starts_with("5write") || method.starts_with("8write_nb") ||
-      method.starts_with("ls"))
-    return StreamData::ReadsElement;
-  if ((method.starts_with("4read") && !method.starts_with("4readEv")) ||
-      method.starts_with("7read_nb") || method.starts_with("rs"))
-    return StreamData::WritesElement;
-  return std::nullopt;
-}
-
 class StructSplitter {
 public:
   /// `roots`: the values the variable is reached through (the allocation's
@@ -471,6 +457,10 @@ public:
     unsigned operand;
     unsigned root;
     SmallVector<Value> lead; // rows selected before the call (`f(a[k])`)
+    /// `f(a[i][j])` with a reference parameter: the element of the last,
+    /// one-dimensional view the callee's pointer starts at (a polygeist
+    /// element view, `&a[i][j]`); null for whole rows.
+    Value element;
   };
   SmallVector<CallEdge> edges;
   /// An element passed to an hls::stream read / write: a whole-element
@@ -511,9 +501,23 @@ public:
       }
     return found;
   }
+  /// The memory index of the array member at struct position `path` (the
+  /// `member_path` cgeist records for an array_partition on `r.data`); none
+  /// when aggregated or when no array leaf sits there.
+  std::optional<unsigned> arrayLeafAt(ArrayRef<int64_t> path) const {
+    if (aggregate)
+      return std::nullopt;
+    for (auto [i, l] : llvm::enumerate(leaves))
+      if (!l.dims.empty() && l.innerPath.empty() &&
+          ArrayRef<int64_t>(l.path) == path)
+        return static_cast<unsigned>(i);
+    return std::nullopt;
+  }
   unsigned variableRank() const { return type.getRank(); }
   bool selectsRows() const {
-    return llvm::any_of(edges, [](const CallEdge &e) { return !e.lead.empty(); });
+    return llvm::any_of(edges, [](const CallEdge &e) {
+      return !e.lead.empty() || e.element;
+    });
   }
 
 private:
@@ -845,6 +849,14 @@ bool StructSplitter::visitMemref(Value v, Addr a) {
       // Whole rows (no offset inside them): the callee's parameter is the
       // same variable, or a row of it.
       bool rows = !a.tail && !a.byteConst && !a.byteDyn;
+      // One element by reference (`sumr(k[i][j])`, a `const V &` parameter
+      // of a kept function): the callee's pointer is an element view of the
+      // last dimension, which the new memories select the same way. Vitis
+      // keeps such an array of hls::vector aggregated, one word per vector
+      // (kernel w9r7rev_vx_fnval: k_0 / k_1 200 x 512, 2 x 29; W9r7 review
+      // defect 4).
+      bool element = a.tail && !a.byteConst && !a.byteDyn &&
+                     type.getRank() == a.lead.size() + 1;
       std::optional<StreamTemplate> stream =
           callee ? parseStreamMethod(callee.getSymName()) : std::nullopt;
       for (OpOperand &use : user->getOpOperands()) {
@@ -864,9 +876,11 @@ bool StructSplitter::visitMemref(Value v, Addr a) {
         auto at = callee && !callee.isExternal() && n < callee.getNumArguments()
                       ? dyn_cast<MemRefType>(callee.getArgument(n).getType())
                       : MemRefType();
-        if (rows && at && at.getElementType() == structType &&
-            at.getRank() == type.getRank() - a.lead.size()) {
-          edges.push_back(CallEdge{call, n, curRoot, a.lead});
+        if ((rows || element) && at && at.getElementType() == structType &&
+            at.getRank() == type.getRank() - a.lead.size() &&
+            (rows || at.isDynamicDim(0))) {
+          edges.push_back(
+              CallEdge{call, n, curRoot, a.lead, rows ? Value() : a.tail});
           edged = true;
         } else {
           other = true;
@@ -2932,12 +2946,14 @@ namespace {
 /// (`#pragma HLS array_partition variable=row.data complete`: cgeist records
 /// `variable = "row.data"` with the member's own dim) belong to that
 /// member's memory, whose dimensions are the variable's, then the member's:
-/// dim d becomes d + rank(variable). The IR has no member names (OPEN_ISSUES
-/// O54 (b)), so only a struct with one array member is resolved; a member
-/// entry on any other memory is dropped (OPEN_ISSUES O78: barry_walker
-/// lab_2 `Q_row_local.data`, Vitis registers).
+/// dim d becomes d + rank(variable). The member is the one at the entry's
+/// `member_path` (its struct positions, which cgeist records: a struct with
+/// several array members, kernel w9r7rev_mp_two, W9r7 review defect 10);
+/// without one (MLIR of an older cgeist) only a struct with one array member
+/// is resolved. A member entry on any other memory is dropped (OPEN_ISSUES
+/// O78: barry_walker lab_2 `Q_row_local.data`, Vitis registers).
 static void placeMemberPartitions(Operation *m, unsigned memoryIndex,
-                                  std::optional<unsigned> soleArrayLeaf,
+                                  const StructSplitter &splitter,
                                   unsigned variableRank) {
   auto arr = m->getAttrOfType<ArrayAttr>("hls.array_partition");
   if (!arr)
@@ -2956,9 +2972,20 @@ static void placeMemberPartitions(Operation *m, unsigned memoryIndex,
       continue;
     }
     changed = true;
-    if (!soleArrayLeaf || *soleArrayLeaf != memoryIndex)
+    std::optional<unsigned> target;
+    if (auto positions = d.getAs<ArrayAttr>("member_path")) {
+      SmallVector<int64_t> path;
+      for (Attribute p : positions)
+        if (auto pi = dyn_cast<IntegerAttr>(p))
+          path.push_back(pi.getInt());
+      target = splitter.arrayLeafAt(path);
+    } else {
+      target = splitter.soleArrayLeaf();
+    }
+    if (!target || *target != memoryIndex)
       continue;
     NamedAttrList fields(d);
+    fields.erase("member_path");
     if (auto dim = d.getAs<IntegerAttr>("dim"))
       if (dim.getInt() > 0)
         fields.set("dim", b.getI32IntegerAttr(
@@ -3374,8 +3401,8 @@ struct SplitStructMemrefsPass
           st.addAttributes(n->op->getAttrs());
           Operation *m = b.create(st);
           if (circt::hlsest::Config::get().tool.hls.structs.memberPartitions)
-            placeMemberPartitions(m, static_cast<unsigned>(memIndex),
-                                  s.soleArrayLeaf(), s.variableRank());
+            placeMemberPartitions(m, static_cast<unsigned>(memIndex), s,
+                                  s.variableRank());
           if (!n->temporary)
             m->setAttr("polygeist.varname", b.getStringAttr(mem.name));
           annotate(m, mem, aggregate);
@@ -3471,6 +3498,15 @@ struct SplitStructMemrefsPass
             auto row = MemRefType::get(mt.getShape().drop_front(),
                                        mt.getElementType());
             v = SubIndexOp::create(b, e.call.getLoc(), row, v, idx);
+            rowsSelected = true;
+          }
+          if (e.element) {
+            auto mt = cast<MemRefType>(v.getType());
+            SmallVector<int64_t> shape(mt.getShape());
+            shape[0] = ShapedType::kDynamic;
+            v = SubIndexOp::create(b, e.call.getLoc(),
+                                   MemRefType::get(shape, mt.getElementType()),
+                                   v, e.element);
             rowsSelected = true;
           }
           if (v.getType() != want.getType())
