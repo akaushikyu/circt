@@ -331,4 +331,4 @@ module {
 // CHECK: memref.alloca @ loc("{{[^"]*}}":246:18){{$}}
 // CHECK-NEXT: kind=PIPO  bram=29{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: Total BRAM: 686{{$}}
+// CHECK: Total BRAM: 629{{$}}
