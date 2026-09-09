@@ -38,10 +38,12 @@ struct MemObject {
   SmallVector<Operation *> anchors;
   SmallVector<Value> aliases;
   SmallVector<Operation *> writers;
+  SmallVector<Operation *> readers;
   DenseSet<Operation *> functions;
   bool escaping = false;
   std::string escapeReason;
   bool live = false;
+  bool scalarised = false;
 };
 
 struct ObjectTable {
@@ -154,7 +156,7 @@ void ObjectTable::close(unsigned id) {
   SmallVector<Value> work(o.aliases.begin(), o.aliases.end());
   for (Value valueHandle : work)
     objOf[valueHandle] = id;
-  llvm::SetVector<Operation *> writers;
+  llvm::SetVector<Operation *> writers, readers;
   while (!work.empty()) {
     Value valueHandle = work.pop_back_val();
     if (auto fn =
@@ -194,6 +196,8 @@ void ObjectTable::close(unsigned id) {
       if (named) {
         if (writes)
           writers.insert(user);
+        else
+          readers.insert(user);
         continue;
       }
 
@@ -204,6 +208,7 @@ void ObjectTable::close(unsigned id) {
     }
   }
   o.writers.assign(writers.begin(), writers.end());
+  o.readers.assign(readers.begin(), readers.end());
   const circt::hlsest::DeadMemoryConfig &dm =
       circt::hlsest::Config::get().tool.hls.middleEnd.deadMemory;
   if (dm.globalSharedByFunctionsEscapes && isa<memref::GlobalOp>(o.def) &&
@@ -762,8 +767,8 @@ static bool canMaterializeZero(Type typeValue) {
 
 class Liveness {
 public:
-  Liveness(ModuleOp module, ObjectTable &table)
-      : module(module), typeValue(table) {}
+  Liveness(ModuleOp module, ObjectTable &table, bool keepCycles)
+      : module(module), typeValue(table), keepCycles(keepCycles) {}
 
   void run();
   bool isLive(Operation *op) const { return liveOps.contains(op); }
@@ -788,9 +793,11 @@ private:
   void markIdx(Operation *op, unsigned loopIndex);
   void markObject(unsigned id);
   void processOp(Operation *op);
+  void markLoadStoreCycles();
 
   ModuleOp module;
   ObjectTable &typeValue;
+  bool keepCycles;
   DenseSet<Operation *> liveOps;
   DenseSet<Value> liveVals;
   DenseSet<std::pair<Operation *, unsigned>> liveIdx;
@@ -885,6 +892,183 @@ void Liveness::processOp(Operation *op) {
     markOp(parent);
 }
 
+/// True if Vitis has turned the array into registers before it removes dead
+/// code, so that a cycle through it is a dead register cycle like any other:
+/// an array of at most complete_threshold elements (kernel w9r8i_dm_sroa:
+/// `int cnt[2] = {0, 0}; ... cnt[0] += hist[i]` with cnt unused, Vitis keeps
+/// only `hist`'s own update), or one whose every access names its element by
+/// constant indices directly on the object (LLVM's SROA; Dehazing-denoising
+/// `pixel_cnt[0] += blue_hist[i]`).
+static bool isScalarised(const MemObject &o) {
+  Type memRefType;
+  if (auto g = dyn_cast<memref::GlobalOp>(o.def))
+    memRefType = g.getType();
+  else
+    memRefType = o.def->getResult(0).getType();
+  if (auto mt = dyn_cast<MemRefType>(memRefType))
+    if (mt.hasStaticShape() &&
+        mt.getNumElements() <=
+            circt::hlsest::Config::get()
+                .tool.hls.options.arrayPartition.completeThreshold)
+      return true;
+  auto constantAccess = [](Operation *op) {
+    if (auto lowerIndex = dyn_cast<affine::AffineLoadOp>(op))
+      return lowerIndex.getAffineMap().isConstant();
+    if (auto st = dyn_cast<affine::AffineStoreOp>(op))
+      return st.getAffineMap().isConstant();
+    auto allConstant = [](ValueRange indexValue) {
+      return llvm::all_of(indexValue, [](Value valueHandle) {
+        return matchPattern(valueHandle, m_Constant());
+      });
+    };
+    if (auto lowerIndex = dyn_cast<memref::LoadOp>(op))
+      return allConstant(lowerIndex.getIndices());
+    if (auto st = dyn_cast<memref::StoreOp>(op))
+      return allConstant(st.getIndices());
+    return false;
+  };
+  if (o.aliases.size() != o.anchors.size())
+    return false;
+  return llvm::all_of(o.readers, constantAccess) &&
+         llvm::all_of(o.writers, constantAccess);
+}
+
+/// The tracked objects an op (not its regions) writes.
+static void writtenObjects(Operation *op, const ObjectTable &typeValue,
+                           llvm::SmallSetVector<unsigned, 4> &out) {
+  auto eff = dyn_cast<MemoryEffectOpInterface>(op);
+  if (!eff)
+    return;
+  SmallVector<MemoryEffects::EffectInstance> effects;
+  eff.getEffects(effects);
+  for (auto &entryValue : effects)
+    if (isa<MemoryEffects::Write>(entryValue.getEffect()) &&
+        entryValue.getValue())
+      if (std::optional<unsigned> id = typeValue.lookup(entryValue.getValue()))
+        if (!typeValue.objs[*id].scalarised)
+          out.insert(*id);
+}
+
+/// VITIS_NOTES N66 (kernels w9r8p_dm_self / dm_selfaff, w9r8i_dm_cyc2 /
+/// dm_ctl / dm_feed): Vitis removes an array only once no load from it is
+/// used (LLVM deletes unused loads and then a store-only alloca; a store is
+/// never deleted while its array still has a load, so there is no cyclic
+/// dead-store elimination). An array whose loaded values reach, as stored
+/// value, address or controlling condition, a store into itself, or into
+/// another array that feeds it back the same way, is therefore kept although
+/// nothing it holds leaves the design. An array accessed only at constant
+/// indices takes no part (isScalarised: it is registers by then). Finds the
+/// objects on such cycles of the
+/// "a load of X feeds a store into Y" graph among the objects that are not
+/// live yet and makes them roots; everything that feeds them follows from the
+/// ordinary propagation.
+void Liveness::markLoadStoreCycles() {
+  const unsigned elementCount = typeValue.objs.size();
+  for (MemObject &o : typeValue.objs)
+    o.scalarised = isScalarised(o);
+  std::vector<llvm::SmallSetVector<unsigned, 4>> feeds(elementCount);
+  for (unsigned exprValue = 0; exprValue < elementCount; ++exprValue) {
+    const MemObject &o = typeValue.objs[exprValue];
+    if (o.live || o.readers.empty() || o.scalarised)
+      continue;
+    llvm::SmallSetVector<unsigned, 4> &out = feeds[exprValue];
+    DenseSet<Value> seen;
+    SmallVector<Value> work;
+    auto taint = [&](Value valueHandle) {
+      if (!isa<BaseMemRefType>(valueHandle.getType()) &&
+          seen.insert(valueHandle).second)
+        work.push_back(valueHandle);
+    };
+
+    auto controlled = [&](Operation *region) {
+      region->walk([&](Operation *in) {
+        if (in != region)
+          writtenObjects(in, typeValue, out);
+      });
+      for (Value resultValue : region->getResults())
+        taint(resultValue);
+    };
+    for (Operation *resultValue : o.readers)
+      for (Value valueHandle : resultValue->getResults())
+        taint(valueHandle);
+    while (!work.empty()) {
+      Value valueHandle = work.pop_back_val();
+      for (OpOperand &use : valueHandle.getUses()) {
+        Operation *user = use.getOwner();
+        writtenObjects(user, typeValue, out);
+        if (isHandledLoop(user)) {
+          auto loop = cast<LoopLikeOpInterface>(user);
+          bool initialValue = false;
+          for (OpOperand &loopIndex : loop.getInitsMutable())
+            if (&loopIndex == &use) {
+              unsigned keyValue =
+                  loopIndex.getOperandNumber() -
+                  loop.getInitsMutable().begin()->getOperandNumber();
+              taint(loop.getRegionIterArgs()[keyValue]);
+              taint(user->getResult(keyValue));
+              initialValue = true;
+            }
+          if (!initialValue)
+            controlled(user);
+          continue;
+        }
+        if (user->getNumRegions() > 0) {
+          controlled(user);
+          continue;
+        }
+        if (user->hasTrait<OpTrait::IsTerminator>()) {
+          Operation *parent = user->getParentOp();
+          if (parent && (isHandledLoop(parent) || isHandledIf(parent))) {
+            unsigned keyValue = use.getOperandNumber();
+            if (keyValue < parent->getNumResults())
+              taint(parent->getResult(keyValue));
+            if (isHandledLoop(parent)) {
+              auto iter = cast<LoopLikeOpInterface>(parent).getRegionIterArgs();
+              if (keyValue < iter.size())
+                taint(iter[keyValue]);
+            }
+          }
+          continue;
+        }
+        for (Value resultValue : user->getResults())
+          taint(resultValue);
+      }
+    }
+  }
+
+  for (unsigned exprValue = 0; exprValue < elementCount; ++exprValue) {
+    if (feeds[exprValue].empty())
+      continue;
+    llvm::BitVector reached(elementCount);
+    SmallVector<unsigned> stack(feeds[exprValue].begin(),
+                                feeds[exprValue].end());
+    for (unsigned rowValue : stack)
+      reached.set(rowValue);
+    while (!stack.empty() && !reached.test(exprValue)) {
+      unsigned rowValue = stack.pop_back_val();
+      for (unsigned depthValue : feeds[rowValue])
+        if (!reached.test(depthValue)) {
+          reached.set(depthValue);
+          stack.push_back(depthValue);
+        }
+    }
+    if (!reached.test(exprValue))
+      continue;
+    MemObject &o = typeValue.objs[exprValue];
+    if (!o.def->hasAttr("hls.kept_reason"))
+      o.def->setAttr(
+          "hls.kept_reason",
+          StringAttr::get(module.getContext(),
+                          "kept: its loads feed stores into itself" +
+                              std::string(feeds[exprValue].contains(exprValue)
+                                              ? ""
+                                              : " through other arrays") +
+                              " (Vitis has no cyclic dead-store elimination; "
+                              "VITIS_NOTES.md N66)"));
+    markObject(exprValue);
+  }
+}
+
 void Liveness::run() {
 
   module.walk([&](Operation *op) {
@@ -942,6 +1126,12 @@ void Liveness::run() {
 
   while (!opWork.empty())
     processOp(opWork.pop_back_val());
+
+  if (keepCycles) {
+    markLoadStoreCycles();
+    while (!opWork.empty())
+      processOp(opWork.pop_back_val());
+  }
 }
 
 bool Liveness::survives(Operation *op) const {
@@ -999,6 +1189,12 @@ struct DeadMemoryEliminationPass
                      "otherwise (hls.kept_reason; VITIS_NOTES.md N17 (a) / "
                      "(d), N25)"),
       llvm::cl::init(true)};
+  Option<bool> loadStoreCycles{
+      *this, "load-store-cycles",
+      llvm::cl::desc("Keep an array whose loads feed stores into itself "
+                     "(directly or through other arrays): Vitis has no "
+                     "cyclic dead-store elimination (VITIS_NOTES.md N66)"),
+      llvm::cl::init(true)};
   Option<bool> remarks{
       *this, "remarks",
       llvm::cl::desc("Emit one remark per eliminated array / store"),
@@ -1019,6 +1215,7 @@ struct DeadMemoryEliminationPass
 private:
   bool eliminateOnce(ModuleOp module, SmallVectorImpl<Attribute> &records);
   DeathNotes notes;
+  bool keepCycles = true;
 };
 
 /// The def-use path along which the value that `load` reads stops
@@ -1151,7 +1348,7 @@ bool DeadMemoryEliminationPass::eliminateOnce(
     ModuleOp module, SmallVectorImpl<Attribute> &records) {
   ObjectTable table;
   table.build(module);
-  Liveness live(module, table);
+  Liveness live(module, table, keepCycles);
   live.run();
 
   bool changed = false;
@@ -1304,6 +1501,8 @@ void DeadMemoryEliminationPass::runOnOperation() {
   const bool killOverwritten =
       circt::hlsest::resolveOption(overwrittenStores, dm.overwrittenStores);
   const bool eraseCalls = circt::hlsest::resolveOption(deadCalls, dm.deadCalls);
+  keepCycles =
+      circt::hlsest::resolveOption(loadStoreCycles, dm.keepLoadStoreCycles);
   notes = DeathNotes();
   SmallVector<Attribute> records;
   if (auto prev = module->getAttrOfType<ArrayAttr>("hls.dead_memrefs"))

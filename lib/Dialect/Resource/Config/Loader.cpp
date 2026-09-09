@@ -969,6 +969,8 @@ void fillTool(const json::Object &t, ToolProfile &tool) {
   mid.deadMemory.honourPreserve = boolean(dm, "honour_preserve");
   mid.deadMemory.globalSharedByFunctionsEscapes =
       boolean(dm, "global_shared_by_functions_escapes");
+  mid.deadMemory.keepLoadStoreCycles =
+      boolean(dm, "load_store_cycles", true);
 
   h.honourInlineOff = boolean(obj(hls, "inlining"), "honour_inline_off");
   const json::Object &sc = obj(hls, "structs");

@@ -363,6 +363,7 @@ struct DeadMemoryConfig {
   bool deadCalls = true;
   bool honourPreserve = false;
   bool globalSharedByFunctionsEscapes = true;
+  bool keepLoadStoreCycles = true;
 };
 
 struct MiddleEndConfig {

@@ -235,6 +235,7 @@ const KeySpec kSchema[] = {
   {"tool.hls.middle_end.dead_memory.dead_calls", KeyKind::Bool, "", "A call of a kept callee whose written arrays are never read is deleted", "P-12", DME, "", kNoLimit, kNoLimit, false},
   {"tool.hls.middle_end.dead_memory.honour_preserve", KeyKind::Bool, "", "hls.preserve keeps a dead array (Vitis: no)", "E-04", DME, "", kNoLimit, kNoLimit, false},
   {"tool.hls.middle_end.dead_memory.global_shared_by_functions_escapes", KeyKind::Bool, "", "A global used by more than one function escapes", "E-02", DME, "", kNoLimit, kNoLimit, false},
+  {"tool.hls.middle_end.dead_memory.load_store_cycles", KeyKind::Bool, "", "An array whose loads feed (as value, address or condition) stores into itself, directly or through other arrays, is kept: no cyclic dead-store elimination; a measured Vitis rule (VITIS_NOTES N66)", "", DME, "", kNoLimit, kNoLimit, true},
   {"tool.hls.inlining", KeyKind::Section, "", "Function inlining", "P-01", "--inline", "", kNoLimit, kNoLimit, false},
   {"tool.hls.inlining.honour_inline_off", KeyKind::Bool, "", "Calls to hls.inline_off callees stay calls (--inline-ignore-inline-off overrides)", "P-01", "--inline", "", kNoLimit, kNoLimit, false},
   {"tool.hls.structs", KeyKind::Section, "", "Disaggregation of struct-typed variables", "P-02", "--split-struct-memrefs", "", kNoLimit, kNoLimit, false},
