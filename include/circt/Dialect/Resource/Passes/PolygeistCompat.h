@@ -100,6 +100,12 @@ public:
   /// result's first dimension is no longer than the source's: `a + k`, the
   /// elements from k on, passed as an array (`f(M + N)`).
   bool isOffsetView();
+  /// True iff source and result have the same rank and identity layouts, the
+  /// source has a static shape, the result's first dimension is dynamic and
+  /// the others agree: `&a[i]` taken as a pointer (`memref<?xT>`), whose
+  /// element k is the source's element i + k (an lvalue of the conditional
+  /// operator `c ? a[i] : b[j]`, OPEN_ISSUES O84 (b) / (d)).
+  bool isElementView();
 };
 
 /// `"polygeist.pointer2memref"(%p) : (!llvm.ptr) -> memref<...>`: Polygeist's

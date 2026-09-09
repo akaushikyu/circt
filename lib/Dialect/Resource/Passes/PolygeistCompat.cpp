@@ -11,10 +11,14 @@
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/LLVMIR/LLVMTypes.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
+#include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/Diagnostics.h"
+#include "mlir/IR/IRMapping.h"
+#include "mlir/IR/IntegerSet.h"
 #include "mlir/IR/SymbolTable.h"
+#include "mlir/Interfaces/SideEffectInterfaces.h"
 #include "mlir/Transforms/InliningUtils.h"
 #include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/SmallVector.h"
@@ -144,6 +148,152 @@ bool SubIndexOp::isOffsetView() {
     return false;
   return src.getShape().drop_front() == passResult.getShape().drop_front() &&
          passResult.getShape()[0] <= src.getShape()[0];
+}
+
+bool SubIndexOp::isElementView() {
+  auto src = dyn_cast<MemRefType>(getSource().getType());
+  auto passResult = dyn_cast<MemRefType>(getResult().getType());
+  if (!src || !passResult || src.getRank() < 1 ||
+      passResult.getRank() != src.getRank() || !src.hasStaticShape() ||
+      !ShapedType::isDynamic(passResult.getShape()[0]))
+    return false;
+  if (!src.getLayout().isIdentity() || !passResult.getLayout().isIdentity())
+    return false;
+  if (src.getElementType() != passResult.getElementType())
+    return false;
+  return src.getShape().drop_front() == passResult.getShape().drop_front();
+}
+
+/// The memref operand of a load / store, or null.
+static Value accessedMemRef(Operation *op) {
+  if (auto lowerIndex = dyn_cast<affine::AffineLoadOp>(op))
+    return lowerIndex.getMemRef();
+  if (auto st = dyn_cast<affine::AffineStoreOp>(op))
+    return st.getMemRef();
+  if (auto lowerIndex = dyn_cast<memref::LoadOp>(op))
+    return lowerIndex.getMemRef();
+  if (auto st = dyn_cast<memref::StoreOp>(op))
+    return st.getMemRef();
+  return {};
+}
+
+/// A copy of `access` that reads / writes `view` instead of its memref.
+static Operation *cloneAccessOn(OpBuilder &b, Operation *access, Value view) {
+  IRMapping memoryOp;
+  memoryOp.map(accessedMemRef(access), view);
+  return b.clone(*access, memoryOp);
+}
+
+/// The conditional operator on lvalues, `T x = c ? B[i][j] : loc[i][j - 1];`
+/// (class types such as ap_fixed bind a reference to the selected element),
+/// reaches the MLIR as an if (or a select) that yields one of two element
+/// views, and the load reads the yielded view: no access names its array, so
+/// the banking cannot split either one and an array_partition on it is not
+/// applied (OPEN_ISSUES O84 (b), reproducer sel1.cpp; the if / else form
+/// sel2.cpp loads in each arm). C evaluates only the chosen operand, so each
+/// access of such a view becomes an if on the same condition whose arms
+/// recompute their view (the arms are side-effect free) and access it; the
+/// original if is erased once nothing uses it. Returns the accesses moved.
+static unsigned sinkAccessesIntoViewConditionals(ModuleOp module) {
+  SmallVector<Operation *> candidates;
+  module.walk([&](Operation *op) {
+    if (!isa<affine::AffineIfOp, scf::IfOp, arith::SelectOp>(op))
+      return;
+    if (llvm::any_of(op->getResultTypes(), [](Type typeValue) {
+          return isa<BaseMemRefType>(typeValue);
+        }))
+      candidates.push_back(op);
+  });
+  unsigned moved = 0;
+  for (Operation *op : candidates) {
+    auto armsPure = llvm::all_of(op->getRegions(), [](Region &resultValue) {
+      if (resultValue.empty())
+        return false;
+      for (Operation &in : resultValue.front().without_terminator())
+        if (!isMemoryEffectFree(&in) || in.getNumRegions() > 0)
+          return false;
+      return true;
+    });
+    if (!armsPure)
+      continue;
+    for (OpResult passResult : op->getResults()) {
+      if (!isa<BaseMemRefType>(passResult.getType()))
+        continue;
+      SmallVector<Operation *> users(passResult.getUsers().begin(),
+                                     passResult.getUsers().end());
+
+      bool onlyAccesses =
+          !users.empty() && llvm::all_of(users, [&](Operation *useValue) {
+            return accessedMemRef(useValue) == passResult &&
+                   (!isa<affine::AffineStoreOp, memref::StoreOp>(useValue) ||
+                    useValue->getOperand(0) != passResult);
+          });
+      if (!onlyAccesses)
+        continue;
+      unsigned indexValue = passResult.getResultNumber();
+      for (Operation *access : users) {
+        OpBuilder b(access);
+        Location loc = access->getLoc();
+        TypeRange types = access->getResultTypes();
+
+        auto fill = [&](OpBuilder &ab, Region *arm, Value selected) {
+          IRMapping memoryOp;
+          Value view = selected;
+          if (arm) {
+            for (Operation &in : arm->front().without_terminator())
+              ab.clone(in, memoryOp);
+            view = memoryOp.lookupOrDefault(
+                arm->front().getTerminator()->getOperand(indexValue));
+          }
+          Operation *a = cloneAccessOn(ab, access, view);
+          return a->getResults();
+        };
+        Operation *nif = nullptr;
+        if (auto aif = dyn_cast<affine::AffineIfOp>(op)) {
+          auto elementCount = affine::AffineIfOp::create(
+              b, loc, types, aif.getIntegerSet(), aif.getOperands(), true);
+          OpBuilder tb = elementCount.getThenBodyBuilder();
+          ValueRange tv = fill(tb, &aif.getThenRegion(), {});
+          affine::AffineYieldOp::create(tb, loc, tv);
+          OpBuilder eb = elementCount.getElseBodyBuilder();
+          ValueRange ev = fill(eb, &aif.getElseRegion(), {});
+          affine::AffineYieldOp::create(eb, loc, ev);
+          nif = elementCount;
+        } else {
+          Value cond = isa<scf::IfOp>(op)
+                           ? cast<scf::IfOp>(op).getCondition()
+                           : cast<arith::SelectOp>(op).getCondition();
+          auto elementCount = scf::IfOp::create(b, loc, types, cond, true);
+          for (unsigned arm = 0; arm < 2; ++arm) {
+            Block &blk = arm == 0 ? elementCount.getThenRegion().front()
+                                  : elementCount.getElseRegion().front();
+
+            if (!blk.empty())
+              blk.back().erase();
+            OpBuilder ab = OpBuilder::atBlockEnd(&blk);
+            ValueRange valueHandle;
+            if (auto sif = dyn_cast<scf::IfOp>(op))
+              valueHandle = fill(
+                  ab, arm == 0 ? &sif.getThenRegion() : &sif.getElseRegion(),
+                  {});
+            else
+              valueHandle =
+                  fill(ab, nullptr,
+                       arm == 0 ? cast<arith::SelectOp>(op).getTrueValue()
+                                : cast<arith::SelectOp>(op).getFalseValue());
+            scf::YieldOp::create(ab, loc, valueHandle);
+          }
+          nif = elementCount;
+        }
+        access->replaceAllUsesWith(nif->getResults());
+        access->erase();
+        ++moved;
+      }
+    }
+    if (op->use_empty())
+      op->erase();
+  }
+  return moved;
 }
 
 /// cgeist marks a function of the real Vitis HLS hls_math.h (hls::exp,
@@ -503,6 +653,16 @@ struct LowerSubIndexPass
     : PassWrapper<LowerSubIndexPass, OperationPass<ModuleOp>> {
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(LowerSubIndexPass)
 
+  LowerSubIndexPass() = default;
+  LowerSubIndexPass(const LowerSubIndexPass &other) : PassWrapper(other) {}
+  Option<bool> sinkConditionalViews{
+      *this, "sink-conditional-views",
+      llvm::cl::desc("Move a load / store of a view that an if or select "
+                     "chooses (the conditional operator on lvalues) into "
+                     "the arms, so that it names its array (OPEN_ISSUES O84 "
+                     "(b))"),
+      llvm::cl::init(true)};
+
   StringRef getArgument() const final { return "lower-polygeist-subindex"; }
   StringRef getDescription() const final {
     return "Replace polygeist.subindex (a row of an array passed by "
@@ -511,8 +671,9 @@ struct LowerSubIndexPass
            "form as Vitis does (N14 R4)";
   }
   void getDependentDialects(DialectRegistry &targetRegistry) const override {
-    targetRegistry.insert<affine::AffineDialect, memref::MemRefDialect,
-                          func::FuncDialect, arith::ArithDialect>();
+    targetRegistry
+        .insert<affine::AffineDialect, memref::MemRefDialect, func::FuncDialect,
+                arith::ArithDialect, scf::SCFDialect>();
   }
 
   struct CloneKey {
@@ -690,7 +851,7 @@ struct LowerSubIndexPass
   }
 
   bool rewriteAccess(Operation *user, SubIndexOp si) {
-    if (si.isOffsetView())
+    if (si.isOffsetView() || si.isElementView())
       return rewriteOffsetAccess(user, si);
     Value src = si.getSource();
     Value indexValue = si.getIndex();
@@ -857,6 +1018,8 @@ struct LowerSubIndexPass
       return signalPassFailure();
     dropMathCoreBodies(module);
     lowerStreamElementViews(module);
+    if (sinkConditionalViews)
+      sinkAccessesIntoViewConditionals(module);
     SmallVector<func::FuncOp> specialised;
     specializeCastArguments(module, specialised);
     SymbolTable symbols(module);
@@ -870,11 +1033,14 @@ struct LowerSubIndexPass
       SubIndexOp si = worklist[elementCount];
       if (!si)
         continue;
-      if (!si.isRowSelect() && !si.isOffsetView())
+      bool element = si.isElementView();
+      if (!si.isRowSelect() && !si.isOffsetView() && !element)
         continue;
       SmallVector<Operation *> users(si->getUsers().begin(),
                                      si->getUsers().end());
       for (Operation *user : users) {
+        if (element && !accessedMemRef(user))
+          continue;
         if (auto call = dyn_cast<func::CallOp>(user)) {
           redirectCall(call, symbols, worklist);
           continue;
@@ -885,6 +1051,29 @@ struct LowerSubIndexPass
       if (si->use_empty())
         si->erase();
       worklist[elementCount] = nullptr;
+    }
+
+    for (bool again = true; again;) {
+      again = false;
+      SmallVector<SubIndexOp> left;
+      module.walk([&](SubIndexOp si) { left.push_back(si); });
+      for (SubIndexOp si : left) {
+        if (!si.isRowSelect() && !si.isOffsetView() && !si.isElementView())
+          continue;
+        if (!llvm::all_of(si->getUsers(), [](Operation *useValue) {
+              return accessedMemRef(useValue) != Value();
+            }))
+          continue;
+        SmallVector<Operation *> users(si->getUsers().begin(),
+                                       si->getUsers().end());
+        for (Operation *user : users)
+          if (rewriteAccess(user, si)) {
+            ++rewrittenAccesses;
+            again = true;
+          }
+        if (si->use_empty())
+          si->erase();
+      }
     }
 
     module.walk([&](SubIndexOp si) {
