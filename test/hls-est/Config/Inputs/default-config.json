@@ -730,6 +730,7 @@
         "_priced_config": "string: The port configuration a FIFO is priced at (never x36) [P-06]",
         "_srl_max_bits": "uint, bits: FIFOs of at most this many bits (depth x width) are shift registers [P-06]",
         "_srl_max_depth": "uint, words: FIFOs at most this deep are shift registers at any width [P-06]",
+        "_stream_pragma_arrays": "bool: A local array of a dataflow region with #pragma HLS stream (type fifo or none) and a depth is one FIFO of that depth at the element width, priced as a stream FIFO, instead of a memory; a measured Vitis rule (VITIS_NOTES N67)",
         "dataflow_argument_fifos": true,
         "declared_element_bits": true,
         "default_depth": 2,
@@ -738,7 +739,8 @@
         "mapper": "vitis-band7",
         "priced_config": "tdp",
         "srl_max_bits": 1024,
-        "srl_max_depth": 2
+        "srl_max_depth": 2,
+        "stream_pragma_arrays": true
       },
       "structs": {
         "_aggregate": "bool: A variable an AGGREGATE pragma reached is one memory of packed words [P-02]",

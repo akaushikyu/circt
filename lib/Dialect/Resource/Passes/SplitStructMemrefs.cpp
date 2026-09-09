@@ -3406,6 +3406,16 @@ struct SplitStructMemrefsPass
           if (!n->temporary)
             m->setAttr("polygeist.varname", b.getStringAttr(mem.name));
           annotate(m, mem, aggregate);
+          // A `#pragma HLS stream` array of structs (hls::vector) streams
+          // whole elements: its FIFO is as wide as the packed struct
+          // (VITIS_NOTES N67, gabriel_lopez_lugo lab2: hls::vector<16b, 10>
+          // elements, a 160-bit FIFO), which the split memory no longer says.
+          if (news.size() == 1 && n->op->hasAttr("hls.stream"))
+            if (unsigned bits = circt::hls_analysis::packedTypeBits(
+                    cast<MemRefType>(n->op->getResult(0).getType())
+                        .getElementType()))
+              m->setAttr("hls.stream_array_element_bits",
+                         b.getI64IntegerAttr(bits));
           if (n->temporary) {
             m->setAttr(kRegistersAttrName, b.getUnitAttr());
             m->setAttr("hls.struct_temporary", b.getUnitAttr());

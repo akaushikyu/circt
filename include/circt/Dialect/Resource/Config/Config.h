@@ -309,6 +309,9 @@ struct StreamConfig {
   /// A stream's width is cgeist's hls.stream_element_bits when present (the
   /// packed C++ element: bool 1 bit, VITIS_NOTES N58).
   bool declaredElementBits = true;
+  /// A local array of a dataflow region with `#pragma HLS stream depth=D`
+  /// is one FIFO of depth D at the element width (VITIS_NOTES N67).
+  bool streamPragmaArrays = true;
 };
 
 /// Dataflow ping-pong channels.

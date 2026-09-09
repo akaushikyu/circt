@@ -57,7 +57,8 @@
         "priced_config": "tdp",
         "dataflow_argument_fifos": true,
         "distinct_element_instances": true,
-        "declared_element_bits": true
+        "declared_element_bits": true,
+        "stream_pragma_arrays": true
       },
       "dataflow_channels": { "enabled": true, "default_blocks": 2 },
       "pipeline_decision": {

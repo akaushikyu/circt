@@ -915,6 +915,7 @@ void fillTool(const json::Object &t, ToolProfile &tool) {
       boolean(st, "distinct_element_instances", true);
   h.streams.declaredElementBits =
       boolean(st, "declared_element_bits", true);
+  h.streams.streamPragmaArrays = boolean(st, "stream_pragma_arrays", true);
   const json::Object &dc = obj(hls, "dataflow_channels");
   h.dataflowChannels.enabled = boolean(dc, "enabled");
   h.dataflowChannels.defaultBlocks = integer(dc, "default_blocks");

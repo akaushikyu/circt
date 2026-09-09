@@ -1092,6 +1092,62 @@ private:
   DenseMap<Operation *, std::string> cache;
 };
 
+/// VITIS_NOTES N67 (kernels w9r8p_st_d256 / st_d4, control st_pipo;
+/// class_ece8893 gabriel_lopez_lugo lab2): a local array of a dataflow region
+/// with `#pragma HLS stream` (type fifo, or no type) and a depth is one FIFO
+/// of that depth at the element width (`buf_r_U | fifo channel | 160, 256,
+/// 1`), priced with the stream FIFO bands (a FIFO of at most srl_max_bits is
+/// shift registers), whatever the array's shape. Without a depth in the
+/// pragma nothing is measured: nullopt (the array stays a memory).
+static std::optional<StreamHandleRecord>
+streamPragmaArrayFifo(Operation *op, Type elt, const Models &models) {
+  auto arr = op->getAttrOfType<ArrayAttr>("hls.stream");
+  if (!arr || arr.empty())
+    return std::nullopt;
+  auto dimensionIndex = dyn_cast<DictionaryAttr>(arr[0]);
+  if (!dimensionIndex)
+    return std::nullopt;
+  if (auto typeValue = dimensionIndex.getAs<StringAttr>("type"))
+    if (!typeValue.getValue().equals_insensitive("fifo"))
+      return std::nullopt;
+  auto depthAttr = dimensionIndex.getAs<IntegerAttr>("depth");
+  if (!depthAttr || depthAttr.getInt() <= 0)
+    return std::nullopt;
+  unsigned bits = packedTypeBits(elt);
+  std::string bitsSource = "ir element";
+
+  if (auto a = op->getAttrOfType<IntegerAttr>("hls.stream_array_element_bits"))
+    if (a.getInt() > 0) {
+      bits = static_cast<unsigned>(a.getInt());
+      bitsSource = "packed struct element (hls.stream_array_element_bits)";
+    }
+  if (bits == 0)
+    return std::nullopt;
+  FifoGroup g;
+  g.count = 1;
+  g.countSource = "the whole array (#pragma HLS stream, N67)";
+  g.depth = depthAttr.getInt();
+  g.depthSource = "pragma";
+  g.bits = bits;
+  g.bitsSource = bitsSource;
+  FifoPrice portValue =
+      priceFifo(g.depth, g.bits, "", [&](int64_t depth, unsigned buildPoint) {
+        return mapBlocks(*models.streamMapper, *models.block,
+                         config().tool.hls.streams.pricedConfig, depth,
+                         buildPoint);
+      });
+  g.bramEach = portValue.bram;
+  g.reason = portValue.reason;
+  StreamHandleRecord resultValue;
+  resultValue.groups.push_back(std::move(g));
+  resultValue.bram = portValue.bram;
+  resultValue.fifos = 1;
+  resultValue.note =
+      "an array with #pragma HLS stream in a dataflow region: one FIFO "
+      "of the pragma's depth (VITIS_NOTES N67)";
+  return resultValue;
+}
+
 static std::optional<BRAMCost>
 tryDataflowChannel(MemoryResourceOpInterface iface, MemrefRecord &rec,
                    ArrayRef<Value> sites, SeqContext *seq, const Models &models,
@@ -1125,6 +1181,10 @@ tryDataflowChannel(MemoryResourceOpInterface iface, MemrefRecord &rec,
   if (valueHandle.channel)
     return estimateChannel(iface, rec, *valueHandle.channel, accesses, seq,
                            models, ports.ofArray(op));
+  if (valueHandle.inRegion && config().tool.hls.streams.streamPragmaArrays)
+    if (std::optional<StreamHandleRecord> fifo =
+            streamPragmaArrayFifo(op, elt, models))
+      return estimateStreamFifos(iface, rec, std::move(*fifo));
   if (valueHandle.inRegion) {
     PipoRecord portValue;
     portValue.notChannelReason = valueHandle.notChannelReason;
