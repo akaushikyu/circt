@@ -50,6 +50,7 @@
 #include "llvm/Support/Debug.h"
 #include <cassert>
 #include <limits>
+#include <map>
 #include <mlir/IR/IntegerSet.h>
 #include <queue>
 #include <unordered_map>
@@ -598,6 +599,242 @@ static bool isRootMemref(Value mem) {
       mem.getDefiningOp());
 }
 
+namespace {
+/// An index over the known values of one block that gives, for an address,
+/// exactly the relation compareAddresses gives against every known value,
+/// without comparing it with each of them (the pairwise scan was quadratic in
+/// the accesses of an unrolled body: 78-95 % of the run time of fdtd-2d-large,
+/// lab2_hanchen and gemm-p-large; OPEN_ISSUES O91).
+///
+/// An address is split into its shape (the operands, the dimension and symbol
+/// counts, and every result without its constant term, splitConstantTerm) and
+/// the constant terms. Two addresses of one shape are the same address when
+/// their constants are equal and disjoint otherwise (compareAddresses' fast
+/// path). For two shapes, the difference of their constant-free results is
+/// computed once (the AffineValueMap::difference of compareAddresses' slow
+/// path); the difference of two addresses is that plus the difference of the
+/// constants, so a result whose shape difference is a constant k is the
+/// constant k + ca - cb, and any other is not a constant.
+class KnownAddressIndex {
+public:
+  struct Split {
+    unsigned shape = 0;
+    std::vector<int64_t> consts;
+  };
+  /// Per pair of shapes: no relation can be computed (different result
+  /// counts: compareAddresses says MayAlias), or the constant difference of
+  /// each result's constant-free parts (nullopt: not a constant).
+  struct PairInfo {
+    bool mayAliasAll = false;
+    SmallVector<std::optional<int64_t>, 4> k;
+  };
+
+  Split split(const AccessAddr &a) {
+    Split out;
+    std::vector<uintptr_t> key;
+    key.push_back(a.map.getNumResults());
+    key.push_back(a.map.getNumDims());
+    key.push_back(a.map.getNumSymbols());
+    for (Value valueHandle : a.operands)
+      key.push_back(
+          reinterpret_cast<uintptr_t>(valueHandle.getAsOpaquePointer()));
+    SmallVector<AffineExpr, 4> parts;
+    for (AffineExpr e : a.map.getResults()) {
+      auto [part, candidateValue] = splitConstantTerm(e);
+      parts.push_back(part);
+      out.consts.push_back(candidateValue);
+      key.push_back(reinterpret_cast<uintptr_t>(part ? part.getAsOpaquePointer()
+                                                     : nullptr));
+    }
+    auto [it, inserted] = shapeIds.try_emplace(key, shapes.size());
+    if (inserted) {
+      Shape sh;
+      sh.ctx = a.map.getContext();
+      sh.numDims = a.map.getNumDims();
+      sh.numSymbols = a.map.getNumSymbols();
+      sh.operands.assign(a.operands.begin(), a.operands.end());
+      sh.parts = std::move(parts);
+      shapes.push_back(std::move(sh));
+    }
+    out.shape = it->second;
+    return out;
+  }
+
+  const PairInfo &pair(unsigned sa, unsigned sb) {
+    auto [it, inserted] = pairs.try_emplace({sa, sb});
+    if (!inserted)
+      return it->second;
+    PairInfo &info = it->second;
+    const Shape &a = shapes[sa], &buildPoint = shapes[sb];
+    if (a.parts.size() != buildPoint.parts.size()) {
+      info.mayAliasAll = true;
+      return info;
+    }
+    bool sameOperands = a.operands == buildPoint.operands &&
+                        a.numDims == buildPoint.numDims &&
+                        a.numSymbols == buildPoint.numSymbols;
+    bool needDifference = false;
+    for (auto [pa, pb] : llvm::zip(a.parts, buildPoint.parts)) {
+      if (sameOperands && pa == pb)
+        info.k.push_back(0);
+      else {
+        info.k.push_back(std::nullopt);
+        needDifference = true;
+      }
+    }
+    if (!needDifference)
+      return info;
+    AffineValueMap va(partsMap(a), a.operands),
+        vb(partsMap(buildPoint), buildPoint.operands), diff;
+    AffineValueMap::difference(va, vb, &diff);
+    for (unsigned r = 0, elementCount = diff.getNumResults(); r < elementCount;
+         ++r) {
+      if (sameOperands && a.parts[r] == buildPoint.parts[r])
+        continue;
+      if (auto candidateValue = dyn_cast<AffineConstantExpr>(diff.getResult(r)))
+        info.k[r] = candidateValue.getValue();
+    }
+    return info;
+  }
+
+  /// compareAddresses of an address (shape sa, constants ca) and a known one
+  /// (shape sb, constants cb).
+  static AddrRelation relation(const PairInfo &portValue, ArrayRef<int64_t> ca,
+                               ArrayRef<int64_t> callback) {
+    if (portValue.mayAliasAll)
+      return AddrRelation::MayAlias;
+    bool allZero = true;
+    for (unsigned r = 0, elementCount = portValue.k.size(); r < elementCount;
+         ++r) {
+      if (!portValue.k[r]) {
+        allZero = false;
+        continue;
+      }
+      if (*portValue.k[r] + ca[r] - callback[r] != 0)
+        return AddrRelation::Disjoint;
+    }
+    return allZero ? AddrRelation::Same : AddrRelation::MayAlias;
+  }
+
+private:
+  struct Shape {
+    MLIRContext *ctx = nullptr;
+    unsigned numDims = 0, numSymbols = 0;
+    SmallVector<Value, 4> operands;
+    SmallVector<AffineExpr, 4> parts;
+  };
+  AffineMap partsMap(const Shape &sh) {
+    SmallVector<AffineExpr, 4> results;
+    MLIRContext *ctx = sh.ctx;
+    for (AffineExpr portValue : sh.parts)
+      results.push_back(portValue ? portValue : getAffineConstantExpr(0, ctx));
+    return AffineMap::get(sh.numDims, sh.numSymbols, results, ctx);
+  }
+
+  std::vector<Shape> shapes;
+  std::map<std::vector<uintptr_t>, unsigned> shapeIds;
+  DenseMap<std::pair<unsigned, unsigned>, PairInfo> pairs;
+};
+
+/// The known values of one memref, in program order, indexed by address.
+struct KnownValues {
+  struct Entry {
+    KnownValue kv;
+    KnownAddressIndex::Split split;
+    bool alive = true;
+  };
+  struct Bucket {
+    unsigned shape;
+    SmallVector<unsigned, 4> all;
+    std::map<std::vector<int64_t>, SmallVector<unsigned, 2>> exact;
+    /// Per mask of results: the entries by their constants on those results.
+    std::map<uint64_t, std::map<std::vector<int64_t>, SmallVector<unsigned, 2>>>
+        projected;
+  };
+  std::vector<Entry> entries;
+  std::vector<Bucket> buckets;
+  DenseMap<unsigned, unsigned> bucketOf;
+
+  static std::vector<int64_t> project(ArrayRef<int64_t> candidateValue,
+                                      uint64_t mask) {
+    std::vector<int64_t> out;
+    for (unsigned r = 0, elementCount = candidateValue.size(); r < elementCount;
+         ++r)
+      if (mask & (uint64_t(1) << r))
+        out.push_back(candidateValue[r]);
+    return out;
+  }
+
+  void add(KnownValue kv, KnownAddressIndex::Split split) {
+    unsigned id = entries.size();
+    auto [it, inserted] = bucketOf.try_emplace(split.shape, buckets.size());
+    if (inserted)
+      buckets.push_back(Bucket{split.shape, {}, {}, {}});
+    Bucket &buildPoint = buckets[it->second];
+    buildPoint.all.push_back(id);
+    buildPoint.exact[split.consts].push_back(id);
+    for (auto &[mask, index] : buildPoint.projected)
+      index[project(split.consts, mask)].push_back(id);
+    entries.push_back({std::move(kv), std::move(split), true});
+  }
+
+  /// The live entries that are not disjoint from the address, with their
+  /// relation (Same or MayAlias), in program order.
+  SmallVector<std::pair<unsigned, AddrRelation>>
+  overlapping(KnownAddressIndex &index,
+              const KnownAddressIndex::Split &queueValue) {
+    SmallVector<std::pair<unsigned, AddrRelation>> out;
+    for (Bucket &buildPoint : buckets) {
+      const KnownAddressIndex::PairInfo &portValue =
+          index.pair(queueValue.shape, buildPoint.shape);
+      auto addAll = [&](ArrayRef<unsigned> ids) {
+        for (unsigned id : ids)
+          if (entries[id].alive) {
+            AddrRelation rel = KnownAddressIndex::relation(
+                portValue, queueValue.consts, entries[id].split.consts);
+            if (rel != AddrRelation::Disjoint)
+              out.push_back({id, rel});
+          }
+      };
+      unsigned elementCount = queueValue.consts.size();
+      if (portValue.mayAliasAll || elementCount > 63) {
+        addAll(buildPoint.all);
+        continue;
+      }
+      uint64_t mask = 0;
+      for (unsigned r = 0; r < elementCount; ++r)
+        if (portValue.k[r])
+          mask |= uint64_t(1) << r;
+      std::vector<int64_t> target;
+      for (unsigned r = 0; r < elementCount; ++r)
+        if (portValue.k[r])
+          target.push_back(queueValue.consts[r] + *portValue.k[r]);
+      uint64_t full =
+          elementCount == 64 ? ~uint64_t(0) : (uint64_t(1) << elementCount) - 1;
+      if (mask == 0) {
+        addAll(buildPoint.all);
+      } else if (mask == full) {
+        auto it = buildPoint.exact.find(target);
+        if (it != buildPoint.exact.end())
+          addAll(it->second);
+      } else {
+        auto [pit, built] = buildPoint.projected.try_emplace(mask);
+        if (built)
+          for (unsigned id : buildPoint.all)
+            pit->second[project(entries[id].split.consts, mask)].push_back(id);
+        auto it = pit->second.find(target);
+        if (it != pit->second.end())
+          addAll(it->second);
+      }
+    }
+    llvm::sort(out, [](const auto &exprValue, const auto &rowValue) {
+      return exprValue.first < rowValue.first;
+    });
+    return out;
+  }
+};
+} // namespace
+
 void AffineToLoopSchedule::cleanupRedundantAccesses() {
   SmallVector<Block *> blocks;
   getOperation().walk([&](Block *buildPoint) { blocks.push_back(buildPoint); });
@@ -612,7 +849,9 @@ void AffineToLoopSchedule::cleanupRedundantAccesses() {
 
   unsigned merged = 0, forwarded = 0, removed = 0;
   for (Block *block : blocks) {
-    DenseMap<Value, SmallVector<KnownValue, 8>> known;
+
+    KnownAddressIndex index;
+    DenseMap<Value, KnownValues> known;
     DenseMap<Value, Value> memberToRoot;
     auto forget = [&](Value mem) {
       auto it = memberToRoot.find(mem);
@@ -646,15 +885,16 @@ void AffineToLoopSchedule::cleanupRedundantAccesses() {
           continue;
         }
         AccessAddr addr(load.getAffineMap(), load.getMapOperands());
-        auto &vals = known[mem];
+        KnownAddressIndex::Split split = index.split(addr);
+        KnownValues &vals = known[mem];
         KnownValue *same = nullptr;
-        for (KnownValue &kv : vals) {
-          AddrRelation rel = compareAddresses(addr, kv.addr);
+        for (auto [id, rel] : vals.overlapping(index, split)) {
+          KnownValue &kv = vals.entries[id].kv;
           if (rel == AddrRelation::Same) {
             same = &kv;
             break;
           }
-          if (rel == AddrRelation::MayAlias && kv.store)
+          if (kv.store)
             kv.readSince = true;
         }
         if (same && (same->store ? forwardStores : cseLoads)) {
@@ -675,7 +915,7 @@ void AffineToLoopSchedule::cleanupRedundantAccesses() {
             same->readSince = true;
           continue;
         }
-        vals.push_back({addr, load.getResult(), nullptr, false});
+        vals.add({addr, load.getResult(), nullptr, false}, std::move(split));
         continue;
       }
       if (auto store = dyn_cast<AffineStoreOp>(op)) {
@@ -685,14 +925,11 @@ void AffineToLoopSchedule::cleanupRedundantAccesses() {
           continue;
         }
         AccessAddr addr(store.getAffineMap(), store.getMapOperands());
-        auto &vals = known[mem];
-        SmallVector<KnownValue, 8> kept;
-        for (KnownValue &kv : vals) {
-          AddrRelation rel = compareAddresses(addr, kv.addr);
-          if (rel == AddrRelation::Disjoint) {
-            kept.push_back(kv);
-            continue;
-          }
+        KnownAddressIndex::Split split = index.split(addr);
+        KnownValues &vals = known[mem];
+        for (auto [id, rel] : vals.overlapping(index, split)) {
+          KnownValues::Entry &e = vals.entries[id];
+          KnownValue &kv = e.kv;
           if (rel == AddrRelation::Same && kv.store && !kv.readSince &&
               forwardStores) {
 
@@ -703,10 +940,11 @@ void AffineToLoopSchedule::cleanupRedundantAccesses() {
             kv.store->erase();
             ++removed;
           }
+
+          e.alive = false;
         }
-        vals = std::move(kept);
-        vals.push_back(
-            {addr, store.getValueToStore(), store.getOperation(), false});
+        vals.add({addr, store.getValueToStore(), store.getOperation(), false},
+                 std::move(split));
         continue;
       }
 
@@ -758,6 +996,58 @@ static AccessAddr accessAddr(Operation *op) {
   return AccessAddr(stringValue.getAffineMap(), stringValue.getMapOperands());
 }
 
+namespace {
+/// What mayConflict needs of an op and everything nested in it, collected
+/// once: whether it holds a call, and the ops that take a memref operand with
+/// those operands and, for an affine access, its address (the walk with an
+/// operand scan per op and an AccessAddr per access made mayConflict, called
+/// for every pair of accesses of an if arm, 41-56 % of symm-opt and syr2k;
+/// OPEN_ISSUES O91). Entries are invalidated when the IR under them changes.
+struct ConflictSummary {
+  struct Toucher {
+    Operation *op;
+    SmallVector<Value, 1> memrefs;
+    std::optional<AccessAddr> addr;
+  };
+  bool hasCall = false;
+  SmallVector<Toucher, 2> touchers;
+};
+
+class ConflictSummaries {
+public:
+  const ConflictSummary &get(Operation *op) {
+    auto it = cache.find(op);
+    if (it != cache.end())
+      return *it->second;
+    auto summary = std::make_unique<ConflictSummary>();
+    op->walk([&](Operation *rowValue) {
+      if (isa<CallOpInterface>(rowValue))
+        summary->hasCall = true;
+      ConflictSummary::Toucher t;
+      t.op = rowValue;
+      for (Value valueHandle : rowValue->getOperands())
+        if (isa<BaseMemRefType>(valueHandle.getType()))
+          t.memrefs.push_back(valueHandle);
+      if (t.memrefs.empty())
+        return;
+      if (isa<AffineLoadOp, AffineStoreOp>(rowValue))
+        t.addr.emplace(accessAddr(rowValue));
+      summary->touchers.push_back(std::move(t));
+    });
+    return *cache.try_emplace(op, std::move(summary)).first->second;
+  }
+  /// `op` changes or goes away: forget it and every op that encloses it.
+  void invalidate(Operation *op) {
+    for (Operation *cur = op; cur; cur = cur->getParentOp())
+      cache.erase(cur);
+  }
+  void clear() { cache.clear(); }
+
+private:
+  DenseMap<Operation *, std::unique_ptr<ConflictSummary>> cache;
+};
+} // namespace
+
 /// True when `other` (an op of an arm, or nested in one) may conflict with an
 /// access to `addr` of the memref whose alias set is `alias`: a write that
 /// may alias the address (or, with `readsConflict`, any access that may alias
@@ -765,31 +1055,29 @@ static AccessAddr accessAddr(Operation *op) {
 /// the memref was passed to some call.
 static bool mayConflict(Operation *other, Value mem,
                         const MemrefAliasInfo &alias, const AccessAddr &addr,
-                        bool readsConflict) {
-  bool conflict = false;
-  other->walk([&](Operation *op) {
-    if (alias.passedToCall && isa<CallOpInterface>(op)) {
-      conflict = true;
-      return WalkResult::interrupt();
-    }
-    bool touches = llvm::any_of(op->getOperands(), [&](Value valueHandle) {
+                        bool readsConflict, ConflictSummaries &summaries) {
+  const ConflictSummary &stringValue = summaries.get(other);
+  if (alias.passedToCall && stringValue.hasCall)
+    return true;
+  for (const ConflictSummary::Toucher &t : stringValue.touchers) {
+    Operation *op = t.op;
+    bool touches = llvm::any_of(t.memrefs, [&](Value valueHandle) {
       return alias.members.contains(valueHandle);
     });
     if (!touches)
-      return WalkResult::advance();
+      continue;
     if (isa<ViewLikeOpInterface>(op))
-      return WalkResult::advance();
+      continue;
     bool isLoad = isa<AffineLoadOp>(op), isStore = isa<AffineStoreOp>(op);
     if ((isLoad || isStore) && accessMemref(op) == mem) {
       if (isLoad && !readsConflict)
-        return WalkResult::advance();
-      if (compareAddresses(accessAddr(op), addr) == AddrRelation::Disjoint)
-        return WalkResult::advance();
+        continue;
+      if (compareAddresses(*t.addr, addr) == AddrRelation::Disjoint)
+        continue;
     }
-    conflict = true;
-    return WalkResult::interrupt();
-  });
-  return conflict;
+    return true;
+  }
+  return false;
 }
 
 static bool definedOutside(ValueRange values, Operation *ifOp) {
@@ -805,7 +1093,8 @@ static void
 movableAccesses(IfArm arm, Operation *ifOp,
                 function_ref<const MemrefAliasInfo *(Value)> tracked,
                 SmallVectorImpl<AffineLoadOp> &loads,
-                SmallVectorImpl<AffineStoreOp> &stores) {
+                SmallVectorImpl<AffineStoreOp> &stores,
+                ConflictSummaries &summaries) {
   for (Operation &op : arm.block->without_terminator()) {
     auto load = dyn_cast<AffineLoadOp>(op);
     if (!load || !definedOutside(load.getMapOperands(), ifOp))
@@ -818,7 +1107,8 @@ movableAccesses(IfArm arm, Operation *ifOp,
     for (Operation &before : *arm.block) {
       if (&before == &op)
         break;
-      if (mayConflict(&before, load.getMemRef(), *alias, addr, false)) {
+      if (mayConflict(&before, load.getMemRef(), *alias, addr, false,
+                      summaries)) {
         clobbered = true;
         break;
       }
@@ -837,7 +1127,8 @@ movableAccesses(IfArm arm, Operation *ifOp,
     bool used = false;
     for (Operation *after = op.getNextNode(); after;
          after = after->getNextNode())
-      if (mayConflict(after, store.getMemRef(), *alias, addr, true)) {
+      if (mayConflict(after, store.getMemRef(), *alias, addr, true,
+                      summaries)) {
         used = true;
         break;
       }
@@ -926,6 +1217,18 @@ void AffineToLoopSchedule::mergeIfElseAccesses() {
 
   unsigned hoisted = 0, sunk = 0, forwarded = 0;
 
+  ConflictSummaries summaries;
+  DenseMap<Operation *, std::unique_ptr<AccessAddr>> loadAddrs;
+  auto loadAddr = [&](AffineLoadOp lowerIndex) -> const AccessAddr & {
+    auto it = loadAddrs.find(lowerIndex.getOperation());
+    if (it == loadAddrs.end())
+      it =
+          loadAddrs
+              .try_emplace(lowerIndex.getOperation(),
+                           std::make_unique<AccessAddr>(accessAddr(lowerIndex)))
+              .first;
+    return *it->second;
+  };
   SmallVector<AffineLoadOp> armLoads;
   getOperation().walk([&](AffineLoadOp load) {
     if (isa_and_present<scf::IfOp, AffineIfOp>(load->getParentOp()))
@@ -937,7 +1240,7 @@ void AffineToLoopSchedule::mergeIfElseAccesses() {
       continue;
     AccessAddr addr = accessAddr(load);
     auto conflicts = [&](Operation *op) {
-      return mayConflict(op, load.getMemRef(), *alias, addr, false);
+      return mayConflict(op, load.getMemRef(), *alias, addr, false, summaries);
     };
     AffineLoadOp earlier;
     bool blocked = false;
@@ -946,7 +1249,7 @@ void AffineToLoopSchedule::mergeIfElseAccesses() {
         if (auto lowerIndex = dyn_cast<AffineLoadOp>(op);
             lowerIndex && lowerIndex != load &&
             lowerIndex.getMemRef() == load.getMemRef() &&
-            compareAddresses(accessAddr(lowerIndex), addr) ==
+            compareAddresses(loadAddr(lowerIndex), addr) ==
                 AddrRelation::Same) {
           earlier = lowerIndex;
           break;
@@ -965,7 +1268,14 @@ void AffineToLoopSchedule::mergeIfElseAccesses() {
       continue;
     addCounterAttr(earlier, "hls.merged_loads",
                    1 + counterAttr(load, "hls.merged_loads"));
+
+    for (Operation *user : load.getResult().getUsers()) {
+      summaries.invalidate(user);
+      loadAddrs.erase(user);
+    }
     load.getResult().replaceAllUsesWith(earlier.getResult());
+    summaries.invalidate(load);
+    loadAddrs.erase(load.getOperation());
     load.erase();
     ++forwarded;
   }
@@ -976,8 +1286,10 @@ void AffineToLoopSchedule::mergeIfElseAccesses() {
 
     SmallVector<AffineLoadOp> thenLoads, elseLoads;
     SmallVector<AffineStoreOp> thenStores, elseStores;
-    movableAccesses(thenArm, ifOp, tracked, thenLoads, thenStores);
-    movableAccesses(elseArm, ifOp, tracked, elseLoads, elseStores);
+
+    summaries.clear();
+    movableAccesses(thenArm, ifOp, tracked, thenLoads, thenStores, summaries);
+    movableAccesses(elseArm, ifOp, tracked, elseLoads, elseStores, summaries);
 
     for (auto [t, e] : pairSameAddress<AffineLoadOp>(thenLoads, elseLoads)) {
       t->moveBefore(ifOp);
@@ -1216,8 +1528,8 @@ void AffineToLoopSchedule::sinkFlattenedParentCode() {
       SmallVector<AffineExpr> exprs;
       SmallVector<bool> eqs;
       SmallVector<Value> dims;
-      for (unsigned keyValue = 0; keyValue < lowerIndex && ok; ++keyValue) {
-        AffineForOp inner = chain[keyValue];
+      for (unsigned k = 0; k < lowerIndex && ok; ++k) {
+        AffineForOp inner = chain[k];
         std::optional<uint64_t> trip = getConstantTripCount(inner);
         if (!inner.hasConstantLowerBound() || !trip || *trip == 0) {
           ok = false;
@@ -1384,9 +1696,9 @@ static void chainSharedCalleeInstances(Operation *loop,
       }
       for (Operation *call : chain)
         holdForDepth(call);
-      for (unsigned keyValue = 1; keyValue < chain.size(); ++keyValue)
+      for (unsigned k = 1; k < chain.size(); ++k)
         (void)problem.insertDependence(
-            Problem::Dependence(chain[keyValue - 1], chain[keyValue]));
+            Problem::Dependence(chain[k - 1], chain[k]));
       Problem::Dependence back(chain.back(), chain.front());
       if (succeeded(problem.insertDependence(back)))
         problem.setDistance(back, 1);
@@ -1766,8 +2078,8 @@ bool FastModuloScheduler::placeAll(unsigned ii, ArrayRef<int64_t> asap,
       continue;
     }
     bool placed = false;
-    for (unsigned keyValue = 0; keyValue < ii && !placed; ++keyValue) {
-      int64_t t = est + keyValue;
+    for (unsigned k = 0; k < ii && !placed; ++k) {
+      int64_t t = est + k;
       unsigned slot = static_cast<unsigned>(t % ii);
       bool free = true;
       for (Problem::ResourceType r : rsrcs[innerIndex]) {
@@ -2191,8 +2503,8 @@ static Value materializeIntegerSet(OpBuilder &buildPoint, Location loc,
 
 struct AffineStoreEnableLowering
     : public OpConversionPattern<hls_analysis::AffineStoreEnableOp> {
-  AffineStoreEnableLowering(MLIRContext *context, MemoryDependenceAnalysis &da)
-      : OpConversionPattern(context), dependenceAnalysis(da) {}
+  AffineStoreEnableLowering(MLIRContext *ctx, MemoryDependenceAnalysis &da)
+      : OpConversionPattern(ctx), dependenceAnalysis(da) {}
 
   LogicalResult
   matchAndRewrite(AffineStoreEnableOp op, OpAdaptor adaptor,
@@ -2363,10 +2675,10 @@ static void recordStorageTier(Value memRef,
       request.narrowed = true;
     }
   request.readWidths.push_back(request.writeWidth);
-  circt::hlsest::SelectionContext context;
-  context.profile = profile;
+  circt::hlsest::SelectionContext ctx;
+  ctx.profile = profile;
   circt::hlsest::TierChoice choice =
-      selector.select(request, circt::hlsest::Config::get().device, context);
+      selector.select(request, circt::hlsest::Config::get().device, ctx);
   Builder buildPoint(def->getContext());
   def->setAttr("hls.storage_tier", buildPoint.getStringAttr(choice.tier));
   def->setAttr("hls.read_latency",
@@ -2595,11 +2907,11 @@ AffineToLoopSchedule::solveSchedulingProblem(Operation *loop,
     reused = nullptr;
   }
 
-  circt::hlsest::SchedulingContext context = schedulingContext;
+  circt::hlsest::SchedulingContext ctx = schedulingContext;
   if (targetII)
-    context.requestedII = targetII;
+    ctx.requestedII = targetII;
   circt::hlsest::ScheduleOutcome outcome =
-      moduloScheduler->schedule(problem, anchor, context);
+      moduloScheduler->schedule(problem, anchor, ctx);
   bool scheduled = outcome.success;
 
   std::string scheduler = outcome.label;
@@ -3096,9 +3408,9 @@ public:
 
   circt::hlsest::ScheduleOutcome
   schedule(ModuloProblem &problem, Operation *anchor,
-           const circt::hlsest::SchedulingContext &context) const override {
+           const circt::hlsest::SchedulingContext &ctx) const override {
     circt::hlsest::ScheduleOutcome out;
-    unsigned targetII = context.requestedII.value_or(0);
+    unsigned targetII = ctx.requestedII.value_or(0);
     if (kind == Greedy) {
       FastModuloScheduler fast(problem, recurrenceRepairRounds);
       out.success = succeeded(fast.schedule(maxIIBumps));
