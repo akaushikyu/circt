@@ -287,6 +287,9 @@ struct ImplicitBufferConfig {
   /// pointer cast (`*reinterpret_cast<ap_uint<512>*>(&a[i])`, N56, kernels
   /// w9r7_mx_cast512 / mx_cast256); off: the declared element widths only.
   bool readFifoCastLoadWidth = true;
+  /// The read FIFO's width is rounded up to a power of two (an AXI data bus
+  /// is 2^n bytes wide; N63, kernels w9r8p_mx_i9 / mx_i3 / mx_s5).
+  bool readFifoPowerOfTwoWidth = true;
   int64_t writeBufferFreeMaxBurst = 16;
   int64_t writeBufferPortWidthBits = 18;
   int64_t writeBufferConfirmedMinBurst = 32;

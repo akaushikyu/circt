@@ -22,7 +22,9 @@
 //     bundle), at most max_bus_bits (1024, the AXI4 limit); the read FIFO is also as wide as the widest load through a
 //     pointer cast (read_fifo.cast_load_width), and there is one read FIFO
 //     per distinct `channel=` of the reading ports (read_fifo.per_channel;
-//     both VITIS_NOTES N56, kernels w9r7_mx_*); the burst settings are the largest any port states, else the
+//     both VITIS_NOTES N56, kernels w9r7_mx_*); the read FIFO width is
+//     rounded up to a power of two (read_fifo.power_of_two_width, N63,
+//     kernels w9r8p_mx_*); the burst settings are the largest any port states, else the
 //     interface pragma defaults (16 / 16 / 16 / 16);
 //   - a port no access reads (writes) has no read FIFO (write buffer); an
 //     argument passed to a defined callee is followed into it, and a port
@@ -47,6 +49,7 @@
 #include "mlir/Interfaces/CallInterfaces.h"
 #include "mlir/Interfaces/ViewLikeInterface.h"
 #include "llvm/ADT/DenseSet.h"
+#include "llvm/Support/MathExtras.h"
 
 using namespace mlir;
 using namespace circt::hlsest;
@@ -266,6 +269,13 @@ public:
       a.readBits = a.busBits;
       if (mc.readFifoCastLoadWidth)
         a.readBits = std::max(a.readBits, std::min(a.castLoadBits, maxBits));
+      // An AXI data bus is 2^n bytes wide: a 288-bit std::array<int, 9>
+      // read is a 512-bit FIFO (N63: kernels w9r8p_mx_i9 29 = F(256 x 512),
+      // mx_i3 96 -> 128 bits, mx_s5 80 -> 128; mx_i8 256 unchanged).
+      unsigned unroundedReadBits = a.readBits;
+      if (mc.readFifoPowerOfTwoWidth)
+        a.readBits = std::min(
+            static_cast<unsigned>(llvm::PowerOf2Ceil(a.readBits)), maxBits);
       size_t index = &a - bundles.data();
       a.readChannels =
           mc.readFifoPerChannel
@@ -287,9 +297,13 @@ public:
         a.readRule = "depth > " + std::to_string(mc.readFifoSrlMaxDepth) +
                      ": BRAM FIFO, two ports (x" +
                      std::to_string(fifoWidth) + " bands of N8)";
-        if (a.readBits != a.busBits)
-          a.readRule += "; " + std::to_string(a.readBits) +
+        if (unroundedReadBits != a.busBits)
+          a.readRule += "; " + std::to_string(unroundedReadBits) +
                         " bits wide: a load through a pointer cast (N56)";
+        if (a.readBits != unroundedReadBits)
+          a.readRule += "; " + std::to_string(unroundedReadBits) +
+                        " bits rounded up to " + std::to_string(a.readBits) +
+                        " (a power of two, N63)";
         if (a.readChannels > 1)
           a.readRule += "; " + std::to_string(a.readChannels) +
                         " FIFOs, one per channel (N56)";

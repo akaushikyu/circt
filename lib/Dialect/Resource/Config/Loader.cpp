@@ -894,6 +894,7 @@ void fillTool(const json::Object &t, ToolProfile &tool) {
     ib.readFifoConfirmedMaxDepth = integer(rf, "confirmed_max_depth", 4096);
     ib.readFifoPerChannel = boolean(rf, "per_channel", true);
     ib.readFifoCastLoadWidth = boolean(rf, "cast_load_width", true);
+    ib.readFifoPowerOfTwoWidth = boolean(rf, "power_of_two_width", true);
     const json::Object &wb = obj(b, "write_buffer");
     ib.writeBufferFreeMaxBurst = integer(wb, "free_max_burst", 16);
     ib.writeBufferPortWidthBits = integer(wb, "port_width_bits", 18);
