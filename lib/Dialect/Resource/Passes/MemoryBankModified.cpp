@@ -337,12 +337,16 @@ static MemrefBanking resolveMemref(OpBuilder &buildPoint, Location loc,
        ++innerIndex) {
     const DimPartition &portValue = lowerIndex.dims[innerIndex];
     Value indexValue = indices[portValue.dim];
-    if (std::optional<int64_t> constIdx = constantIndexOf(indexValue)) {
+    std::optional<int64_t> constIdx = constantIndexOf(indexValue);
+
+    if (constIdx) {
       auto [bank, off] = bankAndOffset(*constIdx, portValue);
-      mb.choice.constBank.push_back(bank);
-      mb.bankedIndices[portValue.dim] =
-          arith::ConstantIndexOp::create(buildPoint, loc, off);
-      continue;
+      if (bank >= 0 && bank < portValue.factor) {
+        mb.choice.constBank.push_back(bank);
+        mb.bankedIndices[portValue.dim] =
+            arith::ConstantIndexOp::create(buildPoint, loc, off);
+        continue;
+      }
     }
 
     bool bankIsDiv = portValue.kind == PartitionSpec::Block;
