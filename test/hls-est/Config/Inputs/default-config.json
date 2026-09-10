@@ -717,10 +717,12 @@
         "_float_loads_perfect": "bool: A read-only inner-invariant floating-point load keeps a nest perfect (flattened, not unrolled) [D-03]",
         "_policy": "plugin name (a pipeline_policy): The PipelinePolicy [D-02, D-07, D-08]",
         "_promote_pipelined": "bool: Promote the invariant accesses of the pipelined loop itself to registers after the unroll [D-06]",
+        "_sink_parent_code": "bool: The straight-line code (with memory accesses, no loops) before the child loop in the body of a loop flattened into a pipeline runs in the pipeline under a first-iteration guard, so its accesses count in the pipeline's port demand and schedule; a measured Vitis rule (VITIS_NOTES N65)",
         "flatten_across_calls": false,
         "float_loads_perfect": true,
         "policy": "vitis-pipeline-loops",
-        "promote_pipelined": true
+        "promote_pipelined": true,
+        "sink_parent_code": true
       },
       "streams": {
         "_dataflow_argument_fifos": "bool: A dataflow function forwards each scalar / m_axi pointer argument a later process reads through a FIFO <arg>_c, depth = processes on the longest channel path to the reader (+1 when the first process does not read it); priced as a stream FIFO (VITIS_NOTES N54) [P-06]",

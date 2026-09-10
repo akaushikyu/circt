@@ -199,6 +199,7 @@ const KeySpec kSchema[] = {
   {"tool.hls.pipeline_decision.float_loads_perfect", KeyKind::Bool, "", "A read-only inner-invariant floating-point load keeps a nest perfect (flattened, not unrolled)", "D-03", APU, "", kNoLimit, kNoLimit, false},
   {"tool.hls.pipeline_decision.promote_pipelined", KeyKind::Bool, "", "Promote the invariant accesses of the pipelined loop itself to registers after the unroll", "D-06", APU, "", kNoLimit, kNoLimit, false},
   {"tool.hls.pipeline_decision.flatten_across_calls", KeyKind::Bool, "", "Flatten a loop into a pipelined loop of a callee (documented assumption: never); reserved: only false is implemented, true is refused", "D-11", APU, "", kNoLimit, kNoLimit, false},
+  {"tool.hls.pipeline_decision.sink_parent_code", KeyKind::Bool, "", "The straight-line code (with memory accesses, no loops) before the child loop in the body of a loop flattened into a pipeline runs in the pipeline under a first-iteration guard, so its accesses count in the pipeline's port demand and schedule; a measured Vitis rule (VITIS_NOTES N65)", "", A2L, "", kNoLimit, kNoLimit, true},
 
   {"tool.hls.partitioning", KeyKind::Section, "", "Automatic and inferred array partitioning", "Q-03..Q-08, Q-15", SPLIT ", " BANK, "", kNoLimit, kNoLimit, false},
   {"tool.hls.partitioning.policy", KeyKind::PluginName, "", "The PartitionPolicy", "Q-03, Q-04, Q-08, Q-15", SPLIT, "partition_policy", kNoLimit, kNoLimit, false},

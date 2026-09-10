@@ -926,6 +926,8 @@ void fillTool(const json::Object &t, ToolProfile &tool) {
   h.pipelineDecision.floatLoadsPerfect = boolean(pd, "float_loads_perfect");
   h.pipelineDecision.promotePipelined = boolean(pd, "promote_pipelined");
   h.pipelineDecision.flattenAcrossCalls = boolean(pd, "flatten_across_calls");
+  h.pipelineDecision.sinkParentCode =
+      boolean(pd, "sink_parent_code", true);
 
   const json::Object &pa = obj(hls, "partitioning");
   h.partitioning.policy = str(pa, "policy");

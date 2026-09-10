@@ -122,6 +122,7 @@ private:
                InnermostLoopDependenceAnalysis &dependenceAnalysis);
 
   void coalescePerfectNests();
+  void sinkFlattenedParentCode();
 
   void hoistInvariantLoads();
   void cleanupRedundantAccesses();
@@ -177,6 +178,14 @@ private:
       llvm::cl::desc("With hoist-invariant: also hoist a loop-invariant "
                      "affine.load nested in an if of the loop body (Vitis' "
                      "LICM speculates guarded invariant loads)."),
+      llvm::cl::init(true)};
+  Option<bool> sinkParentCode{
+      *this, "sink-flattened-parent-code",
+      llvm::cl::desc("Move the straight-line code of the loops a pipelined "
+                     "loop is flattened with (hls.flattened_parents) into "
+                     "the pipelined body under a first-iteration guard: "
+                     "Vitis allocates its ports in the pipeline "
+                     "(VITIS_NOTES N65)"),
       llvm::cl::init(true)};
   Option<bool> mergeIfElse{
       *this, "merge-if-else-accesses",
@@ -1132,6 +1141,111 @@ ModuloProblem AffineToLoopSchedule::getModuloProblem(CyclicProblem &prob) {
 /// Bands that cannot be coalesced (e.g. inner bounds depending on outer
 /// IVs) are simply left alone; their innermost loops are pipelined in place
 /// later, with the outer loops remaining as sequential affine.for control.
+/// VITIS_NOTES N65 (kernels w9r8p_fl_pre / fl_pre2; class_ece8893 ben_hall
+/// lab3): when --auto-pipeline-unroll flattens the loops above a pipelined
+/// loop C into it (hls.flattened_parents, N3 (3)), Vitis sinks the
+/// straight-line code of those loops' bodies into the flattened pipeline,
+/// guarded by the predicate of the first iteration of the loops below it,
+/// and allocates its ports there: `for i, for k { t[j] = A[i][k] * B[k][j]
+/// (j unrolled); for jj (pipelined, flattened) ... }` reads B 64 times per
+/// pipeline iteration (Vitis II 2, B RAM_1WNR 60). Does the same in the IR:
+/// the code before the child loop in a flattened parent's body moves to the
+/// start of C's body under `affine.if` (every loop from the parent's child
+/// down to C at its lower bound), so that the scheduler and --bram-analysis
+/// see it in the pipeline. Only code without loops, whose values nothing
+/// outside it uses, in parents without iter_args, and only when it accesses
+/// memory (register code costs no port); the code after the child loop
+/// stays where it is (not measured).
+void AffineToLoopSchedule::sinkFlattenedParentCode() {
+  SmallVector<AffineForOp> pipelined;
+  getOperation().walk([&](AffineForOp loop) {
+    if (circt::hls_analysis::getFlattenedParents(loop) > 0 &&
+        loop->hasAttr(circt::hls_analysis::kLoopPipelineAttr))
+      pipelined.push_back(loop);
+  });
+  for (AffineForOp candidateValue : pipelined) {
+    unsigned elementCount =
+        circt::hls_analysis::getFlattenedParents(candidateValue);
+
+    SmallVector<AffineForOp> chain{candidateValue};
+    for (unsigned lowerIndex = 0; lowerIndex < elementCount; ++lowerIndex) {
+      auto portValue = dyn_cast<AffineForOp>(chain.back()->getParentOp());
+      if (!portValue)
+        break;
+      chain.push_back(portValue);
+    }
+    for (unsigned lowerIndex = 1; lowerIndex < chain.size(); ++lowerIndex) {
+      AffineForOp parent = chain[lowerIndex];
+      Operation *below = chain[lowerIndex - 1];
+      if (parent.getNumIterOperands() != 0)
+        break;
+      SmallVector<Operation *> pre;
+      bool ok = true, accessesMemory = false;
+      for (Operation &op : *parent.getBody()) {
+        if (&op == below)
+          break;
+        bool hasLoop = isa<AffineForOp, scf::ForOp, scf::WhileOp>(op);
+        op.walk([&](Operation *in) {
+          if (in != &op && isa<AffineForOp, scf::ForOp, scf::WhileOp>(in))
+            hasLoop = true;
+          if (isa<AffineReadOpInterface, AffineWriteOpInterface, memref::LoadOp,
+                  memref::StoreOp>(in))
+            accessesMemory = true;
+          if (isa<CallOpInterface>(in))
+            hasLoop = true;
+        });
+        if (hasLoop) {
+          ok = false;
+          break;
+        }
+        pre.push_back(&op);
+      }
+      if (!ok || pre.empty() || !accessesMemory)
+        continue;
+      llvm::SmallPtrSet<Operation *, 16> moved(pre.begin(), pre.end());
+      for (Operation *op : pre)
+        for (Value r : op->getResults())
+          for (Operation *useValue : r.getUsers()) {
+            Operation *top = useValue;
+            while (top && top->getBlock() != parent.getBody())
+              top = top->getParentOp();
+            if (!top || !moved.contains(top))
+              ok = false;
+          }
+
+      SmallVector<AffineExpr> exprs;
+      SmallVector<bool> eqs;
+      SmallVector<Value> dims;
+      for (unsigned keyValue = 0; keyValue < lowerIndex && ok; ++keyValue) {
+        AffineForOp inner = chain[keyValue];
+        std::optional<uint64_t> trip = getConstantTripCount(inner);
+        if (!inner.hasConstantLowerBound() || !trip || *trip == 0) {
+          ok = false;
+          break;
+        }
+        exprs.push_back(
+            getAffineDimExpr(dims.size(), candidateValue.getContext()) -
+            inner.getConstantLowerBound());
+        eqs.push_back(true);
+        dims.push_back(inner.getInductionVar());
+      }
+      if (!ok)
+        continue;
+      IntegerSet set = IntegerSet::get(dims.size(), 0, exprs, eqs);
+      OpBuilder buildPoint(candidateValue.getBody(),
+                           candidateValue.getBody()->begin());
+      auto guard =
+          AffineIfOp::create(buildPoint, parent.getLoc(), set, dims, false);
+      Block *then = guard.getThenBlock();
+      for (Operation *op : pre)
+        op->moveBefore(then->getTerminator());
+      guard->setAttr(
+          "hls.flattened_parent_code",
+          buildPoint.getI64IntegerAttr(static_cast<int64_t>(lowerIndex)));
+    }
+  }
+}
+
 void AffineToLoopSchedule::coalescePerfectNests() {
 
   SmallVector<SmallVector<AffineForOp>> bands;
@@ -1806,6 +1920,8 @@ void AffineToLoopSchedule::runOnOperation() {
     applyConfigured(hoistPastCalls, me.licmHoistPastCalls);
     applyConfigured(hoistConditional, me.licmHoistConditional);
     applyConfigured(mergeIfElse, me.mergeIfElseAccesses);
+    applyConfigured(sinkParentCode,
+                    cfg.tool.hls.pipelineDecision.sinkParentCode);
     const circt::hlsest::SchedulingConfig &sc = cfg.scheduling;
     applyConfigured(fastThreshold, static_cast<unsigned>(sc.fastThreshold));
     applyConfigured(fastOpsThreshold,
@@ -1815,6 +1931,8 @@ void AffineToLoopSchedule::runOnOperation() {
   if (!timingModel && failed(createPlugins()))
     return signalPassFailure();
 
+  if (sinkParentCode)
+    sinkFlattenedParentCode();
   coalescePerfectNests();
 
   if (mergeIfElse)

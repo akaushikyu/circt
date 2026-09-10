@@ -65,7 +65,8 @@
         "policy": "vitis-pipeline-loops",
         "float_loads_perfect": true,
         "promote_pipelined": true,
-        "flatten_across_calls": false
+        "flatten_across_calls": false,
+        "sink_parent_code": true
       },
       "partitioning": {
         "policy": "vitis-td",

@@ -328,6 +328,9 @@ struct PipelineDecisionConfig {
   bool floatLoadsPerfect = true;
   bool promotePipelined = true;
   bool flattenAcrossCalls = false;
+  /// The straight-line code of flattened parents runs in the pipeline
+  /// (VITIS_NOTES N65).
+  bool sinkParentCode = true;
 };
 
 struct PartitionInferenceConfig {
