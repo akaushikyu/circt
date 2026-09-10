@@ -949,6 +949,69 @@ static void writtenObjects(Operation *op, const ObjectTable &typeValue,
           out.insert(*id);
 }
 
+/// A read-modify-write accumulator whose loop LICM promotes to a register and
+/// whose value before the loop is forwarded from a store to the element just
+/// before it: `q[s][o] = 0; for d: q[s][o] += x[d] * w[o][d];` reads nothing
+/// of q in Vitis (kernel w9r8i_dm_acc0: q removed when nothing reads it;
+/// forgebench attention_op_p1 Q / K, VITIS_NOTES N1), so it is no load of a
+/// load -> store cycle. When the element was written by an earlier loop nest
+/// instead, the load before the promoted loop stays (w9r8i_dm_accn: q kept).
+/// The loop is the innermost one around `load`, extended outwards while the
+/// address stays invariant; no other access of the object may lie in it.
+static bool isForwardedAccumulatorLoad(Operation *load, const MemObject &o) {
+  if (!isa<affine::AffineLoadOp, memref::LoadOp>(load))
+    return false;
+  DenseSet<Operation *> accesses(o.readers.begin(), o.readers.end());
+  accesses.insert(o.writers.begin(), o.writers.end());
+  auto invariantIn = [&](Operation *loop) {
+    for (Value valueHandle : load->getOperands()) {
+      if (isa<BaseMemRefType>(valueHandle.getType()))
+        continue;
+      if (loop->getRegion(0).isAncestor(valueHandle.getParentRegion()))
+        return false;
+    }
+    return true;
+  };
+  auto onlyThisElementIn = [&](Operation *loop) {
+    for (Operation *arrayValue : accesses)
+      if (loop->isAncestor(arrayValue) && !sameAddress(arrayValue, load))
+        return false;
+    return true;
+  };
+  Operation *loop = load->getParentOp();
+  while (loop && !isHandledLoop(loop))
+    loop = loop->getParentOp();
+  if (!loop || isa<func::FuncOp>(loop) || !invariantIn(loop) ||
+      !onlyThisElementIn(loop))
+    return false;
+  bool chain = llvm::any_of(o.writers, [&](Operation *st) {
+    return loop->isAncestor(st) && sameAddress(st, load) &&
+           isPromotableChainLoad(load, st, loop);
+  });
+  if (!chain)
+    return false;
+  while (true) {
+
+    for (Operation *op = loop->getPrevNode(); op; op = op->getPrevNode()) {
+      bool touches = false;
+      op->walk([&](Operation *in) {
+        if (accesses.contains(in))
+          touches = true;
+      });
+      if (!touches)
+        continue;
+      return accesses.contains(op) && storedMemref(op) &&
+             sameAddress(op, load) &&
+             storedType(op) == load->getResult(0).getType();
+    }
+    Operation *parent = loop->getParentOp();
+    if (!parent || !isHandledLoop(parent) || !invariantIn(parent) ||
+        !onlyThisElementIn(parent))
+      return false;
+    loop = parent;
+  }
+}
+
 /// VITIS_NOTES N66 (kernels w9r8p_dm_self / dm_selfaff, w9r8i_dm_cyc2 /
 /// dm_ctl / dm_feed): Vitis removes an array only once no load from it is
 /// used (LLVM deletes unused loads and then a store-only alloca; a store is
@@ -989,8 +1052,9 @@ void Liveness::markLoadStoreCycles() {
         taint(resultValue);
     };
     for (Operation *resultValue : o.readers)
-      for (Value valueHandle : resultValue->getResults())
-        taint(valueHandle);
+      if (!isForwardedAccumulatorLoad(resultValue, o))
+        for (Value valueHandle : resultValue->getResults())
+          taint(valueHandle);
     while (!work.empty()) {
       Value valueHandle = work.pop_back_val();
       for (OpOperand &use : valueHandle.getUses()) {

@@ -157,3 +157,51 @@ func.func @scalarised(%u: memref<1024xi32>) {
   }
   return
 }
+
+// dm_acc0 (Vitis 0): `q[s][o] = 0; for d: q[s][o] += x * w`: LICM keeps the
+// accumulator in a register and its value before the loop is the 0 just
+// stored, so no load of q remains (forgebench attention Q / K).
+// CHECK-LABEL: func.func @accumulator_initialised
+// CHECK-NOT: memref.alloca
+// CHECK: return
+func.func @accumulator_initialised(%u: memref<1024xi32>) {
+  %c0 = arith.constant 0 : i32
+  %q = memref.alloca() {polygeist.varname = "q"} : memref<16x64xi32>
+  affine.for %s = 0 to 16 {
+    affine.for %o = 0 to 64 {
+      affine.store %c0, %q[%s, %o] : memref<16x64xi32>
+      affine.for %d = 0 to 64 {
+        %x = affine.load %u[%s * 64 + %d] : memref<1024xi32>
+        %a = affine.load %q[%s, %o] : memref<16x64xi32>
+        %b = arith.addi %a, %x : i32
+        affine.store %b, %q[%s, %o] : memref<16x64xi32>
+      }
+    }
+  }
+  return
+}
+
+// dm_accn (Vitis 2, q kept): the same accumulation of an element an earlier
+// loop nest wrote: the load before the promoted loop stays, a real cycle.
+// CHECK-LABEL: func.func @accumulator_filled_earlier
+// CHECK: memref.alloca() {hls.kept_reason{{.*}}polygeist.varname = "q"}
+func.func @accumulator_filled_earlier(%u: memref<1024xi32>) {
+  %q = memref.alloca() {polygeist.varname = "q"} : memref<16x64xi32>
+  affine.for %s = 0 to 16 {
+    affine.for %o = 0 to 64 {
+      %x = affine.load %u[%s + %o] : memref<1024xi32>
+      affine.store %x, %q[%s, %o] : memref<16x64xi32>
+    }
+  }
+  affine.for %s = 0 to 16 {
+    affine.for %o = 0 to 64 {
+      affine.for %d = 0 to 64 {
+        %x = affine.load %u[%s * 64 + %d] : memref<1024xi32>
+        %a = affine.load %q[%s, %o] : memref<16x64xi32>
+        %b = arith.addi %a, %x : i32
+        affine.store %b, %q[%s, %o] : memref<16x64xi32>
+      }
+    }
+  }
+  return
+}
