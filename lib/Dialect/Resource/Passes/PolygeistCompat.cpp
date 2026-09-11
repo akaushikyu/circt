@@ -22,6 +22,7 @@
 #include "mlir/Transforms/InliningUtils.h"
 #include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/SmallVector.h"
+#include <array>
 
 using namespace mlir;
 using namespace circt::hls_analysis;
@@ -184,6 +185,75 @@ static Operation *cloneAccessOn(OpBuilder &b, Operation *access, Value view) {
   return b.clone(*access, memoryOp);
 }
 
+/// `c ? A[i] : A[j]` on lvalues of one array: both operands of the
+/// conditional (an if or a select yielding element views) are views of the
+/// same array that differ only in their index. Vitis reads that array once,
+/// at the selected address (review kernel c1_selsame.cpp: Vitis 1 BRAM,
+/// RAM_AUTO_1R1W; with one access per arm, as sinkAccessesIntoView-
+/// Conditionals below makes, the two exclusive loads were both counted as
+/// port demand: RAM_1WNR, 3 BRAM). The conditional becomes one yielding the
+/// index, and a single view `A[c ? i : j]` replaces its result. Returns false
+/// and leaves the IR unchanged when the shape does not match.
+static bool mergeSameArrayViewConditional(Operation *op) {
+  if (op->getNumResults() != 1 ||
+      !isa<BaseMemRefType>(op->getResult(0).getType()))
+    return false;
+  SmallVector<Value, 2> yielded;
+  if (auto sel = dyn_cast<arith::SelectOp>(op)) {
+    yielded = {sel.getTrueValue(), sel.getFalseValue()};
+  } else {
+    for (Region &resultValue : op->getRegions()) {
+      if (resultValue.empty())
+        return false;
+      yielded.push_back(resultValue.front().getTerminator()->getOperand(0));
+    }
+  }
+  if (yielded.size() != 2)
+    return false;
+  auto views =
+      std::array<SubIndexOp, 2>{yielded[0].getDefiningOp<SubIndexOp>(),
+                                yielded[1].getDefiningOp<SubIndexOp>()};
+  if (!views[0] || !views[1] || views[0].getSource() != views[1].getSource() ||
+      views[0].getType() != views[1].getType() || !views[0].isElementView())
+    return false;
+  Value source = views[0].getSource();
+
+  if (op->isAncestor(source.getParentRegion()->getParentOp()))
+    return false;
+  OpBuilder b(op);
+  Location loc = op->getLoc();
+  Type indexTy = b.getIndexType();
+  Value index;
+  if (auto sel = dyn_cast<arith::SelectOp>(op)) {
+    index = arith::SelectOp::create(b, loc, sel.getCondition(),
+                                    views[0].getIndex(), views[1].getIndex());
+  } else {
+    Operation *elementCount;
+    if (auto aif = dyn_cast<affine::AffineIfOp>(op))
+      elementCount = affine::AffineIfOp::create(b, loc, TypeRange{indexTy},
+                                                aif.getIntegerSet(),
+                                                aif.getOperands(), true);
+    else if (auto sif = dyn_cast<scf::IfOp>(op))
+      elementCount = scf::IfOp::create(b, loc, TypeRange{indexTy},
+                                       sif.getCondition(), true);
+    else
+      return false;
+    for (unsigned arm = 0; arm < 2; ++arm) {
+      elementCount->getRegion(arm).takeBody(op->getRegion(arm));
+      elementCount->getRegion(arm).front().getTerminator()->setOperand(
+          0, views[arm].getIndex());
+    }
+    index = elementCount->getResult(0);
+  }
+  auto merged = SubIndexOp::create(b, loc, views[0].getType(), source, index);
+  op->getResult(0).replaceAllUsesWith(merged.getResult());
+  op->erase();
+  for (SubIndexOp valueHandle : views)
+    if (valueHandle->use_empty())
+      valueHandle->erase();
+  return true;
+}
+
 /// The conditional operator on lvalues, `T x = c ? B[i][j] : loc[i][j - 1];`
 /// (class types such as ap_fixed bind a reference to the selected element),
 /// reaches the MLIR as an if (or a select) that yields one of two element
@@ -216,6 +286,10 @@ static unsigned sinkAccessesIntoViewConditionals(ModuleOp module) {
     });
     if (!armsPure)
       continue;
+    if (mergeSameArrayViewConditional(op)) {
+      ++moved;
+      continue;
+    }
     for (OpResult passResult : op->getResults()) {
       if (!isa<BaseMemRefType>(passResult.getType()))
         continue;

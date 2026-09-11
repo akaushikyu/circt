@@ -61,3 +61,55 @@ func.func @select_views(%arg0: memref<16xi32>, %arg1: memref<16xi32>, %arg2: mem
   memref.store %v, %arg2[%k] : memref<16xi32>
   return
 }
+
+// Both operands views of one array (`c ? A[i] : A[i + 1]`, W9 round 8 review
+// defect 3, kernel w9r8rev c1_selsame.cpp: Vitis 1 BRAM, RAM_AUTO_1R1W): one
+// access at the selected index, not a load per arm (which counted two
+// exclusive reads as port demand: RAM_1WNR, 3 BRAM).
+// CHECK-LABEL: func.func @same_array_if
+// CHECK: %[[IX:.*]] = scf.if %{{.*}} -> (index) {
+// CHECK:   scf.yield %{{.*}} : index
+// CHECK: } else {
+// CHECK:   scf.yield %{{.*}} : index
+// CHECK: }
+// CHECK: arith.addi %{{.*}}, %[[IX]] : index
+// CHECK: %[[V:.*]] = memref.load %{{.*}}[%{{.*}}] : memref<1024xi16>
+// CHECK-NEXT: affine.store %[[V]], %arg1
+func.func @same_array_if(%arg0: memref<1024xi32>, %arg1: memref<1024xi16>) {
+  %c1_i32 = arith.constant 1 : i32
+  %A = memref.alloca() {polygeist.varname = "A"} : memref<1024xi16>
+  affine.for %i = 0 to 1020 {
+    %c = affine.load %arg0[%i] : memref<1024xi32>
+    %b = arith.trunci %c : i32 to i1
+    %0 = scf.if %b -> (memref<?xi16>) {
+      %s = "polygeist.subindex"(%A, %i) : (memref<1024xi16>, index) -> memref<?xi16>
+      scf.yield %s : memref<?xi16>
+    } else {
+      %ii = arith.index_cast %i : index to i32
+      %n = arith.addi %ii, %c1_i32 : i32
+      %ni = arith.index_cast %n : i32 to index
+      %s = "polygeist.subindex"(%A, %ni) : (memref<1024xi16>, index) -> memref<?xi16>
+      scf.yield %s : memref<?xi16>
+    }
+    %v = affine.load %0[0] : memref<?xi16>
+    affine.store %v, %arg1[%i] : memref<1024xi16>
+  }
+  return
+}
+
+// The select form on one array: a select of the two indices.
+// CHECK-LABEL: func.func @same_array_select
+// CHECK: %[[IX:.*]] = arith.select %{{.*}}, %{{.*}}, %{{.*}} : index
+// CHECK: %[[O:.*]] = arith.addi %{{.*}}, %[[IX]] : index
+// CHECK: %[[V:.*]] = memref.load %arg0[%[[O]]] : memref<16xi32>
+// CHECK-NOT: scf.if
+// CHECK: memref.store %[[V]], %arg1
+func.func @same_array_select(%arg0: memref<16xi32>, %arg1: memref<16xi32>, %c: i1, %k: index, %m: index) {
+  %a = "polygeist.subindex"(%arg0, %k) : (memref<16xi32>, index) -> memref<?xi32>
+  %b = "polygeist.subindex"(%arg0, %m) : (memref<16xi32>, index) -> memref<?xi32>
+  %s = arith.select %c, %a, %b : memref<?xi32>
+  %c0 = arith.constant 0 : index
+  %v = memref.load %s[%c0] : memref<?xi32>
+  memref.store %v, %arg1[%k] : memref<16xi32>
+  return
+}
