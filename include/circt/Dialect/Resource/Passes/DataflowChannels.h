@@ -130,6 +130,12 @@ public:
   llvm::SmallVector<DataflowArgumentFifo>
   argumentFifos(mlir::Operation *fn);
 
+  /// The blocks of a channel of `region` without a depth pragma, and why;
+  /// computed once per region (it looks up the region function's callers,
+  /// a walk of the whole module).
+  const std::pair<int64_t, std::string> &
+  structuralBlocksOf(mlir::Operation *region);
+
 private:
   struct RegionMerges {
     llvm::DenseMap<mlir::Operation *, mlir::Operation *> parent;
@@ -144,6 +150,10 @@ private:
 
   AccessesFn accessesOf;
   llvm::DenseMap<mlir::Operation *, std::unique_ptr<RegionMerges>> regions;
+  llvm::DenseMap<mlir::Operation *, std::pair<int64_t, std::string>>
+      blocksOfRegion;
+  /// Per memref.global: the only function that uses it, or null.
+  llvm::DenseMap<mlir::Operation *, mlir::Operation *> soleUserOfGlobal;
 };
 
 /// Whether `storage` (a memref.alloca, or a memref.global that a function

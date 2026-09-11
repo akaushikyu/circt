@@ -336,6 +336,14 @@ static void addReason(llvm::DenseMap<Operation *, std::string> &reasons,
 // arrays between the merged processes are ordinary memories of the merged
 // process there). A top-level argument is a port: two processes reading it
 // stay separate and share it, one port each.
+const std::pair<int64_t, std::string> &
+ProcessMerges::structuralBlocksOf(Operation *region) {
+  auto it = blocksOfRegion.find(region);
+  if (it == blocksOfRegion.end())
+    it = blocksOfRegion.try_emplace(region, structuralBlocks(region)).first;
+  return it->second;
+}
+
 void ProcessMerges::mergeOnParameters(Operation *region, RegionMerges &m) {
   func::FuncOp fn = regionFunction(region);
   if (!fn || isTopFunction(fn) || fn.isExternal())
@@ -411,9 +419,49 @@ static SmallVector<Operation *> producerProcesses(Operation &consumer,
 // globals only it uses, a static local) whose every access lies in the
 // region, with the processes that touch them; only those touched by at
 // least two processes.
+/// Whether the global `g` is used by `fn` only (a static local). The users of
+/// every symbol of the module are collected in one walk of the module the
+/// first time (`soleUser`: root symbol name -> the only function holding a
+/// use, null when uses lie in several functions or outside one): one
+/// SymbolTable::getSymbolUses per global walked the whole module per call,
+/// and hp_fft_hls's twiddle tables made that most of its run time.
+static bool onlyUsedBy(memref::GlobalOp g, func::FuncOp fn, ModuleOp module,
+                       llvm::DenseMap<Operation *, Operation *> &soleUser) {
+  if (soleUser.empty()) {
+    // A sentinel entry marks the map as built.
+    soleUser[module.getOperation()] = nullptr;
+    llvm::DenseMap<StringAttr, std::pair<Operation *, bool>> byName;
+    if (std::optional<SymbolTable::UseRange> uses =
+            SymbolTable::getSymbolUses(&module.getBodyRegion())) {
+      for (const SymbolTable::SymbolUse &u : *uses) {
+        StringAttr name = u.getSymbolRef().getRootReference();
+        Operation *f = u.getUser()->getParentOfType<func::FuncOp>();
+        auto [it, fresh] = byName.try_emplace(name, f, false);
+        if (!fresh && (it->second.first != f || !f))
+          it->second.second = true;
+        if (!f)
+          it->second.second = true;
+      }
+    } else {
+      // Unknown uses somewhere: no global is known to be a static local.
+      soleUser[module.getOperation()] = module.getOperation();
+    }
+    for (auto global : module.getOps<memref::GlobalOp>()) {
+      auto it = byName.find(global.getSymNameAttr());
+      soleUser[global.getOperation()] =
+          it == byName.end() || it->second.second ? nullptr
+                                                  : it->second.first;
+    }
+  }
+  if (soleUser.lookup(module.getOperation()))
+    return false;
+  return soleUser.lookup(g.getOperation()) == fn.getOperation();
+}
+
 static SmallVector<StorageUse>
 collectStorageUses(Operation *region,
-                   const ProcessMerges::AccessesFn &accessesOf) {
+                   const ProcessMerges::AccessesFn &accessesOf,
+                   llvm::DenseMap<Operation *, Operation *> &soleUser) {
   SmallVector<StorageUse> used;
   func::FuncOp fn = regionFunction(region);
   if (!fn || fn.isExternal())
@@ -437,11 +485,7 @@ collectStorageUses(Operation *region,
           module, StringAttr::get(module.getContext(), sym));
       if (!g || g.getConstant())
         continue;
-      std::optional<SymbolTable::UseRange> uses =
-          SymbolTable::getSymbolUses(g, module);
-      if (!uses || llvm::any_of(*uses, [&](const SymbolTable::SymbolUse &u) {
-            return u.getUser()->getParentOfType<func::FuncOp>() != fn;
-          }))
+      if (!onlyUsedBy(g, fn, module, soleUser))
         continue;
       storages.push_back({g.getOperation(), sites});
     }
@@ -487,7 +531,7 @@ collectStorageUses(Operation *region,
 }
 
 void ProcessMerges::mergeWritersAndPaths(Operation *region, RegionMerges &m) {
-  SmallVector<StorageUse> used = collectStorageUses(region, accessesOf);
+  SmallVector<StorageUse> used = collectStorageUses(region, accessesOf, soleUserOfGlobal);
 
   // The writers of one storage become one process.
   for (const StorageUse &su : used) {
@@ -612,7 +656,7 @@ ProcessMerges::argumentFifos(Operation *op) {
     return out;
   // Channel edges: a process that writes a storage before one that reads it.
   SmallVector<SmallVector<unsigned>> preds(procs.size());
-  for (const StorageUse &su : collectStorageUses(fn, accessesOf))
+  for (const StorageUse &su : collectStorageUses(fn, accessesOf, soleUserOfGlobal))
     for (const StorageUse::Use &w : su.uses)
       for (const StorageUse::Use &r : su.uses) {
         auto wi = index.find(w.process), ri = index.find(r.process);
@@ -890,7 +934,8 @@ ChannelVerdict analyzeDataflowChannel(Operation *storage,
     ch.blocksSource =
         std::to_string(ch.blocks) + ": stream type=pipo depth pragma";
   } else {
-    std::tie(ch.blocks, ch.blocksSource) = structuralBlocks(region);
+    std::tie(ch.blocks, ch.blocksSource) =
+        merges ? merges->structuralBlocksOf(region) : structuralBlocks(region);
   }
   if (DictionaryAttr bind = pragmaDict(storage, "hls.bind_storage")) {
     if (auto t = bind.getAs<StringAttr>("type"))
