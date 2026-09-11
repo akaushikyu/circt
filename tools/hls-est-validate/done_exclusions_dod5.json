@@ -1,0 +1,33 @@
+{
+  "_doc": "Input of make_done_exclusions.py: the short list of MEMOS #70 (3), designs that may stay out of the DoD-5 band (exact or at most 15 % over), each with its per-array cause, the Vitis evidence and why it is out of scope. 'status' says whether Peter has accepted the entry; 'proposed' entries come from a prove report and wait for him.",
+  "entries": [
+    {
+      "key": "class_ece8893_2023_spring/ECG_Classifier__HLS__Baseline",
+      "cause": "conv1d_2 / conv1d_3 / conv1d_4: Vitis does not flatten the parent loop with its auto-pipelined child ([HLS 200-960] '... either the parent loop or sub loop is do-while loop'), so the child runs alone at II 1 and the temp_* weights are RAM_1WNR with 4 copies; hls-est flattens, gets II 10 and RAM_2P (-156); the remaining -3 is a register-sized array",
+      "vitis_evidence": "VITIS_NOTES N64: 11 kernels w9r8p_ie_acc / w9r8p_dw_* / w9r8p_fl_pre*; the non-flattened parents are already in rotated (do-while) form in db/a.o.1.ll",
+      "why_out_of_scope": "the source shape that makes Vitis's front end rotate the parent loop is not identified (neither the if, the invariant loads nor the accumulation chain decides it); without it the refusal cannot be modelled without branching on the design",
+      "status": "proposed (W9r8-prove, 2026-10-20)"
+    },
+    {
+      "key": "class_ece8893_spring_2025/neuro_monarchs_symbolic_kernel_ece8893_spring_2025",
+      "cause": "-56 over several buffers (*_buffers row views, OPEN_ISSUES O84 (d)); not attributed to a mechanism per array",
+      "vitis_evidence": "OPEN_ISSUES O90 class 'unexplained' (K15); semantics: the candidate also mismatches the native build (OPEN_ISSUES O44-like, check_semantics 'mismatch')",
+      "why_out_of_scope": "unexplained per array; the cgeist output itself is not bit-exact against the native build, so the estimate is of a different program",
+      "status": "proposed (W9r8-prove, 2026-10-20)"
+    },
+    {
+      "key": "hp_fft_hls/n1024__UF8",
+      "cause": "-56: the twiddle / stage buffers of the unroll-factor-8 butterflies (OPEN_ISSUES O79)",
+      "vitis_evidence": "OPEN_ISSUES O79: UF8 and UF2 differ from UF1 / UF4 / UF16 / UF32 (in band) in a way no kernel has reproduced",
+      "why_out_of_scope": "unexplained per array (O79)",
+      "status": "proposed (W9r8-prove, 2026-10-20)"
+    },
+    {
+      "key": "hp_fft_hls/n1024__UF2",
+      "cause": "-8: as UF8 (OPEN_ISSUES O79)",
+      "vitis_evidence": "OPEN_ISSUES O79",
+      "why_out_of_scope": "unexplained per array (O79)",
+      "status": "proposed (W9r8-prove, 2026-10-20)"
+    }
+  ]
+}

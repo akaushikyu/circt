@@ -2718,6 +2718,9 @@ module {
 // CHECK: memref.global @ loc("{{[^"]*}}":40:3){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=64{{$}}
 // CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":41:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=64{{$}}
+// CHECK-NOT: {{^memref\.}}
 // CHECK: memref.global @ loc("{{[^"]*}}":42:3){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
@@ -7473,5 +7476,5 @@ module {
 // CHECK: memref.alloca @ loc("{{[^"]*}}":2400:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: Total BRAM: 11360{{$}}
-// slow: hls-est took 362 s at generation (over the 120 s timeout, inside the 600 s retry); this test costs about as long in every lit run
+// CHECK: Total BRAM: 11437{{$}}
+// slow: hls-est took 381 s at generation (over the 120 s timeout, inside the 600 s retry); this test costs about as long in every lit run

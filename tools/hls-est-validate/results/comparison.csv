@@ -165,8 +165,8 @@ accelerators,DGNN_Booster_EvolveGCN,1723,1715,-8,8,False,under,compared,ok,ok,em
 accelerators,DGNN_Booster_convLSTM,1543,1530,-13,13,False,under,compared,ok,ok,edge_embedding_table: hls-est 256 vs Vitis 268; node_embedding_table: hls-est 128 vs Vitis 134; node_emb_output: hls-est 4 vs Vitis None
 accelerators,GP_selection_kernel_fixed_dataset,67,65,-2,2,False,under,compared,ok,ok,I_minus_BZ_A_inverse: hls-est 1 vs Vitis 2; sigma_22_select: hls-est 1 vs Vitis 2; sort_client_list_0: hls-est 1 vs Vitis None
 accelerators,GP_selection_kernel_float_dataset,73,72,-1,1,False,under,compared,ok,ok,sigma_22_select: hls-est 1 vs Vitis 2; sort_client_list_0: hls-est 1 vs Vitis None; sort_client_list_number: hls-est None vs Vitis 1
-accelerators,Mask-Net_dataset,421,,,,False,,hls-est missing,ok,hls-est timeout 120s,FM_buf_acc: hls-est None vs Vitis 96; FM_buf1: hls-est None vs Vitis 64; FM_buf2: hls-est None vs Vitis 64
-accelerators,SkyNet_dataset,414,,,,False,,hls-est missing,ok,hls-est timeout 120s,FM_buf_acc: hls-est None vs Vitis 96; FM_buf1: hls-est None vs Vitis 64; FM_buf2: hls-est None vs Vitis 64
+accelerators,Mask-Net_dataset,421,421,0,0,True,exact,compared,ok,ok,INPUT_m_axi: hls-est 29 vs Vitis None; INPUT_r_m_axi: hls-est None vs Vitis 29
+accelerators,SkyNet_dataset,414,415,1,1,False,over<=15%,compared,ok,ok,INPUT_m_axi: hls-est 29 vs Vitis None; INPUT_r_m_axi: hls-est None vs Vitis 29; bias_buf: hls-est 1 vs Vitis None
 accelerators,edgemoe,,,,,False,,vitis missing,vitis failed,cgeist error: src/../include/kernel.hpp:5:10: fatal error: 'gmp.h' file not found,
 auto_ntt,BU,0,0,0,0,True,exact,compared,ok,ok,
 auto_ntt,Mmap2Stream_tf_0_1_limbs,0,0,0,0,True,exact,compared,ok,ok,
@@ -191,12 +191,12 @@ basic,arraypartition_cyclic,,2,,,False,,vitis missing,missing,ok,
 basic,arraypartition_multidim,,8,,,False,,vitis missing,missing,ok,
 chstone,gsm,2,1,-1,1,False,under,compared,ok,ok,bitoff: hls-est 1 vs Vitis 2
 chstone,sha,7,7,0,0,True,exact,compared,ok,ok,
-class_ece8893_2022_fall,Dehazing-denoising__source_code__src,93,23,-70,70,False,under,compared,ok,ok,Min_RGB_Tile: hls-est 4 vs Vitis 56; in_tile: hls-est 4 vs Vitis 16; Median_Tile: hls-est 1 vs Vitis 4
+class_ece8893_2022_fall,Dehazing-denoising__source_code__src,93,29,-64,64,False,under,compared,ok,ok,Min_RGB_Tile: hls-est 4 vs Vitis 56; in_tile: hls-est 4 vs Vitis 16; Median_Tile: hls-est 1 vs Vitis 4
 class_ece8893_2022_fall,Dehazing-denoising__source_code__src__debayer_csynth,,,,,False,,vitis missing,vitis failed,top not found,
 class_ece8893_2022_fall,Dehazing-denoising__source_code__src__script,,,,,False,,vitis missing,vitis failed,top not found,
 class_ece8893_2022_fall,Explainable-ML__source_code,39,55,16,16,False,over>15%,compared,ok,ok,conv_out_buf: hls-est 24 vs Vitis 8
-class_ece8893_2022_fall,FLAT-acceleration__source_code__HLS,262,348,86,86,False,over>15%,compared,ok,ok,local_out: hls-est 140 vs Vitis 32; bias_buffer_ping: hls-est 4 vs Vitis 16; bias_buffer_pong: hls-est 4 vs Vitis 16
-class_ece8893_2022_fall,FLAT-acceleration__source_code__HLS__test_systolic_array,,91,,,False,,vitis missing,vitis timeout,ok,local_out: hls-est 83 vs Vitis None; logit: hls-est 8 vs Vitis None
+class_ece8893_2022_fall,FLAT-acceleration__source_code__HLS,262,280,18,18,False,over<=15%,compared,ok,ok,local_out: hls-est 48 vs Vitis 32; max_ping: hls-est 1 vs Vitis None; max_pong: hls-est 1 vs Vitis None
+class_ece8893_2022_fall,FLAT-acceleration__source_code__HLS__test_systolic_array,,171,,,False,,vitis missing,vitis timeout,ok,local_out: hls-est 163 vs Vitis None; logit: hls-est 8 vs Vitis None
 class_ece8893_2022_fall,GNN-virtual-node__source_code__gin_vn_base_hls,,1149,,,False,,vitis missing,vitis failed,ok,mlp_1_weights: hls-est 200 vs Vitis None; mlp_2_weights: hls-est 200 vs Vitis None; virtualnode_mlp_1_weights: hls-est 200 vs Vitis None
 class_ece8893_2022_fall,GNN-virtual-node__source_code__gin_vn_bitstream,,,,,False,,vitis missing,vitis failed,cgeist error: ./dcl.hpp:6:10: fatal error: '/tools/software/xilinx/Vitis_HLS/2021.1/include/gmp.h' file not found,
 class_ece8893_2022_fall,GNN-virtual-node__source_code__gin_vn_pipelined_hls,,,,,False,,vitis missing,vitis failed,cgeist error: ./dcl.hpp:6:10: fatal error: '/tools/software/xilinx/Vitis_HLS/2021.1/include/gmp.h' file not found,
@@ -204,12 +204,12 @@ class_ece8893_2022_fall,Ray-tracing__source_code__HLS,440,440,0,0,True,exact,com
 class_ece8893_2022_fall,Ray-tracing__source_code__golden_c,,,,,False,,vitis missing,vitis failed,cgeist error: trianglemesh.cpp:238:17: error: use of undeclared identifier 'stderr',
 class_ece8893_2022_fall,Yolo-v3-tiny__source_code__src_24Layers,,,,,False,,vitis missing,vitis failed,cgeist error: conv_3x3.cpp:8:16: error: use of undeclared identifier 'IN_BUF_DEPTH',
 class_ece8893_2022_fall,Yolo-v3-tiny__source_code__src_24Layers__conv_synth,,,,,False,,vitis missing,vitis failed,cgeist error: conv_3x3.cpp:8:16: error: use of undeclared identifier 'IN_BUF_DEPTH',
-class_ece8893_2022_fall,Yolo-v3-tiny__source_code__src_24Layers__yolov3_tiny_synth,257,437,180,180,False,over>15%,compared,ok,ok,conv_in_buf: hls-est 128 vs Vitis 43; conv_wt_buf: hls-est 51 vs Vitis 0; conv_wt_buf_Ping: hls-est 10 vs Vitis 0
+class_ece8893_2022_fall,Yolo-v3-tiny__source_code__src_24Layers__yolov3_tiny_synth,257,1454,1197,1197,False,over>15%,compared,ok,ok,conv_in_buf_Ping: hls-est 576 vs Vitis 72; conv_in_buf_Pong: hls-est 576 vs Vitis 72; conv_in_buf: hls-est 232 vs Vitis 43
 class_ece8893_2022_fall,Yolo-v3-tiny__source_code__src_4Layers,,,,,False,,vitis missing,vitis failed,cgeist error: conv_3x3.cpp:8:16: error: use of undeclared identifier 'IN_BUF_DEPTH',
 class_ece8893_2022_fall,Yolo-v3-tiny__source_code__src_4Layers__conv_synth,,,,,False,,vitis missing,vitis failed,cgeist error: conv_3x3.cpp:8:16: error: use of undeclared identifier 'IN_BUF_DEPTH',
-class_ece8893_2022_fall,Yolo-v3-tiny__source_code__src_4Layers__yolov3_tiny_synth,229,317,88,88,False,over>15%,compared,ok,ok,partial_out_fm_buf: hls-est 48 vs Vitis 16; conv_in_buf: hls-est 52 vs Vitis 27; conv_wt_buf: hls-est 13 vs Vitis 0
+class_ece8893_2022_fall,Yolo-v3-tiny__source_code__src_4Layers__yolov3_tiny_synth,229,1534,1305,1305,False,over>15%,compared,ok,ok,conv_in_buf_Ping: hls-est 576 vs Vitis 72; conv_in_buf_Pong: hls-est 576 vs Vitis 72; conv_in_buf: hls-est 216 vs Vitis 27
 class_ece8893_2023_spring,Analog-CIM__hls__baseline,94,94,0,0,True,exact,compared,ok,ok,
-class_ece8893_2023_spring,Analog-CIM__hls__optimized,32,114,82,82,False,over>15%,compared,ok,ok,weight2d_cond_buf: hls-est 96 vs Vitis 0; input_buf: hls-est 4 vs Vitis 20; output_buf: hls-est 8 vs Vitis 6
+class_ece8893_2023_spring,Analog-CIM__hls__optimized,32,34,2,2,False,over<=15%,compared,ok,ok,output_buf: hls-est 8 vs Vitis 6
 class_ece8893_2023_spring,Analog-CIM__on-board,202,202,0,0,True,exact,compared,ok,ok,
 class_ece8893_2023_spring,DSC_Acceleration__Golden_C__unoptimized,,116,,,False,,vitis missing,vitis failed,ok,conv_in_buf: hls-est 64 vs Vitis None; conv_out_buf: hls-est 32 vs Vitis None; conv_wt_buf: hls-est 16 vs Vitis None
 class_ece8893_2023_spring,DSC_Acceleration__HLS__optimized,120,120,0,0,True,exact,compared,ok,ok,
@@ -236,10 +236,10 @@ class_ece8893_2023_spring,YOLOv4-Tiny-Accelerator__HLS_C__Conv2D_Layer1Layer2,54
 class_ece8893_2023_spring,YOLOv4-Tiny-Accelerator__HLS_C__Maxpool_Layer,15,15,0,0,True,exact,compared,ok,ok,
 class_ece8893_2023_spring,YOLOv4-Tiny-Accelerator__HLS_C__Project_L1,37,37,0,0,True,exact,compared,ok,ok,
 class_ece8893_2023_spring,YOLOv4-Tiny-Accelerator__HLS_C__Project_L2,25,25,0,0,True,exact,compared,ok,ok,
-class_ece8893_2023_spring,YOLOv4-Tiny-Accelerator__HLS_C__Project_L3,18,17,-1,1,False,under,compared,ok,ok,conv_in_buf: hls-est 8 vs Vitis 10; conv_out_buf: hls-est 1 vs Vitis 0
-class_ece8893_2023_spring,YOLOv4-Tiny-Accelerator__HLS_C__Project_L4,18,11,-7,7,False,under,compared,ok,ok,conv_in_buf: hls-est 4 vs Vitis 10; conv_wt_buf: hls-est 2 vs Vitis 4; conv_out_buf: hls-est 1 vs Vitis 0
-class_ece8893_2023_spring,YOLOv4-Tiny-Accelerator__HLS_C__Project_L5,18,15,-3,3,False,under,compared,ok,ok,conv_in_buf: hls-est 8 vs Vitis 10; conv_wt_buf: hls-est 2 vs Vitis 4; conv_out_buf: hls-est 1 vs Vitis 0
-class_ece8893_2023_spring,YOLOv4-Tiny-Accelerator__HLS_C__Project_L6,16,10,-6,6,False,under,compared,ok,ok,conv_in_buf: hls-est 4 vs Vitis 8; conv_wt_buf: hls-est 1 vs Vitis 4; conv_out_buf: hls-est 1 vs Vitis 0
+class_ece8893_2023_spring,YOLOv4-Tiny-Accelerator__HLS_C__Project_L3,18,18,0,0,True,exact,compared,ok,ok,
+class_ece8893_2023_spring,YOLOv4-Tiny-Accelerator__HLS_C__Project_L4,18,18,0,0,True,exact,compared,ok,ok,
+class_ece8893_2023_spring,YOLOv4-Tiny-Accelerator__HLS_C__Project_L5,18,20,2,2,False,over<=15%,compared,ok,ok,conv_in_buf: hls-est 12 vs Vitis 10
+class_ece8893_2023_spring,YOLOv4-Tiny-Accelerator__HLS_C__Project_L6,16,16,0,0,True,exact,compared,ok,ok,
 class_ece8893_spring_2025,Apurba_Prasad_Padhy_ece8893_spring25_lab3,64,64,0,0,True,exact,compared,ok,ok,
 class_ece8893_spring_2025,Gaurav_Singh_Chandrabhan_ece8893_spring25_lab2,973,974,1,1,False,over<=15%,compared,ok,ok,math_core:exp_33_9_s: hls-est 7 vs Vitis None; exp_x_msb_1_table: hls-est None vs Vitis 2; f_x_msb_2_table: hls-est None vs Vitis 2
 class_ece8893_spring_2025,Gaurav_Singh_Chandrabhan_ece8893_spring25_lab3,132,131,-1,1,False,under,compared,ok,ok,dense_row: hls-est 57 vs Vitis None; A_col_idx_row_stream: hls-est 2 vs Vitis None; A_rptr_BRAM: hls-est 2 vs Vitis 4
@@ -273,7 +273,7 @@ class_ece8893_spring_2025,davendra_maharaj_ece8893_spring25_lab2,238,238,0,0,Tru
 class_ece8893_spring_2025,davendra_maharaj_ece8893_spring25_lab3,106,105,-1,1,False,under,compared,ok,ok,dense_row: hls-est 57 vs Vitis None; column_indices_A_row_stream: hls-est 2 vs Vitis None; mem3_m_axi: hls-est 2 vs Vitis 1
 class_ece8893_spring_2025,ece8893_dataset_lab_1__0001,,,,,False,,vitis missing,vitis failed,cgeist error: top.cpp:137:5: error: no matching function for call to 'softmax_HLS',
 class_ece8893_spring_2025,ece8893_dataset_lab_1__0002,82,82,0,0,True,exact,compared,ok,ok,
-class_ece8893_spring_2025,gabriel_lopez_lugo_ece8893_spring2025__gabriel_lopez_lugo_lab2,203,,,,False,,hls-est missing,ok,hls-est timeout 120s,v_buf: hls-est None vs Vitis 72; q_buf: hls-est None vs Vitis 64; k_buf: hls-est None vs Vitis 58
+class_ece8893_spring_2025,gabriel_lopez_lugo_ece8893_spring2025__gabriel_lopez_lugo_lab2,203,203,0,0,True,exact,compared,ok,ok,softmax_result: hls-est 9 vs Vitis None
 class_ece8893_spring_2025,gabriel_lopez_lugo_ece8893_spring2025__gabriel_lopez_lugo_lab3,44,44,0,0,True,exact,compared,ok,ok,C_local: hls-est 8 vs Vitis None; sparse_matrix_multiply_HLS_vector_vector_int_vector_vector_int_vector_C_l: hls-est None vs Vitis 8
 class_ece8893_spring_2025,hyungseok_bae_lab2_2025,232,237,5,5,False,over<=15%,compared,ok,ok,fifo_softmax2av: hls-est 89 vs Vitis None; pkt_0: hls-est 2 vs Vitis None; pkt_1: hls-est 2 vs Vitis None
 class_ece8893_spring_2025,hyungseok_bae_lab3_2025,322,154,-168,168,False,under,compared,ok,ok,p_ZZ26sparse_matrix_multiply_HLSPKN3hls6vectorI8ap_fixedILi16ELi5EL9ap_q_mode5EL9: hls-est None vs Vitis 192; local_row_idx_B: hls-est 16 vs Vitis None; idx_stream: hls-est 15 vs Vitis None
@@ -283,7 +283,7 @@ class_ece8893_spring_2025,kamya_hari_lab_2_2025,2056,2050,-6,6,False,under,compa
 class_ece8893_spring_2025,kamya_hari_lab_3_2025,,51,,,False,,vitis missing,vitis timeout,ok,result: hls-est 16 vs Vitis None; local_B: hls-est 8 vs Vitis None; local_B_colptrs: hls-est 8 vs Vitis None
 class_ece8893_spring_2025,karthikeya_sharma_ece8893_spring_25_lab_2,383,383,0,0,True,exact,compared,ok,ok,p_ZZ16computeAttentionRN3hls6streamI8ap_fixedILi16ELi5EL9ap_q_mode5EL9ap_o_mode3E: hls-est None vs Vitis 316; K_BRAM: hls-est 128 vs Vitis None; Q_BRAM: hls-est 128 vs Vitis None
 class_ece8893_spring_2025,karthikeya_sharma_ece8893_spring_25_lab_3,104,104,0,0,True,exact,compared,ok,ok,dense_row: hls-est 57 vs Vitis None; column_indices_A_row_stream: hls-est 2 vs Vitis None; mem3_m_axi: hls-est 2 vs Vitis 1
-class_ece8893_spring_2025,lab2_hanchen,,,,,False,,vitis missing,vitis timeout,hls-est timeout 120s,
+class_ece8893_spring_2025,lab2_hanchen,,68,,,False,,vitis missing,vitis timeout,ok,attention: hls-est 64 vs Vitis None; mem1_m_axi: hls-est 2 vs Vitis None; mem2_m_axi: hls-est 2 vs Vitis None
 class_ece8893_spring_2025,lab2_sushkrutha,,4109,,,False,,vitis missing,vitis timeout,ok,attention_local: hls-est 1088 vs Vitis None; V_local: hls-est 1024 vs Vitis None; K_local: hls-est 960 vs Vitis None
 class_ece8893_spring_2025,lab3_hanchen,16,16,0,0,True,exact,compared,ok,ok,
 class_ece8893_spring_2025,lab3_sushkrutha,46,46,0,0,True,exact,compared,ok,ok,
@@ -295,7 +295,7 @@ class_ece8893_spring_2025,michael_meng_ece_8893_spring_25__lab3,,,,,False,,vitis
 class_ece8893_spring_2025,minjun_kim_Lab2_2025,709,245,-464,464,False,under,compared,ok,ok,V_buffer: hls-est 16 vs Vitis 256; K_buffer: hls-est 16 vs Vitis 240; k_stream: hls-est 64 vs Vitis None
 class_ece8893_spring_2025,minjun_kim_Lab3_2025,20,20,0,0,True,exact,compared,ok,ok,
 class_ece8893_spring_2025,mizanur_Lab2_2025,968,852,-116,116,False,under,compared,ok,ok,mat_V: hls-est 112 vs Vitis 256; attention_prob: hls-est 128 vs Vitis 100
-class_ece8893_spring_2025,mizanur_Lab3_2025,,268,,,False,,vitis missing,vitis failed,ok,local_C: hls-est 128 vs Vitis None; column_indices_A_loc: hls-est 64 vs Vitis None; row_indices_B_loc: hls-est 64 vs Vitis None
+class_ece8893_spring_2025,mizanur_Lab3_2025,,388,,,False,,vitis missing,vitis failed,ok,local_C: hls-est 128 vs Vitis None; column_indices_A_loc: hls-est 64 vs Vitis None; row_indices_B_loc: hls-est 64 vs Vitis None
 class_ece8893_spring_2025,mohammad_zain_lab_2,113,113,0,0,True,exact,compared,ok,ok,attention_softmax_fifo: hls-est 1 vs Vitis None
 class_ece8893_spring_2025,mohammad_zain_lab_3,425,453,28,28,False,over<=15%,compared,ok,ok,C_local: hls-est 57 vs Vitis 29
 class_ece8893_spring_2025,nayan_nair_ece8893_spring25_lab2,2114,2114,0,0,True,exact,compared,ok,ok,
@@ -303,10 +303,10 @@ class_ece8893_spring_2025,nayan_nair_ece8893_spring25_lab3,25,25,0,0,True,exact,
 class_ece8893_spring_2025,neuro_monarchs_neural_kernel_ece8893_spring_2025,,36121,,,False,,vitis missing,vitis timeout,ok,padded: hls-est 32768 vs Vitis None; f1: hls-est 1024 vs Vitis None; f2: hls-est 1024 vs Vitis None
 class_ece8893_spring_2025,neuro_monarchs_symbolic_kernel_ece8893_spring_2025,973,917,-56,56,False,under,compared,ok,ok,A_buffers: hls-est 232 vs Vitis None; B_buffers: hls-est 232 vs Vitis None; C_buffers: hls-est 232 vs Vitis None
 class_ece8893_spring_2025,nikhil_p_ece8893_spring25_lab2,95,128,33,33,False,over>15%,compared,ok,ok,K_lcl: hls-est 16 vs Vitis None; V_lcl: hls-est 96 vs Vitis 84; mem2_m_axi: hls-est 4 vs Vitis 0
-class_ece8893_spring_2025,nikhil_p_ece8893_spring25_lab3,743,686,-57,57,False,under,compared,ok,ok,row_indices_B_local: hls-est 114 vs Vitis 228; col_ptr_B_local: hls-est 58 vs Vitis None; values_B_local: hls-est 58 vs Vitis 116
+class_ece8893_spring_2025,nikhil_p_ece8893_spring25_lab3,743,571,-172,172,False,under,compared,ok,ok,row_indices_B_local: hls-est 114 vs Vitis 228; values_B_local: hls-est 58 vs Vitis 116; C_local: hls-est 57 vs Vitis None
 class_ece8893_spring_2025,nikhil_s_ece8893_sp25_lab2,521,521,0,0,True,exact,compared,ok,ok,
 class_ece8893_spring_2025,nikhil_s_ece8893_sp25_lab3,25,25,0,0,True,exact,compared,ok,ok,
-class_ece8893_spring_2025,oscar_baglivio_lab_2,242,431,189,189,False,over>15%,compared,ok,ok,K_loc: hls-est 240 vs Vitis 128; V_loc: hls-est 176 vs Vitis 100; Q_loc: hls-est 1 vs Vitis None
+class_ece8893_spring_2025,oscar_baglivio_lab_2,242,242,0,0,True,exact,compared,ok,ok,
 class_ece8893_spring_2025,oscar_baglivio_lab_3,95,95,0,0,True,exact,compared,ok,ok,B_T: hls-est 64 vs Vitis None; p_ZZ26sparse_matrix_multiply_HLSP8ap_fixedILi16ELi5EL9ap_q_mode5EL9ap_o_mode3ELi0: hls-est None vs Vitis 54; sparse_matrix_multiply_HLS_ap_fixed_int_int_ap_fixed_int_int_ap_fixed: hls-est None vs Vitis 9
 class_ece8893_spring_2025,pengzhao_liu_Lab2_2025,178,178,0,0,True,exact,compared,ok,ok,
 class_ece8893_spring_2025,pengzhao_liu_Lab3_2025,31,30,-1,1,False,under,compared,ok,ok,ArowStream: hls-est 5 vs Vitis None; CrowStream: hls-est 5 vs Vitis None; local_rowPtrA: hls-est 2 vs Vitis 1
@@ -334,11 +334,11 @@ class_ece8893_spring_2025,zihan_qi_lab2,207,211,4,4,False,over<=15%,compared,ok,
 class_ece8893_spring_2025,zihan_qi_lab3,1920,1920,0,0,True,exact,compared,ok,ok,C_stream: hls-est 1856 vs Vitis None
 class_ece8893_spring_2025,zijun_wang_ece8893_spring25_lab2,457,463,6,6,False,over<=15%,compared,ok,ok,math_core:exp_33_9_s: hls-est 175 vs Vitis None; exp_x_msb_1_table: hls-est None vs Vitis 52; f_x_msb_2_table: hls-est None vs Vitis 52
 class_ece8893_spring_2025,zijun_wang_ece8893_spring25_lab3,270,270,0,0,True,exact,compared,ok,ok,p_ZZ26sparse_matrix_multiply_HLSP8ap_fixedILi16ELi5EL9ap_q_mode5EL9ap_o_mode3ELi0: hls-est None vs Vitis 56; sparse_matrix_multiply_HLS_ap_fixed_int_int_ap_fixed_int_int_ap_fixed: hls-est None vs Vitis 39; buf_A_vals: hls-est 32 vs Vitis None
-flowgnn,dgn,,12959,,,False,,vitis missing,vitis failed,ok,messages_ping: hls-est 4096 vs Vitis None; messages_pong: hls-est 4096 vs Vitis None; h_node: hls-est 2048 vs Vitis None
-flowgnn,gat,,,,,False,,vitis missing,vitis timeout,hls-est timeout 120s,
-flowgnn,gcn,,13034,,,False,,vitis missing,vitis failed,ok,edge_attrs: hls-est 4096 vs Vitis None; h_node: hls-est 2048 vs Vitis None; messages_ping: hls-est 2048 vs Vitis None
-flowgnn,gin,1158,1146,-12,12,False,under,compared,ok,ok,mp_in: hls-est 64 vs Vitis None; mem_m_axi: hls-est 16 vs Vitis 29; edge_attrs: hls-est 12 vs Vitis 8
-flowgnn,pna,20600,20734,134,134,False,over<=15%,compared,ok,ok,neighbor_tables: hls-est 1024 vs Vitis 416; node_conv_weights: hls-est 480 vs Vitis 880; mp_in: hls-est 64 vs Vitis None
+flowgnn,dgn,,12353,,,False,,vitis missing,vitis failed,ok,messages_ping: hls-est 4096 vs Vitis None; messages_pong: hls-est 4096 vs Vitis None; h_node: hls-est 2048 vs Vitis None
+flowgnn,gat,,11437,,,False,,vitis missing,vitis timeout,ok,h_node_ping: hls-est 2048 vs Vitis None; h_node_pong: hls-est 2048 vs Vitis None; out_nodes_features_skip_concat_bias_ping: hls-est 2048 vs Vitis None
+flowgnn,gcn,,12503,,,False,,vitis missing,vitis failed,ok,edge_attrs: hls-est 4096 vs Vitis None; h_node: hls-est 2048 vs Vitis None; messages_ping: hls-est 2048 vs Vitis None
+flowgnn,gin,1158,1160,2,2,False,over<=15%,compared,ok,ok,mp_in: hls-est 64 vs Vitis None; edge_attrs: hls-est 12 vs Vitis 8; embeddings: hls-est 4 vs Vitis None
+flowgnn,pna,20600,20199,-401,401,False,under,compared,ok,ok,node_conv_weights: hls-est 480 vs Vitis 880; mp_in: hls-est 64 vs Vitis None; filtered_embeddings_per_node: hls-est 32 vs Vitis None
 forgebench,Llama_GPT_module,30,30,0,0,True,exact,compared,ok,ok,
 forgebench,activation_module,258,258,0,0,True,exact,compared,ok,ok,
 forgebench,activation_op1,178,178,0,0,True,exact,compared,ok,ok,
@@ -378,7 +378,7 @@ forgebench,mult_op_p2,2,2,0,0,True,exact,compared,ok,ok,
 forgebench,mult_op_p3,2,2,0,0,True,exact,compared,ok,ok,
 forgebench,testing_impl,2,2,0,0,True,exact,compared,ok,ok,
 forgebench,testing_unroll,2,2,0,0,True,exact,compared,ok,ok,
-forgebench,tiled_attn_module,270,268,-2,2,False,under,compared,ok,ok,
+forgebench,tiled_attn_module,270,268,-2,2,False,under,compared,ok,ok,V: hls-est 1 vs Vitis 2; scores: hls-est 1 vs Vitis 2
 forgebench,tiled_attn_p1,73,73,0,0,True,exact,compared,ok,ok,
 forgebench,tiled_attn_p2,23,23,0,0,True,exact,compared,ok,ok,
 forgebench,vec_mtx_module,2,2,0,0,True,exact,compared,ok,ok,
@@ -386,12 +386,12 @@ forgebench,vec_mtx_p1,2,2,0,0,True,exact,compared,ok,ok,
 forgebench,vec_mtx_p2,2,2,0,0,True,exact,compared,ok,ok,
 gnnbuilder,designs__fpga_gcn_qm9,10022,10163,141,141,False,over<=15%,compared,ok,ok,neighbor_emb_aggregation_sum_0: hls-est 10 vs Vitis None; neighbor_emb_aggregation_sum_sum: hls-est None vs Vitis 10; conv_0_out: hls-est 256 vs Vitis 248
 gnnbuilder,designs__fpga_gin_qm9,10408,10521,113,113,False,over<=15%,compared,ok,ok,neighbor_emb_aggregation_sum_0: hls-est 10 vs Vitis None; neighbor_emb_aggregation_sum_sum: hls-est None vs Vitis 10; conv_0_out: hls-est 256 vs Vitis 248
-gnnbuilder,designs__fpga_pna_qm9,13218,13380,162,162,False,over<=15%,compared,ok,ok,neighbor_and_self_concat_emb: hls-est 80 vs Vitis 0; neighbor_emb_aggregation_max_0: hls-est 10 vs Vitis None; neighbor_emb_aggregation_max_1: hls-est 10 vs Vitis None
+gnnbuilder,designs__fpga_pna_qm9,13218,13410,192,192,False,over<=15%,compared,ok,ok,neighbor_and_self_concat_emb: hls-est 80 vs Vitis 0; neighbor_emb_aggregation_max_0: hls-est 10 vs Vitis None; neighbor_emb_aggregation_max_1: hls-est 10 vs Vitis None
 gnnbuilder,designs__fpga_sage_qm9,10346,10594,248,248,False,over<=15%,compared,ok,ok,current_node_embedding_in: hls-est 80 vs Vitis 0; neighbor_emb_aggregation_mean_0: hls-est 10 vs Vitis None; neighbor_emb_aggregation_mean_1: hls-est 10 vs Vitis None
 hlsyn-vitis,vivado-target__sources__2mm,,88,,,False,,vitis missing,vitis timeout,ok,A_buf: hls-est 32 vs Vitis None; B_buf: hls-est 16 vs Vitis None; C_buf: hls-est 16 vs Vitis None
 hlsyn-vitis,vivado-target__sources__3mm,,152,,,False,,vitis missing,vitis timeout,ok,A_buf: hls-est 32 vs Vitis None; C_buf: hls-est 32 vs Vitis None; D_buf: hls-est 32 vs Vitis None
-hlsyn-vitis,vivado-target__sources__adi,,,,,False,,vitis missing,vitis timeout,hls-est timeout 120s,
-hlsyn-vitis,vivado-target__sources__aes,6,1,-5,5,False,under,compared,ok,ok,sbox: hls-est 1 vs Vitis 5
+hlsyn-vitis,vivado-target__sources__adi,,64,,,False,,vitis missing,vitis timeout,ok,p_buf: hls-est 16 vs Vitis None; q_buf: hls-est 16 vs Vitis None; u_buf: hls-est 16 vs Vitis None
+hlsyn-vitis,vivado-target__sources__aes,6,1,-5,5,False,under,compared,ok,ok,sbox: hls-est 1 vs Vitis 6
 hlsyn-vitis,vivado-target__sources__atax,1036,1034,-2,2,False,under,compared,ok,ok,tmp_buf: hls-est 2 vs Vitis 4
 hlsyn-vitis,vivado-target__sources__atax-medium,16396,16394,-2,2,False,under,compared,ok,ok,tmp_buf: hls-est 2 vs Vitis 4
 hlsyn-vitis,vivado-target__sources__bicg,974,1038,64,64,False,over<=15%,compared,ok,ok,A_buf: hls-est 1024 vs Vitis 960
@@ -399,14 +399,14 @@ hlsyn-vitis,vivado-target__sources__bicg-large,16398,16398,0,0,True,exact,compar
 hlsyn-vitis,vivado-target__sources__bicg-medium,16398,16398,0,0,True,exact,compared,ok,ok,
 hlsyn-vitis,vivado-target__sources__correlation,132,132,0,0,True,exact,compared,ok,ok,
 hlsyn-vitis,vivado-target__sources__covariance,68,68,0,0,True,exact,compared,ok,ok,
-hlsyn-vitis,vivado-target__sources__doitgen,72,,,,False,,hls-est missing,ok,hls-est timeout 120s,A_buf: hls-est None vs Vitis 64; C4_buf: hls-est None vs Vitis 4; sum_buf: hls-est None vs Vitis 4
-hlsyn-vitis,vivado-target__sources__doitgen-red,,,,,False,,vitis missing,vitis timeout,hls-est timeout 120s,
+hlsyn-vitis,vivado-target__sources__doitgen,72,72,0,0,True,exact,compared,ok,ok,
+hlsyn-vitis,vivado-target__sources__doitgen-red,,72,,,False,,vitis missing,vitis timeout,ok,A_buf: hls-est 64 vs Vitis None; C4_buf: hls-est 4 vs Vitis None; sum_buf: hls-est 4 vs Vitis None
 hlsyn-vitis,vivado-target__sources__fdtd-2d,,100,,,False,,vitis missing,vitis failed,ok,ex_buf: hls-est 32 vs Vitis None; ey_buf: hls-est 32 vs Vitis None; hz_buf: hls-est 32 vs Vitis None
-hlsyn-vitis,vivado-target__sources__fdtd-2d-large,,,,,False,,vitis missing,vitis failed,hls-est timeout 120s,
+hlsyn-vitis,vivado-target__sources__fdtd-2d-large,,772,,,False,,vitis missing,vitis failed,ok,ex_buf: hls-est 256 vs Vitis None; ey_buf: hls-est 256 vs Vitis None; hz_buf: hls-est 256 vs Vitis None
 hlsyn-vitis,vivado-target__sources__gemm-blocked,,,,,False,,vitis missing,vitis failed,hls-est timeout 120s,
 hlsyn-vitis,vivado-target__sources__gemm-ncubed,,48,,,False,,vitis missing,vitis timeout,ok,m1_buf: hls-est 16 vs Vitis None; m2_buf: hls-est 16 vs Vitis None; prod_buf: hls-est 16 vs Vitis None
 hlsyn-vitis,vivado-target__sources__gemm-p,,96,,,False,,vitis missing,vitis timeout,ok,A_buf: hls-est 32 vs Vitis None; B_buf: hls-est 32 vs Vitis None; C_buf: hls-est 32 vs Vitis None
-hlsyn-vitis,vivado-target__sources__gemm-p-large,,,,,False,,vitis missing,vitis timeout,hls-est timeout 120s,
+hlsyn-vitis,vivado-target__sources__gemm-p-large,,768,,,False,,vitis missing,vitis timeout,ok,A_buf: hls-est 256 vs Vitis None; B_buf: hls-est 256 vs Vitis None; C_buf: hls-est 256 vs Vitis None
 hlsyn-vitis,vivado-target__sources__gemver,,96,,,False,,vitis missing,vitis timeout,ok,A_buf: hls-est 64 vs Vitis None; u1_buf: hls-est 4 vs Vitis None; u2_buf: hls-est 4 vs Vitis None
 hlsyn-vitis,vivado-target__sources__gemver-medium,1056,1056,0,0,True,exact,compared,ok,ok,
 hlsyn-vitis,vivado-target__sources__gesummv,1032,1032,0,0,True,exact,compared,ok,ok,
@@ -418,7 +418,7 @@ hlsyn-vitis,vivado-target__sources__md,234,234,0,0,True,exact,compared,ok,ok,
 hlsyn-vitis,vivado-target__sources__mvt,976,976,0,0,True,exact,compared,ok,ok,
 hlsyn-vitis,vivado-target__sources__mvt-medium,16400,16400,0,0,True,exact,compared,ok,ok,
 hlsyn-vitis,vivado-target__sources__nw,0,0,0,0,True,exact,compared,ok,ok,
-hlsyn-vitis,vivado-target__sources__seidel-2d,,,,,False,,vitis missing,missing,hls-est timeout 120s,
+hlsyn-vitis,vivado-target__sources__seidel-2d,,64,,,False,,vitis missing,missing,ok,
 hlsyn-vitis,vivado-target__sources__spmv-crs,,15,,,False,,vitis missing,missing,ok,
 hlsyn-vitis,vivado-target__sources__spmv-ellpack,,373,,,False,,vitis missing,missing,ok,
 hlsyn-vitis,vivado-target__sources__stencil-3d,,1152,,,False,,vitis missing,missing,ok,
@@ -427,13 +427,13 @@ hlsyn-vitis,vivado-target__sources__symm,,,,,False,,vitis missing,missing,hls-es
 hlsyn-vitis,vivado-target__sources__symm-opt,,,,,False,,vitis missing,missing,hls-est timeout 120s,
 hlsyn-vitis,vivado-target__sources__symm-opt-medium,,,,,False,,vitis missing,missing,hls-est timeout 120s,
 hlsyn-vitis,vivado-target__sources__syr2k,,,,,False,,vitis missing,missing,hls-est timeout 120s,
-hlsyn-vitis,vivado-target__sources__syrk,,,,,False,,vitis missing,missing,hls-est timeout 120s,
+hlsyn-vitis,vivado-target__sources__syrk,,64,,,False,,vitis missing,missing,ok,
 hlsyn-vitis,vivado-target__sources__trmm,,,,,False,,vitis missing,missing,hls-est timeout 120s,
 hlsyn-vitis,vivado-target__sources__trmm-opt,,,,,False,,vitis missing,missing,hls-est timeout 120s,
 hp_fft_hls,n1024__UF1,96,96,0,0,True,exact,compared,ok,ok,data: hls-est 0 vs Vitis 80; _Z24reverse_input_stream_UF1RN3hls6streamINS_6vectorISt7complexIfELm2EEELi0EEES6_@static@_ZZ24reverse_input_stream_UF1RN3hls6streamINS_6vectorISt7complexIfELm2EEELi0EEES6_E14data_in_cyclic_0_0: hls-est 4 vs Vitis None; _Z24reverse_input_stream_UF1RN3hls6streamINS_6vectorISt7complexIfELm2EEELi0EEES6_@static@_ZZ24reverse_input_stream_UF1RN3hls6streamINS_6vectorISt7complexIfELm2EEELi0EEES6_E14data_in_cyclic_0_1: hls-est 4 vs Vitis None
-hp_fft_hls,n1024__UF16,640,,,,False,,hls-est missing,ok,hls-est timeout 120s,FFT_DIT_spatial_unroll_CY_stream_vector_stream_stream_vector_0_data_4_0: hls-est None vs Vitis 64; FFT_DIT_spatial_unroll_CY_stream_vector_stream_stream_vector_0_data_4_1: hls-est None vs Vitis 64; FFT_DIT_spatial_unroll_CY_stream_vector_stream_stream_vector_0_data_5_0: hls-est None vs Vitis 64
+hp_fft_hls,n1024__UF16,640,640,0,0,True,exact,compared,ok,ok,FFT_DIT_spatial_unroll_CY_stream_vector_stream_stream_vector_0_data_4_0: hls-est None vs Vitis 64; FFT_DIT_spatial_unroll_CY_stream_vector_stream_stream_vector_0_data_4_1: hls-est None vs Vitis 64; FFT_DIT_spatial_unroll_CY_stream_vector_stream_stream_vector_0_data_5_0: hls-est None vs Vitis 64
 hp_fft_hls,n1024__UF2,176,168,-8,8,False,under,compared,ok,ok,_Z24reverse_input_stream_UF2RN3hls6streamINS_6vectorISt7complexIfELm4EEELi0EEES6_@static@_ZZ24reverse_input_stream_UF2RN3hls6streamINS_6vectorISt7complexIfELm4EEELi0EEES6_E14data_in_cyclic_0_0: hls-est 16 vs Vitis None; _Z24reverse_input_stream_UF2RN3hls6streamINS_6vectorISt7complexIfELm4EEELi0EEES6_@static@_ZZ24reverse_input_stream_UF2RN3hls6streamINS_6vectorISt7complexIfELm4EEELi0EEES6_E14data_in_cyclic_0_1: hls-est 16 vs Vitis None; FFT_DIT_spatial_unroll_CY_stream_vector_stream_stream_vector_0_data_1_0: hls-est None vs Vitis 8
-hp_fft_hls,n1024__UF32,1024,,,,False,,hls-est missing,ok,hls-est timeout 120s,FFT_DIT_spatial_unroll_CY_stream_vector_stream_stream_vector_0_data_5_0: hls-est None vs Vitis 128; FFT_DIT_spatial_unroll_CY_stream_vector_stream_stream_vector_0_data_5_1: hls-est None vs Vitis 128; FFT_DIT_spatial_unroll_CY_stream_vector_stream_stream_vector_0_data_6_0: hls-est None vs Vitis 128
+hp_fft_hls,n1024__UF32,1024,1024,0,0,True,exact,compared,ok,ok,FFT_DIT_spatial_unroll_CY_stream_vector_stream_stream_vector_0_data_5_0: hls-est None vs Vitis 128; FFT_DIT_spatial_unroll_CY_stream_vector_stream_stream_vector_0_data_5_1: hls-est None vs Vitis 128; FFT_DIT_spatial_unroll_CY_stream_vector_stream_stream_vector_0_data_6_0: hls-est None vs Vitis 128
 hp_fft_hls,n1024__UF4,304,304,0,0,True,exact,compared,ok,ok,data_in_cyclic: hls-est None vs Vitis 64; data_in_cyclic_0_0: hls-est 32 vs Vitis None; data_in_cyclic_0_1: hls-est 32 vs Vitis None
 hp_fft_hls,n1024__UF8,448,392,-56,56,False,under,compared,ok,ok,FFT_DIT_spatial_unroll_CY_stream_vector_stream_stream_vector_0_data_3_0: hls-est None vs Vitis 32; FFT_DIT_spatial_unroll_CY_stream_vector_stream_stream_vector_0_data_3_1: hls-est None vs Vitis 32; FFT_DIT_spatial_unroll_CY_stream_vector_stream_stream_vector_0_data_4_0: hls-est None vs Vitis 32
 hp_fft_hls,n1024__no_StagePipeline,11,11,0,0,True,exact,compared,ok,ok,FFT_TOP_complex_float_complex_float_data_0: hls-est None vs Vitis 4; FFT_TOP_complex_float_complex_float_data_1: hls-est None vs Vitis 4; _Z7FFT_TOPPSt7complexIfES1_@static@_ZZ7FFT_TOPPSt7complexIfES1_E4data_0_0: hls-est 4 vs Vitis None
@@ -441,7 +441,7 @@ hp_fft_hls,n1024__original_C_style,27,27,0,0,True,exact,compared,ok,ok,data: hls
 hp_fft_hls,n256__UF1,80,80,0,0,True,exact,compared,ok,ok,data: hls-est 0 vs Vitis 64; _Z24reverse_input_stream_UF1RN3hls6streamINS_6vectorISt7complexIfELm2EEELi0EEES6_@static@_ZZ24reverse_input_stream_UF1RN3hls6streamINS_6vectorISt7complexIfELm2EEELi0EEES6_E14data_in_cyclic_0_0: hls-est 4 vs Vitis None; _Z24reverse_input_stream_UF1RN3hls6streamINS_6vectorISt7complexIfELm2EEELi0EEES6_@static@_ZZ24reverse_input_stream_UF1RN3hls6streamINS_6vectorISt7complexIfELm2EEELi0EEES6_E14data_in_cyclic_0_1: hls-est 4 vs Vitis None
 hp_fft_hls,n256__UF16,0,0,0,0,True,exact,compared,ok,ok,
 hp_fft_hls,n256__UF2,128,128,0,0,True,exact,compared,ok,ok,FFT_DIT_spatial_unroll_CY_stream_vector_stream_stream_vector_0_data_1_0: hls-est None vs Vitis 8; FFT_DIT_spatial_unroll_CY_stream_vector_stream_stream_vector_0_data_1_1: hls-est None vs Vitis 8; FFT_DIT_spatial_unroll_CY_stream_vector_stream_stream_vector_0_data_2_0: hls-est None vs Vitis 8
-hp_fft_hls,n256__UF32,0,,,,False,,hls-est missing,ok,hls-est timeout 120s,
+hp_fft_hls,n256__UF32,0,0,0,0,True,exact,compared,ok,ok,
 hp_fft_hls,n256__UF4,176,176,0,0,True,exact,compared,ok,ok,FFT_DIT_spatial_unroll_CY_stream_vector_stream_stream_vector_0_data_2_0: hls-est None vs Vitis 16; FFT_DIT_spatial_unroll_CY_stream_vector_stream_stream_vector_0_data_2_1: hls-est None vs Vitis 16; FFT_DIT_spatial_unroll_CY_stream_vector_stream_stream_vector_0_data_3_0: hls-est None vs Vitis 16
 hp_fft_hls,n256__UF8,256,256,0,0,True,exact,compared,ok,ok,FFT_DIT_spatial_unroll_CY_stream_vector_stream_stream_vector_0_data_3_0: hls-est None vs Vitis 32; FFT_DIT_spatial_unroll_CY_stream_vector_stream_stream_vector_0_data_3_1: hls-est None vs Vitis 32; FFT_DIT_spatial_unroll_CY_stream_vector_stream_stream_vector_0_data_4_0: hls-est None vs Vitis 32
 hp_fft_hls,n256__no_StagePipeline,11,7,-4,4,False,under,compared,ok,ok,FFT_TOP_complex_float_complex_float_data_0: hls-est None vs Vitis 4; FFT_TOP_complex_float_complex_float_data_1: hls-est None vs Vitis 4; _Z7FFT_TOPPSt7complexIfES1_@static@_ZZ7FFT_TOPPSt7complexIfES1_E4data_0_0: hls-est 2 vs Vitis None

@@ -1,0 +1,206 @@
+#!/usr/bin/env python3
+"""Generate hls-doc/done-exclusions.md: the lists of MEMOS decision #70 (Peter, 2026-10-20).
+
+(1) DoD 1 / 2: designs whose source Vitis 2025.1 itself rejects (its log has the error line) or whose
+    catalogue top no source defines: done, listed with that line.
+(2) DoD 1: designs whose native reference build is defective (uninitialised reads, AddressSanitizer
+    reports, missing third-party headers such as TAPA, a native build or testbench that fails): they
+    cannot be verified by check_semantics and count as done when cgeist compiles them; the reason is
+    recorded per design.
+(3) DoD 5: the short list of designs that may stay out of band (curated in done_exclusions_dod5.json,
+    each entry with the per-array cause, the Vitis evidence and why it is out of scope), checked against
+    the run; every other out-of-band design is listed as open work.
+
+Inputs (all named on the generated page): a run_hlsest.py result (--run), its compare.py output (--cmp),
+the Vitis ground truth (--vitis, default results/vitis.json), check_semantics.py records (--sem, several;
+a later file wins for a design), and the curated DoD-5 list (--dod5).
+
+Usage:
+  python3 make_done_exclusions.py --run R.json --cmp R.cmp.json --sem a.json b.json ... \\
+      [--dod5 done_exclusions_dod5.json] [--out ../../hls-doc/done-exclusions.md]
+"""
+import argparse
+import datetime
+import json
+import os
+import re
+from pathlib import Path
+
+HERE = Path(__file__).resolve().parent
+
+# Vitis front-end / elaboration errors that reject the source itself (MEMOS #70 (1)).
+VITIS_REJECT = re.compile(r"ERROR: \[HLS (207-\d+|200-70|214-139|214-157)\][^\n]*")
+
+# check_semantics.py "n/a" reasons that mean the native reference is defective (MEMOS #70 (2)),
+# in the order they are tried: (class, regex).
+NATIVE_DEFECT = [
+    ("reads uninitialised memory", re.compile(r"reads uninitialised memory")),
+    ("divides by zero (AddressSanitizer FPE)", re.compile(r"AddressSanitizer: FPE")),
+    ("AddressSanitizer memory error", re.compile(r"AddressSanitizer: (heap|stack|global)-buffer-overflow|AddressSanitizer: SEGV")),
+    ("third-party headers missing (TAPA)", re.compile(r"frt\.h: No such file|tapa")),
+    ("native build fails", re.compile(r"native build (of .* fails|does not link)")),
+    ("native reference aborts", re.compile(r"reference exit -\d+")),
+]
+
+
+def load(path):
+    with open(path) as f:
+        return json.load(f)
+
+
+def rows_of(run):
+    return {k: v for k, v in run.items() if not k.startswith("_") and isinstance(v, dict)}
+
+
+def md_escape(s):
+    return str(s).replace("|", "\\|").replace("\n", " ")
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+    ap.add_argument("--run", required=True, help="run_hlsest.py result json")
+    ap.add_argument("--cmp", required=True, help="compare.py output json of that run")
+    ap.add_argument("--vitis", default=str(HERE / "results" / "vitis.json"))
+    ap.add_argument("--sem", nargs="*", default=[], help="check_semantics.py records (later wins)")
+    ap.add_argument("--dod5", default=str(HERE / "done_exclusions_dod5.json"))
+    ap.add_argument("--out", default=str(HERE.parent.parent / "hls-doc" / "done-exclusions.md"))
+    args = ap.parse_args()
+
+    run = rows_of(load(args.run))
+    cmp_rows = {r["key"]: r for r in load(args.cmp)["rows"]}
+    vitis = load(args.vitis)
+    sem = {}
+    for f in args.sem:
+        for k, v in rows_of(load(f)).items():
+            sem[k] = v
+    dod5 = load(args.dod5)["entries"]
+
+    # (1) Vitis rejects the source.
+    rejects = []
+    for k in sorted(run):
+        r = run[k]
+        v = vitis.get(k) or {}
+        line = ""
+        m = VITIS_REJECT.search(v.get("note") or "")
+        if m:
+            line = m.group(0)
+        elif v.get("status") not in (None, "ok"):
+            log = Path(v.get("cache_dir") or "/nonexistent") / "log" / "hls_compile.log"
+            if log.exists():
+                m = VITIS_REJECT.search(log.read_text(errors="replace"))
+                if m:
+                    line = m.group(0)
+        if line:
+            rejects.append((k, line, r.get("cgeist_status"), r.get("status")))
+
+    # (2) Defective native reference.
+    defects = []
+    for k in sorted(run):
+        s = sem.get(k)
+        if not s or s.get("status") != "n/a":
+            continue
+        reason = str(s.get("reason") or "")
+        for cls, rx in NATIVE_DEFECT:
+            if rx.search(reason):
+                defects.append((k, cls, reason, run[k].get("cgeist_status")))
+                break
+
+    # (3) DoD 5.
+    def band(row):
+        if row.get("status") != "compared":
+            return None
+        h, v = row.get("hlsest_bram"), row.get("vitis_bram")
+        if h is None or v is None:
+            return None
+        if h == v:
+            return "exact"
+        if h > v and h <= v * 1.15:
+            return "over <= 15 %"
+        return "out of band"
+    compared = [r for r in cmp_rows.values() if r.get("status") == "compared"]
+    bands = {r["key"]: band(r) for r in compared}
+    out_of_band = sorted(k for k, b in bands.items() if b == "out of band")
+    listed = {e["key"]: e for e in dod5}
+    open_work = [k for k in out_of_band if k not in listed]
+
+    now = datetime.date.today().isoformat()
+    L = []
+    L.append("# Exclusions in the definition of done (MEMOS #70)")
+    L.append("")
+    L.append("<!-- Generated by tools/hls-est-validate/make_done_exclusions.py on %s. Do not edit: change the"
+             " inputs and re-run the script. -->" % now)
+    L.append("")
+    L.append("Peter, 2026-10-20 (MEMOS decision #70, \"I agree with the exclusion\"): (1) for DoD 1 and 2 a design"
+             " whose source Vitis 2025.1 itself rejects counts as done and is listed with its Vitis log line; (2) for"
+             " DoD 1 a design whose native reference build is defective cannot be verified by check_semantics and"
+             " counts as done when cgeist compiles it, with the reason per design; (3) for DoD 5 a design may stay out"
+             " of band only on a short documented list. The goal is met when every design is in band, done, or on a"
+             " list.")
+    L.append("")
+    L.append("Inputs:")
+    L.append("")
+    L.append("- run: `%s` (%d designs)" % (args.run, len(run)))
+    L.append("- compare: `%s` (%d compared)" % (args.cmp, len(compared)))
+    L.append("- Vitis ground truth: `%s`" % args.vitis)
+    for f in args.sem:
+        L.append("- semantics: `%s`" % f)
+    L.append("- DoD-5 list: `%s`" % args.dod5)
+    L.append("")
+    L.append("## (1) Designs Vitis 2025.1 rejects (%d)" % len(rejects))
+    L.append("")
+    L.append("| design | Vitis log line | cgeist | hls-est |")
+    L.append("|---|---|---|---|")
+    for k, line, cg, st in rejects:
+        L.append("| %s | %s | %s | %s |" % (md_escape(k), md_escape(line[:200]), md_escape((cg or "-")[:60]),
+                                          md_escape(st or "-")))
+    L.append("")
+    L.append("## (2) Designs whose native reference is defective (%d)" % len(defects))
+    L.append("")
+    byclass = {}
+    for d in defects:
+        byclass.setdefault(d[1], []).append(d)
+    for cls, _ in NATIVE_DEFECT:
+        ds = byclass.get(cls, [])
+        if not ds:
+            continue
+        L.append("### %s (%d)" % (cls, len(ds)))
+        L.append("")
+        L.append("| design | check_semantics reason | cgeist |")
+        L.append("|---|---|---|")
+        for k, _, reason, cg in ds:
+            L.append("| %s | %s | %s |" % (md_escape(k), md_escape(reason[:200]), md_escape(cg or "-")))
+        L.append("")
+    L.append("## (3) DoD 5: designs that may stay out of band (%d listed)" % len(dod5))
+    L.append("")
+    L.append("Band: hls-est equals Vitis or over-counts by at most 15 %% (under-counts are out of band). Of %d"
+             " compared designs, %d are exact, %d over by at most 15 %%, %d out of band; %d of these are on the"
+             " list below and %d are open work." % (
+                 len(compared), sum(1 for b in bands.values() if b == "exact"),
+                 sum(1 for b in bands.values() if b == "over <= 15 %"), len(out_of_band),
+                 sum(1 for k in out_of_band if k in listed), len(open_work)))
+    L.append("")
+    L.append("| design | hls-est | Vitis | band in this run | per-array cause | Vitis evidence | why out of scope | status |")
+    L.append("|---|---:|---:|---|---|---|---|---|")
+    for e in dod5:
+        r = cmp_rows.get(e["key"], {})
+        L.append("| %s | %s | %s | %s | %s | %s | %s | %s |" % (
+            md_escape(e["key"]), r.get("hlsest_bram", "-"), r.get("vitis_bram", "-"),
+            bands.get(e["key"]) or r.get("status", "not in run"), md_escape(e["cause"]),
+            md_escape(e["vitis_evidence"]), md_escape(e["why_out_of_scope"]), md_escape(e["status"])))
+    L.append("")
+    L.append("### Out of band and not on the list (open work, %d)" % len(open_work))
+    L.append("")
+    L.append("| design | hls-est | Vitis | difference |")
+    L.append("|---|---:|---:|---:|")
+    for k in sorted(open_work, key=lambda k: -abs(cmp_rows[k]["hlsest_bram"] - cmp_rows[k]["vitis_bram"])):
+        r = cmp_rows[k]
+        L.append("| %s | %d | %d | %+d |" % (md_escape(k), r["hlsest_bram"], r["vitis_bram"],
+                                            r["hlsest_bram"] - r["vitis_bram"]))
+    L.append("")
+    Path(args.out).write_text("\n".join(L) + "\n")
+    print("wrote %s: %d rejects, %d defective references, %d listed, %d open" % (
+        args.out, len(rejects), len(defects), len(dod5), len(open_work)))
+
+
+if __name__ == "__main__":
+    main()

@@ -61,6 +61,6 @@ module {
 // CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
 // CHECK: memref.alloca @ loc("{{[^"]*}}":13:17){{$}}
-// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NEXT: kind=FIFO  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
 // CHECK: Total BRAM: 2{{$}}

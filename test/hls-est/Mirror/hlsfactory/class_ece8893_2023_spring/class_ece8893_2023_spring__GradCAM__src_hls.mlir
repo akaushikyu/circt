@@ -1502,9 +1502,6 @@ module {
 // CHECK: memref.global @ loc("{{[^"]*}}":27:3){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=16{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.global @ loc("{{[^"]*}}":35:3){{$}}
-// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
-// CHECK-NOT: {{^memref\.}}
 // CHECK: memref.global @ loc("{{[^"]*}}":36:3){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}

@@ -4,9 +4,7 @@
 // design: hlsyn-vitis/vivado-target__sources__fdtd-2d-large (harness catalogue record; compiled as run_hlsest.py does)
 // top: _Z14kernel_fdtd_2diiiPA240_dS0_S0_Pd
 // Vitis 2025.1 td=off: vitis failed: ERROR: [HLS 200-1715] Encountered problem during source synthesis
-// expected to fail: hls-est did not finish within 600 s at generation; the RUN line stops it after 120 s
-// RUN: timeout 120 hls-est %s --symbol-privatize=exclude=_Z14kernel_fdtd_2diiiPA240_dS0_S0_Pd --symbol-dce --lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --infer-vitis-split-array=td=off --narrow-ram-widths --memory-banking-bram --convert-affine-to-loopschedule '--bram-analysis=top=_Z14kernel_fdtd_2diiiPA240_dS0_S0_Pd math-costs=%hls_est_math_costs' -o /dev/null | FileCheck %s
-// XFAIL: *
+// RUN: hls-est %s --symbol-privatize=exclude=_Z14kernel_fdtd_2diiiPA240_dS0_S0_Pd --symbol-dce --lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --infer-vitis-split-array=td=off --narrow-ram-widths --memory-banking-bram --convert-affine-to-loopschedule '--bram-analysis=top=_Z14kernel_fdtd_2diiiPA240_dS0_S0_Pd math-costs=%hls_est_math_costs' -o /dev/null | FileCheck %s
 
 module {
   func.func @_Z14kernel_fdtd_2diiiPA240_dS0_S0_Pd(%arg0: i32, %arg1: i32, %arg2: i32, %arg3: memref<200x240xf64>, %arg4: memref<200x240xf64>, %arg5: memref<200x240xf64>, %arg6: memref<100xf64>) attributes {hls.orig_name = "kernel_fdtd_2d", llvm.linkage = #llvm.linkage<external>} {
@@ -113,4 +111,17 @@ module {
   }
 }
 
-// CHECK: Total BRAM:
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":13:15){{$}}
+// CHECK-NEXT: kind=RAM_2P  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":14:17){{$}}
+// CHECK-NEXT: kind=RAM_2P  bram=256{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":15:17){{$}}
+// CHECK-NEXT: kind=RAM_2P  bram=256{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":16:17){{$}}
+// CHECK-NEXT: kind=RAM_2P  bram=256{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: Total BRAM: 772{{$}}
