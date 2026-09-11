@@ -11,6 +11,9 @@
 // @untagged is the same nest without the attribute: the load is hoisted out
 // of the pipeline and does not count.
 
+// The parent's code (`lo2[i] = 7`) is sunk into the pipeline under the
+// first-iteration guard (VITIS_NOTES N65), so the nest is perfect and is
+// coalesced into one 520-trip pipeline.
 // SCHED-LABEL: func.func @tagged
 // SCHED:       %[[LO2:.*]] = memref.alloca() {{.*}}"lo2"
 // SCHED:       %[[LB:.*]] = memref.alloca() {{.*}}"lb"
