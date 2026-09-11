@@ -949,7 +949,9 @@ static void writtenObjects(Operation *op, const ObjectTable &typeValue,
           out.insert(*id);
 }
 
-/// A read-modify-write accumulator whose loop LICM promotes to a register and
+/// A load GVN replaces by a stored value: directly after a store of the same
+/// element (nothing in between touches the object), or a read-modify-write
+/// accumulator whose loop LICM promotes to a register and
 /// whose value before the loop is forwarded from a store to the element just
 /// before it: `q[s][o] = 0; for d: q[s][o] += x[d] * w[o][d];` reads nothing
 /// of q in Vitis (kernel w9r8i_dm_acc0: q removed when nothing reads it;
@@ -978,6 +980,25 @@ static bool isForwardedAccumulatorLoad(Operation *load, const MemObject &o) {
         return false;
     return true;
   };
+
+  auto forwardedBefore = [&](Operation *op) {
+    for (Operation *prev = op->getPrevNode(); prev;
+         prev = prev->getPrevNode()) {
+      bool touches = false;
+      prev->walk([&](Operation *in) {
+        if (accesses.contains(in))
+          touches = true;
+      });
+      if (!touches)
+        continue;
+      return accesses.contains(prev) && storedMemref(prev) &&
+             sameAddress(prev, load) &&
+             storedType(prev) == load->getResult(0).getType();
+    }
+    return false;
+  };
+  if (forwardedBefore(load))
+    return true;
   Operation *loop = load->getParentOp();
   while (loop && !isHandledLoop(loop))
     loop = loop->getParentOp();
@@ -992,17 +1013,16 @@ static bool isForwardedAccumulatorLoad(Operation *load, const MemObject &o) {
     return false;
   while (true) {
 
+    if (forwardedBefore(loop))
+      return true;
     for (Operation *op = loop->getPrevNode(); op; op = op->getPrevNode()) {
       bool touches = false;
       op->walk([&](Operation *in) {
         if (accesses.contains(in))
           touches = true;
       });
-      if (!touches)
-        continue;
-      return accesses.contains(op) && storedMemref(op) &&
-             sameAddress(op, load) &&
-             storedType(op) == load->getResult(0).getType();
+      if (touches)
+        return false;
     }
     Operation *parent = loop->getParentOp();
     if (!parent || !isHandledLoop(parent) || !invariantIn(parent) ||

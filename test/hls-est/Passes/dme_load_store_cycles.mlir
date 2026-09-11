@@ -205,3 +205,25 @@ func.func @accumulator_filled_earlier(%u: memref<1024xi32>) {
   }
   return
 }
+
+// A load right after a store of the same element is forwarded (GVN): the
+// default initialisation and copy of a struct member, `finalized = 0` then
+// copied, then `finalized = 1` (gnnbuilder sum_incremental_data::finalized,
+// which Vitis removes).
+// CHECK-LABEL: func.func @forwarded_copy
+// CHECK-NOT: memref.alloca
+// CHECK: return
+func.func @forwarded_copy() {
+  %c0 = arith.constant 0 : i32
+  %c1 = arith.constant 1 : i32
+  %f = memref.alloca() {polygeist.varname = "finalized"} : memref<64xi32>
+  affine.for %i = 0 to 64 {
+    affine.store %c0, %f[%i] : memref<64xi32>
+    %v = affine.load %f[%i] : memref<64xi32>
+    affine.store %v, %f[%i] : memref<64xi32>
+  }
+  affine.for %i = 0 to 64 {
+    affine.store %c1, %f[%i] : memref<64xi32>
+  }
+  return
+}
