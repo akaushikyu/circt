@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """Generate hls-doc/done-exclusions.md: the lists of MEMOS decision #70 (Peter, 2026-10-20).
 
-(1) DoD 1 / 2: designs whose source Vitis 2025.1 itself rejects (its log has the error line) or whose
-    catalogue top no source defines: done, listed with that line.
+(1) DoD 1 / 2: designs whose source Vitis 2025.1 itself rejects (its log has the error line): done,
+    listed with that line (MEMOS #70 includes a catalogue top that no source defines, [HLS 214-157]).
+    Failures that are not the source's (a Vitis crash, a path Vitis split at a space, a missing file
+    that exists now) are listed apart and are not exclusions.
 (2) DoD 1: designs whose native reference build is defective (uninitialised reads, AddressSanitizer
     reports, missing third-party headers such as TAPA, a native build or testbench that fails): they
     cannot be verified by check_semantics and count as done when cgeist compiles them; the reason is
@@ -56,6 +58,28 @@ def md_escape(s):
     return str(s).replace("|", "\\|").replace("\n", " ")
 
 
+VITIS_CRASH = re.compile(r"EXCEPTION_ACCESS_VIOLATION|Abnormal program termination|Stack dump")
+SPLIT_PATH = re.compile(r"\[HLS 200-40\] Cannot find design file")
+MISSING_FILE = re.compile(r"\[HLS 207-812\] '([^']+)' file not found \(([A-Za-z]):/([^:]+):\d+:\d+\)")
+
+
+def not_a_rejection(line, log_text, v):
+    """Why a Vitis failure with a reject-looking error line is not a rejection of the source, or ''."""
+    if VITIS_CRASH.search(log_text):
+        return "Vitis crashed (EXCEPTION_ACCESS_VIOLATION after the error line): not a rejection"
+    if SPLIT_PATH.search(log_text):
+        return ("harness path bug: a source path with whitespace was split ([HLS 200-40]); fixed in "
+                "run_vitis.py (stage_spaced_design), needs a Vitis re-run")
+    m = MISSING_FILE.search(line)
+    if m:
+        inc, drive, src = m.groups()
+        src = Path("/mnt/%s/%s" % (drive.lower(), src))
+        if not inc.startswith("/") and (src.parent / inc).exists():
+            return ("stale: '%s' exists now (next to %s); the Vitis result predates it and needs a "
+                    "re-run" % (inc, src.name))
+    return ""
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--run", required=True, help="run_hlsest.py result json")
@@ -75,23 +99,30 @@ def main():
             sem[k] = v
     dod5 = load(args.dod5)["entries"]
 
-    # (1) Vitis rejects the source.
-    rejects = []
+    # (1) Vitis rejects the source: an error line of VITIS_REJECT in the record or its log, unless the
+    # log shows that the failure is not the source's (W9 round 8 review defect 2): a Vitis crash, a
+    # harness path that Vitis split at a space, or a missing file that exists now (a stale run).  Those
+    # are listed apart and are not exclusions.
+    rejects, not_rejects = [], []
     for k in sorted(run):
         r = run[k]
         v = vitis.get(k) or {}
-        line = ""
-        m = VITIS_REJECT.search(v.get("note") or "")
-        if m:
-            line = m.group(0)
-        elif v.get("status") not in (None, "ok"):
-            log = Path(v.get("cache_dir") or "/nonexistent") / "log" / "hls_compile.log"
-            if log.exists():
-                m = VITIS_REJECT.search(log.read_text(errors="replace"))
-                if m:
-                    line = m.group(0)
-        if line:
-            rejects.append((k, line, r.get("cgeist_status"), r.get("status")))
+        if v.get("status") in (None, "ok"):
+            continue
+        log_text = ""
+        log = Path(v.get("cache_dir") or "/nonexistent") / "log" / "hls_compile.log"
+        if log.exists():
+            log_text = log.read_text(errors="replace")
+        m = VITIS_REJECT.search(v.get("note") or "") or VITIS_REJECT.search(log_text)
+        if not m:
+            continue
+        line = m.group(0)
+        why = not_a_rejection(line, log_text, v)
+        row = (k, line, r.get("cgeist_status"), r.get("status"))
+        if why:
+            not_rejects.append(row + (why,))
+        else:
+            rejects.append(row)
 
     # (2) Defective native reference.
     defects = []
@@ -154,6 +185,14 @@ def main():
         L.append("| %s | %s | %s | %s |" % (md_escape(k), md_escape(line[:200]), md_escape((cg or "-")[:60]),
                                           md_escape(st or "-")))
     L.append("")
+    L.append("### Vitis failures that are not rejections of the source (%d, not excluded)" % len(not_rejects))
+    L.append("")
+    L.append("| design | Vitis log line | why it is not a rejection | cgeist | hls-est |")
+    L.append("|---|---|---|---|---|")
+    for k, line, cg, st, why in not_rejects:
+        L.append("| %s | %s | %s | %s | %s |" % (md_escape(k), md_escape(line[:160]), md_escape(why),
+                                               md_escape((cg or "-")[:60]), md_escape(st or "-")))
+    L.append("")
     L.append("## (2) Designs whose native reference is defective (%d)" % len(defects))
     L.append("")
     byclass = {}
@@ -198,8 +237,8 @@ def main():
                                             r["hlsest_bram"] - r["vitis_bram"]))
     L.append("")
     Path(args.out).write_text("\n".join(L) + "\n")
-    print("wrote %s: %d rejects, %d defective references, %d listed, %d open" % (
-        args.out, len(rejects), len(defects), len(dod5), len(open_work)))
+    print("wrote %s: %d rejects, %d not rejections, %d defective references, %d listed, %d open" % (
+        args.out, len(rejects), len(not_rejects), len(defects), len(dod5), len(open_work)))
 
 
 if __name__ == "__main__":

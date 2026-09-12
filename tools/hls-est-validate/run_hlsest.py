@@ -660,9 +660,11 @@ def main():
     check_shim_supported(shim)
     resolve_math_costs(args)
     args.mlir_from_records = None
+    mlir_from_meta = {}
     if args.mlir_from:
         prev = C.load_json(args.mlir_from, {}) or {}
         args.mlir_from_records = {k: v for k, v in prev.items() if k != "_meta"}
+        mlir_from_meta = prev.get("_meta") or {}
     catalog = args.catalog or D.default_catalog()
     designs = D.load_designs(catalog=catalog)
     if args.datasets:
@@ -704,6 +706,16 @@ def main():
     })
     results["_meta"]["catalog"] = (f"{catalog} ({D.hlsfactory_root()})" if catalog != "polygeist"
                                    else catalog)
+    if args.mlir_from:
+        # The MLIR of a --mlir-from run comes from the earlier run's cgeist, not from the one this
+        # process would call (W9 round 8 review defect 9: run G recorded the installed cgeist while its
+        # MLIR came from a private build).  Every design that reuses MLIR records the earlier cgeist; the
+        # designs this run compiles itself (n_cgeist) use C.CGEIST.
+        src = {k: mlir_from_meta.get(k) for k in ("cgeist", "cgeist_md5", "polygeist_head")}
+        results["_meta"]["mlir_from_cgeist"] = src
+        results["_meta"]["cgeist_designs_this_run"] = n_cgeist
+        if n_cgeist == 0:
+            results["_meta"].update(src)
     if not args.quiet:
         print(f"{len(designs)} designs; pipeline: {args.pipeline}; shim: {shim}; git {ghash}", flush=True)
     done = 0

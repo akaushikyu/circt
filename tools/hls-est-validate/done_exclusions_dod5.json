@@ -9,13 +9,6 @@
       "status": "proposed (W9r8-prove, 2026-10-20)"
     },
     {
-      "key": "class_ece8893_spring_2025/neuro_monarchs_symbolic_kernel_ece8893_spring_2025",
-      "cause": "-56 over several buffers (*_buffers row views, OPEN_ISSUES O84 (d)); not attributed to a mechanism per array",
-      "vitis_evidence": "OPEN_ISSUES O90 class 'unexplained' (K15); semantics: the candidate also mismatches the native build (OPEN_ISSUES O44-like, check_semantics 'mismatch')",
-      "why_out_of_scope": "unexplained per array; the cgeist output itself is not bit-exact against the native build, so the estimate is of a different program",
-      "status": "proposed (W9r8-prove, 2026-10-20)"
-    },
-    {
       "key": "hp_fft_hls/n1024__UF8",
       "cause": "-56: the twiddle / stage buffers of the unroll-factor-8 butterflies (OPEN_ISSUES O79)",
       "vitis_evidence": "OPEN_ISSUES O79: UF8 and UF2 differ from UF1 / UF4 / UF16 / UF32 (in band) in a way no kernel has reproduced",

@@ -146,6 +146,48 @@ def cache_dir(d, key):
     return C.CACHE_ROOT / d["dataset"] / d["benchmark"] / key
 
 
+def stage_spaced_design(d, work_wsl):
+    """Vitis 2025.1 refuses a source or include path with whitespace ([HLS 200-2015] 'cannot have
+    any space'; unquoted, [HLS 200-40] splits it at the space; W9 round 8 review: DSC_Acceleration
+    'Golden C', Monte-Carlo 'Random 100 Paths').  When the design directory or one of its ancestors
+    has whitespace in its name, the highest such ancestor is copied to <work>/stage with the
+    whitespace in the names along the path to the design directory replaced by '_', and a copy of
+    d whose 'dir' and absolute includes point into the copy is returned; otherwise d itself.  The
+    cache key is computed from the original record, so the result is the design's own."""
+    ddir = Path(d["dir"]).resolve()
+    chain = [ddir] + list(ddir.parents)
+    spaced = [p for p in chain if re.search(r"\s", p.name)]
+    if not spaced:
+        return d
+    root = spaced[-1]
+    stage = Path(work_wsl) / "stage" / re.sub(r"\s", "_", root.name)
+    shutil.copytree(root, stage, symlinks=True)
+    # rename the directories with whitespace between the copied root and the design directory
+    rel = ddir.relative_to(root)
+    cur = stage
+    for part in rel.parts:
+        clean = re.sub(r"\s", "_", part)
+        if clean != part:
+            (cur / part).rename(cur / clean)
+        cur = cur / clean
+
+    def remap(p):
+        p = Path(p).resolve()
+        try:
+            r = p.relative_to(root)
+        except ValueError:
+            return p
+        out = stage
+        for k, part in enumerate(r.parts):
+            out = out / (re.sub(r"\s", "_", part) if k < len(rel.parts) and part == rel.parts[k] else part)
+        return out
+
+    staged = dict(d)
+    staged["dir"] = str(cur)
+    staged["includes"] = [str(remap(Path(d["dir"]) / inc)) for inc in d.get("includes", [])]
+    return staged
+
+
 def make_cfg(d, work_win):
     lines = [f"part={C.PART}", "", "[hls]", f"flow_target={C.FLOW_TARGET}"]
     flags = " ".join(cflags_for(d))
@@ -262,7 +304,8 @@ MAX_WORK_NAME = 24
 
 def work_name(d):
     name = f"{d['dataset']}/{d['benchmark']}"
-    if len(name) <= MAX_WORK_NAME:
+    # Vitis refuses paths with whitespace (the work dir is the --work_dir of v++)
+    if len(name) <= MAX_WORK_NAME and not re.search(r"\s", name):
         return name
     return "h/" + hashlib.sha1(name.encode()).hexdigest()[:12]
 
@@ -305,7 +348,7 @@ def synthesise(d, args, key, cdir, res_path, tag, work_wsl, lock_fd):
     Path(work_wsl).mkdir(parents=True, exist_ok=True)
     (Path(work_wsl) / "DESIGN.txt").write_text(f"{d['dataset']}/{d['benchmark']}" + os.linesep)
     cfg_wsl = Path(work_wsl) / "hls_config.cfg"
-    cfg_wsl.write_text(make_cfg(d, work_win))
+    cfg_wsl.write_text(make_cfg(stage_spaced_design(d, work_wsl), work_win))
     cfg_win = C.win_backslash(cfg_wsl)
     wd_win = C.win_backslash(Path(work_wsl) / "hls")
     # No quotes: cmd.exe strips the outer pair when the string starts with one,

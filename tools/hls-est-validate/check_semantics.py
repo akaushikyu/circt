@@ -1528,6 +1528,55 @@ def first_diff(a, b, plan):
     return dict(call=call, lengths=[len(a), len(b)])
 
 
+def _f32_nan(word):
+    return (word & 0x7F800000) == 0x7F800000 and (word & 0x007FFFFF) != 0
+
+
+def nan_lane_only_diff(a, b, plan):
+    """True when two dumps of equal length differ only in 32-bit lanes of wide integer leaves (at least
+    64 bits, a multiple of 32) where both lanes are float NaNs.  A design that packs floats into an
+    ap_uint<512> stores the NaN its arithmetic made, and C leaves a NaN's sign and payload unspecified
+    (W9 round 8 review defect 7: neuro_monarchs symbolic kernel, ref 0xffc00000 against cand 0x7fe87ad9,
+    both NaN).  Any other difference, a difference in a stream argument, or dumps of different
+    lengths: False."""
+    if len(a) != len(b) or a == b:
+        return False
+    per = dump_layout(plan)
+    if any(ln is None for ln in per):
+        return False
+    pos = 0
+    while pos < len(a):
+        if a[pos:pos + 4] != b[pos:pos + 4]:
+            return False
+        pos += 4
+        for ai, ln in enumerate(per):
+            seg_a, seg_b = a[pos:pos + ln], b[pos:pos + ln]
+            if seg_a != seg_b:
+                p = plan[ai]
+                eb = token_bytes(p)
+                for e in range(0, ln, max(1, eb)):
+                    if seg_a[e:e + eb] == seg_b[e:e + eb]:
+                        continue
+                    off = e
+                    for r in p["runs"]:
+                        if r[2] == 5:
+                            continue
+                        nb = 10 if r[2] == 6 else (r[1] + 7) // 8
+                        for _ in range(r[3]):
+                            la, lb = seg_a[off:off + nb], seg_b[off:off + nb]
+                            if la != lb:
+                                if r[2] != 0 or r[1] < 64 or r[1] % 32:
+                                    return False
+                                for q in range(0, nb, 4):
+                                    wa = int.from_bytes(la[q:q + 4], "little")
+                                    wb = int.from_bytes(lb[q:q + 4], "little")
+                                    if wa != wb and not (_f32_nan(wa) and _f32_nan(wb)):
+                                        return False
+                            off += nb
+            pos += ln
+    return True
+
+
 ASAN_ENV = {"ASAN_OPTIONS": "detect_leaks=0:exitcode=86:detect_stack_use_after_return=0"}
 LAYOUT_EXIT = 87            # REF_THUNK_REAL's exit code when an argument cannot be converted
 MODE_INDEX = {"small": 0, "wide": 1, "pos": 2}
@@ -1881,6 +1930,9 @@ class Checker:
                 r["why"] = f"candidate exit {crc}"
             elif ra == cb:
                 r["equal"] = True
+            elif nan_lane_only_diff(ra, cb, plan):
+                r["equal"] = True
+                r["note"] = "equal up to NaN payloads in float lanes of packed integers"
             else:
                 r["equal"] = False
                 r["diff"] = first_diff(ra, cb, plan)
@@ -2298,6 +2350,22 @@ def self_test():
     b = (0).to_bytes(4, "little") + bytes(fixed) + (2).to_bytes(8, "little") + bytes(4) + b"\x01\0\0\0"
     d = first_diff(a, b, plan)
     assert d["where"] == "stream" and d["token"] == 1 and d["tokens"] == [2, 2], d
+    # NaN lanes of a packed integer (ap_uint<64> holding two floats): payloads differ, both NaN
+    plan = plan_args(["memref<2xi64>", "memref<2xi32>"], [])
+    lay = sum(dump_layout(plan))
+    base = bytearray((0).to_bytes(4, "little") + bytes(lay))
+    off = 4 + plan[0]["guard"] * 8
+    a, b, c = bytearray(base), bytearray(base), bytearray(base)
+    a[off:off + 4] = (0xFFC00000).to_bytes(4, "little")
+    b[off:off + 4] = (0x7FE87AD9).to_bytes(4, "little")
+    c[off:off + 4] = (0x3F800000).to_bytes(4, "little")
+    assert nan_lane_only_diff(bytes(a), bytes(b), plan)
+    assert not nan_lane_only_diff(bytes(a), bytes(c), plan)
+    off32 = 4 + (2 + 2 * plan[0]["guard"]) * 8 + plan[1]["guard"] * 4
+    d1, d2 = bytearray(base), bytearray(base)
+    d1[off32:off32 + 4] = (0xFFC00000).to_bytes(4, "little")
+    d2[off32:off32 + 4] = (0x7FE87AD9).to_bytes(4, "little")
+    assert not nan_lane_only_diff(bytes(d1), bytes(d2), plan)   # an i32 leaf is an integer
     assert defines_function.__name__
     print("self-test ok")
 
