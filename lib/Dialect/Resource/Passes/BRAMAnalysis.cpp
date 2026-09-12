@@ -1092,13 +1092,25 @@ private:
   DenseMap<Operation *, std::string> cache;
 };
 
+/// The number of elements of a statically shaped alloca / alloc / global.
+static std::optional<int64_t> staticElementCount(Operation *op) {
+  MemRefType type;
+  if (auto g = dyn_cast<memref::GlobalOp>(op))
+    type = g.getType();
+  else if (op->getNumResults() == 1)
+    type = dyn_cast<MemRefType>(op->getResult(0).getType());
+  if (!type || !type.hasStaticShape())
+    return std::nullopt;
+  return type.getNumElements();
+}
+
 /// VITIS_NOTES N67 (kernels w9r8p_st_d256 / st_d4, control st_pipo;
 /// class_ece8893 gabriel_lopez_lugo lab2): a local array of a dataflow region
 /// with `#pragma HLS stream` (type fifo, or no type) and a depth is one FIFO
 /// of that depth at the element width (`buf_r_U | fifo channel | 160, 256,
 /// 1`), priced with the stream FIFO bands (a FIFO of at most srl_max_bits is
-/// shift registers), whatever the array's shape. Without a depth in the
-/// pragma nothing is measured: nullopt (the array stays a memory).
+/// shift registers), whatever the array's shape. A pragma without a depth
+/// gives a FIFO as deep as the array (review kernel s1_nodepth).
 static std::optional<StreamHandleRecord>
 streamPragmaArrayFifo(Operation *op, Type elt, const Models &models) {
   auto arr = op->getAttrOfType<ArrayAttr>("hls.stream");
@@ -1113,6 +1125,16 @@ streamPragmaArrayFifo(Operation *op, Type elt, const Models &models) {
   auto depthAttr = dimensionIndex.getAs<IntegerAttr>("depth");
   if (!depthAttr || depthAttr.getInt() <= 0)
     return std::nullopt;
+  int64_t fifoDepth = depthAttr.getInt();
+  std::string depthSource = "pragma";
+
+  if (dimensionIndex.get("depth_defaulted")) {
+    std::optional<int64_t> words = staticElementCount(op);
+    if (!words || *words <= 0)
+      return std::nullopt;
+    fifoDepth = *words;
+    depthSource = "the array's size (#pragma HLS stream without a depth)";
+  }
   unsigned bits = packedTypeBits(elt);
   std::string bitsSource = "ir element";
 
@@ -1126,8 +1148,8 @@ streamPragmaArrayFifo(Operation *op, Type elt, const Models &models) {
   FifoGroup g;
   g.count = 1;
   g.countSource = "the whole array (#pragma HLS stream, N67)";
-  g.depth = depthAttr.getInt();
-  g.depthSource = "pragma";
+  g.depth = fifoDepth;
+  g.depthSource = depthSource;
   g.bits = bits;
   g.bitsSource = bitsSource;
   FifoPrice portValue =
