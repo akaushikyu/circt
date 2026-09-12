@@ -381,6 +381,7 @@ struct MiddleEndConfig {
   bool licmHoistConditional = true;
   bool mergeIfElseAccesses = true;
   bool gvnLoads = true;
+  bool gvnConditionalLoads = true;
   bool storeForwarding = true;
   DeadMemoryConfig deadMemory;
 };

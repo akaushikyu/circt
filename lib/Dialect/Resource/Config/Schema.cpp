@@ -232,6 +232,7 @@ const KeySpec kSchema[] = {
   {"tool.hls.middle_end.licm_hoist_conditional", KeyKind::Bool, "", "Invariant loads nested in an if of the body are hoisted too (speculated)", "P-11", A2L, "", kNoLimit, kNoLimit, false},
   {"tool.hls.middle_end.merge_if_else_accesses", KeyKind::Bool, "", "A load / store both arms of an if/else make of one address is one access (SimplifyCFG / InstCombine)", "P-11", A2L, "", kNoLimit, kNoLimit, false},
   {"tool.hls.middle_end.gvn_loads", KeyKind::Bool, "", "GVN: a repeated load of one address is one load", "L-02", A2L, "", kNoLimit, kNoLimit, false},
+  {"tool.hls.middle_end.gvn_conditional_loads", KeyKind::Bool, "", "GVN load PRE: loads of one address in one block and in the ifs nested in it, with no write of the memref between them, are one load per iteration; a measured Vitis rule (W9 round 8 review, kernels w9r8f_pr1 / pr2 / pr3)", "L-02", A2L, "", kNoLimit, kNoLimit, false},
   {"tool.hls.middle_end.store_forwarding", KeyKind::Bool, "", "Store-to-load forwarding and dead-store elimination within a block", "L-03", A2L, "", kNoLimit, kNoLimit, false},
   {"tool.hls.middle_end.dead_memory", KeyKind::Section, "", "Dead-memory elimination", "E-02..E-04", DME, "", kNoLimit, kNoLimit, false},
   {"tool.hls.middle_end.dead_memory.overwritten_stores", KeyKind::Bool, "", "A store a later store of the same access overwrites before any read is deleted", "E-03", DME, "", kNoLimit, kNoLimit, false},

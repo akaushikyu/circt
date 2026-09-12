@@ -128,6 +128,7 @@ private:
   void hoistInvariantLoads();
   void cleanupRedundantAccesses();
   void mergeIfElseAccesses();
+  void mergeConditionalLoads();
 
   CyclicSchedulingAnalysis *schedulingAnalysis;
 
@@ -196,6 +197,15 @@ private:
                      "it as one store of the value the if yields (Vitis "
                      "SimplifyCFG / InstCombine): the pair counts as one "
                      "access per iteration for ports and replication."),
+      llvm::cl::init(true)};
+  Option<bool> gvnConditionalLoads{
+      *this, "gvn-conditional-loads",
+      llvm::cl::desc("Before the redundant-access cleanup, replace the loads "
+                     "of one address made in one block and in the ifs nested "
+                     "in it, with no write of the memref between them, by one "
+                     "load before the first (Vitis GVN load PRE: one read per "
+                     "path, so one per iteration; W9 round 8 review, kernels "
+                     "w9r8f_pr1 / pr2 / pr3)."),
       llvm::cl::init(true)};
   Option<bool> verifyScheduleReuse{
       *this, "verify-schedule-reuse",
@@ -1191,6 +1201,138 @@ static Operation *addIfResults(Operation *ifOp,
     oldRes.replaceAllUsesWith(newRes);
   ifOp->erase();
   return newIf;
+}
+
+/// The affine.loads of `op` and of the ifs nested in it, through ifs only (a
+/// loop or any other region op ends the search), in program order.
+static void collectLoadsThroughIfs(Operation *op,
+                                   SmallVectorImpl<AffineLoadOp> &out) {
+  if (auto l = dyn_cast<AffineLoadOp>(op)) {
+    out.push_back(l);
+    return;
+  }
+  if (!isa<AffineIfOp, scf::IfOp>(op))
+    return;
+  for (Region &r : op->getRegions())
+    for (Block &b : r)
+      for (Operation &in : b)
+        collectLoadsThroughIfs(&in, out);
+}
+
+/// True when `v` is available before `point` (an op of `block`): defined
+/// before it in `block`, or outside `block`'s region.
+static bool availableBefore(Value v, Block *block, Operation *point) {
+  Block *vb = v.getParentBlock();
+  if (vb == block) {
+    Operation *def = v.getDefiningOp();
+    return !def || def->isBeforeInBlock(point);
+  }
+  return vb->getParent()->isProperAncestor(block->getParent());
+}
+
+/// Vitis GVN load PRE (W9 round 8 review defect 6: class_ece8893 Dehazing
+/// update_vmin_vmax reads `blue_hist[i]` in two non-exclusive ifs of one
+/// pipelined iteration; kernels w9r8f_pr1 Vitis 1 BRAM, RAM_AUTO_1R1W: one
+/// read per iteration; control pr2, another address in the second if, 2
+/// BRAM; pr3, a store of the array between the two ifs, keeps both). The
+/// loads of one address of one memref made directly in a block and in the
+/// ifs nested in its ops, with no op between the first and the last that may
+/// write the memref, read one value: GVN makes it available on every path
+/// with one load each. They become one load before the first op that holds
+/// one of them (`hls.merged_loads` counts the others). The cleanup within a
+/// block (cleanupRedundantAccesses) handles the loads of one block; this
+/// handles the ones under ifs, which it never reaches.
+void AffineToLoopSchedule::mergeConditionalLoads() {
+  DenseMap<Value, MemrefAliasInfo> aliasCache;
+  auto aliasInfo = [&](Value mem) -> const MemrefAliasInfo & {
+    auto it = aliasCache.find(mem);
+    if (it == aliasCache.end())
+      it = aliasCache.try_emplace(mem, collectMemrefAliases(mem)).first;
+    return it->second;
+  };
+  SmallVector<Block *> blocks;
+  getOperation().walk([&](Block *b) { blocks.push_back(b); });
+  unsigned merged = 0;
+  for (Block *block : blocks) {
+    struct Cand {
+      AffineLoadOp load;
+      Operation *top; // the op of `block` that holds it
+    };
+    SmallVector<Cand> cands;
+    bool nested = false;
+    for (Operation &top : *block) {
+      SmallVector<AffineLoadOp> loads;
+      collectLoadsThroughIfs(&top, loads);
+      for (AffineLoadOp l : loads) {
+        cands.push_back({l, &top});
+        nested |= l.getOperation() != &top;
+      }
+    }
+    if (!nested || cands.size() < 2)
+      continue;
+    SmallVector<bool> used(cands.size(), false);
+    for (unsigned i = 0; i < cands.size(); ++i) {
+      if (used[i])
+        continue;
+      Value mem = cands[i].load.getMemRef();
+      if (!isRootMemref(mem))
+        continue;
+      const MemrefAliasInfo &alias = aliasInfo(mem);
+      if (alias.escaped)
+        continue;
+      AccessAddr addr(cands[i].load.getAffineMap(),
+                      cands[i].load.getMapOperands());
+      SmallVector<unsigned> group{i};
+      for (unsigned j = i + 1; j < cands.size(); ++j)
+        if (!used[j] && cands[j].load.getMemRef() == mem &&
+            compareAddresses(addr,
+                             AccessAddr(cands[j].load.getAffineMap(),
+                                        cands[j].load.getMapOperands())) ==
+                AddrRelation::Same)
+          group.push_back(j);
+      if (group.size() < 2 ||
+          llvm::all_of(group, [&](unsigned k) {
+            return cands[k].load.getOperation() == cands[k].top;
+          }))
+        continue; // nothing under an if: the block cleanup's case
+      // No op from the first holder to the last may write the memref.
+      Operation *first = cands[group.front()].top;
+      Operation *last = cands[group.back()].top;
+      bool written = false;
+      for (Operation *op = first;; op = op->getNextNode()) {
+        if (isMemrefWrittenInLoop(alias, op, /*callsOnlyInLoop=*/true)) {
+          written = true;
+          break;
+        }
+        if (op == last)
+          break;
+      }
+      if (written)
+        continue;
+      // A load of the group whose address operands exist before `first`.
+      std::optional<unsigned> pick;
+      for (unsigned k : group)
+        if (llvm::all_of(cands[k].load.getMapOperands(), [&](Value v) {
+              return availableBefore(v, block, first);
+            })) {
+          pick = k;
+          break;
+        }
+      if (!pick)
+        continue;
+      OpBuilder b(first);
+      auto one = cast<AffineLoadOp>(b.clone(*cands[*pick].load));
+      for (unsigned k : group) {
+        used[k] = true;
+        cands[k].load.getResult().replaceAllUsesWith(one.getResult());
+        cands[k].load.erase();
+      }
+      addCounterAttr(one, "hls.merged_loads", group.size() - 1);
+      merged += group.size() - 1;
+    }
+  }
+  LLVM_DEBUG(llvm::dbgs() << "merged " << merged
+                          << " loads under ifs (GVN load PRE)\n");
 }
 
 void AffineToLoopSchedule::mergeIfElseAccesses() {
@@ -2232,6 +2374,7 @@ void AffineToLoopSchedule::runOnOperation() {
     applyConfigured(hoistPastCalls, me.licmHoistPastCalls);
     applyConfigured(hoistConditional, me.licmHoistConditional);
     applyConfigured(mergeIfElse, me.mergeIfElseAccesses);
+    applyConfigured(gvnConditionalLoads, me.gvnConditionalLoads);
     applyConfigured(sinkParentCode,
                     cfg.tool.hls.pipelineDecision.sinkParentCode);
     const circt::hlsest::SchedulingConfig &sc = cfg.scheduling;
@@ -2249,6 +2392,8 @@ void AffineToLoopSchedule::runOnOperation() {
 
   if (mergeIfElse)
     mergeIfElseAccesses();
+  if (gvnConditionalLoads)
+    mergeConditionalLoads();
   if (cseLoads || forwardStores)
     cleanupRedundantAccesses();
   if (hoistInvariant)

@@ -623,6 +623,7 @@
       },
       "middle_end": {
         "_dead_memory": "object: Dead-memory elimination [E-02..E-04]",
+        "_gvn_conditional_loads": "bool: GVN load PRE: loads of one address in one block and in the ifs nested in it, with no write of the memref between them, are one load per iteration; a measured Vitis rule (W9 round 8 review, kernels w9r8f_pr1 / pr2 / pr3) [L-02]",
         "_gvn_loads": "bool: GVN: a repeated load of one address is one load [L-02]",
         "_licm_hoist_conditional": "bool: Invariant loads nested in an if of the body are hoisted too (speculated) [P-11]",
         "_licm_hoist_invariant_loads": "bool: LICM: invariant loads move out of the pipelined loop and use none of its ports [L-01]",
@@ -641,6 +642,7 @@
           "load_store_cycles": true,
           "overwritten_stores": true
         },
+        "gvn_conditional_loads": true,
         "gvn_loads": true,
         "licm_hoist_conditional": true,
         "licm_hoist_invariant_loads": true,

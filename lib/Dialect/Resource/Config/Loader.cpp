@@ -966,6 +966,7 @@ void fillTool(const json::Object &t, ToolProfile &tool) {
   mid.licmHoistConditional = boolean(me, "licm_hoist_conditional");
   mid.mergeIfElseAccesses = boolean(me, "merge_if_else_accesses");
   mid.gvnLoads = boolean(me, "gvn_loads");
+  mid.gvnConditionalLoads = boolean(me, "gvn_conditional_loads", true);
   mid.storeForwarding = boolean(me, "store_forwarding");
   const json::Object &dm = obj(me, "dead_memory");
   mid.deadMemory.overwrittenStores = boolean(dm, "overwritten_stores");
