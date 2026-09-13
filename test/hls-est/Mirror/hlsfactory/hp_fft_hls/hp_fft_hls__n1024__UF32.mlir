@@ -4,9 +4,7 @@
 // design: hp_fft_hls/n1024__UF32 (harness catalogue record; compiled as run_hlsest.py does)
 // top: _Z7FFT_TOPRN3hls6streamINS_6vectorISt7complexIfELm64EEELi0EEES6_
 // Vitis 2025.1 td=off: BRAM_18K 1024 (results/vitis.json, key d8fb410005b4f99f); a comment only, the CHECK lines pin hls-est's current output
-// expected to fail: hls-est did not finish within 600 s at generation; the RUN line stops it after 120 s
-// RUN: timeout 120 hls-est %s --symbol-privatize=exclude=_Z7FFT_TOPRN3hls6streamINS_6vectorISt7complexIfELm64EEELi0EEES6_ --symbol-dce --lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --infer-vitis-split-array=td=off --narrow-ram-widths --memory-banking-bram --convert-affine-to-loopschedule '--bram-analysis=top=_Z7FFT_TOPRN3hls6streamINS_6vectorISt7complexIfELm64EEELi0EEES6_ math-costs=%hls_est_math_costs' -o /dev/null | FileCheck %s
-// XFAIL: *
+// RUN: hls-est %s --symbol-privatize=exclude=_Z7FFT_TOPRN3hls6streamINS_6vectorISt7complexIfELm64EEELi0EEES6_ --symbol-dce --lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --infer-vitis-split-array=td=off --narrow-ram-widths --memory-banking-bram --convert-affine-to-loopschedule '--bram-analysis=top=_Z7FFT_TOPRN3hls6streamINS_6vectorISt7complexIfELm64EEELi0EEES6_ math-costs=%hls_est_math_costs' -o /dev/null | FileCheck %s
 
 #set = affine_set<(d0) : (d0 - 1 >= 0)>
 module {
@@ -3467,4 +3465,19217 @@ module {
   }
 }
 
-// CHECK: Total BRAM:
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":12:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":13:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":13:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":13:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":13:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":13:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":13:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":13:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":13:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":13:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":13:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":13:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":13:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":13:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":13:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":13:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":13:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":13:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":13:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":13:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":13:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":13:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":13:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":13:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":13:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":13:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":13:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":13:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":13:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":13:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":13:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":13:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":13:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":13:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":13:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":13:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":13:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":13:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":13:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":13:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":13:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":13:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":13:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":13:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":13:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":13:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":13:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":13:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":13:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":13:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":13:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":13:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":13:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":13:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":13:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":13:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":13:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":13:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":13:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":13:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":13:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":13:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":13:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":13:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":13:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":14:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":15:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":15:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":15:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":15:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":15:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":15:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":15:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":15:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":15:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":15:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":15:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":15:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":15:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":15:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":15:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":15:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":15:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":15:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":15:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":15:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":15:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":15:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":15:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":15:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":15:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":15:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":15:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":15:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":15:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":15:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":15:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":15:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":15:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":15:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":15:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":15:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":15:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":15:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":15:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":15:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":15:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":15:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":15:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":15:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":15:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":15:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":15:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":15:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":15:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":15:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":15:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":15:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":15:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":15:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":15:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":15:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":15:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":15:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":15:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":15:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":15:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":15:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":15:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":15:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":16:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":17:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":17:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":17:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":17:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":17:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":17:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":17:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":17:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":17:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":17:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":17:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":17:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":17:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":17:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":17:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":17:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":17:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":17:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":17:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":17:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":17:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":17:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":17:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":17:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":17:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":17:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":17:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":17:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":17:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":17:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":17:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":17:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":17:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":17:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":17:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":17:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":17:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":17:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":17:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":17:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":17:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":17:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":17:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":17:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":17:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":17:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":17:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":17:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":17:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":17:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":17:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":17:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":17:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":17:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":17:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":17:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":17:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":17:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":17:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":17:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":17:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":17:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":17:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":17:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":18:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":19:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":19:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":19:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":19:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":19:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":19:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":19:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":19:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":19:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":19:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":19:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":19:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":19:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":19:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":19:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":19:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":19:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":19:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":19:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":19:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":19:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":19:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":19:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":19:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":19:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":19:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":19:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":19:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":19:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":19:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":19:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":19:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":19:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":19:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":19:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":19:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":19:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":19:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":19:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":19:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":19:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":19:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":19:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":19:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":19:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":19:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":19:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":19:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":19:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":19:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":19:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":19:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":19:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":19:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":19:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":19:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":19:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":19:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":19:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":19:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":19:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":19:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":19:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":19:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=4{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":20:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":21:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":21:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":21:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":21:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":21:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":21:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":21:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":21:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":21:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":21:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":21:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":21:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":21:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":21:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":21:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":21:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":21:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":21:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":21:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":21:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":21:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":21:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":21:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":21:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":21:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":21:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":21:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":21:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":21:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":21:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":21:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":21:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":21:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":21:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":21:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":21:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":21:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":21:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":21:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":21:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":21:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":21:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":21:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":21:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":21:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":21:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":21:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":21:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":21:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":21:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":21:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":21:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":21:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":21:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":21:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":21:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":21:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":21:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":21:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":21:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":21:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":21:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":21:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":21:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":21:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":21:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":21:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":21:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":21:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":21:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":21:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":21:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":21:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":21:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":21:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":21:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":21:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":21:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":21:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":21:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":21:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":21:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":21:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":21:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":21:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":21:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":21:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":21:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":21:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":21:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":21:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":21:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":21:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":21:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":21:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":21:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":21:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":21:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":21:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":21:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":21:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":21:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":21:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":21:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":21:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":21:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":21:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":21:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":21:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":21:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":21:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":21:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":21:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":21:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":21:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":21:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":21:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":21:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":21:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":21:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":21:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":21:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":21:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":21:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":21:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":21:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":21:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":21:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":22:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":23:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":23:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":23:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":23:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":23:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":23:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":23:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":23:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":23:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":23:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":23:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":23:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":23:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":23:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":23:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":23:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":23:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":23:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":23:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":23:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":23:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":23:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":23:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":23:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":23:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":23:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":23:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":23:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":23:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":23:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":23:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":23:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":23:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":23:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":23:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":23:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":23:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":23:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":23:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":23:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":23:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":23:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":23:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":23:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":23:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":23:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":23:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":23:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":23:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":23:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":23:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":23:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":23:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":23:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":23:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":23:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":23:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":23:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":23:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":23:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":23:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":23:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":23:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":23:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":23:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":23:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":23:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":23:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":23:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":23:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":23:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":23:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":23:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":23:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":23:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":23:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":23:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":23:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":23:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":23:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":23:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":23:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":23:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":23:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":23:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":23:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":23:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":23:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":23:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":23:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":23:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":23:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":23:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":23:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":23:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":23:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":23:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":23:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":23:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":23:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":23:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":23:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":23:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":23:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":23:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":23:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":23:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":23:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":23:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":23:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":23:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":23:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":23:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":23:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":23:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":23:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":23:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":23:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":23:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":23:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":23:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":23:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":23:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":23:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":23:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":23:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":23:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":23:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":24:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":25:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":25:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":25:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":25:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":25:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":25:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":25:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":25:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":25:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":25:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":25:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":25:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":25:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":25:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":25:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":25:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":25:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":25:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":25:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":25:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":25:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":25:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":25:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":25:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":25:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":25:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":25:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":25:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":25:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":25:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":25:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":25:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":25:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":25:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":25:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":25:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":25:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":25:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":25:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":25:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":25:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":25:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":25:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":25:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":25:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":25:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":25:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":25:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":25:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":25:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":25:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":25:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":25:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":25:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":25:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":25:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":25:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":25:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":25:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":25:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":25:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":25:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":25:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":25:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":25:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":25:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":25:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":25:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":25:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":25:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":25:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":25:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":25:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":25:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":25:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":25:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":25:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":25:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":25:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":25:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":25:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":25:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":25:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":25:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":25:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":25:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":25:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":25:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":25:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":25:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":25:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":25:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":25:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":25:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":25:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":25:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":25:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":25:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":25:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":25:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":25:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":25:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":25:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":25:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":25:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":25:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":25:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":25:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":25:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":25:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":25:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":25:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":25:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":25:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":25:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":25:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":25:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":25:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":25:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":25:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":25:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":25:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":25:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":25:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":25:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":25:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":25:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":25:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":26:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":27:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":27:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":27:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":27:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":27:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":27:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":27:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":27:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":27:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":27:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":27:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":27:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":27:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":27:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":27:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":27:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":27:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":27:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":27:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":27:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":27:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":27:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":27:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":27:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":27:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":27:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":27:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":27:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":27:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":27:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":27:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":27:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":27:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":27:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":27:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":27:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":27:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":27:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":27:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":27:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":27:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":27:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":27:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":27:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":27:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":27:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":27:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":27:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":27:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":27:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":27:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":27:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":27:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":27:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":27:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":27:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":27:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":27:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":27:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":27:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":27:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":27:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":27:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":27:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":27:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":27:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":27:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":27:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":27:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":27:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":27:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":27:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":27:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":27:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":27:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":27:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":27:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":27:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":27:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":27:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":27:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":27:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":27:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":27:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":27:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":27:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":27:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":27:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":27:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":27:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":27:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":27:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":27:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":27:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":27:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":27:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":27:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":27:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":27:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":27:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":27:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":27:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":27:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":27:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":27:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":27:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":27:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":27:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":27:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":27:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":27:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":27:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":27:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":27:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":27:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":27:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":27:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":27:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":27:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":27:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":27:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":27:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":27:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":27:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":27:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":27:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":27:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":27:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":28:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":29:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":29:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":29:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":29:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":29:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":29:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":29:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":29:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":29:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":29:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":29:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":29:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":29:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":29:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":29:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":29:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":29:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":29:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":29:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":29:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":29:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":29:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":29:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":29:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":29:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":29:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":29:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":29:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":29:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":29:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":29:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":29:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":29:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":29:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":29:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":29:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":29:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":29:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":29:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":29:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":29:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":29:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":29:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":29:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":29:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":29:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":29:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":29:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":29:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":29:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":29:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":29:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":29:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":29:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":29:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":29:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":29:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":29:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":29:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":29:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":29:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":29:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":29:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":29:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":29:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":29:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":29:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":29:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":29:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":29:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":29:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":29:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":29:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":29:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":29:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":29:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":29:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":29:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":29:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":29:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":29:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":29:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":29:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":29:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":29:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":29:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":29:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":29:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":29:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":29:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":29:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":29:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":29:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":29:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":29:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":29:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":29:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":29:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":29:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":29:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":29:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":29:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":29:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":29:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":29:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":29:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":29:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":29:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":29:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":29:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":29:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":29:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":29:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":29:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":29:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":29:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":29:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":29:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":29:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":29:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":29:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":29:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":29:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":29:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":29:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":29:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":29:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":29:3){{$}}
+// CHECK-NEXT: kind=PIPO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":30:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":31:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":32:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":33:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":173:7){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":139:15){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":1488:7){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":250:15){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":252:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":252:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":252:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":252:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":252:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":252:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":252:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":252:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":252:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":252:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":252:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":252:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":252:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":252:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":252:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":252:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":252:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":252:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":252:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":252:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":252:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":252:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":252:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":252:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":252:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":252:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":252:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":252:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":252:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":252:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":252:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":252:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":252:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":252:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":252:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":252:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":252:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":252:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":252:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":252:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":252:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":252:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":252:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":252:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":252:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":252:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":252:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":252:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":252:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":252:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":252:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":252:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":252:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":252:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":252:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":252:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":252:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":252:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":252:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":252:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":252:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":252:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":252:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":252:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":253:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":253:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":253:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":253:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":253:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":253:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":253:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":253:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":253:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":253:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":253:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":253:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":253:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":253:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":253:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":253:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":253:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":253:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":253:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":253:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":253:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":253:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":253:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":253:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":253:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":253:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":253:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":253:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":253:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":253:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":253:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":253:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":253:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":253:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":253:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":253:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":253:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":253:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":253:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":253:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":253:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":253:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":253:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":253:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":253:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":253:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":253:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":253:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":253:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":253:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":253:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":253:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":253:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":253:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":253:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":253:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":253:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":253:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":253:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":253:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":253:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":253:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":253:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":253:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":254:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":255:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":356:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":1764:7){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":1584:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":1584:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":1585:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":1585:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":1586:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":1586:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":1587:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":1587:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":1588:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":1588:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":1589:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":1589:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":1590:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":1592:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":1593:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":1594:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":1599:18){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":1599:18){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":1600:18){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":1600:18){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":1601:18){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":1601:18){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":1602:18){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":1602:18){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":1603:18){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":1603:18){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":1604:18){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":1604:18){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":1605:18){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":1605:18){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":1775:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":1775:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":1776:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":1776:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":1778:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":1778:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":1779:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":1779:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":1780:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":1780:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":1781:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":1781:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":1782:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":1782:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":1783:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":1783:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":1784:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":1784:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":1785:18){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":1785:18){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":1786:18){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":1786:18){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":1787:18){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":1787:18){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":1790:18){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":1791:18){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":1792:18){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":1794:18){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":1794:18){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":1795:18){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":1795:18){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":1796:18){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":1796:18){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":1797:18){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":1797:18){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":1798:18){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":1798:18){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":1799:18){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":1799:18){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":1800:18){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":1800:18){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":1801:18){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":1801:18){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":1802:18){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":1802:18){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":1803:18){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":1803:18){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":1804:18){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":1804:18){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":1805:18){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":1805:18){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":1806:18){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":1806:18){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":2083:15){{$}}
+// CHECK-NEXT: kind=FIFO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":2087:17){{$}}
+// CHECK-NEXT: kind=FIFO  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":2248:15){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":2248:15){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":2249:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":2249:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":2251:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":2251:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":2252:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":2252:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":2253:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":2253:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":2254:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":2254:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":2255:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":2255:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":2256:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":2256:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":2257:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":2257:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":2393:15){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":2393:15){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":2394:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":2394:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":2396:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":2396:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":2397:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":2397:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":2398:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":2398:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":2399:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":2399:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":2400:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":2400:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":2401:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":2401:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":2402:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":2402:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":2538:15){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":2538:15){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":2539:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":2539:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":2541:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":2541:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":2542:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":2542:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":2543:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":2543:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":2544:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":2544:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":2545:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":2545:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":2546:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":2546:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":2547:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":2547:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":2682:15){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":2682:15){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":2683:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":2683:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":2685:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":2685:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":2686:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":2686:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":2687:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":2687:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":2688:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":2688:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":2689:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":2689:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":2690:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":2690:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":2691:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":2691:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":2827:15){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":2827:15){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":2828:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":2828:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":2830:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":2830:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":2831:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":2831:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":2832:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":2832:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":2833:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":2833:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":2834:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":2834:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":2835:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":2835:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":2836:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":2836:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":2972:15){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":2972:15){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":2973:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":2973:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":2975:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":2975:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":2976:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":2976:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":2977:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":2977:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":2978:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":2978:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":2979:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":2979:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":2980:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":2980:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":2981:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":2981:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":3117:15){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":3117:15){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":3118:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":3118:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":3120:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":3120:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":3121:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":3121:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":3122:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":3122:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":3123:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":3123:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":3124:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":3124:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":3125:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":3125:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":3126:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":3126:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":3261:15){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":3261:15){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":3262:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":3262:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":3264:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":3264:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":3265:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":3265:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":3266:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":3266:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":3267:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":3267:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":3268:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":3268:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":3269:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":3269:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":3270:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":3270:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":3397:15){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":3397:15){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":3398:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":3398:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":3399:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":3399:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":3400:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":3400:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":3401:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":3401:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":3402:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":3402:17){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: Total BRAM: 1024{{$}}
