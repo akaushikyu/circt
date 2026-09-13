@@ -1270,44 +1270,57 @@ void AffineToLoopSchedule::mergeConditionalLoads() {
     }
     if (!nested || cands.size() < 2)
       continue;
-    SmallVector<bool> used(cands.size(), false);
+    // Bucket the loads by memref and canonical address (an unrolled body
+    // has thousands: a pairwise comparison made lab2_hanchen run for over
+    // 40 min). Equal canonical maps and operands are the same address.
+    std::map<std::vector<const void *>, SmallVector<unsigned, 2>> buckets;
     for (unsigned i = 0; i < cands.size(); ++i) {
-      if (used[i])
+      AffineLoadOp l = cands[i].load;
+      if (!isRootMemref(l.getMemRef()))
         continue;
-      Value mem = cands[i].load.getMemRef();
-      if (!isRootMemref(mem))
-        continue;
+      AccessAddr addr(l.getAffineMap(), l.getMapOperands());
+      std::vector<const void *> key{l.getMemRef().getAsOpaquePointer(),
+                                    addr.map.getAsOpaquePointer()};
+      for (Value v : addr.operands)
+        key.push_back(v.getAsOpaquePointer());
+      buckets[key].push_back(i);
+    }
+    // The index of each op of the block, and per memref the number of ops
+    // up to each index that may write it (computed when first needed).
+    DenseMap<Operation *, unsigned> position;
+    SmallVector<Operation *> tops;
+    for (Operation &op : *block) {
+      position[&op] = tops.size();
+      tops.push_back(&op);
+    }
+    DenseMap<Value, std::vector<unsigned>> writesBefore;
+    auto writersPrefix = [&](Value mem) -> const std::vector<unsigned> & {
+      auto it = writesBefore.find(mem);
+      if (it != writesBefore.end())
+        return it->second;
       const MemrefAliasInfo &alias = aliasInfo(mem);
-      if (alias.escaped)
-        continue;
-      AccessAddr addr(cands[i].load.getAffineMap(),
-                      cands[i].load.getMapOperands());
-      SmallVector<unsigned> group{i};
-      for (unsigned j = i + 1; j < cands.size(); ++j)
-        if (!used[j] && cands[j].load.getMemRef() == mem &&
-            compareAddresses(addr,
-                             AccessAddr(cands[j].load.getAffineMap(),
-                                        cands[j].load.getMapOperands())) ==
-                AddrRelation::Same)
-          group.push_back(j);
-      if (group.size() < 2 ||
-          llvm::all_of(group, [&](unsigned k) {
+      std::vector<unsigned> prefix(tops.size() + 1, 0);
+      for (unsigned k = 0; k < tops.size(); ++k)
+        prefix[k + 1] =
+            prefix[k] +
+            (isMemrefWrittenInLoop(alias, tops[k], /*callsOnlyInLoop=*/true)
+                 ? 1
+                 : 0);
+      return writesBefore.try_emplace(mem, std::move(prefix)).first->second;
+    };
+    for (auto &[key, group] : buckets) {
+      if (group.size() < 2 || llvm::all_of(group, [&](unsigned k) {
             return cands[k].load.getOperation() == cands[k].top;
           }))
         continue; // nothing under an if: the block cleanup's case
+      Value mem = cands[group.front()].load.getMemRef();
+      if (aliasInfo(mem).escaped)
+        continue;
       // No op from the first holder to the last may write the memref.
       Operation *first = cands[group.front()].top;
       Operation *last = cands[group.back()].top;
-      bool written = false;
-      for (Operation *op = first;; op = op->getNextNode()) {
-        if (isMemrefWrittenInLoop(alias, op, /*callsOnlyInLoop=*/true)) {
-          written = true;
-          break;
-        }
-        if (op == last)
-          break;
-      }
-      if (written)
+      const std::vector<unsigned> &prefix = writersPrefix(mem);
+      if (prefix[position[last] + 1] != prefix[position[first]])
         continue;
       // A load of the group whose address operands exist before `first`.
       std::optional<unsigned> pick;
@@ -1323,7 +1336,6 @@ void AffineToLoopSchedule::mergeConditionalLoads() {
       OpBuilder b(first);
       auto one = cast<AffineLoadOp>(b.clone(*cands[*pick].load));
       for (unsigned k : group) {
-        used[k] = true;
         cands[k].load.getResult().replaceAllUsesWith(one.getResult());
         cands[k].load.erase();
       }
