@@ -105,6 +105,7 @@
         "licm_hoist_conditional": true,
         "merge_if_else_accesses": true,
         "gvn_loads": true,
+        "gvn_conditional_loads": true,
         "store_forwarding": true,
         "dead_memory": {
           "overwritten_stores": true,
