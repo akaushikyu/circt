@@ -1,15 +1,15 @@
 {
  "_meta": {
   "cgeist": "/mnt/d/HLS/Polygeist/build/bin/cgeist",
-  "cgeist_md5": "d0e92867836ad6dec06da485e2f0fc26",
-  "date": "2026-10-20",
-  "elapsed_s": 5541,
+  "cgeist_md5": "a5056b2375dcc052ef1fdc3c5fefcb7f",
+  "date": "2026-10-21",
+  "elapsed_s": 3724,
   "hls_est": "/home/peter/circt/build/clion/bin/hls-est",
-  "hls_est_git": "1ada328f",
-  "hls_est_md5": "7746ca45d595f8a38dd8d1c6dd4f5c0f",
+  "hls_est_git": "aea5aedd",
+  "hls_est_md5": "3a564722b52aea2a2ee9d5acf46c57a7",
   "long_timeout": 600,
   "pipeline": "--lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --infer-vitis-split-array=td=off --narrow-ram-widths --memory-banking-bram --convert-affine-to-loopschedule --bram-analysis",
-  "polygeist_commit": "429ca211",
+  "polygeist_commit": "537d6614",
   "shim": "tools/hls-est-validate/shim/real",
   "shim_flags": [
    "--xlx-prelude",
@@ -92,7 +92,7 @@
    "design": null,
    "hlsest_bram": 0,
    "kind": "feature",
-   "memrefs": 0,
+   "memrefs": 8,
    "mirror": "test/hls-est/Mirror/BasicArrayPartition.mlir",
    "outcome": "pass",
    "run_line": {
@@ -370,7 +370,7 @@
    "design": null,
    "hlsest_bram": 0,
    "kind": "feature",
-   "memrefs": 26,
+   "memrefs": 44,
    "mirror": "test/hls-est/Mirror/array_partition/variables.mlir",
    "outcome": "pass",
    "run_line": {
@@ -1501,7 +1501,7 @@
    "cgeist_status": "ok",
    "design": "WIP/stream_hls__ResidualBlock__opt4",
    "hlsest_bram": 1248,
-   "hlsest_s": 438,
+   "hlsest_s": 394,
    "kind": "hlsfactory",
    "memrefs": 12,
    "mirror": "test/hls-est/Mirror/hlsfactory/WIP/WIP__stream_hls__ResidualBlock__opt4.mlir",
@@ -2432,7 +2432,7 @@
    "cgeist_status": "ok",
    "design": "WIP/stream_hls______processed_dataset__ResidualBlock__opt4",
    "hlsest_bram": 1248,
-   "hlsest_s": 432,
+   "hlsest_s": 384,
    "kind": "hlsfactory",
    "memrefs": 12,
    "mirror": "test/hls-est/Mirror/hlsfactory/WIP/WIP__stream_hls______processed_dataset__ResidualBlock__opt4.mlir",
@@ -5780,9 +5780,9 @@
    "cgeist_cmd": "/mnt/d/HLS/Polygeist/build/bin/cgeist src/conv1x1_new.cc src/dwconv3x3_new.cc src/dwconv5x5.cc src/net_hls.cc '--function=*' -S --hls-annotate --raise-scf-to-affine --memref-fullrank --xlx-prelude -I /mnt/a/Vitis/2025.1/Vitis/common/technology/autopilot -D__SYNTHESIS__ -D__VITIS_HLS__ -DAESL_SYN -D__HLS_SYN__ -D__DSP48E1__ -include /mnt/a/Vitis/2025.1/Vitis/common/technology/autopilot/etc/autopilot_ssdm_op.h -Xclang -fxlx-bitwidth -Xclang -fxlx-apint-promote -Xclang -fnative-half-type -Xclang -fnative-half-arguments-and-returns -Xclang -Wno-unknown-attributes -Xclang -fno-threadsafe-statics -Xclang -fno-use-cxa-atexit --scalar-wrapper-abi --xlx-headers -resource-dir=/mnt/d/HLS/Polygeist/llvm-project/build/lib/clang/18 -D__SYNTHESIS__ -D__VITIS_HLS__ -D__HLS_SYN__ -DAESL_SYN -std=gnu++14 -I /home/peter/circt/tools/hls-est-validate/shim/real -I . -I src -o '<mlir>'",
    "cgeist_status": "ok",
    "design": "accelerators/Mask-Net_dataset",
-   "hlsest_bram": 424,
+   "hlsest_bram": 421,
    "kind": "hlsfactory",
-   "memrefs": 6724,
+   "memrefs": 769,
    "mirror": "test/hls-est/Mirror/hlsfactory/accelerators/accelerators__Mask-Net_dataset.mlir",
    "outcome": "pass",
    "run_line": {
@@ -5814,10 +5814,11 @@
    "cgeist_cmd": "/mnt/d/HLS/Polygeist/build/bin/cgeist src/conv1x1.cc src/dwconv3x3.cc src/net_hls.cc '--function=*' -S --hls-annotate --raise-scf-to-affine --memref-fullrank --xlx-prelude -I /mnt/a/Vitis/2025.1/Vitis/common/technology/autopilot -D__SYNTHESIS__ -D__VITIS_HLS__ -DAESL_SYN -D__HLS_SYN__ -D__DSP48E1__ -include /mnt/a/Vitis/2025.1/Vitis/common/technology/autopilot/etc/autopilot_ssdm_op.h -Xclang -fxlx-bitwidth -Xclang -fxlx-apint-promote -Xclang -fnative-half-type -Xclang -fnative-half-arguments-and-returns -Xclang -Wno-unknown-attributes -Xclang -fno-threadsafe-statics -Xclang -fno-use-cxa-atexit --scalar-wrapper-abi --xlx-headers -resource-dir=/mnt/d/HLS/Polygeist/llvm-project/build/lib/clang/18 -D__SYNTHESIS__ -D__VITIS_HLS__ -D__HLS_SYN__ -DAESL_SYN -std=gnu++14 -I /home/peter/circt/tools/hls-est-validate/shim/real -I . -I src -o '<mlir>'",
    "cgeist_status": "ok",
    "design": "accelerators/SkyNet_dataset",
+   "hlsest_bram": 415,
    "kind": "hlsfactory",
+   "memrefs": 742,
    "mirror": "test/hls-est/Mirror/hlsfactory/accelerators/accelerators__SkyNet_dataset.mlir",
-   "outcome": "xfail",
-   "reason": "hls-est timeout (> 600 s)",
+   "outcome": "pass",
    "run_line": {
     "defines": [],
     "dir": "../Inputs/accelerators/SkyNet_dataset",
@@ -6483,9 +6484,9 @@
    "cgeist_cmd": "/mnt/d/HLS/Polygeist/build/bin/cgeist debayer.cpp dehaze.cpp pipeline.cpp utils.cpp whitebalance.cpp '--function=*' -S --hls-annotate --raise-scf-to-affine --memref-fullrank --xlx-prelude -I /mnt/a/Vitis/2025.1/Vitis/common/technology/autopilot -D__SYNTHESIS__ -D__VITIS_HLS__ -DAESL_SYN -D__HLS_SYN__ -D__DSP48E1__ -include /mnt/a/Vitis/2025.1/Vitis/common/technology/autopilot/etc/autopilot_ssdm_op.h -Xclang -fxlx-bitwidth -Xclang -fxlx-apint-promote -Xclang -fnative-half-type -Xclang -fnative-half-arguments-and-returns -Xclang -Wno-unknown-attributes -Xclang -fno-threadsafe-statics -Xclang -fno-use-cxa-atexit --scalar-wrapper-abi --xlx-headers -resource-dir=/mnt/d/HLS/Polygeist/llvm-project/build/lib/clang/18 -D__SYNTHESIS__ -D__VITIS_HLS__ -D__HLS_SYN__ -DAESL_SYN -std=gnu++14 -I /home/peter/circt/tools/hls-est-validate/shim/real -I . -o '<mlir>'",
    "cgeist_status": "ok",
    "design": "class_ece8893_2022_fall/Dehazing-denoising__source_code__src",
-   "hlsest_bram": 23,
+   "hlsest_bram": 26,
    "kind": "hlsfactory",
-   "memrefs": 48,
+   "memrefs": 63,
    "mirror": "test/hls-est/Mirror/hlsfactory/class_ece8893_2022_fall/class_ece8893_2022_fall__Dehazing-denoising__source_code__src.mlir",
    "outcome": "pass",
    "run_line": {
@@ -6517,9 +6518,9 @@
    "cgeist_cmd": "/mnt/d/HLS/Polygeist/build/bin/cgeist pipeline.cpp debayer.cpp whitebalance.cpp dehaze.cpp utils.cpp '--function=*' -S --hls-annotate --raise-scf-to-affine --memref-fullrank --xlx-prelude -I /mnt/a/Vitis/2025.1/Vitis/common/technology/autopilot -D__SYNTHESIS__ -D__VITIS_HLS__ -DAESL_SYN -D__HLS_SYN__ -D__DSP48E1__ -include /mnt/a/Vitis/2025.1/Vitis/common/technology/autopilot/etc/autopilot_ssdm_op.h -Xclang -fxlx-bitwidth -Xclang -fxlx-apint-promote -Xclang -fnative-half-type -Xclang -fnative-half-arguments-and-returns -Xclang -Wno-unknown-attributes -Xclang -fno-threadsafe-statics -Xclang -fno-use-cxa-atexit --scalar-wrapper-abi --xlx-headers -resource-dir=/mnt/d/HLS/Polygeist/llvm-project/build/lib/clang/18 -D__SYNTHESIS__ -D__VITIS_HLS__ -D__HLS_SYN__ -DAESL_SYN -std=gnu++14 -I /home/peter/circt/tools/hls-est-validate/shim/real -I . -o '<mlir>'",
    "cgeist_status": "ok",
    "design": "class_ece8893_2022_fall/Dehazing-denoising__source_code__src__debayer_csynth",
-   "hlsest_bram": 34,
+   "hlsest_bram": 29,
    "kind": "hlsfactory",
-   "memrefs": 92,
+   "memrefs": 65,
    "mirror": "test/hls-est/Mirror/hlsfactory/class_ece8893_2022_fall/class_ece8893_2022_fall__Dehazing-denoising__source_code__src__debayer_csynth.mlir",
    "outcome": "pass",
    "run_line": {
@@ -6550,9 +6551,9 @@
    "cgeist_cmd": "/mnt/d/HLS/Polygeist/build/bin/cgeist debayer.cpp dehaze.cpp pipeline.cpp utils.cpp whitebalance.cpp '--function=*' -S --hls-annotate --raise-scf-to-affine --memref-fullrank --xlx-prelude -I /mnt/a/Vitis/2025.1/Vitis/common/technology/autopilot -D__SYNTHESIS__ -D__VITIS_HLS__ -DAESL_SYN -D__HLS_SYN__ -D__DSP48E1__ -include /mnt/a/Vitis/2025.1/Vitis/common/technology/autopilot/etc/autopilot_ssdm_op.h -Xclang -fxlx-bitwidth -Xclang -fxlx-apint-promote -Xclang -fnative-half-type -Xclang -fnative-half-arguments-and-returns -Xclang -Wno-unknown-attributes -Xclang -fno-threadsafe-statics -Xclang -fno-use-cxa-atexit --scalar-wrapper-abi --xlx-headers -resource-dir=/mnt/d/HLS/Polygeist/llvm-project/build/lib/clang/18 -D__SYNTHESIS__ -D__VITIS_HLS__ -D__HLS_SYN__ -DAESL_SYN -std=gnu++14 -I /home/peter/circt/tools/hls-est-validate/shim/real -I . -o '<mlir>'",
    "cgeist_status": "ok",
    "design": "class_ece8893_2022_fall/Dehazing-denoising__source_code__src__script",
-   "hlsest_bram": 34,
+   "hlsest_bram": 29,
    "kind": "hlsfactory",
-   "memrefs": 92,
+   "memrefs": 65,
    "mirror": "test/hls-est/Mirror/hlsfactory/class_ece8893_2022_fall/class_ece8893_2022_fall__Dehazing-denoising__source_code__src__script.mlir",
    "outcome": "pass",
    "run_line": {
@@ -6613,9 +6614,9 @@
    "cgeist_cmd": "/mnt/d/HLS/Polygeist/build/bin/cgeist flat.cpp systolic_array.cpp utils.cpp '--function=*' -S --hls-annotate --raise-scf-to-affine --memref-fullrank --xlx-prelude -I /mnt/a/Vitis/2025.1/Vitis/common/technology/autopilot -D__SYNTHESIS__ -D__VITIS_HLS__ -DAESL_SYN -D__HLS_SYN__ -D__DSP48E1__ -include /mnt/a/Vitis/2025.1/Vitis/common/technology/autopilot/etc/autopilot_ssdm_op.h -Xclang -fxlx-bitwidth -Xclang -fxlx-apint-promote -Xclang -fnative-half-type -Xclang -fnative-half-arguments-and-returns -Xclang -Wno-unknown-attributes -Xclang -fno-threadsafe-statics -Xclang -fno-use-cxa-atexit --scalar-wrapper-abi --xlx-headers -resource-dir=/mnt/d/HLS/Polygeist/llvm-project/build/lib/clang/18 -D__SYNTHESIS__ -D__VITIS_HLS__ -D__HLS_SYN__ -DAESL_SYN -std=gnu++14 -I /home/peter/circt/tools/hls-est-validate/shim/real -I . -o '<mlir>'",
    "cgeist_status": "ok",
    "design": "class_ece8893_2022_fall/FLAT-acceleration__source_code__HLS",
-   "hlsest_bram": 348,
+   "hlsest_bram": 280,
    "kind": "hlsfactory",
-   "memrefs": 336,
+   "memrefs": 261,
    "mirror": "test/hls-est/Mirror/hlsfactory/class_ece8893_2022_fall/class_ece8893_2022_fall__FLAT-acceleration__source_code__HLS.mlir",
    "outcome": "pass",
    "run_line": {
@@ -6645,9 +6646,9 @@
    "cgeist_cmd": "/mnt/d/HLS/Polygeist/build/bin/cgeist systolic.cpp '--function=*' -S --hls-annotate --raise-scf-to-affine --memref-fullrank --xlx-prelude -I /mnt/a/Vitis/2025.1/Vitis/common/technology/autopilot -D__SYNTHESIS__ -D__VITIS_HLS__ -DAESL_SYN -D__HLS_SYN__ -D__DSP48E1__ -include /mnt/a/Vitis/2025.1/Vitis/common/technology/autopilot/etc/autopilot_ssdm_op.h -Xclang -fxlx-bitwidth -Xclang -fxlx-apint-promote -Xclang -fnative-half-type -Xclang -fnative-half-arguments-and-returns -Xclang -Wno-unknown-attributes -Xclang -fno-threadsafe-statics -Xclang -fno-use-cxa-atexit --scalar-wrapper-abi --xlx-headers -resource-dir=/mnt/d/HLS/Polygeist/llvm-project/build/lib/clang/18 -D__SYNTHESIS__ -D__VITIS_HLS__ -D__HLS_SYN__ -DAESL_SYN -std=gnu++14 -I /home/peter/circt/tools/hls-est-validate/shim/real -I . -o '<mlir>'",
    "cgeist_status": "ok",
    "design": "class_ece8893_2022_fall/FLAT-acceleration__source_code__HLS__test_systolic_array",
-   "hlsest_bram": 91,
+   "hlsest_bram": 167,
    "kind": "hlsfactory",
-   "memrefs": 66,
+   "memrefs": 129,
    "mirror": "test/hls-est/Mirror/hlsfactory/class_ece8893_2022_fall/class_ece8893_2022_fall__FLAT-acceleration__source_code__HLS__test_systolic_array.mlir",
    "outcome": "pass",
    "run_line": {
@@ -6761,7 +6762,7 @@
    "design": "class_ece8893_2022_fall/Ray-tracing__source_code__HLS",
    "hlsest_bram": 440,
    "kind": "hlsfactory",
-   "memrefs": 173,
+   "memrefs": 178,
    "mirror": "test/hls-est/Mirror/hlsfactory/class_ece8893_2022_fall/class_ece8893_2022_fall__Ray-tracing__source_code__HLS.mlir",
    "outcome": "pass",
    "run_line": {
@@ -6873,9 +6874,9 @@
    "cgeist_cmd": "/mnt/d/HLS/Polygeist/build/bin/cgeist utils.cpp conv_3x3_id3.cpp conv_3x3_id16.cpp conv_ver3.cpp conv_1x1.cpp yolov3_tiny.cpp '--function=*' -S --hls-annotate --raise-scf-to-affine --memref-fullrank --xlx-prelude -I /mnt/a/Vitis/2025.1/Vitis/common/technology/autopilot -D__SYNTHESIS__ -D__VITIS_HLS__ -DAESL_SYN -D__HLS_SYN__ -D__DSP48E1__ -include /mnt/a/Vitis/2025.1/Vitis/common/technology/autopilot/etc/autopilot_ssdm_op.h -Xclang -fxlx-bitwidth -Xclang -fxlx-apint-promote -Xclang -fnative-half-type -Xclang -fnative-half-arguments-and-returns -Xclang -Wno-unknown-attributes -Xclang -fno-threadsafe-statics -Xclang -fno-use-cxa-atexit --scalar-wrapper-abi --xlx-headers -resource-dir=/mnt/d/HLS/Polygeist/llvm-project/build/lib/clang/18 -D__SYNTHESIS__ -D__VITIS_HLS__ -D__HLS_SYN__ -DAESL_SYN -std=gnu++14 -I /home/peter/circt/tools/hls-est-validate/shim/real -I . -o '<mlir>'",
    "cgeist_status": "ok",
    "design": "class_ece8893_2022_fall/Yolo-v3-tiny__source_code__src_24Layers__yolov3_tiny_synth",
-   "hlsest_bram": 437,
+   "hlsest_bram": 1454,
    "kind": "hlsfactory",
-   "memrefs": 50,
+   "memrefs": 541,
    "mirror": "test/hls-est/Mirror/hlsfactory/class_ece8893_2022_fall/class_ece8893_2022_fall__Yolo-v3-tiny__source_code__src_24Layers__yolov3_tiny_synth.mlir",
    "outcome": "pass",
    "run_line": {
@@ -6963,9 +6964,9 @@
    "cgeist_cmd": "/mnt/d/HLS/Polygeist/build/bin/cgeist utils.cpp conv_3x3_id3.cpp conv_3x3_id16.cpp conv_ver3.cpp conv_1x1.cpp yolov3_tiny.cpp '--function=*' -S --hls-annotate --raise-scf-to-affine --memref-fullrank --xlx-prelude -I /mnt/a/Vitis/2025.1/Vitis/common/technology/autopilot -D__SYNTHESIS__ -D__VITIS_HLS__ -DAESL_SYN -D__HLS_SYN__ -D__DSP48E1__ -include /mnt/a/Vitis/2025.1/Vitis/common/technology/autopilot/etc/autopilot_ssdm_op.h -Xclang -fxlx-bitwidth -Xclang -fxlx-apint-promote -Xclang -fnative-half-type -Xclang -fnative-half-arguments-and-returns -Xclang -Wno-unknown-attributes -Xclang -fno-threadsafe-statics -Xclang -fno-use-cxa-atexit --scalar-wrapper-abi --xlx-headers -resource-dir=/mnt/d/HLS/Polygeist/llvm-project/build/lib/clang/18 -D__SYNTHESIS__ -D__VITIS_HLS__ -D__HLS_SYN__ -DAESL_SYN -std=gnu++14 -I /home/peter/circt/tools/hls-est-validate/shim/real -I . -o '<mlir>'",
    "cgeist_status": "ok",
    "design": "class_ece8893_2022_fall/Yolo-v3-tiny__source_code__src_4Layers__yolov3_tiny_synth",
-   "hlsest_bram": 317,
+   "hlsest_bram": 1534,
    "kind": "hlsfactory",
-   "memrefs": 16,
+   "memrefs": 207,
    "mirror": "test/hls-est/Mirror/hlsfactory/class_ece8893_2022_fall/class_ece8893_2022_fall__Yolo-v3-tiny__source_code__src_4Layers__yolov3_tiny_synth.mlir",
    "outcome": "pass",
    "run_line": {
@@ -7030,9 +7031,9 @@
    "cgeist_cmd": "/mnt/d/HLS/Polygeist/build/bin/cgeist cim_conv.cpp tiled_cim_conv.cpp utils.cpp '--function=*' -S --hls-annotate --raise-scf-to-affine --memref-fullrank --xlx-prelude -I /mnt/a/Vitis/2025.1/Vitis/common/technology/autopilot -D__SYNTHESIS__ -D__VITIS_HLS__ -DAESL_SYN -D__HLS_SYN__ -D__DSP48E1__ -include /mnt/a/Vitis/2025.1/Vitis/common/technology/autopilot/etc/autopilot_ssdm_op.h -Xclang -fxlx-bitwidth -Xclang -fxlx-apint-promote -Xclang -fnative-half-type -Xclang -fnative-half-arguments-and-returns -Xclang -Wno-unknown-attributes -Xclang -fno-threadsafe-statics -Xclang -fno-use-cxa-atexit --scalar-wrapper-abi --xlx-headers -resource-dir=/mnt/d/HLS/Polygeist/llvm-project/build/lib/clang/18 -D__SYNTHESIS__ -D__VITIS_HLS__ -D__HLS_SYN__ -DAESL_SYN -std=gnu++14 -I /home/peter/circt/tools/hls-est-validate/shim/real -I . -o '<mlir>'",
    "cgeist_status": "ok",
    "design": "class_ece8893_2023_spring/Analog-CIM__hls__optimized",
-   "hlsest_bram": 114,
+   "hlsest_bram": 34,
    "kind": "hlsfactory",
-   "memrefs": 6,
+   "memrefs": 173,
    "mirror": "test/hls-est/Mirror/hlsfactory/class_ece8893_2023_spring/class_ece8893_2023_spring__Analog-CIM__hls__optimized.mlir",
    "outcome": "pass",
    "run_line": {
@@ -7117,8 +7118,9 @@
    "test_mode": "full",
    "top": "_Z10tiled_convPA96_A96_8ap_fixedILi16ELi3EL9ap_q_mode5EL9ap_o_mode3ELi0EEPA48_A48_S2_S8_S8_S8_PA24_A24_S2_PA3_A3_A3_S2_PS2_PA1_SD_SG_PA32_A1_A1_S2_SG_PA16_SK_SG_PA96_SD_SG_PA96_SK_SG_SB_",
    "vitis": {
+    "bram": 116,
     "key": "6aafefad40ef63bc",
-    "status": "vitis failed: ERROR: [HLS 200-70] Cannot find any design unit to elaborate."
+    "status": "ok"
    }
   },
   {
@@ -7280,7 +7282,7 @@
    "design": "class_ece8893_2023_spring/FocusedACO__HLS__LocalSearchOptimized",
    "hlsest_bram": 83,
    "kind": "hlsfactory",
-   "memrefs": 9,
+   "memrefs": 10,
    "mirror": "test/hls-est/Mirror/hlsfactory/class_ece8893_2023_spring/class_ece8893_2023_spring__FocusedACO__HLS__LocalSearchOptimized.mlir",
    "outcome": "pass",
    "run_line": {
@@ -7368,7 +7370,7 @@
    "design": "class_ece8893_2023_spring/GradCAM__src_hls",
    "hlsest_bram": 122,
    "kind": "hlsfactory",
-   "memrefs": 156,
+   "memrefs": 155,
    "mirror": "test/hls-est/Mirror/hlsfactory/class_ece8893_2023_spring/class_ece8893_2023_spring__GradCAM__src_hls.mlir",
    "outcome": "pass",
    "run_line": {
@@ -7492,7 +7494,7 @@
    "design": "class_ece8893_2023_spring/GradCAM__src_hls__conv_3x3_s1",
    "hlsest_bram": 32,
    "kind": "hlsfactory",
-   "memrefs": 51,
+   "memrefs": 50,
    "mirror": "test/hls-est/Mirror/hlsfactory/class_ece8893_2023_spring/class_ece8893_2023_spring__GradCAM__src_hls__conv_3x3_s1.mlir",
    "outcome": "pass",
    "run_line": {
@@ -7690,7 +7692,7 @@
    "top": "genRandNums",
    "vitis": {
     "key": "554c4b6cc776229d",
-    "status": "vitis failed: ERROR: [HLS 200-70] Cannot find any design unit to elaborate."
+    "status": "vitis failed: ERROR: [HLS 207-812] './mersenneTwister.hpp' file not found (stage/Random_100_Paths/genRandNums.cpp:2:10)"
    }
   },
   {
@@ -7855,9 +7857,9 @@
    "cgeist_cmd": "/mnt/d/HLS/Polygeist/build/bin/cgeist conv_7x7.cpp tiled_conv.cpp utils.cpp '--function=*' -S --hls-annotate --raise-scf-to-affine --memref-fullrank --xlx-prelude -I /mnt/a/Vitis/2025.1/Vitis/common/technology/autopilot -D__SYNTHESIS__ -D__VITIS_HLS__ -DAESL_SYN -D__HLS_SYN__ -D__DSP48E1__ -include /mnt/a/Vitis/2025.1/Vitis/common/technology/autopilot/etc/autopilot_ssdm_op.h -Xclang -fxlx-bitwidth -Xclang -fxlx-apint-promote -Xclang -fnative-half-type -Xclang -fnative-half-arguments-and-returns -Xclang -Wno-unknown-attributes -Xclang -fno-threadsafe-statics -Xclang -fno-use-cxa-atexit --scalar-wrapper-abi --xlx-headers -resource-dir=/mnt/d/HLS/Polygeist/llvm-project/build/lib/clang/18 -D__SYNTHESIS__ -D__VITIS_HLS__ -D__HLS_SYN__ -DAESL_SYN -std=gnu++14 -I /home/peter/circt/tools/hls-est-validate/shim/real -I . -o '<mlir>'",
    "cgeist_status": "ok",
    "design": "class_ece8893_2023_spring/YOLOv4-Tiny-Accelerator__HLS_C__Project_L3",
-   "hlsest_bram": 17,
+   "hlsest_bram": 18,
    "kind": "hlsfactory",
-   "memrefs": 4,
+   "memrefs": 50,
    "mirror": "test/hls-est/Mirror/hlsfactory/class_ece8893_2023_spring/class_ece8893_2023_spring__YOLOv4-Tiny-Accelerator__HLS_C__Project_L3.mlir",
    "outcome": "pass",
    "run_line": {
@@ -7887,9 +7889,9 @@
    "cgeist_cmd": "/mnt/d/HLS/Polygeist/build/bin/cgeist conv_7x7.cpp tiled_conv.cpp utils.cpp '--function=*' -S --hls-annotate --raise-scf-to-affine --memref-fullrank --xlx-prelude -I /mnt/a/Vitis/2025.1/Vitis/common/technology/autopilot -D__SYNTHESIS__ -D__VITIS_HLS__ -DAESL_SYN -D__HLS_SYN__ -D__DSP48E1__ -include /mnt/a/Vitis/2025.1/Vitis/common/technology/autopilot/etc/autopilot_ssdm_op.h -Xclang -fxlx-bitwidth -Xclang -fxlx-apint-promote -Xclang -fnative-half-type -Xclang -fnative-half-arguments-and-returns -Xclang -Wno-unknown-attributes -Xclang -fno-threadsafe-statics -Xclang -fno-use-cxa-atexit --scalar-wrapper-abi --xlx-headers -resource-dir=/mnt/d/HLS/Polygeist/llvm-project/build/lib/clang/18 -D__SYNTHESIS__ -D__VITIS_HLS__ -D__HLS_SYN__ -DAESL_SYN -std=gnu++14 -I /home/peter/circt/tools/hls-est-validate/shim/real -I . -o '<mlir>'",
    "cgeist_status": "ok",
    "design": "class_ece8893_2023_spring/YOLOv4-Tiny-Accelerator__HLS_C__Project_L4",
-   "hlsest_bram": 11,
+   "hlsest_bram": 18,
    "kind": "hlsfactory",
-   "memrefs": 4,
+   "memrefs": 50,
    "mirror": "test/hls-est/Mirror/hlsfactory/class_ece8893_2023_spring/class_ece8893_2023_spring__YOLOv4-Tiny-Accelerator__HLS_C__Project_L4.mlir",
    "outcome": "pass",
    "run_line": {
@@ -7919,9 +7921,9 @@
    "cgeist_cmd": "/mnt/d/HLS/Polygeist/build/bin/cgeist conv_7x7.cpp tiled_conv.cpp utils.cpp '--function=*' -S --hls-annotate --raise-scf-to-affine --memref-fullrank --xlx-prelude -I /mnt/a/Vitis/2025.1/Vitis/common/technology/autopilot -D__SYNTHESIS__ -D__VITIS_HLS__ -DAESL_SYN -D__HLS_SYN__ -D__DSP48E1__ -include /mnt/a/Vitis/2025.1/Vitis/common/technology/autopilot/etc/autopilot_ssdm_op.h -Xclang -fxlx-bitwidth -Xclang -fxlx-apint-promote -Xclang -fnative-half-type -Xclang -fnative-half-arguments-and-returns -Xclang -Wno-unknown-attributes -Xclang -fno-threadsafe-statics -Xclang -fno-use-cxa-atexit --scalar-wrapper-abi --xlx-headers -resource-dir=/mnt/d/HLS/Polygeist/llvm-project/build/lib/clang/18 -D__SYNTHESIS__ -D__VITIS_HLS__ -D__HLS_SYN__ -DAESL_SYN -std=gnu++14 -I /home/peter/circt/tools/hls-est-validate/shim/real -I . -o '<mlir>'",
    "cgeist_status": "ok",
    "design": "class_ece8893_2023_spring/YOLOv4-Tiny-Accelerator__HLS_C__Project_L5",
-   "hlsest_bram": 15,
+   "hlsest_bram": 20,
    "kind": "hlsfactory",
-   "memrefs": 4,
+   "memrefs": 52,
    "mirror": "test/hls-est/Mirror/hlsfactory/class_ece8893_2023_spring/class_ece8893_2023_spring__YOLOv4-Tiny-Accelerator__HLS_C__Project_L5.mlir",
    "outcome": "pass",
    "run_line": {
@@ -7951,9 +7953,9 @@
    "cgeist_cmd": "/mnt/d/HLS/Polygeist/build/bin/cgeist conv_7x7.cpp tiled_conv.cpp utils.cpp '--function=*' -S --hls-annotate --raise-scf-to-affine --memref-fullrank --xlx-prelude -I /mnt/a/Vitis/2025.1/Vitis/common/technology/autopilot -D__SYNTHESIS__ -D__VITIS_HLS__ -DAESL_SYN -D__HLS_SYN__ -D__DSP48E1__ -include /mnt/a/Vitis/2025.1/Vitis/common/technology/autopilot/etc/autopilot_ssdm_op.h -Xclang -fxlx-bitwidth -Xclang -fxlx-apint-promote -Xclang -fnative-half-type -Xclang -fnative-half-arguments-and-returns -Xclang -Wno-unknown-attributes -Xclang -fno-threadsafe-statics -Xclang -fno-use-cxa-atexit --scalar-wrapper-abi --xlx-headers -resource-dir=/mnt/d/HLS/Polygeist/llvm-project/build/lib/clang/18 -D__SYNTHESIS__ -D__VITIS_HLS__ -D__HLS_SYN__ -DAESL_SYN -std=gnu++14 -I /home/peter/circt/tools/hls-est-validate/shim/real -I . -o '<mlir>'",
    "cgeist_status": "ok",
    "design": "class_ece8893_2023_spring/YOLOv4-Tiny-Accelerator__HLS_C__Project_L6",
-   "hlsest_bram": 10,
+   "hlsest_bram": 16,
    "kind": "hlsfactory",
-   "memrefs": 4,
+   "memrefs": 48,
    "mirror": "test/hls-est/Mirror/hlsfactory/class_ece8893_2023_spring/class_ece8893_2023_spring__YOLOv4-Tiny-Accelerator__HLS_C__Project_L6.mlir",
    "outcome": "pass",
    "run_line": {
@@ -8761,7 +8763,7 @@
    "design": "class_ece8893_spring_2025/barry_walker_lab_3",
    "hlsest_bram": 624,
    "kind": "hlsfactory",
-   "memrefs": 99,
+   "memrefs": 109,
    "mirror": "test/hls-est/Mirror/hlsfactory/class_ece8893_spring_2025/class_ece8893_spring_2025__barry_walker_lab_3.mlir",
    "outcome": "pass",
    "run_line": {
@@ -8967,7 +8969,7 @@
    "cgeist_cmd": "/mnt/d/HLS/Polygeist/build/bin/cgeist top.cpp '--function=*' -S --hls-annotate --raise-scf-to-affine --memref-fullrank --xlx-prelude -I /mnt/a/Vitis/2025.1/Vitis/common/technology/autopilot -D__SYNTHESIS__ -D__VITIS_HLS__ -DAESL_SYN -D__HLS_SYN__ -D__DSP48E1__ -include /mnt/a/Vitis/2025.1/Vitis/common/technology/autopilot/etc/autopilot_ssdm_op.h -Xclang -fxlx-bitwidth -Xclang -fxlx-apint-promote -Xclang -fnative-half-type -Xclang -fnative-half-arguments-and-returns -Xclang -Wno-unknown-attributes -Xclang -fno-threadsafe-statics -Xclang -fno-use-cxa-atexit --scalar-wrapper-abi --xlx-headers -resource-dir=/mnt/d/HLS/Polygeist/llvm-project/build/lib/clang/18 -D__SYNTHESIS__ -D__VITIS_HLS__ -D__HLS_SYN__ -DAESL_SYN -std=gnu++14 -I /home/peter/circt/tools/hls-est-validate/shim/real -I . -o '<mlir>'",
    "cgeist_status": "ok",
    "design": "class_ece8893_spring_2025/gabriel_lopez_lugo_ece8893_spring2025__gabriel_lopez_lugo_lab2",
-   "hlsest_bram": 386,
+   "hlsest_bram": 203,
    "kind": "hlsfactory",
    "memrefs": 143,
    "mirror": "test/hls-est/Mirror/hlsfactory/class_ece8893_spring_2025/class_ece8893_spring_2025__gabriel_lopez_lugo_ece8893_spring2025__gabriel_lopez_lugo_lab2.mlir",
@@ -9265,10 +9267,11 @@
    "cgeist_cmd": "/mnt/d/HLS/Polygeist/build/bin/cgeist top.cpp '--function=*' -S --hls-annotate --raise-scf-to-affine --memref-fullrank --xlx-prelude -I /mnt/a/Vitis/2025.1/Vitis/common/technology/autopilot -D__SYNTHESIS__ -D__VITIS_HLS__ -DAESL_SYN -D__HLS_SYN__ -D__DSP48E1__ -include /mnt/a/Vitis/2025.1/Vitis/common/technology/autopilot/etc/autopilot_ssdm_op.h -Xclang -fxlx-bitwidth -Xclang -fxlx-apint-promote -Xclang -fnative-half-type -Xclang -fnative-half-arguments-and-returns -Xclang -Wno-unknown-attributes -Xclang -fno-threadsafe-statics -Xclang -fno-use-cxa-atexit --scalar-wrapper-abi --xlx-headers -resource-dir=/mnt/d/HLS/Polygeist/llvm-project/build/lib/clang/18 -D__SYNTHESIS__ -D__VITIS_HLS__ -D__HLS_SYN__ -DAESL_SYN -std=gnu++14 -I /home/peter/circt/tools/hls-est-validate/shim/real -I . -o '<mlir>'",
    "cgeist_status": "ok",
    "design": "class_ece8893_spring_2025/lab2_hanchen",
+   "hlsest_bram": 68,
    "kind": "hlsfactory",
+   "memrefs": 6,
    "mirror": "test/hls-est/Mirror/hlsfactory/class_ece8893_spring_2025/class_ece8893_spring_2025__lab2_hanchen.mlir",
-   "outcome": "xfail",
-   "reason": "hls-est timeout (> 600 s)",
+   "outcome": "pass",
    "run_line": {
     "defines": [],
     "dir": "../Inputs/class_ece8893_spring_2025/lab2_hanchen",
@@ -9502,9 +9505,9 @@
    "cgeist_cmd": "/mnt/d/HLS/Polygeist/build/bin/cgeist top.cpp '--function=*' -S --hls-annotate --raise-scf-to-affine --memref-fullrank --xlx-prelude -I /mnt/a/Vitis/2025.1/Vitis/common/technology/autopilot -D__SYNTHESIS__ -D__VITIS_HLS__ -DAESL_SYN -D__HLS_SYN__ -D__DSP48E1__ -include /mnt/a/Vitis/2025.1/Vitis/common/technology/autopilot/etc/autopilot_ssdm_op.h -Xclang -fxlx-bitwidth -Xclang -fxlx-apint-promote -Xclang -fnative-half-type -Xclang -fnative-half-arguments-and-returns -Xclang -Wno-unknown-attributes -Xclang -fno-threadsafe-statics -Xclang -fno-use-cxa-atexit --scalar-wrapper-abi --xlx-headers -resource-dir=/mnt/d/HLS/Polygeist/llvm-project/build/lib/clang/18 -D__SYNTHESIS__ -D__VITIS_HLS__ -D__HLS_SYN__ -DAESL_SYN -std=gnu++14 -I /home/peter/circt/tools/hls-est-validate/shim/real -I . -o '<mlir>'",
    "cgeist_status": "ok",
    "design": "class_ece8893_spring_2025/michael_meng_ece_8893_spring_25__lab3",
-   "hlsest_bram": 26,
+   "hlsest_bram": 104,
    "kind": "hlsfactory",
-   "memrefs": 15,
+   "memrefs": 99,
    "mirror": "test/hls-est/Mirror/hlsfactory/class_ece8893_spring_2025/class_ece8893_spring_2025__michael_meng_ece_8893_spring_25__lab3.mlir",
    "outcome": "pass",
    "run_line": {
@@ -9621,9 +9624,9 @@
    "cgeist_cmd": "/mnt/d/HLS/Polygeist/build/bin/cgeist compute_SpMM.cpp generate_matrices.cpp top.cpp '--function=*' -S --hls-annotate --raise-scf-to-affine --memref-fullrank --xlx-prelude -I /mnt/a/Vitis/2025.1/Vitis/common/technology/autopilot -D__SYNTHESIS__ -D__VITIS_HLS__ -DAESL_SYN -D__HLS_SYN__ -D__DSP48E1__ -include /mnt/a/Vitis/2025.1/Vitis/common/technology/autopilot/etc/autopilot_ssdm_op.h -Xclang -fxlx-bitwidth -Xclang -fxlx-apint-promote -Xclang -fnative-half-type -Xclang -fnative-half-arguments-and-returns -Xclang -Wno-unknown-attributes -Xclang -fno-threadsafe-statics -Xclang -fno-use-cxa-atexit --scalar-wrapper-abi --xlx-headers -resource-dir=/mnt/d/HLS/Polygeist/llvm-project/build/lib/clang/18 -D__SYNTHESIS__ -D__VITIS_HLS__ -D__HLS_SYN__ -DAESL_SYN -std=gnu++14 -I /home/peter/circt/tools/hls-est-validate/shim/real -I . -o '<mlir>'",
    "cgeist_status": "ok",
    "design": "class_ece8893_spring_2025/mizanur_Lab3_2025",
-   "hlsest_bram": 268,
+   "hlsest_bram": 388,
    "kind": "hlsfactory",
-   "memrefs": 324,
+   "memrefs": 450,
    "mirror": "test/hls-est/Mirror/hlsfactory/class_ece8893_spring_2025/class_ece8893_spring_2025__mizanur_Lab3_2025.mlir",
    "outcome": "pass",
    "run_line": {
@@ -9951,9 +9954,9 @@
    "cgeist_cmd": "/mnt/d/HLS/Polygeist/build/bin/cgeist top.cpp '--function=*' -S --hls-annotate --raise-scf-to-affine --memref-fullrank --xlx-prelude -I /mnt/a/Vitis/2025.1/Vitis/common/technology/autopilot -D__SYNTHESIS__ -D__VITIS_HLS__ -DAESL_SYN -D__HLS_SYN__ -D__DSP48E1__ -include /mnt/a/Vitis/2025.1/Vitis/common/technology/autopilot/etc/autopilot_ssdm_op.h -Xclang -fxlx-bitwidth -Xclang -fxlx-apint-promote -Xclang -fnative-half-type -Xclang -fnative-half-arguments-and-returns -Xclang -Wno-unknown-attributes -Xclang -fno-threadsafe-statics -Xclang -fno-use-cxa-atexit --scalar-wrapper-abi --xlx-headers -resource-dir=/mnt/d/HLS/Polygeist/llvm-project/build/lib/clang/18 -D__SYNTHESIS__ -D__VITIS_HLS__ -D__HLS_SYN__ -DAESL_SYN -std=gnu++14 -I /home/peter/circt/tools/hls-est-validate/shim/real -I . -o '<mlir>'",
    "cgeist_status": "ok",
    "design": "class_ece8893_spring_2025/oscar_baglivio_lab_2",
-   "hlsest_bram": 431,
+   "hlsest_bram": 242,
    "kind": "hlsfactory",
-   "memrefs": 108,
+   "memrefs": 461,
    "mirror": "test/hls-est/Mirror/hlsfactory/class_ece8893_spring_2025/class_ece8893_spring_2025__oscar_baglivio_lab_2.mlir",
    "outcome": "pass",
    "run_line": {
@@ -10782,9 +10785,9 @@
    "cgeist_cmd": "/mnt/d/HLS/Polygeist/build/bin/cgeist src/DGN_compute.cc src/conv_layer.cc src/finalize.cc src/globals.cc src/linear.cc src/load_inputs.cc src/message_passing.cc src/node_embedding.cc '--function=*' -S --hls-annotate --raise-scf-to-affine --memref-fullrank --xlx-prelude -I /mnt/a/Vitis/2025.1/Vitis/common/technology/autopilot -D__SYNTHESIS__ -D__VITIS_HLS__ -DAESL_SYN -D__HLS_SYN__ -D__DSP48E1__ -include /mnt/a/Vitis/2025.1/Vitis/common/technology/autopilot/etc/autopilot_ssdm_op.h -Xclang -fxlx-bitwidth -Xclang -fxlx-apint-promote -Xclang -fnative-half-type -Xclang -fnative-half-arguments-and-returns -Xclang -Wno-unknown-attributes -Xclang -fno-threadsafe-statics -Xclang -fno-use-cxa-atexit --scalar-wrapper-abi --xlx-headers -resource-dir=/mnt/d/HLS/Polygeist/llvm-project/build/lib/clang/18 -D__SYNTHESIS__ -D__VITIS_HLS__ -D__HLS_SYN__ -DAESL_SYN -std=gnu++14 -I /home/peter/circt/tools/hls-est-validate/shim/real -I . -I src -o '<mlir>'",
    "cgeist_status": "ok",
    "design": "flowgnn/dgn",
-   "hlsest_bram": 12351,
+   "hlsest_bram": 12353,
    "kind": "hlsfactory",
-   "memrefs": 338,
+   "memrefs": 643,
    "mirror": "test/hls-est/Mirror/hlsfactory/flowgnn/flowgnn__dgn.mlir",
    "outcome": "pass",
    "run_line": {
@@ -10819,10 +10822,9 @@
    "cgeist_cmd": "/mnt/d/HLS/Polygeist/build/bin/cgeist src/GAT_compute.cc src/conv_layer.cc src/finalize.cc src/globals.cc src/linear.cc src/load_inputs.cc src/message_passing.cc src/node_embedding.cc '--function=*' -S --hls-annotate --raise-scf-to-affine --memref-fullrank --xlx-prelude -I /mnt/a/Vitis/2025.1/Vitis/common/technology/autopilot -D__SYNTHESIS__ -D__VITIS_HLS__ -DAESL_SYN -D__HLS_SYN__ -D__DSP48E1__ -include /mnt/a/Vitis/2025.1/Vitis/common/technology/autopilot/etc/autopilot_ssdm_op.h -Xclang -fxlx-bitwidth -Xclang -fxlx-apint-promote -Xclang -fnative-half-type -Xclang -fnative-half-arguments-and-returns -Xclang -Wno-unknown-attributes -Xclang -fno-threadsafe-statics -Xclang -fno-use-cxa-atexit --scalar-wrapper-abi --xlx-headers -resource-dir=/mnt/d/HLS/Polygeist/llvm-project/build/lib/clang/18 -D__SYNTHESIS__ -D__VITIS_HLS__ -D__HLS_SYN__ -DAESL_SYN -std=gnu++14 -I /home/peter/circt/tools/hls-est-validate/shim/real -I . -I src -o '<mlir>'",
    "cgeist_status": "ok",
    "design": "flowgnn/gat",
-   "hlsest_bram": 11360,
-   "hlsest_s": 362,
+   "hlsest_bram": 11437,
    "kind": "hlsfactory",
-   "memrefs": 1597,
+   "memrefs": 1598,
    "mirror": "test/hls-est/Mirror/hlsfactory/flowgnn/flowgnn__gat.mlir",
    "outcome": "pass",
    "run_line": {
@@ -10857,9 +10859,9 @@
    "cgeist_cmd": "/mnt/d/HLS/Polygeist/build/bin/cgeist src/GCN_compute.cc src/conv_layer.cc src/finalize.cc src/globals.cc src/linear.cc src/load_inputs.cc src/message_passing.cc src/node_embedding.cc '--function=*' -S --hls-annotate --raise-scf-to-affine --memref-fullrank --xlx-prelude -I /mnt/a/Vitis/2025.1/Vitis/common/technology/autopilot -D__SYNTHESIS__ -D__VITIS_HLS__ -DAESL_SYN -D__HLS_SYN__ -D__DSP48E1__ -include /mnt/a/Vitis/2025.1/Vitis/common/technology/autopilot/etc/autopilot_ssdm_op.h -Xclang -fxlx-bitwidth -Xclang -fxlx-apint-promote -Xclang -fnative-half-type -Xclang -fnative-half-arguments-and-returns -Xclang -Wno-unknown-attributes -Xclang -fno-threadsafe-statics -Xclang -fno-use-cxa-atexit --scalar-wrapper-abi --xlx-headers -resource-dir=/mnt/d/HLS/Polygeist/llvm-project/build/lib/clang/18 -D__SYNTHESIS__ -D__VITIS_HLS__ -D__HLS_SYN__ -DAESL_SYN -std=gnu++14 -I /home/peter/circt/tools/hls-est-validate/shim/real -I . -I src -o '<mlir>'",
    "cgeist_status": "ok",
    "design": "flowgnn/gcn",
-   "hlsest_bram": 12426,
+   "hlsest_bram": 12503,
    "kind": "hlsfactory",
-   "memrefs": 501,
+   "memrefs": 502,
    "mirror": "test/hls-est/Mirror/hlsfactory/flowgnn/flowgnn__gcn.mlir",
    "outcome": "pass",
    "run_line": {
@@ -10894,9 +10896,9 @@
    "cgeist_cmd": "/mnt/d/HLS/Polygeist/build/bin/cgeist src/GIN_compute.cc src/conv_layer.cc src/finalize.cc src/globals.cc src/linear.cc src/load_inputs.cc src/message_passing.cc src/node_embedding.cc '--function=*' -S --hls-annotate --raise-scf-to-affine --memref-fullrank --xlx-prelude -I /mnt/a/Vitis/2025.1/Vitis/common/technology/autopilot -D__SYNTHESIS__ -D__VITIS_HLS__ -DAESL_SYN -D__HLS_SYN__ -D__DSP48E1__ -include /mnt/a/Vitis/2025.1/Vitis/common/technology/autopilot/etc/autopilot_ssdm_op.h -Xclang -fxlx-bitwidth -Xclang -fxlx-apint-promote -Xclang -fnative-half-type -Xclang -fnative-half-arguments-and-returns -Xclang -Wno-unknown-attributes -Xclang -fno-threadsafe-statics -Xclang -fno-use-cxa-atexit --scalar-wrapper-abi --xlx-headers -resource-dir=/mnt/d/HLS/Polygeist/llvm-project/build/lib/clang/18 -D__SYNTHESIS__ -D__VITIS_HLS__ -D__HLS_SYN__ -DAESL_SYN -std=gnu++14 -I /home/peter/circt/tools/hls-est-validate/shim/real -I . -I src -o '<mlir>'",
    "cgeist_status": "ok",
    "design": "flowgnn/gin",
-   "hlsest_bram": 1146,
+   "hlsest_bram": 1160,
    "kind": "hlsfactory",
-   "memrefs": 1386,
+   "memrefs": 1387,
    "mirror": "test/hls-est/Mirror/hlsfactory/flowgnn/flowgnn__gin.mlir",
    "outcome": "pass",
    "run_line": {
@@ -10932,9 +10934,9 @@
    "cgeist_cmd": "/mnt/d/HLS/Polygeist/build/bin/cgeist src/PNA_compute.cc src/conv_layer.cc src/finalize.cc src/globals.cc src/linear.cc src/load_inputs.cc src/message_passing.cc src/node_embedding.cc '--function=*' -S --hls-annotate --raise-scf-to-affine --memref-fullrank --xlx-prelude -I /mnt/a/Vitis/2025.1/Vitis/common/technology/autopilot -D__SYNTHESIS__ -D__VITIS_HLS__ -DAESL_SYN -D__HLS_SYN__ -D__DSP48E1__ -include /mnt/a/Vitis/2025.1/Vitis/common/technology/autopilot/etc/autopilot_ssdm_op.h -Xclang -fxlx-bitwidth -Xclang -fxlx-apint-promote -Xclang -fnative-half-type -Xclang -fnative-half-arguments-and-returns -Xclang -Wno-unknown-attributes -Xclang -fno-threadsafe-statics -Xclang -fno-use-cxa-atexit --scalar-wrapper-abi --xlx-headers -resource-dir=/mnt/d/HLS/Polygeist/llvm-project/build/lib/clang/18 -D__SYNTHESIS__ -D__VITIS_HLS__ -D__HLS_SYN__ -DAESL_SYN -std=gnu++14 -I /home/peter/circt/tools/hls-est-validate/shim/real -I . -I src -o '<mlir>'",
    "cgeist_status": "ok",
    "design": "flowgnn/pna",
-   "hlsest_bram": 20126,
+   "hlsest_bram": 20199,
    "kind": "hlsfactory",
-   "memrefs": 336,
+   "memrefs": 636,
    "mirror": "test/hls-est/Mirror/hlsfactory/flowgnn/flowgnn__pna.mlir",
    "outcome": "pass",
    "run_line": {
@@ -12498,7 +12500,6 @@
    "cgeist_status": "ok",
    "design": "hlsyn-vitis/vivado-target__sources__adi",
    "hlsest_bram": 64,
-   "hlsest_s": 136,
    "kind": "hlsfactory",
    "memrefs": 4,
    "mirror": "test/hls-est/Mirror/hlsfactory/hlsyn-vitis/hlsyn-vitis__vivado-target__sources__adi.mlir",
@@ -12768,7 +12769,7 @@
    "cgeist_status": "ok",
    "design": "hlsyn-vitis/vivado-target__sources__doitgen-red",
    "hlsest_bram": 72,
-   "hlsest_s": 266,
+   "hlsest_s": 214,
    "kind": "hlsfactory",
    "memrefs": 3,
    "mirror": "test/hls-est/Mirror/hlsfactory/hlsyn-vitis/hlsyn-vitis__vivado-target__sources__doitgen-red.mlir",
@@ -12798,7 +12799,7 @@
    "cgeist_status": "ok",
    "design": "hlsyn-vitis/vivado-target__sources__doitgen",
    "hlsest_bram": 72,
-   "hlsest_s": 260,
+   "hlsest_s": 207,
    "kind": "hlsfactory",
    "memrefs": 3,
    "mirror": "test/hls-est/Mirror/hlsfactory/hlsyn-vitis/hlsyn-vitis__vivado-target__sources__doitgen.mlir",
@@ -12828,10 +12829,11 @@
    "cgeist_cmd": "/mnt/d/HLS/Polygeist/build/bin/cgeist fdtd-2d-large.cpp '--function=*' -S --hls-annotate --raise-scf-to-affine --memref-fullrank --xlx-prelude -I /mnt/a/Vitis/2025.1/Vitis/common/technology/autopilot -D__SYNTHESIS__ -D__VITIS_HLS__ -DAESL_SYN -D__HLS_SYN__ -D__DSP48E1__ -include /mnt/a/Vitis/2025.1/Vitis/common/technology/autopilot/etc/autopilot_ssdm_op.h -Xclang -fxlx-bitwidth -Xclang -fxlx-apint-promote -Xclang -fnative-half-type -Xclang -fnative-half-arguments-and-returns -Xclang -Wno-unknown-attributes -Xclang -fno-threadsafe-statics -Xclang -fno-use-cxa-atexit --scalar-wrapper-abi --xlx-headers -resource-dir=/mnt/d/HLS/Polygeist/llvm-project/build/lib/clang/18 -D__SYNTHESIS__ -D__VITIS_HLS__ -D__HLS_SYN__ -DAESL_SYN -std=gnu++14 -I /home/peter/circt/tools/hls-est-validate/shim/real -I . -o '<mlir>'",
    "cgeist_status": "ok",
    "design": "hlsyn-vitis/vivado-target__sources__fdtd-2d-large",
+   "hlsest_bram": 772,
    "kind": "hlsfactory",
+   "memrefs": 4,
    "mirror": "test/hls-est/Mirror/hlsfactory/hlsyn-vitis/hlsyn-vitis__vivado-target__sources__fdtd-2d-large.mlir",
-   "outcome": "xfail",
-   "reason": "hls-est timeout (> 600 s)",
+   "outcome": "pass",
    "run_line": {
     "defines": [],
     "dir": "../Inputs/hlsyn-vitis/vivado-target/sources/fdtd-2d-large",
@@ -12942,10 +12944,12 @@
    "cgeist_cmd": "/mnt/d/HLS/Polygeist/build/bin/cgeist gemm-p-large.cpp '--function=*' -S --hls-annotate --raise-scf-to-affine --memref-fullrank --xlx-prelude -I /mnt/a/Vitis/2025.1/Vitis/common/technology/autopilot -D__SYNTHESIS__ -D__VITIS_HLS__ -DAESL_SYN -D__HLS_SYN__ -D__DSP48E1__ -include /mnt/a/Vitis/2025.1/Vitis/common/technology/autopilot/etc/autopilot_ssdm_op.h -Xclang -fxlx-bitwidth -Xclang -fxlx-apint-promote -Xclang -fnative-half-type -Xclang -fnative-half-arguments-and-returns -Xclang -Wno-unknown-attributes -Xclang -fno-threadsafe-statics -Xclang -fno-use-cxa-atexit --scalar-wrapper-abi --xlx-headers -resource-dir=/mnt/d/HLS/Polygeist/llvm-project/build/lib/clang/18 -D__SYNTHESIS__ -D__VITIS_HLS__ -D__HLS_SYN__ -DAESL_SYN -std=gnu++14 -I /home/peter/circt/tools/hls-est-validate/shim/real -I . -o '<mlir>'",
    "cgeist_status": "ok",
    "design": "hlsyn-vitis/vivado-target__sources__gemm-p-large",
+   "hlsest_bram": 768,
+   "hlsest_s": 111,
    "kind": "hlsfactory",
+   "memrefs": 3,
    "mirror": "test/hls-est/Mirror/hlsfactory/hlsyn-vitis/hlsyn-vitis__vivado-target__sources__gemm-p-large.mlir",
-   "outcome": "xfail",
-   "reason": "hls-est timeout (> 600 s)",
+   "outcome": "pass",
    "run_line": {
     "defines": [],
     "dir": "../Inputs/hlsyn-vitis/vivado-target/sources/gemm-p-large",
@@ -13326,7 +13330,6 @@
    "cgeist_status": "ok",
    "design": "hlsyn-vitis/vivado-target__sources__seidel-2d",
    "hlsest_bram": 64,
-   "hlsest_s": 142,
    "kind": "hlsfactory",
    "memrefs": 1,
    "mirror": "test/hls-est/Mirror/hlsfactory/hlsyn-vitis/hlsyn-vitis__vivado-target__sources__seidel-2d.mlir",
@@ -13493,10 +13496,12 @@
    "cgeist_cmd": "/mnt/d/HLS/Polygeist/build/bin/cgeist symm-opt.cpp '--function=*' -S --hls-annotate --raise-scf-to-affine --memref-fullrank --xlx-prelude -I /mnt/a/Vitis/2025.1/Vitis/common/technology/autopilot -D__SYNTHESIS__ -D__VITIS_HLS__ -DAESL_SYN -D__HLS_SYN__ -D__DSP48E1__ -include /mnt/a/Vitis/2025.1/Vitis/common/technology/autopilot/etc/autopilot_ssdm_op.h -Xclang -fxlx-bitwidth -Xclang -fxlx-apint-promote -Xclang -fnative-half-type -Xclang -fnative-half-arguments-and-returns -Xclang -Wno-unknown-attributes -Xclang -fno-threadsafe-statics -Xclang -fno-use-cxa-atexit --scalar-wrapper-abi --xlx-headers -resource-dir=/mnt/d/HLS/Polygeist/llvm-project/build/lib/clang/18 -D__SYNTHESIS__ -D__VITIS_HLS__ -D__HLS_SYN__ -DAESL_SYN -std=gnu++14 -I /home/peter/circt/tools/hls-est-validate/shim/real -I . -o '<mlir>'",
    "cgeist_status": "ok",
    "design": "hlsyn-vitis/vivado-target__sources__symm-opt",
+   "hlsest_bram": 80,
+   "hlsest_s": 533,
    "kind": "hlsfactory",
+   "memrefs": 3,
    "mirror": "test/hls-est/Mirror/hlsfactory/hlsyn-vitis/hlsyn-vitis__vivado-target__sources__symm-opt.mlir",
-   "outcome": "xfail",
-   "reason": "hls-est timeout (> 600 s)",
+   "outcome": "pass",
    "run_line": {
     "defines": [],
     "dir": "../Inputs/hlsyn-vitis/vivado-target/sources/symm-opt",
@@ -13520,10 +13525,12 @@
    "cgeist_cmd": "/mnt/d/HLS/Polygeist/build/bin/cgeist symm.cpp '--function=*' -S --hls-annotate --raise-scf-to-affine --memref-fullrank --xlx-prelude -I /mnt/a/Vitis/2025.1/Vitis/common/technology/autopilot -D__SYNTHESIS__ -D__VITIS_HLS__ -DAESL_SYN -D__HLS_SYN__ -D__DSP48E1__ -include /mnt/a/Vitis/2025.1/Vitis/common/technology/autopilot/etc/autopilot_ssdm_op.h -Xclang -fxlx-bitwidth -Xclang -fxlx-apint-promote -Xclang -fnative-half-type -Xclang -fnative-half-arguments-and-returns -Xclang -Wno-unknown-attributes -Xclang -fno-threadsafe-statics -Xclang -fno-use-cxa-atexit --scalar-wrapper-abi --xlx-headers -resource-dir=/mnt/d/HLS/Polygeist/llvm-project/build/lib/clang/18 -D__SYNTHESIS__ -D__VITIS_HLS__ -D__HLS_SYN__ -DAESL_SYN -std=gnu++14 -I /home/peter/circt/tools/hls-est-validate/shim/real -I . -o '<mlir>'",
    "cgeist_status": "ok",
    "design": "hlsyn-vitis/vivado-target__sources__symm",
+   "hlsest_bram": 80,
+   "hlsest_s": 320,
    "kind": "hlsfactory",
+   "memrefs": 3,
    "mirror": "test/hls-est/Mirror/hlsfactory/hlsyn-vitis/hlsyn-vitis__vivado-target__sources__symm.mlir",
-   "outcome": "xfail",
-   "reason": "hls-est timeout (> 600 s)",
+   "outcome": "pass",
    "run_line": {
     "defines": [],
     "dir": "../Inputs/hlsyn-vitis/vivado-target/sources/symm",
@@ -13548,7 +13555,7 @@
    "cgeist_status": "ok",
    "design": "hlsyn-vitis/vivado-target__sources__syr2k",
    "hlsest_bram": 96,
-   "hlsest_s": 594,
+   "hlsest_s": 282,
    "kind": "hlsfactory",
    "memrefs": 3,
    "mirror": "test/hls-est/Mirror/hlsfactory/hlsyn-vitis/hlsyn-vitis__vivado-target__sources__syr2k.mlir",
@@ -13577,7 +13584,7 @@
    "cgeist_status": "ok",
    "design": "hlsyn-vitis/vivado-target__sources__syrk",
    "hlsest_bram": 64,
-   "hlsest_s": 341,
+   "hlsest_s": 205,
    "kind": "hlsfactory",
    "memrefs": 2,
    "mirror": "test/hls-est/Mirror/hlsfactory/hlsyn-vitis/hlsyn-vitis__vivado-target__sources__syrk.mlir",
@@ -13606,7 +13613,6 @@
    "cgeist_status": "ok",
    "design": "hlsyn-vitis/vivado-target__sources__trmm-opt",
    "hlsest_bram": 48,
-   "hlsest_s": 393,
    "kind": "hlsfactory",
    "memrefs": 2,
    "mirror": "test/hls-est/Mirror/hlsfactory/hlsyn-vitis/hlsyn-vitis__vivado-target__sources__trmm-opt.mlir",
@@ -13634,10 +13640,12 @@
    "cgeist_cmd": "/mnt/d/HLS/Polygeist/build/bin/cgeist trmm.cpp '--function=*' -S --hls-annotate --raise-scf-to-affine --memref-fullrank --xlx-prelude -I /mnt/a/Vitis/2025.1/Vitis/common/technology/autopilot -D__SYNTHESIS__ -D__VITIS_HLS__ -DAESL_SYN -D__HLS_SYN__ -D__DSP48E1__ -include /mnt/a/Vitis/2025.1/Vitis/common/technology/autopilot/etc/autopilot_ssdm_op.h -Xclang -fxlx-bitwidth -Xclang -fxlx-apint-promote -Xclang -fnative-half-type -Xclang -fnative-half-arguments-and-returns -Xclang -Wno-unknown-attributes -Xclang -fno-threadsafe-statics -Xclang -fno-use-cxa-atexit --scalar-wrapper-abi --xlx-headers -resource-dir=/mnt/d/HLS/Polygeist/llvm-project/build/lib/clang/18 -D__SYNTHESIS__ -D__VITIS_HLS__ -D__HLS_SYN__ -DAESL_SYN -std=gnu++14 -I /home/peter/circt/tools/hls-est-validate/shim/real -I . -o '<mlir>'",
    "cgeist_status": "ok",
    "design": "hlsyn-vitis/vivado-target__sources__trmm",
+   "hlsest_bram": 48,
+   "hlsest_s": 400,
    "kind": "hlsfactory",
+   "memrefs": 2,
    "mirror": "test/hls-est/Mirror/hlsfactory/hlsyn-vitis/hlsyn-vitis__vivado-target__sources__trmm.mlir",
-   "outcome": "xfail",
-   "reason": "hls-est timeout (> 600 s)",
+   "outcome": "pass",
    "run_line": {
     "defines": [],
     "dir": "../Inputs/hlsyn-vitis/vivado-target/sources/trmm",
@@ -13692,7 +13700,7 @@
    "cgeist_status": "ok",
    "design": "hp_fft_hls/n1024__UF16",
    "hlsest_bram": 640,
-   "hlsest_s": 458,
+   "hlsest_s": 123,
    "kind": "hlsfactory",
    "memrefs": 5860,
    "mirror": "test/hls-est/Mirror/hlsfactory/hp_fft_hls/hp_fft_hls__n1024__UF16.mlir",
@@ -13752,10 +13760,11 @@
    "cgeist_cmd": "/mnt/d/HLS/Polygeist/build/bin/cgeist FFT.cpp '--function=*' -S --hls-annotate --raise-scf-to-affine --memref-fullrank --xlx-prelude -I /mnt/a/Vitis/2025.1/Vitis/common/technology/autopilot -D__SYNTHESIS__ -D__VITIS_HLS__ -DAESL_SYN -D__HLS_SYN__ -D__DSP48E1__ -include /mnt/a/Vitis/2025.1/Vitis/common/technology/autopilot/etc/autopilot_ssdm_op.h -Xclang -fxlx-bitwidth -Xclang -fxlx-apint-promote -Xclang -fnative-half-type -Xclang -fnative-half-arguments-and-returns -Xclang -Wno-unknown-attributes -Xclang -fno-threadsafe-statics -Xclang -fno-use-cxa-atexit --scalar-wrapper-abi --xlx-headers -resource-dir=/mnt/d/HLS/Polygeist/llvm-project/build/lib/clang/18 -D__SYNTHESIS__ -D__VITIS_HLS__ -D__HLS_SYN__ -DAESL_SYN -std=gnu++14 -I /home/peter/circt/tools/hls-est-validate/shim/real -I . -o '<mlir>'",
    "cgeist_status": "ok",
    "design": "hp_fft_hls/n1024__UF32",
+   "hlsest_bram": 1024,
    "kind": "hlsfactory",
+   "memrefs": 6404,
    "mirror": "test/hls-est/Mirror/hlsfactory/hp_fft_hls/hp_fft_hls__n1024__UF32.mlir",
-   "outcome": "xfail",
-   "reason": "hls-est timeout (> 600 s)",
+   "outcome": "pass",
    "run_line": {
     "defines": [],
     "dir": "../Inputs/hp_fft_hls/n1024__UF32",
@@ -13992,7 +14001,6 @@
    "cgeist_status": "ok",
    "design": "hp_fft_hls/n256__UF32",
    "hlsest_bram": 0,
-   "hlsest_s": 244,
    "kind": "hlsfactory",
    "memrefs": 2398,
    "mirror": "test/hls-est/Mirror/hlsfactory/hp_fft_hls/hp_fft_hls__n256__UF32.mlir",
@@ -21215,8 +21223,9 @@
    "test_mode": "full",
    "top": "_Z9renderingP7ap_uintILi32EES1_",
    "vitis": {
+    "bram": 111,
     "key": "ca456ff3ec93ca98",
-    "status": "vitis failed: ERROR: [HLS 207-812] '../host/typedefs.h' file not found (D:/HLS/Polygeist/tools/cgeist/Test/HLS/hlsfactory/Inputs/rosetta/3d-rendering/src/sdsoc/rendering.cpp:"
+    "status": "ok"
    }
   },
   {
@@ -21271,8 +21280,9 @@
    "test_mode": "full",
    "top": "_Z8DigitRecP7ap_uintILi256EES1_Phi",
    "vitis": {
+    "bram": 543,
     "key": "cae07c8d2302b1cb",
-    "status": "vitis failed: ERROR: [HLS 207-812] '../host/typedefs.h' file not found (D:/HLS/Polygeist/tools/cgeist/Test/HLS/hlsfactory/Inputs/rosetta/digit-recognition/src/sdsoc/digitrec."
+    "status": "ok"
    }
   },
   {
@@ -21300,8 +21310,9 @@
    "test_mode": "full",
    "top": "_Z11face_detectPhPiS0_S0_S0_S0_",
    "vitis": {
-    "key": "0d26edc971e25cb3",
-    "status": "no ground truth for these sources (the Vitis entry was synthesised from other sources)"
+    "bram": 200,
+    "key": "26ab5d0560c427de",
+    "status": "ok"
    }
   },
   {
@@ -21357,8 +21368,8 @@
    "test_mode": "skip",
    "top": "optical_flow",
    "vitis": {
-    "key": "f07b039eaf9cafde",
-    "status": "no ground truth for these sources (the Vitis entry was synthesised from other sources)"
+    "key": "c5bdc8bf9ff0bd05",
+    "status": "vitis failed: ERROR: [HLS 207-812] 'hls_video.h' file not found (D:/HLS/Polygeist/tools/cgeist/Test/HLS/hlsfactory/Inputs/rosetta/optical-flow/src/sdsoc/optical_flow_original"
    }
   },
   {
@@ -21413,8 +21424,9 @@
    "test_mode": "full",
    "top": "_Z5SgdLRP7ap_uintILi512EEPS_ILi32EES1_bb",
    "vitis": {
+    "bram": 12,
     "key": "cbd5c3e034ec3eab",
-    "status": "vitis failed: ERROR: [HLS 207-812] '../host/typedefs.h' file not found (D:/HLS/Polygeist/tools/cgeist/Test/HLS/hlsfactory/Inputs/rosetta/spam-filter/src/sdsoc/sgd.h:9:10)"
+    "status": "ok"
    }
   },
   {
@@ -22920,7 +22932,7 @@
    "cgeist_status": "ok",
    "design": "stream_hls/ResidualBlock__opt4",
    "hlsest_bram": 1248,
-   "hlsest_s": 385,
+   "hlsest_s": 390,
    "kind": "hlsfactory",
    "memrefs": 12,
    "mirror": "test/hls-est/Mirror/hlsfactory/stream_hls/stream_hls__ResidualBlock__opt4.mlir",
@@ -25564,11 +25576,13 @@
   },
   {
    "cgeist_cmd": "/mnt/d/HLS/Polygeist/build/bin/cgeist cxx.cpp '--function=*' -S --hls-annotate --raise-scf-to-affine --memref-fullrank --xlx-prelude -I /mnt/a/Vitis/2025.1/Vitis/common/technology/autopilot -D__SYNTHESIS__ -D__VITIS_HLS__ -DAESL_SYN -D__HLS_SYN__ -D__DSP48E1__ -include /mnt/a/Vitis/2025.1/Vitis/common/technology/autopilot/etc/autopilot_ssdm_op.h -Xclang -fxlx-bitwidth -Xclang -fxlx-apint-promote -Xclang -fnative-half-type -Xclang -fnative-half-arguments-and-returns -Xclang -Wno-unknown-attributes -Xclang -fno-threadsafe-statics -Xclang -fno-use-cxa-atexit --scalar-wrapper-abi --xlx-headers -resource-dir=/mnt/d/HLS/Polygeist/llvm-project/build/lib/clang/18 -D__SYNTHESIS__ -D__VITIS_HLS__ -D__HLS_SYN__ -DAESL_SYN -std=gnu++14 -I /home/peter/circt/tools/hls-est-validate/shim/real -I . -o /home/peter/hls-est-work/mirror-cgeist/placement__cxx.cpp.mlir",
-   "cgeist_status": "cgeist crash",
+   "cgeist_status": "ok",
    "design": null,
+   "hlsest_bram": 0,
    "kind": "feature",
-   "outcome": "cgeist failure",
-   "reason": "cgeist crash",
+   "memrefs": 0,
+   "mirror": "test/hls-est/Mirror/placement/cxx.mlir",
+   "outcome": "pass",
    "run_line": {
     "defines": [],
     "dir": ".",
@@ -26153,7 +26167,7 @@
    "design": null,
    "hlsest_bram": 2,
    "kind": "feature",
-   "memrefs": 5,
+   "memrefs": 19,
    "mirror": "test/hls-est/Mirror/realheaders/header-pragma.mlir",
    "outcome": "pass",
    "run_line": {
@@ -26232,6 +26246,28 @@
     ]
    },
    "test": "realheaders/math-core.cpp",
+   "top": null,
+   "vitis": null
+  },
+  {
+   "cgeist_cmd": "/mnt/d/HLS/Polygeist/build/bin/cgeist memcpy-typed.cpp '--function=*' -S --hls-annotate --raise-scf-to-affine --memref-fullrank --xlx-prelude -I /mnt/a/Vitis/2025.1/Vitis/common/technology/autopilot -D__SYNTHESIS__ -D__VITIS_HLS__ -DAESL_SYN -D__HLS_SYN__ -D__DSP48E1__ -include /mnt/a/Vitis/2025.1/Vitis/common/technology/autopilot/etc/autopilot_ssdm_op.h -Xclang -fxlx-bitwidth -Xclang -fxlx-apint-promote -Xclang -fnative-half-type -Xclang -fnative-half-arguments-and-returns -Xclang -Wno-unknown-attributes -Xclang -fno-threadsafe-statics -Xclang -fno-use-cxa-atexit --scalar-wrapper-abi --xlx-headers -resource-dir=/mnt/d/HLS/Polygeist/llvm-project/build/lib/clang/18 -D__SYNTHESIS__ -D__VITIS_HLS__ -D__HLS_SYN__ -DAESL_SYN -std=gnu++14 -I /home/peter/circt/tools/hls-est-validate/shim/real -I . -o /home/peter/hls-est-work/mirror-cgeist/realheaders__memcpy-typed.cpp.mlir",
+   "cgeist_status": "ok",
+   "design": null,
+   "hlsest_bram": 0,
+   "kind": "feature",
+   "memrefs": 1,
+   "mirror": "test/hls-est/Mirror/realheaders/memcpy-typed.mlir",
+   "outcome": "pass",
+   "run_line": {
+    "defines": [],
+    "dir": ".",
+    "function": "*",
+    "includes": [],
+    "sources": [
+     "%s"
+    ]
+   },
+   "test": "realheaders/memcpy-typed.cpp",
    "top": null,
    "vitis": null
   },
@@ -26446,6 +26482,28 @@
    "vitis": null
   },
   {
+   "cgeist_cmd": "/mnt/d/HLS/Polygeist/build/bin/cgeist array-of-struct-pointer-to-row.cpp '--function=*' -S --hls-annotate --raise-scf-to-affine --memref-fullrank --xlx-prelude -I /mnt/a/Vitis/2025.1/Vitis/common/technology/autopilot -D__SYNTHESIS__ -D__VITIS_HLS__ -DAESL_SYN -D__HLS_SYN__ -D__DSP48E1__ -include /mnt/a/Vitis/2025.1/Vitis/common/technology/autopilot/etc/autopilot_ssdm_op.h -Xclang -fxlx-bitwidth -Xclang -fxlx-apint-promote -Xclang -fnative-half-type -Xclang -fnative-half-arguments-and-returns -Xclang -Wno-unknown-attributes -Xclang -fno-threadsafe-statics -Xclang -fno-use-cxa-atexit --scalar-wrapper-abi --xlx-headers -resource-dir=/mnt/d/HLS/Polygeist/llvm-project/build/lib/clang/18 -D__SYNTHESIS__ -D__VITIS_HLS__ -D__HLS_SYN__ -DAESL_SYN -std=gnu++14 -I /home/peter/circt/tools/hls-est-validate/shim/real -I . -o /home/peter/hls-est-work/mirror-cgeist/regressions__array-of-struct-pointer-to-row.cpp.mlir",
+   "cgeist_status": "ok",
+   "design": null,
+   "hlsest_bram": 0,
+   "kind": "feature",
+   "memrefs": 3,
+   "mirror": "test/hls-est/Mirror/regressions/array-of-struct-pointer-to-row.mlir",
+   "outcome": "pass",
+   "run_line": {
+    "defines": [],
+    "dir": ".",
+    "function": "*",
+    "includes": [],
+    "sources": [
+     "%s"
+    ]
+   },
+   "test": "regressions/array-of-struct-pointer-to-row.cpp",
+   "top": "_Z3topPiS_",
+   "vitis": null
+  },
+  {
    "cgeist_cmd": "/mnt/d/HLS/Polygeist/build/bin/cgeist array-partition-merge.c '--function=*' -S --hls-annotate --raise-scf-to-affine --memref-fullrank --xlx-prelude -I /mnt/a/Vitis/2025.1/Vitis/common/technology/autopilot -D__SYNTHESIS__ -D__VITIS_HLS__ -DAESL_SYN -D__HLS_SYN__ -D__DSP48E1__ -include /mnt/a/Vitis/2025.1/Vitis/common/technology/autopilot/etc/autopilot_ssdm_op.h -Xclang -fxlx-bitwidth -Xclang -fxlx-apint-promote -Xclang -fnative-half-type -Xclang -fnative-half-arguments-and-returns -Xclang -Wno-unknown-attributes -Xclang -fno-threadsafe-statics -Xclang -fno-use-cxa-atexit --scalar-wrapper-abi --xlx-headers -resource-dir=/mnt/d/HLS/Polygeist/llvm-project/build/lib/clang/18 -D__SYNTHESIS__ -D__VITIS_HLS__ -D__HLS_SYN__ -DAESL_SYN -std=gnu99 -I /home/peter/circt/tools/hls-est-validate/shim/real -I . -o /home/peter/hls-est-work/mirror-cgeist/regressions__array-partition-merge.c.mlir",
    "cgeist_status": "ok",
    "design": null,
@@ -26464,6 +26522,29 @@
     ]
    },
    "test": "regressions/array-partition-merge.c",
+   "top": null,
+   "vitis": null
+  },
+  {
+   "cgeist_cmd": "/mnt/d/HLS/Polygeist/build/bin/cgeist auto-inline-cross-unit.cpp Inputs/auto-inline-cross-unit-callee.cpp '--function=*' -S --hls-annotate --raise-scf-to-affine --memref-fullrank --xlx-prelude -I /mnt/a/Vitis/2025.1/Vitis/common/technology/autopilot -D__SYNTHESIS__ -D__VITIS_HLS__ -DAESL_SYN -D__HLS_SYN__ -D__DSP48E1__ -include /mnt/a/Vitis/2025.1/Vitis/common/technology/autopilot/etc/autopilot_ssdm_op.h -Xclang -fxlx-bitwidth -Xclang -fxlx-apint-promote -Xclang -fnative-half-type -Xclang -fnative-half-arguments-and-returns -Xclang -Wno-unknown-attributes -Xclang -fno-threadsafe-statics -Xclang -fno-use-cxa-atexit --scalar-wrapper-abi --xlx-headers -resource-dir=/mnt/d/HLS/Polygeist/llvm-project/build/lib/clang/18 -D__SYNTHESIS__ -D__VITIS_HLS__ -D__HLS_SYN__ -DAESL_SYN -std=gnu++14 -I /home/peter/circt/tools/hls-est-validate/shim/real -I . -o /home/peter/hls-est-work/mirror-cgeist/regressions__auto-inline-cross-unit.cpp.mlir",
+   "cgeist_status": "ok",
+   "design": null,
+   "hlsest_bram": 4,
+   "kind": "feature",
+   "memrefs": 1,
+   "mirror": "test/hls-est/Mirror/regressions/auto-inline-cross-unit.mlir",
+   "outcome": "pass",
+   "run_line": {
+    "defines": [],
+    "dir": ".",
+    "function": "*",
+    "includes": [],
+    "sources": [
+     "%s",
+     "Inputs/auto-inline-cross-unit-callee.cpp"
+    ]
+   },
+   "test": "regressions/auto-inline-cross-unit.cpp",
    "top": null,
    "vitis": null
   },
@@ -26954,6 +27035,28 @@
    "vitis": null
   },
   {
+   "cgeist_cmd": "/mnt/d/HLS/Polygeist/build/bin/cgeist initlist-scalar-wrapper.cpp '--function=*' -S --hls-annotate --raise-scf-to-affine --memref-fullrank --xlx-prelude -I /mnt/a/Vitis/2025.1/Vitis/common/technology/autopilot -D__SYNTHESIS__ -D__VITIS_HLS__ -DAESL_SYN -D__HLS_SYN__ -D__DSP48E1__ -include /mnt/a/Vitis/2025.1/Vitis/common/technology/autopilot/etc/autopilot_ssdm_op.h -Xclang -fxlx-bitwidth -Xclang -fxlx-apint-promote -Xclang -fnative-half-type -Xclang -fnative-half-arguments-and-returns -Xclang -Wno-unknown-attributes -Xclang -fno-threadsafe-statics -Xclang -fno-use-cxa-atexit --scalar-wrapper-abi --xlx-headers -resource-dir=/mnt/d/HLS/Polygeist/llvm-project/build/lib/clang/18 -D__SYNTHESIS__ -D__VITIS_HLS__ -D__HLS_SYN__ -DAESL_SYN -std=gnu++14 -I /home/peter/circt/tools/hls-est-validate/shim/real -I . -o /home/peter/hls-est-work/mirror-cgeist/regressions__initlist-scalar-wrapper.cpp.mlir",
+   "cgeist_status": "ok",
+   "design": null,
+   "hlsest_bram": 0,
+   "kind": "feature",
+   "memrefs": 0,
+   "mirror": "test/hls-est/Mirror/regressions/initlist-scalar-wrapper.mlir",
+   "outcome": "pass",
+   "run_line": {
+    "defines": [],
+    "dir": ".",
+    "function": "*",
+    "includes": [],
+    "sources": [
+     "%s"
+    ]
+   },
+   "test": "regressions/initlist-scalar-wrapper.cpp",
+   "top": "_Z3add1VS_",
+   "vitis": null
+  },
+  {
    "cgeist_cmd": "/mnt/d/HLS/Polygeist/build/bin/cgeist inline-off-kept-call.c '--function=*' -S --hls-annotate --raise-scf-to-affine --memref-fullrank --xlx-prelude -I /mnt/a/Vitis/2025.1/Vitis/common/technology/autopilot -D__SYNTHESIS__ -D__VITIS_HLS__ -DAESL_SYN -D__HLS_SYN__ -D__DSP48E1__ -include /mnt/a/Vitis/2025.1/Vitis/common/technology/autopilot/etc/autopilot_ssdm_op.h -Xclang -fxlx-bitwidth -Xclang -fxlx-apint-promote -Xclang -fnative-half-type -Xclang -fnative-half-arguments-and-returns -Xclang -Wno-unknown-attributes -Xclang -fno-threadsafe-statics -Xclang -fno-use-cxa-atexit --scalar-wrapper-abi --xlx-headers -resource-dir=/mnt/d/HLS/Polygeist/llvm-project/build/lib/clang/18 -D__SYNTHESIS__ -D__VITIS_HLS__ -D__HLS_SYN__ -DAESL_SYN -std=gnu99 -I /home/peter/circt/tools/hls-est-validate/shim/real -I . -o /home/peter/hls-est-work/mirror-cgeist/regressions__inline-off-kept-call.c.mlir",
    "cgeist_status": "ok",
    "design": null,
@@ -27243,11 +27346,13 @@
   },
   {
    "cgeist_cmd": "/mnt/d/HLS/Polygeist/build/bin/cgeist orig-name-operator-crash.cpp '--function=*' -S --hls-annotate --raise-scf-to-affine --memref-fullrank --xlx-prelude -I /mnt/a/Vitis/2025.1/Vitis/common/technology/autopilot -D__SYNTHESIS__ -D__VITIS_HLS__ -DAESL_SYN -D__HLS_SYN__ -D__DSP48E1__ -include /mnt/a/Vitis/2025.1/Vitis/common/technology/autopilot/etc/autopilot_ssdm_op.h -Xclang -fxlx-bitwidth -Xclang -fxlx-apint-promote -Xclang -fnative-half-type -Xclang -fnative-half-arguments-and-returns -Xclang -Wno-unknown-attributes -Xclang -fno-threadsafe-statics -Xclang -fno-use-cxa-atexit --scalar-wrapper-abi --xlx-headers -resource-dir=/mnt/d/HLS/Polygeist/llvm-project/build/lib/clang/18 -D__SYNTHESIS__ -D__VITIS_HLS__ -D__HLS_SYN__ -DAESL_SYN -std=gnu++14 -I /home/peter/circt/tools/hls-est-validate/shim/real -I . -o /home/peter/hls-est-work/mirror-cgeist/regressions__orig-name-operator-crash.cpp.mlir",
-   "cgeist_status": "cgeist crash",
+   "cgeist_status": "ok",
    "design": null,
+   "hlsest_bram": 0,
    "kind": "feature",
-   "outcome": "cgeist failure",
-   "reason": "cgeist crash",
+   "memrefs": 0,
+   "mirror": "test/hls-est/Mirror/regressions/orig-name-operator-crash.mlir",
+   "outcome": "pass",
    "run_line": {
     "defines": [],
     "dir": ".",
@@ -27347,6 +27452,28 @@
    },
    "test": "regressions/predec-lvalue.cpp",
    "top": "_Z3cntv",
+   "vitis": null
+  },
+  {
+   "cgeist_cmd": "/mnt/d/HLS/Polygeist/build/bin/cgeist range-for-array-ref.cpp '--function=*' -S --hls-annotate --raise-scf-to-affine --memref-fullrank --xlx-prelude -I /mnt/a/Vitis/2025.1/Vitis/common/technology/autopilot -D__SYNTHESIS__ -D__VITIS_HLS__ -DAESL_SYN -D__HLS_SYN__ -D__DSP48E1__ -include /mnt/a/Vitis/2025.1/Vitis/common/technology/autopilot/etc/autopilot_ssdm_op.h -Xclang -fxlx-bitwidth -Xclang -fxlx-apint-promote -Xclang -fnative-half-type -Xclang -fnative-half-arguments-and-returns -Xclang -Wno-unknown-attributes -Xclang -fno-threadsafe-statics -Xclang -fno-use-cxa-atexit --scalar-wrapper-abi --xlx-headers -resource-dir=/mnt/d/HLS/Polygeist/llvm-project/build/lib/clang/18 -D__SYNTHESIS__ -D__VITIS_HLS__ -D__HLS_SYN__ -DAESL_SYN -std=gnu++14 -I /home/peter/circt/tools/hls-est-validate/shim/real -I . -o /home/peter/hls-est-work/mirror-cgeist/regressions__range-for-array-ref.cpp.mlir",
+   "cgeist_status": "ok",
+   "design": null,
+   "hlsest_bram": 0,
+   "kind": "feature",
+   "memrefs": 0,
+   "mirror": "test/hls-est/Mirror/regressions/range-for-array-ref.mlir",
+   "outcome": "pass",
+   "run_line": {
+    "defines": [],
+    "dir": ".",
+    "function": "*",
+    "includes": [],
+    "sources": [
+     "%s"
+    ]
+   },
+   "test": "regressions/range-for-array-ref.cpp",
+   "top": null,
    "vitis": null
   },
   {
