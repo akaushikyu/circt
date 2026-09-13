@@ -15,11 +15,14 @@ columns):
       wall-clock seconds of the hls-est run (elapsed_s of the --hlsest result files; a later
       file overrides an earlier one, e.g. a no-timeout re-run of the designs that timed out)
       and of the Vitis csynth run (elapsed_s in results/vitis.json, kept from the original run
-      for cached results); empty when there is no such run (Peter, 2026-10-20).
+      for cached results); empty when there is no such run (Peter, 2026-10-20);
+  Note
+      free text per design from --notes (a JSON object {dataset/benchmark: text}), e.g. where a
+      number comes from a no-timeout re-run (Peter, 2026-10-21); empty otherwise.
 
 Usage: python3 make_vitis_comparison_csv.py [--comparison results/comparison.csv]
                                              [--vitis results/vitis.json] [--out <csv>]
-                                             [--hlsest <run json> ...]
+                                             [--hlsest <run json> ...] [--notes <json>]
 """
 
 import argparse
@@ -31,7 +34,7 @@ HERE = Path(__file__).resolve().parent
 VITIS_COLUMNS = ("BRAM", "DSP", "FF", "LUT", "BRAM_util_pct", "DSP_util_pct", "FF_util_pct",
                  "LUT_util_pct")
 HEADER = ["dataset", "benchmark", *VITIS_COLUMNS, "BRAM (prediction, shim)", "Diff",
-          "hls-est time (s)", "Vitis csynth time (s)"]
+          "hls-est time (s)", "Vitis csynth time (s)", "Note"]
 
 
 def seconds(value):
@@ -59,7 +62,7 @@ def prediction_cell(row, vitis_ok, vitis_status):
     return predicted
 
 
-def build_rows(comparison, vitis, times):
+def build_rows(comparison, vitis, times, notes):
     for row in comparison:
         key = f"{row['dataset']}/{row['benchmark']}"
         result = vitis.get(key, {})
@@ -70,7 +73,7 @@ def build_rows(comparison, vitis, times):
         yield [row["dataset"], row["benchmark"], *[totals.get(c, "") for c in VITIS_COLUMNS],
                prediction_cell(row, vitis_ok, vitis_status),
                row["diff_hlsest_minus_vitis"] if compared else "",
-               seconds(times.get(key)), seconds(result.get("elapsed_s"))]
+               seconds(times.get(key)), seconds(result.get("elapsed_s")), notes.get(key, "")]
 
 
 def main():
@@ -80,10 +83,12 @@ def main():
     ap.add_argument("--out", default=HERE.parent.parent / "hls-doc/hls-est-vs-vitis.csv")
     ap.add_argument("--hlsest", nargs="*", default=[],
                     help="hls-est result files for the time column (later ones override)")
+    ap.add_argument("--notes", default="", help="JSON object {dataset/benchmark: text} for the Note column")
     args = ap.parse_args()
     comparison = list(csv.DictReader(open(args.comparison)))
     vitis = json.load(open(args.vitis))
-    rows = list(build_rows(comparison, vitis, hlsest_times(args.hlsest)))
+    notes = json.load(open(args.notes)) if args.notes else {}
+    rows = list(build_rows(comparison, vitis, hlsest_times(args.hlsest), notes))
     with open(args.out, "w", newline="") as f:
         writer = csv.writer(f, lineterminator="\n")
         writer.writerow(HEADER)

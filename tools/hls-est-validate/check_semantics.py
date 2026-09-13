@@ -2038,7 +2038,10 @@ class Checker:
         return d
 
     def ref_cache_key(self, kind, ddir, flags, mflags_hint, rec, plan, top_fn, tag, extra):
+        # The reference's own source files: several probes (or designs) in one directory share the
+        # directory digest and can share a top signature, so the digest alone does not tell them apart.
         parts = [REF_CACHE_VERSION, kind, tag, " ".join(flags), " ".join(extra), top_fn, rec.get("top") or "",
+                 " ".join(str(s) for s in (rec.get("sources") or [])),
                  spec_header(plan), DRIVER_MAIN, REF_THUNK_REAL if kind == "real" else REF_THUNK_CXX,
                  " ".join(THUNK_SHIELDED),
                  mflags_hint, self._files_digest(ddir)]
