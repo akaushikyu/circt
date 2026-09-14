@@ -26,7 +26,7 @@ Compiler Explorer otherwise writes every compile to the Windows temp folder.
 
 A third entry, **hls-est (current)** (`compiler.hlsestcurrent`), runs
 `~/hls-est-demo/current/hls_est_ce_current.sh`: the same driver with today's tools frozen there
-(the installed real-Vitis-headers cgeist and a round-6 hls-est), while `hls-est` keeps the demo's
+(the installed real-Vitis-headers cgeist and the W9 round-8 hls-est, refreshed 2026-10-21), while `hls-est` keeps the demo's
 frozen tools. The instance also enables `llvm` (`--language c++ llvm`, a view-only `/bin/cat`
 entry in `etc/config/llvm.local.properties`) so a design's Vitis IR stages (`db/a.*.ll` of a
 Vitis run) can be opened next to the source.
@@ -38,7 +38,8 @@ branch `rtl-backend` (worktree `~/rtlspike/circt`) with its tools frozen in `~/h
 (hls-est and circt-opt from the float build, the installed cgeist). It prints the interface, hls-est's
 LoopSchedule and the Verilog (`--show=verilog|schedule|interface`, `--full`). Examples `HLS_5` (vadd),
 `HLS_6` (float dot product, HardFloat units), `HLS_7` (local array as a RAM module) and `HLS_8`
-(polybench gemm) are written for it.
+(polybench gemm) are written for it. `HLS_9_sha` (chstone/sha with sha.h inlined) is written for
+"hls-est (current)": 7 BRAM_18K = Vitis per array (the frozen demo compiler gives 24).
 
 A fifth entry, **Vitis HLS 2025.1 IR (csynth, xc7z020)** (`compiler.vitisir`), runs `vitis_ir_ce.py`:
 Vitis HLS csynth on the source with the ground-truth configuration (through
