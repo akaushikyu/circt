@@ -40,6 +40,16 @@ LoopSchedule and the Verilog (`--show=verilog|schedule|interface`, `--full`). Ex
 `HLS_6` (float dot product, HardFloat units), `HLS_7` (local array as a RAM module) and `HLS_8`
 (polybench gemm) are written for it.
 
+A fifth entry, **Vitis HLS 2025.1 IR (csynth, xc7z020)** (`compiler.vitisir`), runs `vitis_ir_ce.py`:
+Vitis HLS csynth on the source with the ground-truth configuration (through
+`tools/hls-est-validate/vitis_adhoc.py`, as an experiment `ce_<source hash>`, never the ground-truth
+cache), then prints the csynth summary (BRAM/DSP/FF/LUT, memories, loops) and one of Vitis's own LLVM
+IR stages from the run's `db/`: `--stage=front` (a.g.ld.0.ll), `link` (a.g.ld.5.gdce.ll), `o1`, `o2`
+(default), `o3` (a.o.N.ll); `--function=NAME` keeps only matching definitions, `--metadata` keeps the
+debug metadata. The first view of a source waits for Vitis (about 30 s to a few minutes; the instance's
+`compileTimeoutMs` is 900000 in `etc/config/compiler-explorer.local.properties`), later views reuse the
+run. Put it next to the hls-est compiler to compare a design's IR with the decisions hls-est makes.
+
 The compiler dropdown has **cgeist** (HLS C/C++ -> affine MLIR: the front end alone, with the
 harness's flags; its options box takes cgeist flags) and **hls-est** (the same cgeist step, then
 the hls-est pipeline and the BRAM report). Both run this driver; `compiler.cgeistlocal.options=--emit=cgeist`
