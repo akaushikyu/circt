@@ -219,6 +219,7 @@ const KeySpec kSchema[] = {
   {"tool.hls.partitioning.inference.rotating_banks", KeyKind::Bool, "", "A rotating access is charged to one bank (off: to every bank)", "Q-08", SPLIT, "", kNoLimit, kNoLimit, false},
   {"tool.hls.partitioning.inference.max_scanned_factor", KeyKind::UInt, "", "Factors above this are not scanned one by one (a guard)", "Q-08", SPLIT, "", 1, kNoLimit, false},
   {"tool.hls.partitioning.steer_affine_loads", KeyKind::Bool, "", "Unrolled copies of a partitioned load with distinct constant offsets read each bank once", "", BANK, "", kNoLimit, kNoLimit, false},
+  {"tool.hls.partitioning.steer_window_groups", KeyKind::Bool, "", "Unrolled window reads (one runtime base plus constants on every partitioned dimension) read each bank once per member of a residue class: a steered group spans several partitioned dimensions, and copies that share a residue class form further groups (VITIS_NOTES N74; off: one dimension, distinct residues only)", "", BANK, "", kNoLimit, kNoLimit, true},
   {"tool.hls.partitioning.compound_assign_two_stores", KeyKind::Bool, "", "An ap_fixed compound assignment (/=, *=, +=, -=; cgeist marks its store hls.ap_compound_assign) to a bank chosen at run time writes that bank twice: never RAM_1WNR, two writes per iteration (VITIS_NOTES N38 R-cmpd)", "", BANK, "", kNoLimit, kNoLimit, true},
 
   {"tool.hls.folding", KeyKind::Section, "", "The tool's constant folding", "F-01..F-03", FOLD, "", kNoLimit, kNoLimit, false},

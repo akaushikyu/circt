@@ -953,6 +953,8 @@ void fillTool(const json::Object &t, ToolProfile &tool) {
   pi.rotatingBanks = boolean(inf, "rotating_banks");
   pi.maxScannedFactor = integer(inf, "max_scanned_factor");
   h.partitioning.steerAffineLoads = boolean(pa, "steer_affine_loads");
+  h.partitioning.steerWindowGroups =
+      boolean(pa, "steer_window_groups", true);
 
   const json::Object &fo = obj(hls, "folding");
   h.folding.ruleSet = str(fo, "rule_set");

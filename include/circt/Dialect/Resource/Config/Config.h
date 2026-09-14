@@ -359,6 +359,10 @@ struct PartitioningConfig {
   bool compoundAssignTwoStores = true;
   PartitionInferenceConfig inference;
   bool steerAffineLoads = true;
+  /// Steered load groups follow N74: a group spans every partitioned
+  /// dimension (base + constant on each) and copies that share a residue
+  /// class form further groups, so a bank is read once per class member.
+  bool steerWindowGroups = true;
 };
 
 struct FoldingConfig {

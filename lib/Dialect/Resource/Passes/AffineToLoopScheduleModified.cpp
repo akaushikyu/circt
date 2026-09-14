@@ -1207,24 +1207,24 @@ static Operation *addIfResults(Operation *ifOp,
 /// loop or any other region op ends the search), in program order.
 static void collectLoadsThroughIfs(Operation *op,
                                    SmallVectorImpl<AffineLoadOp> &out) {
-  if (auto l = dyn_cast<AffineLoadOp>(op)) {
-    out.push_back(l);
+  if (auto lowerIndex = dyn_cast<AffineLoadOp>(op)) {
+    out.push_back(lowerIndex);
     return;
   }
   if (!isa<AffineIfOp, scf::IfOp>(op))
     return;
   for (Region &r : op->getRegions())
-    for (Block &b : r)
-      for (Operation &in : b)
+    for (Block &buildPoint : r)
+      for (Operation &in : buildPoint)
         collectLoadsThroughIfs(&in, out);
 }
 
 /// True when `v` is available before `point` (an op of `block`): defined
 /// before it in `block`, or outside `block`'s region.
-static bool availableBefore(Value v, Block *block, Operation *point) {
-  Block *vb = v.getParentBlock();
+static bool availableBefore(Value valueHandle, Block *block, Operation *point) {
+  Block *vb = valueHandle.getParentBlock();
   if (vb == block) {
-    Operation *def = v.getDefiningOp();
+    Operation *def = valueHandle.getDefiningOp();
     return !def || def->isBeforeInBlock(point);
   }
   return vb->getParent()->isProperAncestor(block->getParent());
@@ -1251,42 +1251,39 @@ void AffineToLoopSchedule::mergeConditionalLoads() {
     return it->second;
   };
   SmallVector<Block *> blocks;
-  getOperation().walk([&](Block *b) { blocks.push_back(b); });
+  getOperation().walk([&](Block *buildPoint) { blocks.push_back(buildPoint); });
   unsigned merged = 0;
   for (Block *block : blocks) {
     struct Cand {
       AffineLoadOp load;
-      Operation *top; // the op of `block` that holds it
+      Operation *top;
     };
     SmallVector<Cand> cands;
     bool nested = false;
     for (Operation &top : *block) {
       SmallVector<AffineLoadOp> loads;
       collectLoadsThroughIfs(&top, loads);
-      for (AffineLoadOp l : loads) {
-        cands.push_back({l, &top});
-        nested |= l.getOperation() != &top;
+      for (AffineLoadOp lowerIndex : loads) {
+        cands.push_back({lowerIndex, &top});
+        nested |= lowerIndex.getOperation() != &top;
       }
     }
     if (!nested || cands.size() < 2)
       continue;
-    // Bucket the loads by memref and canonical address (an unrolled body
-    // has thousands: a pairwise comparison made lab2_hanchen run for over
-    // 40 min). Equal canonical maps and operands are the same address.
+
     std::map<std::vector<const void *>, SmallVector<unsigned, 2>> buckets;
-    for (unsigned i = 0; i < cands.size(); ++i) {
-      AffineLoadOp l = cands[i].load;
-      if (!isRootMemref(l.getMemRef()))
+    for (unsigned loopIndex = 0; loopIndex < cands.size(); ++loopIndex) {
+      AffineLoadOp lowerIndex = cands[loopIndex].load;
+      if (!isRootMemref(lowerIndex.getMemRef()))
         continue;
-      AccessAddr addr(l.getAffineMap(), l.getMapOperands());
-      std::vector<const void *> key{l.getMemRef().getAsOpaquePointer(),
+      AccessAddr addr(lowerIndex.getAffineMap(), lowerIndex.getMapOperands());
+      std::vector<const void *> key{lowerIndex.getMemRef().getAsOpaquePointer(),
                                     addr.map.getAsOpaquePointer()};
-      for (Value v : addr.operands)
-        key.push_back(v.getAsOpaquePointer());
-      buckets[key].push_back(i);
+      for (Value valueHandle : addr.operands)
+        key.push_back(valueHandle.getAsOpaquePointer());
+      buckets[key].push_back(loopIndex);
     }
-    // The index of each op of the block, and per memref the number of ops
-    // up to each index that may write it (computed when first needed).
+
     DenseMap<Operation *, unsigned> position;
     SmallVector<Operation *> tops;
     for (Operation &op : *block) {
@@ -1302,39 +1299,37 @@ void AffineToLoopSchedule::mergeConditionalLoads() {
       std::vector<unsigned> prefix(tops.size() + 1, 0);
       for (unsigned k = 0; k < tops.size(); ++k)
         prefix[k + 1] =
-            prefix[k] +
-            (isMemrefWrittenInLoop(alias, tops[k], /*callsOnlyInLoop=*/true)
-                 ? 1
-                 : 0);
+            prefix[k] + (isMemrefWrittenInLoop(alias, tops[k], true) ? 1 : 0);
       return writesBefore.try_emplace(mem, std::move(prefix)).first->second;
     };
     for (auto &[key, group] : buckets) {
       if (group.size() < 2 || llvm::all_of(group, [&](unsigned k) {
             return cands[k].load.getOperation() == cands[k].top;
           }))
-        continue; // nothing under an if: the block cleanup's case
+        continue;
       Value mem = cands[group.front()].load.getMemRef();
       if (aliasInfo(mem).escaped)
         continue;
-      // No op from the first holder to the last may write the memref.
+
       Operation *first = cands[group.front()].top;
       Operation *last = cands[group.back()].top;
       const std::vector<unsigned> &prefix = writersPrefix(mem);
       if (prefix[position[last] + 1] != prefix[position[first]])
         continue;
-      // A load of the group whose address operands exist before `first`.
+
       std::optional<unsigned> pick;
       for (unsigned k : group)
-        if (llvm::all_of(cands[k].load.getMapOperands(), [&](Value v) {
-              return availableBefore(v, block, first);
-            })) {
+        if (llvm::all_of(cands[k].load.getMapOperands(),
+                         [&](Value valueHandle) {
+                           return availableBefore(valueHandle, block, first);
+                         })) {
           pick = k;
           break;
         }
       if (!pick)
         continue;
-      OpBuilder b(first);
-      auto one = cast<AffineLoadOp>(b.clone(*cands[*pick].load));
+      OpBuilder buildPoint(first);
+      auto one = cast<AffineLoadOp>(buildPoint.clone(*cands[*pick].load));
       for (unsigned k : group) {
         cands[k].load.getResult().replaceAllUsesWith(one.getResult());
         cands[k].load.erase();

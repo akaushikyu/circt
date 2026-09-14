@@ -80,7 +80,8 @@
           "max_scanned_factor": 65536
         },
         "steer_affine_loads": true,
-        "compound_assign_two_stores": true
+        "compound_assign_two_stores": true,
+        "steer_window_groups": true
       },
       "folding": { "rule_set": "vitis-undef", "canonicalize": true, "max_rounds": 16 },
       "middle_end": {
