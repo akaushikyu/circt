@@ -32,6 +32,14 @@ entry in `etc/config/llvm.local.properties`) so a design's Vitis IR stages (`db/
 Vitis run) can be opened next to the source.
 
 
+A fourth entry, **hls-est -> Verilog (RTL back end M1)** (`compiler.hlsestrtl`), runs
+`~/hls-est-demo/rtl/hls_rtl_ce.sh`: the RTL back end driver `tools/rtl-backend/hls_rtl_ce.py` of
+branch `rtl-backend` (worktree `~/rtlspike/circt`) with its tools frozen in `~/hls-est-demo/rtl`
+(hls-est and circt-opt from the float build, the installed cgeist). It prints the interface, hls-est's
+LoopSchedule and the Verilog (`--show=verilog|schedule|interface`, `--full`). Examples `HLS_5` (vadd),
+`HLS_6` (float dot product, HardFloat units), `HLS_7` (local array as a RAM module) and `HLS_8`
+(polybench gemm) are written for it.
+
 The compiler dropdown has **cgeist** (HLS C/C++ -> affine MLIR: the front end alone, with the
 harness's flags; its options box takes cgeist flags) and **hls-est** (the same cgeist step, then
 the hls-est pipeline and the BRAM report). Both run this driver; `compiler.cgeistlocal.options=--emit=cgeist`
