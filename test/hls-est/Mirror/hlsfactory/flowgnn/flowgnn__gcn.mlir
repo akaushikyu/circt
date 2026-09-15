@@ -2409,16 +2409,40 @@ module {
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
 // CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
-// CHECK-NEXT: kind=RAM_1P  bram=1024{{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=256{{$}}
 // CHECK-NOT: {{^memref\.}}
 // CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
-// CHECK-NEXT: kind=RAM_1P  bram=1024{{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=256{{$}}
 // CHECK-NOT: {{^memref\.}}
 // CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
-// CHECK-NEXT: kind=RAM_1P  bram=1024{{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=256{{$}}
 // CHECK-NOT: {{^memref\.}}
 // CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
-// CHECK-NEXT: kind=RAM_1P  bram=1024{{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=256{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=256{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=256{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=256{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=256{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=256{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=256{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=256{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.global @ loc("{{[^"]*}}":34:3){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=256{{$}}
 // CHECK-NOT: {{^memref\.}}
 // CHECK: memref.global @ loc("{{[^"]*}}":35:3){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
@@ -3878,4 +3902,4 @@ module {
 // CHECK: memref.alloca @ loc("{{[^"]*}}":2272:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: Total BRAM: 12503{{$}}
+// CHECK: Total BRAM: 11479{{$}}
