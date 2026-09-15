@@ -358,6 +358,11 @@ struct PartitioningConfig {
   /// Rule (b) also for an array without an affine access (every index a
   /// memref.load operand; N57: the other indices need not be affine).
   bool constantIndexNonAffineArrays = true;
+  /// Rule (b) also for an array whose only storage pragma is `stream
+  /// type=pipo` (VITIS_NOTES N77).
+  bool constantIndexPipoStreams = true;
+  /// Rule (b) also for memref.globals, over every function's accesses (N77).
+  bool constantIndexGlobals = true;
   /// An ap_fixed compound assignment (cgeist's hls.ap_compound_assign) to a
   /// bank chosen at run time writes that bank twice (VITIS_NOTES N38 R-cmpd).
   bool compoundAssignTwoStores = true;

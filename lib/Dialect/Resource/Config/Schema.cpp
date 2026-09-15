@@ -208,6 +208,8 @@ const KeySpec kSchema[] = {
   {"tool.hls.partitioning.constant_index.min_extent", KeyKind::UInt, "elements", "Smallest extent of such a dimension that is partitioned", "Q-03", SPLIT, "", 1, kNoLimit, false},
   {"tool.hls.partitioning.constant_index.max_extent", KeyKind::UInt, "elements", "Largest extent of such a dimension that is partitioned; a larger one stays whole (VITIS_NOTES N61; 0 or absent: no limit)", "Q-03", SPLIT, "", 0, kNoLimit, true},
   {"tool.hls.partitioning.constant_index.after_user_partition", KeyKind::Bool, "", "Rule (b) also applies to an array with a user cyclic / block array_partition, on every part (VITIS_NOTES N57)", "Q-03", SPLIT, "", kNoLimit, kNoLimit, true},
+  {"tool.hls.partitioning.constant_index.pipo_streams", KeyKind::Bool, "", "Rule (b) also applies to an array whose only storage pragma is stream type=pipo (VITIS_NOTES N77)", "Q-03", SPLIT, "", kNoLimit, kNoLimit, true},
+  {"tool.hls.partitioning.constant_index.globals", KeyKind::Bool, "", "Rule (b) also applies to globals and function statics, over the accesses of every function (VITIS_NOTES N77)", "Q-03", SPLIT, "", kNoLimit, kNoLimit, true},
   {"tool.hls.partitioning.constant_index.non_affine_arrays", KeyKind::Bool, "", "Rule (b) also applies to an array none of whose accesses is affine (VITIS_NOTES N57)", "Q-03", SPLIT, "", kNoLimit, kNoLimit, true},
   {"tool.hls.partitioning.inference", KeyKind::Section, "", "The td=auto port-pressure search", "Q-06..Q-08", SPLIT, "", kNoLimit, kNoLimit, false},
   {"tool.hls.partitioning.inference.target_ii", KeyKind::UInt, "cycles", "II of a loop without its own", "Q-07", SPLIT, "", 1, kNoLimit, false},

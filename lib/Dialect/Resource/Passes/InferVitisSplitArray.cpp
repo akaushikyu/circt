@@ -80,6 +80,7 @@
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
+#include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/Dialect/Utils/StaticValueUtils.h"
 #include "mlir/IR/AffineExpr.h"
 #include "mlir/IR/AffineMap.h"
@@ -813,12 +814,46 @@ struct ConstantIndexInfo {
   SmallVector<bool> constantDim;
 };
 
+/// Whether `store` writes a constant under the first-call guard of a static
+/// (an scf.if on the `<static>@init` flag global cgeist emits): the static's
+/// constant initialiser, not an access. A C++ static whose constructor is a
+/// constant expression (`static complex<float> buf[..]`) is constant-
+/// initialised by Vitis' clang (the initial value of the global, no code),
+/// so these stores do not stop rule (b) (VITIS_NOTES N77: hp_fft_hls
+/// `data_rev_stream`, 214-449 in the Vitis log).
+static bool isStaticInitStore(Operation *store, Value stored) {
+  if (!stored.getDefiningOp<arith::ConstantOp>())
+    return false;
+  for (auto ifOp = store->getParentOfType<scf::IfOp>(); ifOp;
+       ifOp = ifOp->getParentOfType<scf::IfOp>()) {
+    Operation *def = ifOp.getCondition().getDefiningOp();
+    Value flag;
+    if (auto ld = dyn_cast_or_null<AffineLoadOp>(def))
+      flag = ld.getMemRef();
+    else if (auto ld = dyn_cast_or_null<memref::LoadOp>(def))
+      flag = ld.getMemRef();
+    if (auto gg = flag ? flag.getDefiningOp<memref::GetGlobalOp>()
+                       : memref::GetGlobalOp())
+      if (gg.getName().ends_with("@init"))
+        return true;
+  }
+  return false;
+}
+
 static ConstantIndexInfo analyzeConstantIndices(Value mem, unsigned rank) {
   ConstantIndexInfo info;
   info.constantDim.assign(rank, true);
   for (OpOperand &use : mem.getUses()) {
     Operation *user = use.getOwner();
     SmallVector<bool> dims;
+    if (auto store = dyn_cast<AffineStoreOp>(user);
+        store && store.getMemRef() == mem &&
+        isStaticInitStore(store, store.getValueToStore()))
+      continue;
+    if (auto store = dyn_cast<memref::StoreOp>(user);
+        store && store.getMemRef() == mem &&
+        isStaticInitStore(store, store.getValueToStore()))
+      continue;
     if (auto load = dyn_cast<AffineLoadOp>(user)) {
       dims = constantDimsOfAffine(load.getAffineMap(), load.getMapOperands());
       ++info.affineAccesses;
@@ -870,7 +905,35 @@ struct AutomaticRules {
   bool afterUserPartition = true;
   /// (b) also on an array without an affine access (N57).
   bool nonAffineArrays = true;
+  /// (b) also on an array whose only storage pragma is `stream type=pipo`
+  /// (VITIS_NOTES N77, kernels w9r9p_o79_loc_pipo / static_pipo).
+  bool pipoStreams = true;
+  /// (b) also on memref.globals (function statics, file-scope arrays),
+  /// over the accesses of every function (N77, w9r9p_o79_static*).
+  bool globals = true;
 };
+
+/// Whether the only user storage pragma on `def` is `stream type=pipo`: Vitis
+/// still applies the constant-index partition (b) to it (N77: o79_loc_pipo,
+/// o79_static_pipo, hp_fft_hls `data_rev_stream`).
+static bool hasOnlyPipoStream(Operation *def, const AutomaticRules &rules) {
+  if (!rules.pipoStreams)
+    return false;
+  constexpr StringRef kStream = "hls.stream";
+  auto streams = def->getAttrOfType<ArrayAttr>(kStream);
+  if (!streams || streams.empty())
+    return false;
+  for (Attribute a : streams) {
+    auto entry = dyn_cast<DictionaryAttr>(a);
+    auto type = entry ? entry.getAs<StringAttr>("type") : StringAttr();
+    if (!type || type.getValue() != "pipo")
+      return false;
+  }
+  for (StringRef pragma : rules.userStoragePragmas)
+    if (pragma != kStream && def->hasAttr(pragma))
+      return false;
+  return true;
+}
 
 /// Whether the only user storage pragma on `def` is an array_partition (rule
 /// (b) may still add complete entries to it).
@@ -946,34 +1009,21 @@ static AutomaticPartition decideSmallArray(MemRefType ty,
   return decision;
 }
 
-static AutomaticPartition decideAutomaticPartition(memref::AllocaOp alloca,
-                                                   const AutomaticRules &rules,
-                                                   bool &afterUser) {
+/// Rules (b) and (c) from what the accesses of `def` (an alloca or a
+/// global) say. `onlyB`: rule (c) is not applied, and an array indexed by
+/// constants in every dimension is left alone (unconfirmed for a PIPO stream
+/// and for globals).
+static AutomaticPartition
+decideFromConstantIndices(Operation *def, MemRefType ty,
+                          const ConstantIndexInfo &info,
+                          const AutomaticRules &rules, bool afterUser,
+                          bool onlyB) {
   AutomaticPartition decision;
-  MemRefType ty = alloca.getType();
-  // A user cyclic / block partition: Vitis still completes each part along
-  // a dimension every access indexes with a constant after the implied
-  // unroll (N57, kernels w9r7_ap_cyc / ap_blk: 4 user banks -> 32). Only
-  // rule (b) is applied on top of the user's pragma.
-  afterUser = rules.afterUserPartition &&
-              hasOnlyUserPartition(alloca.getOperation(), rules) &&
-              ty.hasStaticShape() &&
-              (ty.getElementType().isIntOrFloat() ||
-               isa<IndexType>(ty.getElementType()));
-  if (!afterUser && !isAutomaticCandidate(alloca.getOperation(), ty, rules))
-    return decision;
-
-  // (a) Small arrays.
-  if (!afterUser) {
-    decision = decideSmallArray(ty, rules);
-    if (decision.kind != AutomaticPartition::None)
-      return decision;
-  }
-
   unsigned rank = ty.getRank();
-  ConstantIndexInfo info = analyzeConstantIndices(alloca.getResult(), rank);
   if (!info.complete || info.accesses == 0)
     return decision; // escapes, or nothing to look at (dead: not ours)
+  if (onlyB && llvm::all_of(info.constantDim, [](bool c) { return c; }))
+    return decision;
 
   // (c) Every access constant in every dimension: scalarised.
   if (!afterUser && llvm::all_of(info.constantDim, [](bool c) { return c; })) {
@@ -993,7 +1043,7 @@ static AutomaticPartition decideAutomaticPartition(memref::AllocaOp alloca,
     if (!info.constantDim[d] || ty.getDimSize(d) < rules.constantIndexMinExtent)
       continue;
     if (rules.constantIndexMaxExtent > 0 &&
-        partExtent(alloca.getOperation(), ty, d) >
+        partExtent(def, ty, d) >
             rules.constantIndexMaxExtent) {
       tooLarge.push_back(d);
       continue;
@@ -1006,7 +1056,7 @@ static AutomaticPartition decideAutomaticPartition(memref::AllocaOp alloca,
           "dimension " + std::to_string(tooLarge.front() + 1) +
           " is indexed only by constants, but its extent (per part of a "
           "user partition) " +
-          std::to_string(partExtent(alloca.getOperation(), ty,
+          std::to_string(partExtent(def, ty,
                                     tooLarge.front())) +
           " exceeds constant_index.max_extent " +
           std::to_string(rules.constantIndexMaxExtent) +
@@ -1042,6 +1092,40 @@ static AutomaticPartition decideAutomaticPartition(memref::AllocaOp alloca,
   if (decision.parts.size() > 1)
     decision.reason += "; memory banking applies only the first entry";
   return decision;
+}
+
+static AutomaticPartition decideAutomaticPartition(memref::AllocaOp alloca,
+                                                   const AutomaticRules &rules,
+                                                   bool &afterUser) {
+  AutomaticPartition decision;
+  MemRefType ty = alloca.getType();
+  Operation *def = alloca.getOperation();
+  // A user cyclic / block partition: Vitis still completes each part along
+  // a dimension every access indexes with a constant after the implied
+  // unroll (N57, kernels w9r7_ap_cyc / ap_blk: 4 user banks -> 32). Only
+  // rule (b) is applied on top of the user's pragma.
+  afterUser = rules.afterUserPartition &&
+              hasOnlyUserPartition(alloca.getOperation(), rules) &&
+              ty.hasStaticShape() &&
+              (ty.getElementType().isIntOrFloat() ||
+               isa<IndexType>(ty.getElementType()));
+  bool pipo = !afterUser && hasOnlyPipoStream(def, rules) &&
+              ty.hasStaticShape() &&
+              (ty.getElementType().isIntOrFloat() ||
+               isa<IndexType>(ty.getElementType()));
+  if (!afterUser && !pipo && !isAutomaticCandidate(def, ty, rules))
+    return decision;
+
+  // (a) Small arrays.
+  if (!afterUser && !pipo) {
+    decision = decideSmallArray(ty, rules);
+    if (decision.kind != AutomaticPartition::None)
+      return decision;
+  }
+
+  ConstantIndexInfo info =
+      analyzeConstantIndices(alloca.getResult(), ty.getRank());
+  return decideFromConstantIndices(def, ty, info, rules, afterUser, pipo);
 }
 
 //===----------------------------------------------------------------------===//
@@ -1180,6 +1264,8 @@ struct InferVitisSplitArray
     rules.afterUserPartition =
         cfgPartitioning->constantIndexAfterUserPartition;
     rules.nonAffineArrays = cfgPartitioning->constantIndexNonAffineArrays;
+    rules.pipoStreams = cfgPartitioning->constantIndexPipoStreams;
+    rules.globals = cfgPartitioning->constantIndexGlobals;
     DenseSet<Value> decided;
     Builder builder(func.getContext());
     func.walk([&](memref::AllocaOp alloca) {
@@ -1251,7 +1337,92 @@ struct InferVitisSplitArray
               << " completely based on constant index";
     });
     applySmallGlobals(func, rules, decided);
+    applyConstantIndexGlobals(func, rules, decided);
     return decided;
+  }
+
+  /// Rule (b) on the globals and function statics `func` uses, over the
+  /// accesses of every function of the module (VITIS_NOTES N77: Vitis logs
+  /// [HLS 214-449] for a static array as for a local one, kernels
+  /// w9r9p_o79_static / static_pipo, hp_fft_hls `data_rev_stream`). Rule
+  /// (c) and an array indexed by constants in every dimension stay
+  /// unconfirmed for globals and are left alone. A global decided once
+  /// carries hls.partition_reason; later functions only note it.
+  void applyConstantIndexGlobals(func::FuncOp func,
+                                 const AutomaticRules &rules,
+                                 DenseSet<Value> &decided) {
+    if (!rules.globals)
+      return;
+    auto module = func->getParentOfType<ModuleOp>();
+    Builder builder(func.getContext());
+    func.walk([&](memref::GetGlobalOp get) {
+      auto global = SymbolTable::lookupNearestSymbolFrom<memref::GlobalOp>(
+          get, get.getNameAttr());
+      if (!global)
+        return;
+      Operation *def = global.getOperation();
+      if (def->hasAttr(kRegistersAttrName))
+        return;
+      if (def->hasAttr(kReasonAttr)) {
+        decided.insert(get.getResult());
+        return;
+      }
+      MemRefType ty = global.getType();
+      bool wordArray = ty.hasStaticShape() &&
+                       (ty.getElementType().isIntOrFloat() ||
+                        isa<IndexType>(ty.getElementType()));
+      bool afterUser = rules.afterUserPartition && wordArray &&
+                       hasOnlyUserPartition(def, rules);
+      bool pipo = !afterUser && wordArray && hasOnlyPipoStream(def, rules);
+      if (!afterUser && !pipo && !isAutomaticCandidate(def, ty, rules))
+        return;
+      unsigned rank = ty.getRank();
+      ConstantIndexInfo info;
+      info.constantDim.assign(rank, true);
+      std::optional<SymbolTable::UseRange> uses =
+          SymbolTable::getSymbolUses(def, module);
+      if (!uses)
+        return;
+      for (const SymbolTable::SymbolUse &use : *uses) {
+        auto gg = dyn_cast<memref::GetGlobalOp>(use.getUser());
+        if (!gg)
+          return; // another kind of use: nothing is concluded
+        ConstantIndexInfo gi = analyzeConstantIndices(gg.getResult(), rank);
+        if (!gi.complete)
+          return;
+        info.accesses += gi.accesses;
+        info.affineAccesses += gi.affineAccesses;
+        for (unsigned d = 0; d < rank; ++d)
+          info.constantDim[d] = info.constantDim[d] && gi.constantDim[d];
+      }
+      AutomaticPartition decision = decideFromConstantIndices(
+          def, ty, info, rules, afterUser, /*onlyB=*/true);
+      if (decision.kind != AutomaticPartition::ConstantDims)
+        return;
+      ArrayAttr automatic =
+          buildPartitionAttr(builder, decision.parts, ty.getShape(),
+                             def->getAttrOfType<StringAttr>(kVarNameAttr),
+                             kSourceConstantIndex);
+      if (afterUser) {
+        SmallVector<Attribute> merged;
+        if (auto user = def->getAttrOfType<ArrayAttr>(kPartitionAttr))
+          llvm::append_range(merged, user.getValue());
+        llvm::append_range(merged, automatic.getValue());
+        automatic = builder.getArrayAttr(merged);
+      }
+      def->setAttr(kPartitionAttr, automatic);
+      def->setAttr(kReasonAttr, builder.getStringAttr(decision.reason));
+      decided.insert(get.getResult());
+      ++runStats.constantDims;
+      if (decision.parts.size() > 1)
+        ++runStats.multiConstantDims;
+      if (emitRemarks)
+        for (const PartitionChoice &part : decision.parts)
+          mlir::emitRemark(global.getLoc())
+              << "Automatically partitioning global '" << global.getSymName()
+              << "' dimension " << part.dim + 1
+              << " completely based on constant index";
+    });
   }
 
   /// Rule (a) on the globals and function statics `func` reads or writes
