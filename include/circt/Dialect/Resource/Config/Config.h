@@ -549,6 +549,11 @@ struct SchedulingConfig {
 
   /// `operator_latencies.<cls>`; 0 when the class is not listed.
   int64_t latency(llvm::StringRef cls) const;
+  /// The operator class of a floating-point `base` operation (fpdiv,
+  /// fpsqrt) on floats of `width` bits: `<base>_f<width>` when the table has
+  /// that key, else `base` (VITIS_NOTES N78: the divide and the square root
+  /// take 15 / 58 and 15 / 56 cycles for float / double).
+  std::string floatClass(llvm::StringRef base, unsigned width) const;
 };
 
 struct FrontendConfig {

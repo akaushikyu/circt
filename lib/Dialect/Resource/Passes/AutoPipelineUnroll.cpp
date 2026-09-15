@@ -1005,10 +1005,14 @@ private:
             arith::MaxNumFOp, arith::MinNumFOp, math::FmaOp, math::FloorOp,
             math::CeilOp, math::RoundOp, math::RoundEvenOp, math::TruncOp>(op))
       return lat("fpaddsub");
+    auto width = [&] {
+      Type elt = getElementTypeOrSelf(op->getResult(0).getType());
+      return elt.isIntOrFloat() ? elt.getIntOrFloatBitWidth() : 0u;
+    };
     if (isa<arith::DivFOp, arith::RemFOp>(op))
-      return lat("fpdiv");
+      return lat(sched.floatClass("fpdiv", width()));
     if (isa<math::SqrtOp, math::RsqrtOp>(op))
-      return lat("fpsqrt");
+      return lat(sched.floatClass("fpsqrt", width()));
     if (isa<math::AbsFOp, math::AbsIOp, math::CopySignOp>(op))
       return 0;
     if (isa_and_nonnull<math::MathDialect>(op->getDialect()))

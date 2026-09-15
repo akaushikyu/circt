@@ -205,6 +205,12 @@ double CallDepthConfig::ternaryAdder(unsigned bits) const {
   return bandDelay(ternaryAdderNs, bits);
 }
 
+std::string SchedulingConfig::floatClass(StringRef base,
+                                         unsigned width) const {
+  std::string typed = (base + "_f" + llvm::Twine(width)).str();
+  return operatorLatencies.count(typed) ? typed : base.str();
+}
+
 int64_t SchedulingConfig::latency(StringRef cls) const {
   auto it = operatorLatencies.find(cls.str());
   return it == operatorLatencies.end() ? 0 : it->second;

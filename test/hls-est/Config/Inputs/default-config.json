@@ -366,15 +366,19 @@
     },
     "timing": {
       "_model": "plugin name (a operator_timing_model): The OperatorTimingModel [S-02]",
-      "_operator_latencies": "map of int, cycles: Latency per operator class of calyx-fixed (unconfirmed against Vitis); call / kept_call -1: the loop stays sequential [S-01, S-03, S-04]",
+      "_operator_latencies": "map of int, cycles: Latency per operator class of calyx-fixed (unconfirmed against Vitis); call / kept_call -1: the loop stays sequential; the optional fpdiv_f32 / fpdiv_f64 / fpsqrt_f32 / fpsqrt_f64 replace fpdiv / fpsqrt for that element type (VITIS_NOTES N78) [S-01, S-03, S-04]",
       "model": "calyx-fixed",
       "operator_latencies": {
         "call": -1,
         "comb": 0,
         "fpaddsub": 5,
         "fpdiv": 12,
+        "fpdiv_f32": 15,
+        "fpdiv_f64": 58,
         "fpmul": 4,
         "fpsqrt": 16,
+        "fpsqrt_f32": 15,
+        "fpsqrt_f64": 56,
         "fptrans": 20,
         "kept_call": 1,
         "mem": 1,
@@ -601,11 +605,13 @@
           "_exclusive_arm_stores_once": "bool: The stores the two arms of one if make count once per iteration, whatever their addresses (off: only a same-address pair) [P-10]",
           "_max_copies": "uint, copies: At most this many copies of a replicated bank (1: no replication); the scheduler's pool is max_copies * (ports - 1) + 1 slots [K-02]",
           "_max_stores_per_iteration": "uint, stores: A bank some loop body stores to more often than this is never replicated [K-06]",
+          "_port_bound_several_arrays": "bool: A callee parameter whose call sites bind two or more different arrays is read through the module's own ports even with one instance: those arrays are never replicated for the callee's accesses (VITIS_NOTES N75; off: only a callee instantiated at more than one place) [K-02]",
           "_shared_write_port_reads_when_idle": "bool: The shared write port of the copies reads in a cycle without a write (the +1 slot) [K-02]",
           "callee_stores_per_loop": true,
           "exclusive_arm_stores_once": true,
           "max_copies": 16,
           "max_stores_per_iteration": 1,
+          "port_bound_several_arrays": true,
           "shared_write_port_reads_when_idle": true
         },
         "rom": {
@@ -679,16 +685,21 @@
         "_inference": "object: The td=auto port-pressure search [Q-06..Q-08]",
         "_policy": "plugin name (a partition_policy): The PartitionPolicy [Q-03, Q-04, Q-08, Q-15]",
         "_steer_affine_loads": "bool: Unrolled copies of a partitioned load with distinct constant offsets read each bank once",
+        "_steer_window_groups": "bool: Unrolled window reads (one runtime base plus constants on every partitioned dimension) read each bank once per member of a residue class: a steered group spans several partitioned dimensions, and copies that share a residue class form further groups (VITIS_NOTES N74; off: one dimension, distinct residues only)",
         "compound_assign_two_stores": true,
         "constant_index": {
           "_after_user_partition": "bool: Rule (b) also applies to an array with a user cyclic / block array_partition, on every part (VITIS_NOTES N57) [Q-03]",
+          "_globals": "bool: Rule (b) also applies to globals and function statics, over the accesses of every function (VITIS_NOTES N77) [Q-03]",
           "_max_extent": "uint, elements: Largest extent of such a dimension that is partitioned; a larger one stays whole (VITIS_NOTES N61; 0 or absent: no limit) [Q-03]",
           "_min_extent": "uint, elements: Smallest extent of such a dimension that is partitioned [Q-03]",
           "_non_affine_arrays": "bool: Rule (b) also applies to an array none of whose accesses is affine (VITIS_NOTES N57) [Q-03]",
+          "_pipo_streams": "bool: Rule (b) also applies to an array whose only storage pragma is stream type=pipo (VITIS_NOTES N77) [Q-03]",
           "after_user_partition": true,
+          "globals": true,
           "max_extent": 64,
           "min_extent": 2,
-          "non_affine_arrays": true
+          "non_affine_arrays": true,
+          "pipo_streams": true
         },
         "inference": {
           "_max_dims": "uint: Dimensions partitioned per array [Q-08]",
@@ -712,7 +723,8 @@
           "target_ii": 1
         },
         "policy": "vitis-td",
-        "steer_affine_loads": true
+        "steer_affine_loads": true,
+        "steer_window_groups": true
       },
       "pipeline_decision": {
         "_flatten_across_calls": "bool: Flatten a loop into a pipelined loop of a callee (documented assumption: never); reserved: only false is implemented, true is refused [D-11]",

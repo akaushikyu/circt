@@ -311,7 +311,7 @@ const KeySpec kSchema[] = {
   {"scheduling", KeyKind::Section, "", "Operator timing, dependences, schedulers and binding", "S-01..S-22", A2L ", " APU, "", kNoLimit, kNoLimit, false},
   {"scheduling.timing", KeyKind::Section, "", "The operator timing model", "S-01..S-05", A2L, "", kNoLimit, kNoLimit, false},
   {"scheduling.timing.model", KeyKind::PluginName, "", "The OperatorTimingModel", "S-02", A2L, "operator_timing_model", kNoLimit, kNoLimit, false},
-  {"scheduling.timing.operator_latencies", KeyKind::IntMap, "cycles", "Latency per operator class of calyx-fixed (unconfirmed against Vitis); call / kept_call -1: the loop stays sequential", "S-01, S-03, S-04", A2L ", " APU, "", -1, kNoLimit, false},
+  {"scheduling.timing.operator_latencies", KeyKind::IntMap, "cycles", "Latency per operator class of calyx-fixed (unconfirmed against Vitis); call / kept_call -1: the loop stays sequential; the optional fpdiv_f32 / fpdiv_f64 / fpsqrt_f32 / fpsqrt_f64 replace fpdiv / fpsqrt for that element type (VITIS_NOTES N78)", "S-01, S-03, S-04", A2L ", " APU, "", -1, kNoLimit, false},
   {"scheduling.dependences", KeyKind::Section, "", "Which dependences constrain the schedule", "S-11..S-13", A2L, "", kNoLimit, kNoLimit, false},
   {"scheduling.dependences.model", KeyKind::PluginName, "", "The DependenceModel (cached-o1 keeps OPEN_ISSUES O1)", "S-11", A2L, "dependence_model", kNoLimit, kNoLimit, false},
   {"scheduling.modulo", KeyKind::Section, "", "The modulo scheduler of pipelined loops", "S-08, S-10", A2L, "", kNoLimit, kNoLimit, false},

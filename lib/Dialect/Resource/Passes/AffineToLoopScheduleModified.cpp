@@ -3405,7 +3405,8 @@ public:
                               candidateValue + "'");
 
     for (const auto &kv : latencies) {
-      if (llvm::is_contained(classes, kv.first))
+      if (llvm::is_contained(classes, kv.first) ||
+          llvm::is_contained(kTypedClasses, StringRef(kv.first)))
         continue;
       std::string msg = "scheduling.timing.operator_latencies." + kv.first +
                         ": calyx-fixed has no operator class '" + kv.first +
@@ -3435,11 +3436,19 @@ public:
       out.push_back(candidateValue);
   }
 
+  /// Optional per-type classes (VITIS_NOTES N78); an absent one falls back
+  /// to its base class.
+  static constexpr const char *kTypedClasses[] = {"fpdiv_f32", "fpdiv_f64",
+                                                  "fpsqrt_f32", "fpsqrt_f64"};
+
   void library(SmallVectorImpl<OperatorTiming> &out) const override {
     for (const char *candidateValue :
          {"comb", "seq", "multicycle", "fpmul", "fpaddsub", "fpdiv", "fpsqrt",
           "fptrans"})
       out.push_back(make(candidateValue));
+    for (const char *candidateValue : kTypedClasses)
+      if (latencies.count(candidateValue))
+        out.push_back(make(candidateValue));
   }
 
   std::optional<OperatorTiming>
@@ -3460,9 +3469,12 @@ public:
         .Case<MulFOp>([&](Operation *) { return make("fpmul"); })
         .Case<AddFOp, SubFOp, MaximumFOp, MinimumFOp, MaxNumFOp, MinNumFOp>(
             [&](Operation *) { return make("fpaddsub"); })
-        .Case<DivFOp, RemFOp>([&](Operation *) { return make("fpdiv"); })
-        .Case<math::SqrtOp, math::RsqrtOp>(
-            [&](Operation *) { return make("fpsqrt"); })
+        .Case<DivFOp, RemFOp>([&](Operation *opHandle) {
+          return make(typedClass("fpdiv", opHandle));
+        })
+        .Case<math::SqrtOp, math::RsqrtOp>([&](Operation *opHandle) {
+          return make(typedClass("fpsqrt", opHandle));
+        })
         .Case<math::ExpOp, math::Exp2Op, math::ExpM1Op, math::LogOp,
               math::Log2Op, math::Log10Op, math::Log1pOp, math::PowFOp,
               math::SinOp, math::CosOp, math::TanOp, math::TanhOp, math::ErfOp,
@@ -3510,6 +3522,15 @@ private:
   int64_t latency(StringRef cls) const {
     auto it = latencies.find(cls.str());
     return it == latencies.end() ? 0 : it->second;
+  }
+  /// `base`, or its per-type class for the element width of `op`'s result.
+  std::string typedClass(StringRef base, Operation *op) const {
+    Type elt = getElementTypeOrSelf(op->getResult(0).getType());
+    std::string typed =
+        (base + "_f" +
+         Twine(elt.isIntOrFloat() ? elt.getIntOrFloatBitWidth() : 0u))
+            .str();
+    return latencies.count(typed) ? typed : base.str();
   }
   OperatorTiming make(StringRef cls) const {
     OperatorTiming t;
