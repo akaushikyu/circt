@@ -35,11 +35,13 @@
 #include "mlir/Dialect/Affine/LoopUtils.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/BuiltinOps.h"
+#include "llvm/Support/ThreadPool.h"
 #include "mlir/Interfaces/LoopLikeInterface.h"
 #include "llvm/ADT/Hashing.h"
 #include "llvm/ADT/MapVector.h"
 #include "llvm/Support/Debug.h"
 
+#include <atomic>
 #include <chrono>
 #include <map>
 
@@ -50,6 +52,9 @@ using namespace mlir::affine;
 using namespace circt::analysis;
 
 namespace {
+
+/// Threads the dependence tests of one analysis run use at most.
+constexpr unsigned kDependenceTestThreads = 4;
 
 /// Everything the dependence test between two accesses depends on: their
 /// composed access maps and operands, the blocks they live in (which fix the
@@ -228,9 +233,26 @@ void MemoryDependenceAnalysis::checkMemrefDependence(
     accessMaps[op].reset(map, operands);
   }
 
-  DenseMap<PairKey, PairResult, PairKeyInfo> memo;
+  // The tests run in three phases with the same outcome as one serial loop:
+  // (1) every pair, in program order, gets its memo entry, and each fresh
+  // entry one job; (2) the jobs' dependence tests run in parallel (each a
+  // pure function of the IR); (3) the pairs are visited again in the same
+  // order and their results recorded. ResidualBlock opt4 spent 434 s in
+  // 10,434 serial Fourier-Motzkin tests (OPEN_ISSUES O103).
+  DenseMap<PairKey, unsigned, PairKeyInfo> memo; // key -> index in results
+  SmallVector<PairResult> results;
+  SmallVector<std::pair<Operation *, Operation *>> jobs; // per result
+  constexpr unsigned kDisjoint = ~0u;
+  std::vector<unsigned> pairResult; // per enumerated pair, in order
   uint64_t numPairs = 0, numTests = 0, numDeps = 0;
   [[maybe_unused]] uint64_t numDisjoint = 0, numHits = 0;
+
+  struct GroupBuckets {
+    DenseMap<Operation *, unsigned> bucketOf;
+    SmallVector<SmallVector<Operation *>> buckets;
+  };
+  std::vector<GroupBuckets> groupBuckets;
+  groupBuckets.reserve(byMemref.size());
 
   for (auto &group : byMemref) {
     SmallVectorImpl<Operation *> &ops = group.second;
@@ -243,8 +265,9 @@ void MemoryDependenceAnalysis::checkMemrefDependence(
     // in program order of the source, then of the destination.
     SmallVector<unsigned> constantDims =
         dimsConstantInAll(ops, accessMaps);
-    DenseMap<Operation *, unsigned> bucketOf;
-    SmallVector<SmallVector<Operation *>> buckets;
+    GroupBuckets &gb = groupBuckets.emplace_back();
+    DenseMap<Operation *, unsigned> &bucketOf = gb.bucketOf;
+    SmallVector<SmallVector<Operation *>> &buckets = gb.buckets;
     {
       std::map<SmallVector<int64_t>, unsigned> bucketIds;
       for (auto *op : ops) {
@@ -262,7 +285,6 @@ void MemoryDependenceAnalysis::checkMemrefDependence(
       }
     }
     for (auto *source : ops) {
-      MemRefAccess src(source);
       const AffineValueMap &srcMap = accessMaps[source];
       for (auto *destination : buckets[bucketOf[source]]) {
         if (source == destination)
@@ -271,6 +293,7 @@ void MemoryDependenceAnalysis::checkMemrefDependence(
         const AffineValueMap &dstMap = accessMaps[destination];
         if (haveDisjointConstantIndex(srcMap, dstMap)) {
           ++numDisjoint;
+          pairResult.push_back(kDisjoint);
           continue;
         }
 
@@ -289,25 +312,77 @@ void MemoryDependenceAnalysis::checkMemrefDependence(
         key.depth = depth;
         key.srcBeforeDst = appearsBefore(source, destination);
 
-        auto [memoIt, fresh] = memo.try_emplace(key);
-        PairResult &pr = memoIt->second;
+        auto [memoIt, fresh] =
+            memo.try_emplace(key, static_cast<unsigned>(results.size()));
         if (fresh) {
-          MemRefAccess dst(destination);
-          // Requested depth might not be a valid comparison if they do not
-          // belong to the same loop nest
-          if (depth > getInnermostCommonLoopDepth({source, destination})) {
-            pr.skipped = true;
-          } else {
-            ++numTests;
-            FlatAffineValueConstraints dependenceConstraints;
-            DependenceResult result = checkMemrefAccessDependence(
-                src, dst, depth, &dependenceConstraints, &pr.comps, true);
-            pr.value = result.value;
-            pr.sameElement = (src == dst);
-          }
+          results.emplace_back();
+          jobs.push_back({source, destination});
         } else {
           ++numHits;
         }
+        pairResult.push_back(memoIt->second);
+      }
+    }
+  }
+
+  // (2) The block orders the tests compare are computed first, so that no
+  // test writes to the IR (Operation::isBeforeInBlock recomputes them
+  // lazily).
+  {
+    llvm::SmallPtrSet<Block *, 16> blocks;
+    for (auto *op : memoryOps)
+      for (Operation *cur = op; cur; cur = cur->getParentOp())
+        if (Block *b = cur->getBlock(); b && blocks.insert(b).second)
+          b->recomputeOpOrder();
+  }
+  auto runTest = [&](size_t i) {
+    auto [source, destination] = jobs[i];
+    PairResult &pr = results[i];
+    // Requested depth might not be a valid comparison if they do not
+    // belong to the same loop nest
+    if (depth > getInnermostCommonLoopDepth({source, destination})) {
+      pr.skipped = true;
+      return;
+    }
+    MemRefAccess src(source), dst(destination);
+    FlatAffineValueConstraints dependenceConstraints;
+    DependenceResult result = checkMemrefAccessDependence(
+        src, dst, depth, &dependenceConstraints, &pr.comps, true);
+    pr.value = result.value;
+    pr.sameElement = (src == dst);
+  };
+  // A few threads of its own, not the context's pool: one Fourier-Motzkin
+  // test can hold hundreds of MB, and the harness runs designs side by side.
+  unsigned threads = std::min<size_t>(kDependenceTestThreads, jobs.size());
+  if (threads > 1 && memoryOps.front()->getContext()->isMultithreadingEnabled()) {
+    llvm::StdThreadPool pool(llvm::hardware_concurrency(threads));
+    std::atomic<size_t> next{0};
+    for (unsigned t = 0; t < threads; ++t)
+      pool.async([&] {
+        for (size_t i = next++; i < jobs.size(); i = next++)
+          runTest(i);
+      });
+    pool.wait();
+  } else {
+    for (size_t i = 0; i < jobs.size(); ++i)
+      runTest(i);
+  }
+  for (const PairResult &pr : results)
+    if (!pr.skipped)
+      ++numTests;
+
+  // (3) Record, in phase 1's pair order.
+  size_t pairNo = 0, groupNo = 0;
+  for (auto &group : byMemref) {
+    GroupBuckets &gb = groupBuckets[groupNo++];
+    for (auto *source : group.second) {
+      for (auto *destination : gb.buckets[gb.bucketOf[source]]) {
+        if (source == destination)
+          continue;
+        unsigned r = pairResult[pairNo++];
+        if (r == kDisjoint)
+          continue;
+        const PairResult &pr = results[r];
         if (pr.skipped)
           continue;
 

@@ -18,6 +18,9 @@
 // identity select of materializeYieldedValues) starts at 10. Its register chain
 // must run through a forwarding stage at 11; no op starts there, so the stage
 // was not created and the chain ended at 11.
+// Since W9r9-impl (OPEN_ISSUES O103) a value is registered once, by the stage
+// that computes it, and the terminator reads that stage's result: no
+// forwarding stage, and the lookup must still find the yielded value.
 
 // CHECK: Total BRAM: 0
 
@@ -25,9 +28,8 @@
 // SCHED: %[[SEL:.+]] = loopschedule.pipeline.stage start = 10 {
 // SCHED-NEXT: %[[V:.+]] = arith.select
 // SCHED-NEXT: loopschedule.register %[[V]] : f32
-// SCHED: %[[FWD:.+]] = loopschedule.pipeline.stage start = 11 {
-// SCHED-NEXT: loopschedule.register %[[SEL]] : f32
-// SCHED: loopschedule.terminator iter_args({{.*}}, %[[FWD]]), results(%[[FWD]])
+// SCHED-NOT: loopschedule.pipeline.stage start = 11
+// SCHED: loopschedule.terminator iter_args({{.*}}, %[[SEL]]), results(%[[SEL]])
 
 func.func @dot(%a: memref<64xf32>, %b: memref<64xf32>, %o: memref<1xf32>) {
   %cst = arith.constant 0.000000e+00 : f32

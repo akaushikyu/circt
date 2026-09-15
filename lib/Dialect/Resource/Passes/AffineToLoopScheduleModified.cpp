@@ -3221,79 +3221,32 @@ AffineToLoopSchedule::createLoopSchedulePipeline(Operation *loop,
 
   DominanceInfo dom(getOperation());
 
-  SmallVector<SmallVector<Value>> registerValues;
-  SmallVector<SmallVector<Type>> registerTypes;
-
-  SmallVector<IRMapping> stageValueMaps;
-
-  DenseMap<Operation *, std::pair<unsigned, unsigned>> pipeTimes;
-
-  for (auto startTime : startTimes) {
-    auto group = startGroups[startTime];
-
-    auto isLoopTerminator = [loop](Operation *op) {
-      return isa<AffineYieldOp, scf::YieldOp>(op) && op->getParentOp() == loop;
-    };
-
-    for (unsigned loopIndex = registerValues.size(); loopIndex <= startTime;
-         ++loopIndex)
-      registerValues.emplace_back(SmallVector<Value>());
-
-    for (auto *op : group) {
-      if (op->getUsers().empty())
-        continue;
-
-      unsigned pipeEndTime = 0;
-      for (auto *rawUser : op->getUsers()) {
-
-        Operation *user = body->findAncestorOpInBlock(*rawUser);
-        if (!user)
-          user = rawUser;
-        unsigned userStartTime = *problem.getStartTime(user);
-        if (*problem.getStartTime(user) > startTime)
-          pipeEndTime = std::max(pipeEndTime, userStartTime);
-        else if (isLoopTerminator(user))
-
-          pipeEndTime = std::max(pipeEndTime, userStartTime + 1);
-      }
-
-      pipeTimes[op] = std::pair(startTime, pipeEndTime);
-
-      for (unsigned loopIndex = registerValues.size(); loopIndex <= pipeEndTime;
-           ++loopIndex)
-        registerValues.push_back(SmallVector<Value>());
-
-      for (auto result : op->getResults())
-        registerValues[startTime].push_back(result);
-
-      unsigned firstUse = std::max(
-          startTime + 1,
-          startTime + *problem.getLatency(*problem.getLinkedOperatorType(op)));
-      for (unsigned loopIndex = firstUse; loopIndex < pipeEndTime;
-           ++loopIndex) {
-        for (auto result : op->getResults())
-          registerValues[loopIndex].push_back(result);
-      }
-    }
-  }
-
-  for (unsigned loopIndex = 0; loopIndex < registerValues.size(); ++loopIndex) {
-    SmallVector<mlir::Type> types;
-    for (auto operandValue : registerValues[loopIndex])
-      types.push_back(operandValue.getType());
-
-    registerTypes.push_back(types);
-    stageValueMaps.push_back(valueMap);
-  }
-
-  stageValueMaps.push_back(valueMap);
+  auto isLoopTerminator = [loop](Operation *op) {
+    return isa<AffineYieldOp, scf::YieldOp>(op) && op->getParentOp() == loop;
+  };
+  IRMapping current = valueMap;
 
   for (auto startTime : startTimes) {
     auto group = startGroups[startTime];
     llvm::sort(group, [&](Operation *a, Operation *buildPoint) {
       return dom.properlyDominates(a, buildPoint);
     });
-    auto stageTypes = registerTypes[startTime];
+
+    SmallVector<Value> registered;
+    for (auto *op : group) {
+      bool usedLater = llvm::any_of(op->getUsers(), [&](Operation *rawUser) {
+        Operation *user = body->findAncestorOpInBlock(*rawUser);
+        if (!user)
+          user = rawUser;
+        return *problem.getStartTime(user) > startTime ||
+               isLoopTerminator(user);
+      });
+      if (usedLater)
+        llvm::append_range(registered, op->getResults());
+    }
+    SmallVector<Type> stageTypes;
+    for (Value valueHandle : registered)
+      stageTypes.push_back(valueHandle.getType());
 
     if (group.empty() && stageTypes.empty() && startTime != 0)
       continue;
@@ -3311,29 +3264,17 @@ AffineToLoopSchedule::createLoopSchedulePipeline(Operation *loop,
     builder.setInsertionPointToStart(&stageBlock);
 
     for (auto *op : group) {
-      auto *newOp = builder.clone(*op, stageValueMaps[startTime]);
+      auto *newOp = builder.clone(*op, current);
 
       for (auto result : op->getResults())
-        stageValueMaps[startTime].map(
-            result, newOp->getResult(result.getResultNumber()));
+        current.map(result, newOp->getResult(result.getResultNumber()));
     }
 
     SmallVector<Value> stageOperands;
-    unsigned resIndex = 0;
-    for (auto passResult : registerValues[startTime]) {
-      stageOperands.push_back(stageValueMaps[startTime].lookup(passResult));
-
-      unsigned destTime = startTime + 1;
-      unsigned latency = *problem.getLatency(
-          *problem.getLinkedOperatorType(passResult.getDefiningOp()));
-
-      if (*problem.getStartTime(passResult.getDefiningOp()) == startTime &&
-          latency > 1)
-        destTime = startTime + latency;
-      destTime = std::min((unsigned)(stageValueMaps.size() - 1), destTime);
-      stageValueMaps[destTime].map(passResult, stage.getResult(resIndex++));
-    }
-
+    for (Value passResult : registered)
+      stageOperands.push_back(current.lookup(passResult));
+    for (auto [k, passResult] : llvm::enumerate(registered))
+      current.map(passResult, stage.getResult(k));
     stageTerminator->insertOperands(stageTerminator->getNumOperands(),
                                     stageOperands);
 
@@ -3354,11 +3295,8 @@ AffineToLoopSchedule::createLoopSchedulePipeline(Operation *loop,
       stagesBlock.front().getResult(stagesBlock.front().getNumResults() - 1));
 
   for (auto value : body->getTerminator()->getOperands()) {
-    unsigned lookupTime = std::min((unsigned)(stageValueMaps.size() - 1),
-                                   pipeTimes[value.getDefiningOp()].second);
-
-    termIterArgs.push_back(stageValueMaps[lookupTime].lookup(value));
-    termResults.push_back(stageValueMaps[lookupTime].lookup(value));
+    termIterArgs.push_back(current.lookupOrDefault(value));
+    termResults.push_back(current.lookupOrDefault(value));
   }
 
   stagesTerminator.getIterArgsMutable().append(termIterArgs);
