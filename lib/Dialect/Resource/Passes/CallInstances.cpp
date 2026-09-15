@@ -1061,12 +1061,42 @@ InstanceModel::singleInstanceOwner(ArrayRef<func::FuncOp> users) const {
   return opHandle;
 }
 
+bool InstanceModel::argBindsSeveralArrays(func::FuncOp fn,
+                                          unsigned argIndex) const {
+  if (!circt::hlsest::Config::get()
+           .tool.hls.memoryArchitecture.replication.portBoundSeveralArrays)
+    return false;
+  auto it = parents.find(fn.getOperation());
+  if (it == parents.end())
+    return false;
+  std::optional<StorageRoot> first;
+  for (const ParentInstances &pi : it->second)
+    for (auto &[siteOp, grp] : pi.siteGroups) {
+      (void)grp;
+      auto args = cast<CallOpInterface>(siteOp).getArgOperands();
+      if (argIndex >= args.size() ||
+          !isa<BaseMemRefType>(args[argIndex].getType()))
+        continue;
+      StorageRoot root = storageRoot(args[argIndex]);
+      if (!first)
+        first = root;
+      else if (*first != root)
+        return true;
+    }
+  return false;
+}
+
+bool InstanceModel::calleeArgPortBound(func::FuncOp callee,
+                                       unsigned argIndex) const {
+  return instanceSites(callee) > 1 || argBindsSeveralArrays(callee, argIndex);
+}
+
 bool InstanceModel::argReachesSharedModule(func::FuncOp fn,
                                            unsigned argIndex) const {
   SmallPtrSet<Operation *, 8> stack;
   std::function<bool(func::FuncOp, unsigned)> shared =
       [&](func::FuncOp fieldValue, unsigned indexValue) -> bool {
-    if (instanceSites(fieldValue) > 1)
+    if (calleeArgPortBound(fieldValue, indexValue))
       return true;
     if (!stack.insert(fieldValue.getOperation()).second)
       return false;

@@ -185,6 +185,16 @@ struct InstanceModel {
   /// a module instantiated at more than one place on its way from its owner
   /// (`fn` itself, or a caller up the chain of arguments) (R6).
   bool argReachesSharedModule(mlir::func::FuncOp fn, unsigned argIndex) const;
+  /// Whether the call sites of `fn` bind two or more different arrays
+  /// (storage roots) to its memref argument `argIndex`. One module instance
+  /// then reads them through its own ports (VITIS_NOTES N75: rs_two_common,
+  /// rs_pingpong; tool.hls.memory_architecture.replication.
+  /// port_bound_several_arrays).
+  bool argBindsSeveralArrays(mlir::func::FuncOp fn, unsigned argIndex) const;
+  /// The callee side of R6 / N75: whether accesses inside `callee` to the
+  /// array passed as its argument `argIndex` go through a module port
+  /// (several instances, or several arrays bound to the parameter).
+  bool calleeArgPortBound(mlir::func::FuncOp callee, unsigned argIndex) const;
 
   // Call-graph helpers (parents of a function, as func.funcs).
   llvm::DenseMap<mlir::Operation *, llvm::SmallVector<mlir::func::FuncOp>>

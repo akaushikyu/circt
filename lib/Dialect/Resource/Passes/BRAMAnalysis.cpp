@@ -550,7 +550,8 @@ static void collectAccessesFrom(
         continue;
       if (!visitedArgs.insert({callee.getOperation(), *indexValue}).second)
         continue;
-      bool shared = portBound || (model && model->instanceSites(callee) > 1);
+      bool shared = portBound ||
+                    (model && model->calleeArgPortBound(callee, *indexValue));
       collectAccessesFrom(callee.getArgument(*indexValue), via ? via : user,
                           shared, model, visitedArgs, seen, out);
       continue;
