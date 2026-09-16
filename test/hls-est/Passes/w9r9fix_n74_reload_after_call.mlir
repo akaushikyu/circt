@@ -5,8 +5,9 @@
 // (inline off, writes G[0][i] through its own get_global), then re-reads G[0][i] inside an if arm: that reload
 // stays a read of the banks inside the arm (it was replaced by the value loaded before the call).
 // Kernel ~/hls-est-work/coord/scratch/w9r9rev/k/fwd_call.cpp; MLIR from cgeist 537d6614 (installed), --shim real.
-// No Vitis run (an IR soundness test; the total is the current hls-est output).
-// CHECK: Total BRAM: 4{{$}}
+// No Vitis run (an IR soundness test; the total is the current hls-est output: 8 since W9r10-impl attributes the
+// global's accesses by default, VITIS_NOTES N85; 4 before).
+// CHECK: Total BRAM: 8{{$}}
 // IR: call @_ZL3updii
 // IR: scf.if
 // IR-NEXT: affine.apply

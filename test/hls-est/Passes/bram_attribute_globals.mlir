@@ -1,9 +1,11 @@
-// RUN: hls-est %s --affine-loop-normalize --convert-affine-to-loopschedule --bram-analysis -o /dev/null | FileCheck %s --check-prefix=DEFAULT
+// RUN: hls-est %s --affine-loop-normalize --convert-affine-to-loopschedule --bram-analysis --bram-attribute-globals=false -o /dev/null | FileCheck %s --check-prefix=DEFAULT
+// RUN: hls-est %s --affine-loop-normalize --convert-affine-to-loopschedule --bram-analysis -o /dev/null | FileCheck %s --check-prefix=ATTR
 // RUN: hls-est %s --affine-loop-normalize --convert-affine-to-loopschedule --bram-analysis --bram-attribute-globals --bram-debug -o /dev/null > %t.out 2> %t.err
 // RUN: FileCheck %s --input-file=%t.out --check-prefix=ATTR
 // RUN: FileCheck %s --input-file=%t.err --check-prefix=DBG
 
-// --bram-attribute-globals: a memref.global has no SSA result, so by default
+// --bram-attribute-globals (on by default since W9r10-impl, tool.hls.globals.attribute_accesses,
+// VITIS_NOTES N85; prefix DEFAULT is the earlier default, =false): a memref.global has no SSA result, so without it
 // --bram-analysis cannot see its accesses and prices it as RAM_1P (one live
 // port, x36): OPEN_ISSUES.md O4. With the flag its accesses are collected
 // through its memref.get_global sites, like an alloca's (Vitis treats globals

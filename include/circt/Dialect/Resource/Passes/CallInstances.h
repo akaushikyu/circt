@@ -197,7 +197,8 @@ struct InstanceModel {
   bool calleeArgPortBound(mlir::func::FuncOp callee, unsigned argIndex) const;
   /// Why calleeArgPortBound holds: "instances" (several instance sites, R6),
   /// "several_arrays" (N75), "array_shared_with_port_bound_parameter" (N75
-  /// per array, W9r9 review D1); empty when it does not.
+  /// per array, W9r9 review D1), "writable_global" (N85); empty when it does
+  /// not.
   llvm::StringRef calleeArgPortBoundReason(mlir::func::FuncOp callee,
                                            unsigned argIndex) const;
   /// The arrays bound to memref argument `argIndex` of `fn` at its call
@@ -209,6 +210,16 @@ struct InstanceModel {
   /// an array bound to a parameter that binds several arrays is port-bound
   /// in every callee it reaches, also through parameters that bind it alone.
   bool argSharesPortBoundArray(mlir::func::FuncOp fn, unsigned argIndex) const;
+
+  /// Whether a written global (or function static) reaches memref argument
+  /// `argIndex` of `fn` (VITIS_NOTES N85: Vitis never replicates such an
+  /// array, a callee reads it through its two ports; tool.hls.
+  /// memory_architecture.replication.port_bound_writable_globals).
+  bool argBindsWritableGlobal(mlir::func::FuncOp fn, unsigned argIndex) const;
+  /// Whether some op writes the global `global` (not a constant table).
+  bool isWrittenGlobal(mlir::Operation *global) const;
+  /// Cache of isWrittenGlobal.
+  mutable llvm::DenseMap<mlir::Operation *, bool> writtenGlobals;
 
   /// Cache of the roots bound to a parameter that binds several arrays.
   mutable std::optional<llvm::SmallVector<StorageRoot>> severalArraysRoots;

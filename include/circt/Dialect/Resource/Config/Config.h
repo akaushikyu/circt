@@ -240,6 +240,10 @@ struct ReplicationConfig {
   /// arrays is port-bound even when the callee has one instance
   /// (VITIS_NOTES N75).
   bool portBoundSeveralArrays = true;
+  /// A written global or function-static array is never replicated, also
+  /// for a callee reading it through a parameter: its accesses go through
+  /// its two ports (VITIS_NOTES N85).
+  bool portBoundWritableGlobals = true;
 };
 
 struct RomConfig {

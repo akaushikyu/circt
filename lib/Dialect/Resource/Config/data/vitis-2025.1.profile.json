@@ -20,7 +20,8 @@
           "shared_write_port_reads_when_idle": true,
           "exclusive_arm_stores_once": true,
           "callee_stores_per_loop": true,
-          "port_bound_several_arrays": true
+          "port_bound_several_arrays": true,
+          "port_bound_writable_globals": true
         },
         "rom": { "sdp_max_reads": 2, "copies": "ceil_half" },
         "sequential_scope": { "model": "stretch-pair" },
@@ -104,7 +105,7 @@
       "inlining": { "honour_inline_off": true },
       "structs": { "aggregate": true, "globals": true, "scalar_registers": true, "through_calls": true, "element_copy_loops": true, "temporary_registers": true, "member_partitions": true },
       "narrowing": { "stored_ranges": true, "load_demand": true, "full_address_interface_modes": ["m_axi"] },
-      "globals": { "attribute_accesses": false },
+      "globals": { "attribute_accesses": true },
       "grouping": { "plugin": "identity" },
       "math_library": { "table": "", "local_struct_tables_at_run_time": true }
     },

@@ -506,7 +506,7 @@
       },
       "globals": {
         "_attribute_accesses": "bool: A global's accesses are attributed through its get_global sites (--bram-attribute-globals overrides) [T-03]",
-        "attribute_accesses": false
+        "attribute_accesses": true
       },
       "grouping": {
         "_plugin": "plugin name (a memory_grouping): The MemoryGrouping (identity: one memref, one memory) [N-11]",
@@ -606,12 +606,14 @@
           "_max_copies": "uint, copies: At most this many copies of a replicated bank (1: no replication); the scheduler's pool is max_copies * (ports - 1) + 1 slots [K-02]",
           "_max_stores_per_iteration": "uint, stores: A bank some loop body stores to more often than this is never replicated [K-06]",
           "_port_bound_several_arrays": "bool: A callee parameter whose call sites bind two or more different arrays is read through the module's own ports even with one instance: those arrays are never replicated for the callee's accesses (VITIS_NOTES N75; off: only a callee instantiated at more than one place) [K-02]",
+          "_port_bound_writable_globals": "bool: A written global or function-static array is never replicated: its accesses, also those of a callee reading it through a parameter, go through its two ports and the loop II rises (VITIS_NOTES N85; off: such an array is replicated like a local) [K-02]",
           "_shared_write_port_reads_when_idle": "bool: The shared write port of the copies reads in a cycle without a write (the +1 slot) [K-02]",
           "callee_stores_per_loop": true,
           "exclusive_arm_stores_once": true,
           "max_copies": 16,
           "max_stores_per_iteration": 1,
           "port_bound_several_arrays": true,
+          "port_bound_writable_globals": true,
           "shared_write_port_reads_when_idle": true
         },
         "rom": {

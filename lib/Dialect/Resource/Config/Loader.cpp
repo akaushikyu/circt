@@ -856,6 +856,8 @@ void fillTool(const json::Object &t, ToolProfile &tool) {
   m.replication.calleeStoresPerLoop = boolean(rep, "callee_stores_per_loop");
   m.replication.portBoundSeveralArrays =
       boolean(rep, "port_bound_several_arrays", true);
+  m.replication.portBoundWritableGlobals =
+      boolean(rep, "port_bound_writable_globals", true);
   const json::Object &rom = obj(ma, "rom");
   m.rom.sdpMaxReads = integer(rom, "sdp_max_reads");
   m.rom.copies = str(rom, "copies");

@@ -1,4 +1,4 @@
-// RUN: hls-est %s --affine-loop-normalize --memory-banking-bram --convert-affine-to-loopschedule --bram-analysis --bram-debug > %t.out 2> %t.err
+// RUN: hls-est %s --affine-loop-normalize --memory-banking-bram --convert-affine-to-loopschedule --bram-analysis --bram-debug --bram-attribute-globals=false > %t.out 2> %t.err
 // RUN: FileCheck %s --input-file=%t.err
 // RUN: FileCheck %s --input-file=%t.out --check-prefix=REPORT
 
@@ -8,7 +8,8 @@
 // Covers one memref of each kind the explanation distinguishes: the banks of a
 // pragma-partitioned array (`buf`, cyclic 2), a plain counted array (`acc`), an
 // array below the BRAM promotion threshold (`small`, 8 x i32 = 256 bits), and a
-// global whose accesses cannot be attributed (`coef`).
+// global whose accesses are not attributed (`coef`; --bram-attribute-globals=false,
+// the default before W9r10-impl turned attribution on, VITIS_NOTES N85).
 
 module {
   memref.global "private" @coef : memref<64xi32> = uninitialized

@@ -9,6 +9,7 @@
 #include "circt/Dialect/Resource/Passes/LoopPragmas.h"
 #include "circt/Dialect/Resource/Passes/PartitionLayout.h"
 #include "circt/Dialect/Resource/Passes/PolygeistCompat.h"
+#include "circt/Dialect/Resource/Passes/ReadOnlyMemory.h"
 #include "circt/Dialect/Resource/Passes/StreamFifos.h"
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
@@ -1099,7 +1100,39 @@ StringRef InstanceModel::calleeArgPortBoundReason(func::FuncOp callee,
     return "several_arrays";
   if (argSharesPortBoundArray(callee, argIndex))
     return "array_shared_with_port_bound_parameter";
+  if (argBindsWritableGlobal(callee, argIndex))
+    return "writable_global";
   return "";
+}
+
+bool InstanceModel::isWrittenGlobal(Operation *global) const {
+  auto globalOp = dyn_cast<memref::GlobalOp>(global);
+  if (!globalOp || globalOp.getConstant())
+    return false;
+  auto [it, inserted] = writtenGlobals.try_emplace(global, false);
+  if (!inserted)
+    return it->second;
+  SmallVector<Value> sites;
+  if (Operation *table = SymbolTable::getNearestSymbolTable(global))
+    table->walk([&](memref::GetGlobalOp globalUse) {
+      if (globalUse.getName() == globalOp.getSymName())
+        sites.push_back(globalUse.getResult());
+    });
+  bool written = !sites.empty() && !neverWritten(sites);
+  writtenGlobals[global] = written;
+  return written;
+}
+
+bool InstanceModel::argBindsWritableGlobal(func::FuncOp fn,
+                                           unsigned argIndex) const {
+  if (!circt::hlsest::Config::get()
+           .tool.hls.memoryArchitecture.replication.portBoundWritableGlobals)
+    return false;
+  SmallVector<StorageRoot> roots;
+  boundRoots(fn, argIndex, roots);
+  return llvm::any_of(roots, [&](const StorageRoot &resultValue) {
+    return resultValue.global && isWrittenGlobal(resultValue.global);
+  });
 }
 
 void InstanceModel::boundRoots(func::FuncOp fn, unsigned argIndex,
