@@ -532,7 +532,8 @@ static std::optional<int64_t> constantBankOf(Value indexValue,
 /// are one runtime base plus constants, no two copies with the same residues:
 /// rewritten as one load per candidate bank, at the offset of the copy that
 /// addresses it.
-static void steerGroup(SmallVector<SteerMember> members, ArrayRef<Value> banks,
+/// Returns whether the group was steered (debug provenance only).
+static bool steerGroup(SmallVector<SteerMember> members, ArrayRef<Value> banks,
                        const BankLayout &lowerIndex) {
   llvm::sort(members,
              [](const SteerMember &arrayValue, const SteerMember &buildPoint) {
@@ -546,11 +547,11 @@ static void steerGroup(SmallVector<SteerMember> members, ArrayRef<Value> banks,
   unsigned numRotating = llvm::count(constBanks, std::nullopt);
   for (const SteerMember &memoryOp : members) {
     if (memoryOp.offsets.size() != numRotating)
-      return;
+      return false;
     for (auto [innerIndex, portValue] : llvm::enumerate(lowerIndex.dims))
       if (constantBankOf(memoryOp.load.getIndices()[portValue.dim],
                          portValue) != constBanks[innerIndex])
-        return;
+        return false;
   }
   Operation *first = members.front().load;
   bool movable = llvm::all_of(members, [&](const SteerMember &memoryOp) {
@@ -559,7 +560,7 @@ static void steerGroup(SmallVector<SteerMember> members, ArrayRef<Value> banks,
     });
   });
   if (!movable)
-    return;
+    return false;
   for (const SteerMember &memoryOp : members)
     for (Value loopIndex : memoryOp.load.getIndices())
       hoistBefore(loopIndex, first, false);
@@ -655,6 +656,7 @@ static void steerGroup(SmallVector<SteerMember> members, ArrayRef<Value> banks,
     memoryOp.load.replaceAllUsesWith(resultValue);
     memoryOp.load.erase();
   }
+  return true;
 }
 
 /// The copies of one group split into groups whose residue tuples are
@@ -721,18 +723,38 @@ static std::pair<AffineExpr, int64_t> splitConstant(AffineExpr entryValue) {
 /// anyway (`m = a[i]; if (m < b) m = a[i];`, Explainable-ML's pooling), but
 /// only while both are the same affine.load: once the outer one is steered
 /// (N74) the reload would read every bank again.
-static void forwardNestedReloads(Value site) {
+/// Returns how many reloads were forwarded.
+static unsigned forwardNestedReloads(Value site) {
   SmallVector<affine::AffineLoadOp> loads;
   for (Operation *user : site.getUsers())
     if (auto ld = dyn_cast<affine::AffineLoadOp>(user);
         ld && ld.getMemRef() == site)
       loads.push_back(ld);
   if (loads.size() < 2)
-    return;
+    return 0;
+
+  SmallVector<Value> handles{site};
+
+  bool isGlobal = isa<BlockArgument>(site);
+  if (auto globalUse = site.getDefiningOp<memref::GetGlobalOp>()) {
+    isGlobal = true;
+    if (auto fn = globalUse->getParentOfType<FunctionOpInterface>())
+      fn->walk([&](memref::GetGlobalOp other) {
+        if (other != globalUse &&
+            other.getNameAttr() == globalUse.getNameAttr())
+          handles.push_back(other.getResult());
+      });
+  }
   auto onlyLoadsIn = [&](Operation *scope) {
-    return llvm::all_of(site.getUsers(), [&](Operation *user) {
-      return isa<affine::AffineLoadOp, memref::LoadOp>(user) ||
-             !scope->isAncestor(user);
+    if (isGlobal &&
+        scope->walk([](CallOpInterface) { return WalkResult::interrupt(); })
+            .wasInterrupted())
+      return false;
+    return llvm::all_of(handles, [&](Value h) {
+      return llvm::all_of(h.getUsers(), [&](Operation *user) {
+        return isa<affine::AffineLoadOp, memref::LoadOp>(user) ||
+               !scope->isAncestor(user);
+      });
     });
   };
   llvm::SmallPtrSet<Operation *, 8> erased;
@@ -754,10 +776,19 @@ static void forwardNestedReloads(Value site) {
   }
   for (Operation *op : erased)
     op->erase();
+  return erased.size();
 }
 
+/// What steerLoadGroups did to one array (debug provenance, `hls.steering`
+/// on its banks; W9r9 review D8).
+struct SteerStats {
+  SmallVector<int64_t> groupSizes;
+  unsigned forwardedReloads = 0;
+};
+
 static void steerLoadGroups(Value site, ArrayRef<Value> banks,
-                            const BankLayout &lowerIndex, bool affineLoads) {
+                            const BankLayout &lowerIndex, bool affineLoads,
+                            SteerStats &stats) {
   if (lowerIndex.numBanks < 2 ||
       static_cast<int64_t>(banks.size()) != lowerIndex.numBanks ||
       llvm::any_of(lowerIndex.dims, [](const DimPartition &portValue) {
@@ -767,7 +798,7 @@ static void steerLoadGroups(Value site, ArrayRef<Value> banks,
   if (lowerIndex.dims.size() != 1 && !steerWindowGroups())
     return;
   if (affineLoads && steerWindowGroups())
-    forwardNestedReloads(site);
+    stats.forwardedReloads += forwardNestedReloads(site);
 
   auto rotatingFactors = [&](ArrayRef<std::optional<int64_t>> constBanks) {
     SmallVector<int64_t> fieldValue;
@@ -926,7 +957,9 @@ static void steerLoadGroups(Value site, ArrayRef<Value> banks,
           members.push_back(
               {converted.lookup(candidateValue.load.getOperation()),
                candidateValue.offsets});
-        steerGroup(std::move(members), banks, lowerIndex);
+        int64_t size = members.size();
+        if (steerGroup(std::move(members), banks, lowerIndex))
+          stats.groupSizes.push_back(size);
       }
     }
   }
@@ -976,8 +1009,11 @@ static void steerLoadGroups(Value site, ArrayRef<Value> banks,
                return memoryOp.offsets;
              },
              rotatingFactors(constBanks)))
-      if (cls.size() >= 2)
-        steerGroup(std::move(cls), banks, lowerIndex);
+      if (cls.size() >= 2) {
+        int64_t size = cls.size();
+        if (steerGroup(std::move(cls), banks, lowerIndex))
+          stats.groupSizes.push_back(size);
+      }
   }
 }
 
@@ -1011,6 +1047,41 @@ static void rewriteMemrefStore(memref::StoreOp storeOp, ArrayRef<Value> banks,
     }
   }
   storeOp.erase();
+}
+
+/// `hls.steering` on the memory of each bank: the sizes of the load groups
+/// steered across the banks and the forwarded if-arm reloads (N27 / N74),
+/// accumulated over the sites of a global. Read by the debug report only.
+static void recordSteering(ArrayRef<Value> banks, const SteerStats &stats) {
+  if (stats.groupSizes.empty() && stats.forwardedReloads == 0)
+    return;
+  for (Value bank : banks) {
+    Operation *mem = bank.getDefiningOp();
+    if (auto globalUse = dyn_cast_or_null<memref::GetGlobalOp>(mem))
+      mem = SymbolTable::lookupNearestSymbolFrom(globalUse,
+                                                 globalUse.getNameAttr());
+    if (!mem)
+      continue;
+    Builder buildPoint(mem->getContext());
+    SmallVector<int64_t> sizes;
+    int64_t forwarded = 0;
+    if (auto old = mem->getAttrOfType<DictionaryAttr>("hls.steering")) {
+      if (auto globalOp = old.getAs<DenseI64ArrayAttr>("groups"))
+        sizes.append(globalOp.asArrayRef().begin(),
+                     globalOp.asArrayRef().end());
+      if (auto fieldValue = old.getAs<IntegerAttr>("forwarded_reloads"))
+        forwarded = fieldValue.getInt();
+    }
+    sizes.append(stats.groupSizes.begin(), stats.groupSizes.end());
+    forwarded += stats.forwardedReloads;
+    mem->setAttr("hls.steering",
+                 buildPoint.getDictionaryAttr(
+                     {buildPoint.getNamedAttr(
+                          "groups", buildPoint.getDenseI64ArrayAttr(sizes)),
+                      buildPoint.getNamedAttr(
+                          "forwarded_reloads",
+                          buildPoint.getI64IntegerAttr(forwarded))}));
+  }
 }
 
 class BankingPlan {
@@ -1357,7 +1428,9 @@ void BankingPlan::createGlobalBanks(memref::GlobalOp globalOp,
 
 void BankingPlan::rewriteAccesses(Value site, const BankLayout &lowerIndex) {
   SmallVector<Value> banks = banksOf[site];
-  steerLoadGroups(site, banks, lowerIndex, steerAffineLoads);
+  SteerStats stats;
+  steerLoadGroups(site, banks, lowerIndex, steerAffineLoads, stats);
+  recordSteering(banks, stats);
   SmallVector<Operation *> users(site.getUsers().begin(),
                                  site.getUsers().end());
   for (Operation *user : users) {

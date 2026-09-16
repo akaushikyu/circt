@@ -11901,7 +11901,7 @@
    "cgeist_cmd": "/mnt/d/HLS/Polygeist/build/bin/cgeist top.cpp '--function=*' -S --hls-annotate --raise-scf-to-affine --memref-fullrank --xlx-prelude -I /mnt/a/Vitis/2025.1/Vitis/common/technology/autopilot -D__SYNTHESIS__ -D__VITIS_HLS__ -DAESL_SYN -D__HLS_SYN__ -D__DSP48E1__ -include /mnt/a/Vitis/2025.1/Vitis/common/technology/autopilot/etc/autopilot_ssdm_op.h -Xclang -fxlx-bitwidth -Xclang -fxlx-apint-promote -Xclang -fnative-half-type -Xclang -fnative-half-arguments-and-returns -Xclang -Wno-unknown-attributes -Xclang -fno-threadsafe-statics -Xclang -fno-use-cxa-atexit --scalar-wrapper-abi --xlx-headers -resource-dir=/mnt/d/HLS/Polygeist/llvm-project/build/lib/clang/18 -D__SYNTHESIS__ -D__VITIS_HLS__ -D__HLS_SYN__ -DAESL_SYN -std=gnu++14 -I /home/peter/circt/tools/hls-est-validate/shim/real -I . -o '<mlir>'",
    "cgeist_status": "ok",
    "design": "forgebench/mult_op_module_dot",
-   "hlsest_bram": 100,
+   "hlsest_bram": 58,
    "kind": "hlsfactory",
    "memrefs": 56,
    "mirror": "test/hls-est/Mirror/hlsfactory/forgebench/forgebench__mult_op_module_dot.mlir",

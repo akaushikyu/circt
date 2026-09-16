@@ -6,7 +6,7 @@
     Failures that are not the source's (a Vitis crash, a path Vitis split at a space, a missing file
     that exists now) are listed apart and are not exclusions.
 (2) DoD 1: designs whose native reference build is defective (uninitialised reads, AddressSanitizer
-    reports, missing third-party headers such as TAPA, a native build or testbench that fails): they
+    reports, a native build or testbench that fails; not TAPA's host runtime, W9r9 review D6): they
     cannot be verified by check_semantics and count as done when cgeist compiles them; the reason is
     recorded per design.
 (3) DoD 5: the short list of designs that may stay out of band (curated in done_exclusions_dod5.json,
@@ -39,7 +39,6 @@ NATIVE_DEFECT = [
     ("reads uninitialised memory", re.compile(r"reads uninitialised memory")),
     ("divides by zero (AddressSanitizer FPE)", re.compile(r"AddressSanitizer: FPE")),
     ("AddressSanitizer memory error", re.compile(r"AddressSanitizer: (heap|stack|global)-buffer-overflow|AddressSanitizer: SEGV")),
-    ("third-party headers missing (TAPA)", re.compile(r"frt\.h: No such file|tapa")),
     ("native build fails", re.compile(r"native build (of .* fails|does not link)")),
     ("native reference aborts", re.compile(r"reference exit -\d+")),
 ]
@@ -63,7 +62,56 @@ SPLIT_PATH = re.compile(r"\[HLS 200-40\] Cannot find design file")
 MISSING_FILE = re.compile(r"\[HLS 207-812\] '([^']+)' file not found \(([A-Za-z]):/([^:]+):\d+:\d+\)")
 
 
-def not_a_rejection(line, log_text, v):
+TB_FILE = re.compile(r"^[ \t]*add_files[ \t]+-tb[ \t]+([^\s;\[\]$]+)[ \t]*$", re.M)
+ERROR_FILE = re.compile(r"\(([A-Za-z]:/[^:()]+):\d+:\d+\)")
+_CATALOG = None
+
+
+def catalog_record(key):
+    """The HLSFactory v2 catalogue record of `key` (designs.load_hlsfactory_v2), or None."""
+    global _CATALOG
+    if _CATALOG is None:
+        import designs
+        _CATALOG = {"%s/%s" % (d["dataset"], d["benchmark"]): d for d in designs.load_hlsfactory_v2()}
+    return _CATALOG.get(key)
+
+
+def stale_catalogue_script(line, key):
+    """Why a reject-looking line comes from the catalogue's synthesis script rather than the source
+    (W9r9 review D5), or ''.  (a) [HLS 214-157] (top not found) when the script's own testbench files are
+    not in the design tree: the script was copied from another project (class_ece8893 lab3 scripts that
+    name lab2's compute_attention_HLS and its Q/K/V tensors).  (b) an error located in a file the script
+    never names, compiled only because none of its design files exists (the harness's fallback, e.g. a
+    generate_matrices.cpp helper next to a script that adds a missing top_dense.cpp)."""
+    rec = catalog_record(key)
+    if not rec:
+        return ""
+    v2 = rec.get("v2") or {}
+    script = (v2.get("tcl") or {}).get("script")
+    tree = rec.get("v2_dir") or rec.get("dir")
+    if not script or not tree:
+        return ""
+    try:
+        text = (Path(tree) / script).read_text(errors="replace")
+    except OSError:
+        return ""
+    if "214-157" in line:
+        absent = [f for f in TB_FILE.findall(text) if not (Path(tree) / f).exists()]
+        if absent:
+            return ("stale catalogue script: %s names a top no source defines and adds testbench files the "
+                    "design tree does not hold (%s); it belongs to another project, the design needs its own "
+                    "top and a Vitis re-run" % (script, ", ".join(absent[:3])))
+    m = ERROR_FILE.search(line)
+    if m and v2.get("source_rule") == "fallback":
+        name = Path(m.group(1)).name
+        if name not in text:
+            return ("harness fallback: %s adds no existing design file (%s), so every C/C++ file was compiled; "
+                    "the error is in %s, which the script never names; the design needs its own file list "
+                    "and a Vitis re-run" % (script, "; ".join(v2.get("source_notes", [])[:1]), name))
+    return ""
+
+
+def not_a_rejection(line, log_text, v, key=""):
     """Why a Vitis failure with a reject-looking error line is not a rejection of the source, or ''."""
     if VITIS_CRASH.search(log_text):
         return "Vitis crashed (EXCEPTION_ACCESS_VIOLATION after the error line): not a rejection"
@@ -77,7 +125,7 @@ def not_a_rejection(line, log_text, v):
         if not inc.startswith("/") and (src.parent / inc).exists():
             return ("stale: '%s' exists now (next to %s); the Vitis result predates it and needs a "
                     "re-run" % (inc, src.name))
-    return ""
+    return stale_catalogue_script(line, key) if key else ""
 
 
 def main():
@@ -117,7 +165,7 @@ def main():
         if not m:
             continue
         line = m.group(0)
-        why = not_a_rejection(line, log_text, v)
+        why = not_a_rejection(line, log_text, v, k)
         row = (k, line, r.get("cgeist_status"), r.get("status"))
         if why:
             not_rejects.append(row + (why,))

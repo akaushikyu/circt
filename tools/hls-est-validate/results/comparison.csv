@@ -370,7 +370,7 @@ forgebench,diff_orders_p3,514,514,0,0,True,exact,compared,ok,ok,
 forgebench,gpt_transformer_p1,28,28,0,0,True,exact,compared,ok,ok,
 forgebench,llama_transformer_p2,30,30,0,0,True,exact,compared,ok,ok,
 forgebench,mlp,,1030,,,False,,vitis missing,vitis timeout,ok,
-forgebench,mult_op_module_dot,58,100,42,42,False,over>15%,compared,ok,ok,BRAM_B2: hls-est 15 vs Vitis 1; BRAM_C1: hls-est 15 vs Vitis 1; BRAM_C2: hls-est 15 vs Vitis 1
+forgebench,mult_op_module_dot,58,58,0,0,True,exact,compared,ok,ok,
 forgebench,mult_op_module_mm,3,3,0,0,True,exact,compared,ok,ok,
 forgebench,mult_op_module_mmv,20,20,0,0,True,exact,compared,ok,ok,
 forgebench,mult_op_p1,2,2,0,0,True,exact,compared,ok,ok,

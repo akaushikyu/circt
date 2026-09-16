@@ -39,6 +39,7 @@
 #include "mlir/Interfaces/LoopLikeInterface.h"
 #include "llvm/ADT/Hashing.h"
 #include "llvm/ADT/MapVector.h"
+#include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Debug.h"
 
 #include <atomic>
@@ -53,8 +54,16 @@ using namespace circt::analysis;
 
 namespace {
 
-/// Threads the dependence tests of one analysis run use at most.
-constexpr unsigned kDependenceTestThreads = 4;
+/// Threads the dependence tests of one analysis run use at most. Each
+/// thread can hold one Fourier-Motzkin elimination of up to ~2 GB, so the
+/// peak memory grows with it (W9r9 review D4: ResidualBlock opt4 7.85 GB with
+/// 4 threads, 2.03 GB with 1; OPEN_ISSUES O103). Estimates never depend on
+/// it; --mlir-disable-threading also forces 1.
+llvm::cl::opt<unsigned> dependenceTestThreads(
+    "hls-dependence-test-threads",
+    llvm::cl::desc("Threads the memory dependence tests of one analysis run "
+                   "use at most (1: sequential; peak memory grows with it)"),
+    llvm::cl::init(4));
 
 /// Everything the dependence test between two accesses depends on: their
 /// composed access maps and operands, the blocks they live in (which fix the
@@ -353,7 +362,8 @@ void MemoryDependenceAnalysis::checkMemrefDependence(
   };
   // A few threads of its own, not the context's pool: one Fourier-Motzkin
   // test can hold hundreds of MB, and the harness runs designs side by side.
-  unsigned threads = std::min<size_t>(kDependenceTestThreads, jobs.size());
+  unsigned threads = std::min<size_t>(
+      std::max(1u, dependenceTestThreads.getValue()), jobs.size());
   if (threads > 1 && memoryOps.front()->getContext()->isMultithreadingEnabled()) {
     llvm::StdThreadPool pool(llvm::hardware_concurrency(threads));
     std::atomic<size_t> next{0};

@@ -6,6 +6,7 @@
 #include "../Plugins/Builtin/Builtins.h"
 #include "circt/Dialect/Resource/Config/ConfigUtils.h"
 #include "circt/Dialect/Resource/Passes/CallInstances.h"
+#include "circt/Dialect/Resource/Passes/FloatOps.h"
 #include "circt/Dialect/Resource/Passes/LoopPragmas.h"
 #include "circt/Dialect/Resource/Plugins/PassPolicies.h"
 #include "circt/Dialect/Resource/Plugins/Registry.h"
@@ -999,7 +1000,8 @@ private:
     auto lat = [&](llvm::StringRef cls) {
       return static_cast<unsigned>(sched.latency(cls));
     };
-    if (isa<arith::MulFOp>(op))
+    if (isa<arith::MulFOp>(op) ||
+        circt::hls_analysis::isExactReciprocalDivide(op))
       return lat("fpmul");
     if (isa<arith::AddFOp, arith::SubFOp, arith::MaximumFOp, arith::MinimumFOp,
             arith::MaxNumFOp, arith::MinNumFOp, math::FmaOp, math::FloorOp,

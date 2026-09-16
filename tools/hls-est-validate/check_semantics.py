@@ -1689,6 +1689,48 @@ def ref_flags(kind, flags, rec, vitis_inc):
     return out
 
 
+# TAPA kernels (auto_ntt): without __SYNTHESIS__ TAPA's headers take its host runtime (tapa/host: frt,
+# glog, boost.coroutine2, none of them part of the design), so the native reference never compiled
+# (W9r9 review D6).  The kernel-side headers (tapa/xilinx/hls) only wrap hls::stream, which C simulation
+# provides: include them once with __SYNTHESIS__ defined, after the C-simulation ap_int / hls_stream
+# headers have set their include guards; the design's own `#include <tapa.h>` is then a no-op.
+TAPA_KERNEL_PRELUDE = """// check_semantics.py: TAPA's kernel headers over the C-simulation hls::stream
+#include <algorithm>
+#include <array>
+#include <cassert>
+#include <climits>
+#include <cmath>
+#include <cstddef>
+#include <cstdint>
+#include <cstring>
+#include <functional>
+#include <ostream>
+#include <ap_int.h>
+#include <hls_stream.h>
+#define __SYNTHESIS__
+#include "tapa.h"
+#undef __SYNTHESIS__
+"""
+TAPA_KERNEL_MARK = os.path.join("tapa", "xilinx", "hls", "tapa.h")
+
+
+def tapa_kernel_flags(flags, work, ddir):
+    """-include of TAPA_KERNEL_PRELUDE when an -I directory holds TAPA's tapa.h and its kernel headers."""
+    dirs = [flags[k + 1] for k in range(len(flags) - 1) if flags[k] == "-I"]
+    dirs += [x[2:] for x in flags if x.startswith("-I") and len(x) > 2]
+    dirs = [os.path.join(str(ddir), d) for d in dirs]  # relative -I paths are the design directory's
+    if not any(os.path.isfile(os.path.join(d, TAPA_KERNEL_MARK)) and os.path.isfile(os.path.join(d, "tapa.h"))
+               for d in dirs):
+        return []
+    hdr = Path(work) / "cs_tapa_kernel.h"
+    if not hdr.exists() or hdr.read_text() != TAPA_KERNEL_PRELUDE:
+        hdr.parent.mkdir(parents=True, exist_ok=True)
+        hdr.write_text(TAPA_KERNEL_PRELUDE)
+    # The kernel headers call hls::stream::empty() / full() from const members; the synthesis
+    # hls::stream declares them const, the C-simulation one does not: -fpermissive lets g++ accept it.
+    return ["-fpermissive", "-include", str(hdr)]
+
+
 class Checker:
     def __init__(self, args):
         self.a = args
@@ -1868,6 +1910,8 @@ class Checker:
         a = self.a
         res = dict(status="", reason="")
         rflags = ref_flags(kind, flags, rec, self.vitis_inc)
+        if kind == "real":
+            rflags = rflags + tapa_kernel_flags(rflags, self.work, ddir)
         res["flags"] = rflags
         san = ["-fsanitize=address", "-fno-omit-frame-pointer"]
         refb = self.build_ref(kind, wd, ddir, rflags, srcs, top_fn, rec, plan, res, tag=f"{kind}", extra=san)

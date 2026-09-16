@@ -195,6 +195,23 @@ struct InstanceModel {
   /// array passed as its argument `argIndex` go through a module port
   /// (several instances, or several arrays bound to the parameter).
   bool calleeArgPortBound(mlir::func::FuncOp callee, unsigned argIndex) const;
+  /// Why calleeArgPortBound holds: "instances" (several instance sites, R6),
+  /// "several_arrays" (N75), "array_shared_with_port_bound_parameter" (N75
+  /// per array, W9r9 review D1); empty when it does not.
+  llvm::StringRef calleeArgPortBoundReason(mlir::func::FuncOp callee,
+                                           unsigned argIndex) const;
+  /// The arrays bound to memref argument `argIndex` of `fn` at its call
+  /// sites, followed up through the callers' own arguments to their roots
+  /// (an alloca, a global, or an argument of a root function).
+  void boundRoots(mlir::func::FuncOp fn, unsigned argIndex,
+                  llvm::SmallVectorImpl<StorageRoot> &out) const;
+  /// N75 is a per-array decision (W9r9 review D1, kernel w9r9rev_e75_mixed):
+  /// an array bound to a parameter that binds several arrays is port-bound
+  /// in every callee it reaches, also through parameters that bind it alone.
+  bool argSharesPortBoundArray(mlir::func::FuncOp fn, unsigned argIndex) const;
+
+  /// Cache of the roots bound to a parameter that binds several arrays.
+  mutable std::optional<llvm::SmallVector<StorageRoot>> severalArraysRoots;
 
   // Call-graph helpers (parents of a function, as func.funcs).
   llvm::DenseMap<mlir::Operation *, llvm::SmallVector<mlir::func::FuncOp>>

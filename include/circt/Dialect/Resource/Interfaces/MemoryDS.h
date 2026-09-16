@@ -84,6 +84,9 @@ namespace circt::hls_analysis {
       // than one place (VITIS_NOTES.md N14 R6): it goes through the module's
       // two ports and never makes the array replicated.
       bool portBound = false;
+      // Why (debug only): "instances" (R6), "several_arrays" (N75),
+      // "array_shared_with_port_bound_parameter" (N75 per array).
+      llvm::StringRef portBoundReason;
     };
 
     struct BRAMCost {

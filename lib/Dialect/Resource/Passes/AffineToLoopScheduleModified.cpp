@@ -11,6 +11,7 @@
 #include "circt/Dialect/Resource/HLS/HLSOps.h"
 #include "circt/Dialect/Resource/Passes/CallInstances.h"
 #include "circt/Dialect/Resource/Passes/CyclicSchedulingAnalysisModified.h"
+#include "circt/Dialect/Resource/Passes/FloatOps.h"
 #include "circt/Dialect/Resource/Passes/LoopPragmas.h"
 #include "circt/Dialect/Resource/Passes/MemrefBankClassification.h"
 #include "circt/Dialect/Resource/Plugins/MemoryInterfaces.h"
@@ -3408,6 +3409,8 @@ public:
         .Case<AddFOp, SubFOp, MaximumFOp, MinimumFOp, MaxNumFOp, MinNumFOp>(
             [&](Operation *) { return make("fpaddsub"); })
         .Case<DivFOp, RemFOp>([&](Operation *opHandle) {
+          if (circt::hls_analysis::isExactReciprocalDivide(opHandle))
+            return make("fpmul");
           return make(typedClass("fpdiv", opHandle));
         })
         .Case<math::SqrtOp, math::RsqrtOp>([&](Operation *opHandle) {

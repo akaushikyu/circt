@@ -1088,7 +1088,76 @@ bool InstanceModel::argBindsSeveralArrays(func::FuncOp fn,
 
 bool InstanceModel::calleeArgPortBound(func::FuncOp callee,
                                        unsigned argIndex) const {
-  return instanceSites(callee) > 1 || argBindsSeveralArrays(callee, argIndex);
+  return !calleeArgPortBoundReason(callee, argIndex).empty();
+}
+
+StringRef InstanceModel::calleeArgPortBoundReason(func::FuncOp callee,
+                                                  unsigned argIndex) const {
+  if (instanceSites(callee) > 1)
+    return "instances";
+  if (argBindsSeveralArrays(callee, argIndex))
+    return "several_arrays";
+  if (argSharesPortBoundArray(callee, argIndex))
+    return "array_shared_with_port_bound_parameter";
+  return "";
+}
+
+void InstanceModel::boundRoots(func::FuncOp fn, unsigned argIndex,
+                               SmallVectorImpl<StorageRoot> &out) const {
+  SmallPtrSet<Operation *, 8> stack;
+  std::function<void(func::FuncOp, unsigned)> walk =
+      [&](func::FuncOp fieldValue, unsigned indexValue) {
+        if (!stack.insert(fieldValue.getOperation()).second)
+          return;
+        auto it = parents.find(fieldValue.getOperation());
+        if (it != parents.end())
+          for (const ParentInstances &pi : it->second)
+            for (auto &[siteOp, grp] : pi.siteGroups) {
+              (void)grp;
+              auto args = cast<CallOpInterface>(siteOp).getArgOperands();
+              if (indexValue >= args.size() ||
+                  !isa<BaseMemRefType>(args[indexValue].getType()))
+                continue;
+              StorageRoot root = storageRoot(args[indexValue]);
+              auto barg = dyn_cast_or_null<BlockArgument>(root.value);
+              Operation *parentOp = pi.parent;
+              if (barg && barg.getOwner()->getParentOp() == parentOp &&
+                  parents.count(parentOp)) {
+                walk(cast<func::FuncOp>(parentOp), barg.getArgNumber());
+                continue;
+              }
+              if (!llvm::is_contained(out, root))
+                out.push_back(root);
+            }
+        stack.erase(fieldValue.getOperation());
+      };
+  walk(fn, argIndex);
+}
+
+bool InstanceModel::argSharesPortBoundArray(func::FuncOp fn,
+                                            unsigned argIndex) const {
+  if (!circt::hlsest::Config::get()
+           .tool.hls.memoryArchitecture.replication.portBoundSeveralArrays)
+    return false;
+  if (!severalArraysRoots) {
+    severalArraysRoots.emplace();
+    for (auto &[calleeOp, pis] : parents) {
+      (void)pis;
+      auto callee = cast<func::FuncOp>(calleeOp);
+      for (BlockArgument arg : callee.getArguments())
+        if (isa<BaseMemRefType>(arg.getType()) &&
+            argBindsSeveralArrays(callee, arg.getArgNumber()))
+          boundRoots(callee, arg.getArgNumber(), *severalArraysRoots);
+    }
+  }
+  if (severalArraysRoots->empty())
+    return false;
+  SmallVector<StorageRoot> mine;
+  boundRoots(fn, argIndex, mine);
+  for (const StorageRoot &resultValue : mine)
+    if (llvm::is_contained(*severalArraysRoots, resultValue))
+      return true;
+  return false;
 }
 
 bool InstanceModel::argReachesSharedModule(func::FuncOp fn,

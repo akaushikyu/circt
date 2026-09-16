@@ -213,6 +213,7 @@ struct AccessRecord {
   std::optional<std::string> viaCall;
 
   bool portBound = false;
+  std::string portBoundReason;
 };
 
 struct ScopeDemandRecord {
@@ -236,6 +237,9 @@ struct PartitionRecord {
   SmallVector<std::tuple<std::string, int64_t, int64_t>> dims;
 
   std::optional<std::string> from;
+
+  SmallVector<int64_t> steeredGroups;
+  std::optional<int64_t> forwardedReloads;
 };
 
 struct BankMathRecord {
@@ -535,10 +539,12 @@ Operation *sequentialScope(Operation *op) {
   return nullptr;
 }
 
-static void collectAccessesFrom(
-    Value mem, Operation *via, bool portBound, const InstanceModel *model,
-    DenseSet<std::pair<Operation *, unsigned>> &visitedArgs,
-    DenseSet<Operation *> &seen, SmallVectorImpl<AccessSummary> &out) {
+static void
+collectAccessesFrom(Value mem, Operation *via, StringRef portBoundReason,
+                    const InstanceModel *model,
+                    DenseSet<std::pair<Operation *, unsigned>> &visitedArgs,
+                    DenseSet<Operation *> &seen,
+                    SmallVectorImpl<AccessSummary> &out) {
   for (OpOperand &use : mem.getUses()) {
     Operation *user = use.getOwner();
     if (auto call = dyn_cast<CallOpInterface>(user)) {
@@ -550,18 +556,19 @@ static void collectAccessesFrom(
         continue;
       if (!visitedArgs.insert({callee.getOperation(), *indexValue}).second)
         continue;
-      bool shared = portBound ||
-                    (model && model->calleeArgPortBound(callee, *indexValue));
+      StringRef reason = portBoundReason;
+      if (reason.empty() && model)
+        reason = model->calleeArgPortBoundReason(callee, *indexValue);
       collectAccessesFrom(callee.getArgument(*indexValue), via ? via : user,
-                          shared, model, visitedArgs, seen, out);
+                          reason, model, visitedArgs, seen, out);
       continue;
     }
     if (auto view = dyn_cast<ViewLikeOpInterface>(user))
       if (view.getViewSource() == mem) {
         for (Value resultValue : user->getResults())
           if (isa<BaseMemRefType>(resultValue.getType()))
-            collectAccessesFrom(resultValue, via, portBound, model, visitedArgs,
-                                seen, out);
+            collectAccessesFrom(resultValue, via, portBoundReason, model,
+                                visitedArgs, seen, out);
         continue;
       }
     bool isWrite = false;
@@ -575,7 +582,8 @@ static void collectAccessesFrom(
     a.isWrite = isWrite;
     a.latency = portOccupancy(isWrite);
     a.via = via;
-    a.portBound = portBound;
+    a.portBound = !portBoundReason.empty();
+    a.portBoundReason = portBoundReason;
 
     if (auto pipeline = user->getParentOfType<LoopSchedulePipelineOp>()) {
       auto stage = user->getParentOfType<LoopSchedulePipelineStageOp>();
@@ -599,7 +607,7 @@ collectAccessSummaries(ArrayRef<Value> banks,
   DenseSet<std::pair<Operation *, unsigned>> visitedArgs;
   DenseSet<Operation *> seen;
   for (Value mem : banks)
-    collectAccessesFrom(mem, nullptr, false, model, visitedArgs, seen, out);
+    collectAccessesFrom(mem, nullptr, "", model, visitedArgs, seen, out);
   return out;
 }
 
@@ -711,6 +719,13 @@ static void describeMemref(Operation *op, unsigned index,
   }
   if (auto reason = op->getAttrOfType<StringAttr>("hls.partition_reason"))
     portValue.reason = reason.getValue().str();
+  if (auto st = op->getAttrOfType<DictionaryAttr>("hls.steering")) {
+    if (auto g = st.getAs<DenseI64ArrayAttr>("groups"))
+      portValue.steeredGroups.assign(g.asArrayRef().begin(),
+                                     g.asArrayRef().end());
+    if (auto fieldValue = st.getAs<IntegerAttr>("forwarded_reloads"))
+      portValue.forwardedReloads = fieldValue.getInt();
+  }
 }
 
 static void recordAccesses(ArrayRef<AccessSummary> accesses,
@@ -743,6 +758,7 @@ static void recordAccesses(ArrayRef<AccessSummary> accesses,
       ar.viaCall = valueHandle + " @ " + locString(a.via->getLoc());
     }
     ar.portBound = a.portBound;
+    ar.portBoundReason = a.portBoundReason.str();
     resultValue.accesses.push_back(std::move(ar));
     if (!llvm::is_contained(scopeOrder, a.scope))
       scopeOrder.push_back(a.scope);
@@ -2325,6 +2341,14 @@ static llvm::json::Object toJson(const MemrefRecord &resultValue) {
     }
     if (portValue.from)
       part["from"] = *portValue.from;
+
+    if (portValue.forwardedReloads) {
+      llvm::json::Array g;
+      for (int64_t elementCount : portValue.steeredGroups)
+        g.push_back(elementCount);
+      part["steered_groups"] = std::move(g);
+      part["forwarded_reloads"] = *portValue.forwardedReloads;
+    }
     o["partition"] = std::move(part);
   } else {
     o["partition"] = nullptr;
@@ -2352,6 +2376,10 @@ static llvm::json::Object toJson(const MemrefRecord &resultValue) {
     ao["via_call"] = optStr(a.viaCall);
 
     ao["port_bound"] = a.portBound;
+
+    ao["port_bound_reason"] = a.portBoundReason.empty()
+                                  ? llvm::json::Value(nullptr)
+                                  : llvm::json::Value(a.portBoundReason);
     accesses.push_back(std::move(ao));
   }
   o["accesses"] = std::move(accesses);

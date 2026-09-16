@@ -8,7 +8,7 @@ class_ece8893_2022_fall,17,6,6,4,66.7,85,14.2,0.0,0,11,5,1,0,1,83.3
 class_ece8893_2023_spring,32,29,29,23,79.3,254,8.8,0,0,3,26,3,0,3,89.7
 class_ece8893_spring_2025,94,79,79,46,58.2,1692,21.4,0,0,15,57,11,5,17,72.2
 flowgnn,5,2,2,0,0.0,403,201.5,201.5,0,3,1,1,0,1,50.0
-forgebench,45,44,44,35,79.5,61,1.4,0.0,0,1,40,5,3,1,90.9
+forgebench,45,44,44,36,81.8,19,0.4,0.0,0,1,41,5,2,1,93.2
 gnnbuilder,4,4,4,0,0.0,694,173.5,166.5,0,0,4,4,0,0,100.0
 hlsyn-vitis,42,17,17,12,70.6,75,4.4,0,0,25,13,1,0,4,76.5
 hp_fft_hls,16,16,16,14,87.5,6,0.4,0.0,0,0,14,0,0,2,87.5
@@ -23,14 +23,14 @@ spector_hls,10,10,10,10,100.0,0,0,0.0,0,0,10,0,0,0,100.0
 stream_hls,77,77,77,74,96.1,508,6.6,0,0,0,74,0,0,3,96.1
 vitis_examples,23,22,22,21,95.5,1,0.0,0.0,0,1,21,0,0,1,95.5
 whetstone,1,1,1,0,0.0,16,16,16,0,0,0,0,1,0,0.0
-ALL,812,741,739,652,88.2,4918,6.7,0,2,71,680,28,11,48,92.0
+ALL,812,741,739,653,88.4,4876,6.6,0,2,71,681,28,10,48,92.2
 
 run_setting,value
-generated,2026-10-21 16:10
+generated,2026-10-21 18:05
 generator,tools/hls-est-validate/make_compare_csv.py
-hls-est run json,/home/peter/hls-est-work/coord/scratch/w9r9i/P2.json
-hls-est git,unknown (HLS_EST_BIN=/home/peter/hls-est-work/coord/scratch/w9r9i/bin/hls-est.P2)
-hls-est binary,/home/peter/hls-est-work/coord/scratch/w9r9i/bin/hls-est.P2
+hls-est run json,/home/peter/hls-est-work/coord/scratch/w9r9fix/F.json
+hls-est git,649e9501d
+hls-est binary,/home/peter/hls-est-work/coord/scratch/w9r9fix/bin/hls-est.F1
 pipeline,--lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --infer-vitis-split-array=td=off --narrow-ram-widths --memory-banking-bram --convert-affine-to-loopschedule --bram-analysis
 shim,/home/peter/circt/tools/hls-est-validate/shim/real
 cgeist,/home/peter/hls-est-work/coord/scratch/w9r8g/bin/cgeist.g
