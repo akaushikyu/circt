@@ -77,6 +77,35 @@ Operation *enclosingRegion(Operation *op) {
   return nullptr;
 }
 
+// Whether `op` lies in the dataflow region `region`, directly or inside a
+// dataflow region nested in one of its processes.
+bool liesInRegion(Operation *op, Operation *region) {
+  if (!circt::hlsest::Config::get()
+           .tool.hls.dataflowChannels.throughNestedRegions)
+    return enclosingRegion(op) == region;
+  for (Operation *r = enclosingRegion(op); r; r = enclosingRegion(r))
+    if (r == region)
+      return true;
+  return false;
+}
+
+// The innermost dataflow region that holds every access. A region nested in
+// a process of an outer region does not change the outer region's channels
+// (VITIS_NOTES N84, w9r10p_pc_nest: an array the outer region's producer
+// writes from inside its own dataflow loop is still a PIPO of the outer
+// region); null when no region holds them all.
+Operation *commonRegion(ArrayRef<ChannelAccess> accesses) {
+  if (accesses.empty())
+    return nullptr;
+  for (Operation *r = enclosingRegion(accesses.front().anchor); r;
+       r = enclosingRegion(r))
+    if (llvm::all_of(accesses, [&](const ChannelAccess &a) {
+          return liesInRegion(a.anchor, r);
+        }))
+      return r;
+  return nullptr;
+}
+
 std::string locText(Location loc) {
   std::string s;
   llvm::raw_string_ostream os(s);
@@ -506,7 +535,7 @@ collectStorageUses(Operation *region,
     }
     bool local = true;
     for (const ChannelAccess &a : accesses) {
-      if (enclosingRegion(a.anchor) != region) {
+      if (!liesInRegion(a.anchor, region)) {
         local = false;
         break;
       }
@@ -793,13 +822,9 @@ ChannelVerdict analyzeDataflowChannel(Operation *storage,
   ChannelVerdict v;
   if (accesses.empty())
     return v;
-  Operation *region = nullptr;
-  for (const ChannelAccess &a : accesses) {
-    Operation *r = enclosingRegion(a.anchor);
-    if (!r || (region && r != region))
-      return v; // not every access lies in one dataflow region
-    region = r;
-  }
+  Operation *region = commonRegion(accesses);
+  if (!region)
+    return v; // not every access lies in one dataflow region
   // A local array belongs to the region of its own function (cgeist places
   // the allocas of a loop body at the function entry).
   if (!isa<memref::GlobalOp>(storage)) {

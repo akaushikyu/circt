@@ -329,6 +329,10 @@ struct StreamConfig {
 struct DataflowChannelConfig {
   bool enabled = true;
   int64_t defaultBlocks = 2;
+  /// An array the processes of a dataflow region exchange stays a channel of
+  /// that region when one process accesses it from inside its own nested
+  /// dataflow region (VITIS_NOTES N84); off: such an array is no channel.
+  bool throughNestedRegions = true;
 };
 
 struct PipelineDecisionConfig {

@@ -62,7 +62,7 @@
         "declared_element_bits": true,
         "stream_pragma_arrays": true
       },
-      "dataflow_channels": { "enabled": true, "default_blocks": 2 },
+      "dataflow_channels": { "enabled": true, "default_blocks": 2, "through_nested_regions": true },
       "pipeline_decision": {
         "policy": "vitis-pipeline-loops",
         "float_loads_perfect": true,

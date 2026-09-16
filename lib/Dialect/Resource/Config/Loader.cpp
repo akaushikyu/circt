@@ -924,6 +924,8 @@ void fillTool(const json::Object &t, ToolProfile &tool) {
   const json::Object &dc = obj(hls, "dataflow_channels");
   h.dataflowChannels.enabled = boolean(dc, "enabled");
   h.dataflowChannels.defaultBlocks = integer(dc, "default_blocks");
+  h.dataflowChannels.throughNestedRegions =
+      boolean(dc, "through_nested_regions", true);
 
   const json::Object &pd = obj(hls, "pipeline_decision");
   h.pipelineDecision.policy = str(pd, "policy");

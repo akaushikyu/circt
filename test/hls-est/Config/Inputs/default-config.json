@@ -493,8 +493,10 @@
       "dataflow_channels": {
         "_default_blocks": "uint, blocks: Blocks of a channel without a stream type=pipo depth [P-08]",
         "_enabled": "bool: Price an array one process writes and a later one reads as a PIPO (--bram-dataflow-channels overrides) [P-08]",
+        "_through_nested_regions": "bool: An array exchanged by the processes of a dataflow region stays a channel of that region when a process accesses it from inside its own nested dataflow region (VITIS_NOTES N84; off: no channel) [P-08]",
         "default_blocks": 2,
-        "enabled": true
+        "enabled": true,
+        "through_nested_regions": true
       },
       "folding": {
         "_canonicalize": "bool: Also apply every dialect's canonicalization in the same rewrite, so a folded zero propagates [F-03]",

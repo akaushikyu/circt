@@ -195,6 +195,7 @@ const KeySpec kSchema[] = {
   {"tool.hls.dataflow_channels", KeyKind::Section, "", "Ping-pong channels of a dataflow region", "P-08", BA, "", kNoLimit, kNoLimit, false},
   {"tool.hls.dataflow_channels.enabled", KeyKind::Bool, "", "Price an array one process writes and a later one reads as a PIPO (--bram-dataflow-channels overrides)", "P-08", BA, "", kNoLimit, kNoLimit, false},
   {"tool.hls.dataflow_channels.default_blocks", KeyKind::UInt, "blocks", "Blocks of a channel without a stream type=pipo depth", "P-08", BA, "", 1, kNoLimit, false},
+  {"tool.hls.dataflow_channels.through_nested_regions", KeyKind::Bool, "", "An array exchanged by the processes of a dataflow region stays a channel of that region when a process accesses it from inside its own nested dataflow region (VITIS_NOTES N84; off: no channel)", "P-08", BA, "", kNoLimit, kNoLimit, true},
 
   {"tool.hls.pipeline_decision", KeyKind::Section, "", "The automatic pipeline / unroll / flatten decision", "D-01..D-12", APU, "", kNoLimit, kNoLimit, false},
   {"tool.hls.pipeline_decision.policy", KeyKind::PluginName, "", "The PipelinePolicy", "D-02, D-07, D-08", APU, "pipeline_policy", kNoLimit, kNoLimit, false},
