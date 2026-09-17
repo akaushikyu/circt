@@ -4,9 +4,7 @@
 // design: hlsyn-vitis/vivado-target__sources__gemm-blocked (harness catalogue record; compiled as run_hlsest.py does)
 // top: _Z6bbgemmPdS_S_
 // Vitis 2025.1 td=off: vitis failed: ERROR: [HLS 200-70] Failed building synthesis data model.
-// expected to fail: hls-est did not finish within 600 s at generation; the RUN line stops it after 120 s
-// RUN: timeout 120 hls-est %s --symbol-privatize=exclude=_Z6bbgemmPdS_S_ --symbol-dce --lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --infer-vitis-split-array=td=off --narrow-ram-widths --memory-banking-bram --convert-affine-to-loopschedule '--bram-analysis=top=_Z6bbgemmPdS_S_ math-costs=%hls_est_math_costs' -o /dev/null | FileCheck %s
-// XFAIL: *
+// RUN: hls-est %s --symbol-privatize=exclude=_Z6bbgemmPdS_S_ --symbol-dce --lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --infer-vitis-split-array=td=off --narrow-ram-widths --memory-banking-bram --convert-affine-to-loopschedule '--bram-analysis=top=_Z6bbgemmPdS_S_ math-costs=%hls_est_math_costs' -o /dev/null | FileCheck %s
 
 module {
   func.func @_Z6bbgemmPdS_S_(%arg0: memref<4096xf64>, %arg1: memref<4096xf64>, %arg2: memref<4096xf64>) attributes {hls.orig_name = "bbgemm", llvm.linkage = #llvm.linkage<external>} {
@@ -74,4 +72,14 @@ module {
   }
 }
 
-// CHECK: Total BRAM:
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":13:15){{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=16{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":14:17){{$}}
+// CHECK-NEXT: kind=RAM_2P  bram=16{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":15:17){{$}}
+// CHECK-NEXT: kind=RAM_2P  bram=16{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: Total BRAM: 48{{$}}

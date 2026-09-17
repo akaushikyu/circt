@@ -567,15 +567,15 @@ module {
 // CHECK-NEXT: kind=RAM_T2P  bram=4{{$}}
 // CHECK-NOT: {{^memref\.}}
 // CHECK: memref.alloca @ loc("{{[^"]*}}":165:17){{$}}
-// CHECK-NEXT: kind=RAM_2P  bram=4{{$}}
+// CHECK-NEXT: kind=RAM_1WNR  bram=8{{$}}
 // CHECK-NOT: {{^memref\.}}
 // CHECK: memref.alloca @ loc("{{[^"]*}}":165:17){{$}}
-// CHECK-NEXT: kind=RAM_2P  bram=4{{$}}
+// CHECK-NEXT: kind=RAM_1WNR  bram=8{{$}}
 // CHECK-NOT: {{^memref\.}}
 // CHECK: memref.alloca @ loc("{{[^"]*}}":165:17){{$}}
-// CHECK-NEXT: kind=RAM_2P  bram=4{{$}}
+// CHECK-NEXT: kind=RAM_1WNR  bram=8{{$}}
 // CHECK-NOT: {{^memref\.}}
 // CHECK: memref.alloca @ loc("{{[^"]*}}":165:17){{$}}
-// CHECK-NEXT: kind=RAM_2P  bram=4{{$}}
+// CHECK-NEXT: kind=RAM_1WNR  bram=8{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: Total BRAM: 83{{$}}
+// CHECK: Total BRAM: 99{{$}}

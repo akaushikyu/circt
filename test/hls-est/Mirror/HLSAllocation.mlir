@@ -441,16 +441,16 @@ module {
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
 // CHECK: memref.global @ loc("{{[^"]*}}":25:3){{$}}
-// CHECK-NEXT: kind=RAM_1P  bram=64{{$}}
+// CHECK-NEXT: kind=RAM_2P  bram=64{{$}}
 // CHECK-NOT: {{^memref\.}}
 // CHECK: memref.global @ loc("{{[^"]*}}":26:3){{$}}
-// CHECK-NEXT: kind=RAM_1P  bram=64{{$}}
+// CHECK-NEXT: kind=RAM_2P  bram=64{{$}}
 // CHECK-NOT: {{^memref\.}}
 // CHECK: memref.global @ loc("{{[^"]*}}":27:3){{$}}
-// CHECK-NEXT: kind=RAM_1P  bram=64{{$}}
+// CHECK-NEXT: kind=RAM_2P  bram=64{{$}}
 // CHECK-NOT: {{^memref\.}}
 // CHECK: memref.global @ loc("{{[^"]*}}":28:3){{$}}
-// CHECK-NEXT: kind=RAM_1P  bram=64{{$}}
+// CHECK-NEXT: kind=RAM_2P  bram=64{{$}}
 // CHECK-NOT: {{^memref\.}}
 // CHECK: memref.alloca @ loc("{{[^"]*}}":282:15){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}

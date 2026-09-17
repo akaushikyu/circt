@@ -153,7 +153,7 @@ module {
 // CHECK-NEXT: kind=RAM_1P  bram=4{{$}}
 // CHECK-NOT: {{^memref\.}}
 // CHECK: memref.global @ loc("{{[^"]*}}":17:3){{$}}
-// CHECK-NEXT: kind=RAM_1P  bram=16{{$}}
+// CHECK-NEXT: kind=RAM_T2P  bram=16{{$}}
 // CHECK-NOT: {{^memref\.}}
 // CHECK: memref.alloca @ loc("{{[^"]*}}":107:15){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}

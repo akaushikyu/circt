@@ -544,7 +544,7 @@ module {
 
 // CHECK-NOT: {{^memref\.}}
 // CHECK: memref.global @ loc("{{[^"]*}}":12:3){{$}}
-// CHECK-NEXT: kind=RAM_1P  bram=128{{$}}
+// CHECK-NEXT: kind=RAM_T2P  bram=128{{$}}
 // CHECK-NOT: {{^memref\.}}
 // CHECK: memref.global @ loc("{{[^"]*}}":13:3){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}

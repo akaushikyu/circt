@@ -4,9 +4,7 @@
 // design: hlsyn-vitis/vivado-target__sources__symm-opt-medium (harness catalogue record; compiled as run_hlsest.py does)
 // top: _Z11kernel_symmddPA240_dPA200_dS0_
 // Vitis 2025.1 td=off: no ground truth (not synthesised)
-// expected to fail: hls-est did not finish within 600 s at generation; the RUN line stops it after 120 s
-// RUN: timeout 120 hls-est %s --symbol-privatize=exclude=_Z11kernel_symmddPA240_dPA200_dS0_ --symbol-dce --lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --infer-vitis-split-array=td=off --narrow-ram-widths --memory-banking-bram --convert-affine-to-loopschedule '--bram-analysis=top=_Z11kernel_symmddPA240_dPA200_dS0_ math-costs=%hls_est_math_costs' -o /dev/null | FileCheck %s
-// XFAIL: *
+// RUN: hls-est %s --symbol-privatize=exclude=_Z11kernel_symmddPA240_dPA200_dS0_ --symbol-dce --lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --infer-vitis-split-array=td=off --narrow-ram-widths --memory-banking-bram --convert-affine-to-loopschedule '--bram-analysis=top=_Z11kernel_symmddPA240_dPA200_dS0_ math-costs=%hls_est_math_costs' -o /dev/null | FileCheck %s
 
 #set = affine_set<(d0, d1) : (d0 - d1 - 1 >= 0)>
 module {
@@ -78,4 +76,14 @@ module {
   }
 }
 
-// CHECK: Total BRAM:
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":13:15){{$}}
+// CHECK-NEXT: kind=RAM_2P  bram=256{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":14:17){{$}}
+// CHECK-NEXT: kind=RAM_2P  bram=256{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":15:17){{$}}
+// CHECK-NEXT: kind=RAM_2P  bram=256{{$}}
+// CHECK-NOT: {{^memref\.}}
+// CHECK: Total BRAM: 768{{$}}
