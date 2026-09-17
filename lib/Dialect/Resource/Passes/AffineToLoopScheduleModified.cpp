@@ -25,6 +25,7 @@
 #include "mlir/Dialect/Affine/Analysis/LoopAnalysis.h"
 #include "mlir/Dialect/Affine/IR/AffineMemoryOpInterfaces.h"
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
+#include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/Affine/IR/AffineValueMap.h"
 #include "mlir/Dialect/Affine/LoopUtils.h"
 #include "mlir/Dialect/Affine/Utils.h"
@@ -3741,6 +3742,10 @@ public:
               TruncIOp, ExtSIOp, ExtUIOp, NegFOp, CmpFOp, ExtFOp, TruncFOp,
               SIToFPOp, UIToFPOp, FPToSIOp, FPToUIOp, BitcastOp>(
             [&](Operation *) { return make("comb"); })
+        // An integer max / min is a compare and a select (both comb above);
+        // a member of an SSA struct value is a wire (OPEN_ISSUES O111 (b)).
+        .Case<MaxSIOp, MinSIOp, MaxUIOp, MinUIOp, LLVM::InsertValueOp,
+              LLVM::ExtractValueOp>([&](Operation *) { return make("comb"); })
         .Case<AffineStoreOp, memref::StoreOp, AffineLoadOp, memref::LoadOp,
               StoreEnableOp>([&](Operation *) { return make("mem"); })
         .Case<MulIOp, DivSIOp, DivUIOp, RemSIOp, RemUIOp>(
