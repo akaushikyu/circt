@@ -14,6 +14,7 @@
 #include "circt/Dialect/Resource/Passes/FloatOps.h"
 #include "circt/Dialect/Resource/Passes/LoopPragmas.h"
 #include "circt/Dialect/Resource/Passes/MemrefBankClassification.h"
+#include "circt/Dialect/Resource/Passes/StreamFifos.h"
 #include "circt/Dialect/Resource/Plugins/MemoryInterfaces.h"
 #include "circt/Dialect/Resource/Plugins/Registry.h"
 #include "circt/Dialect/Resource/Plugins/Scheduling.h"
@@ -2948,8 +2949,10 @@ LogicalResult AffineToLoopSchedule::populateOperatorTypes(
     problem.setLatency(opr, t->latency);
     problem.setLinkedOperatorType(op, opr);
     if (t->unitLimit) {
-      Problem::ResourceType r =
-          problem.getOrInsertResourceType("unit_" + t->cls);
+      std::string unit = "unit_" + t->cls;
+      if (!t->unitInstance.empty())
+        unit += "@" + t->unitInstance;
+      Problem::ResourceType r = problem.getOrInsertResourceType(unit);
       problem.setLimit(r, *t->unitLimit);
       problem.setLinkedResourceTypes(op, {r});
     }
@@ -3375,10 +3378,16 @@ public:
       out.push_back(candidateValue);
   }
 
-  /// Optional per-type classes (VITIS_NOTES N78); an absent one falls back
-  /// to its base class.
-  static constexpr const char *kTypedClasses[] = {"fpdiv_f32", "fpdiv_f64",
-                                                  "fpsqrt_f32", "fpsqrt_f64"};
+  static constexpr const char *kStreamRead = "stream_read";
+  static constexpr const char *kStreamWrite = "stream_write";
+
+  /// Optional classes: per-type classes (VITIS_NOTES N78; an absent one
+  /// falls back to its base class) and the hls::stream accesses (N82; absent:
+  /// a loop with a stream access stays sequential, the behaviour before
+  /// W9r10).
+  static constexpr const char *kTypedClasses[] = {"fpdiv_f32",  "fpdiv_f64",
+                                                  "fpsqrt_f32", "fpsqrt_f64",
+                                                  kStreamRead,  kStreamWrite};
 
   void library(SmallVectorImpl<OperatorTiming> &out) const override {
     for (const char *candidateValue :
@@ -3427,6 +3436,8 @@ public:
         .Case<math::FloorOp, math::CeilOp, math::RoundOp, math::RoundEvenOp,
               math::TruncOp>([&](Operation *) { return make("fpaddsub"); })
         .Default([&](Operation *badOp) -> std::optional<OperatorTiming> {
+          if (std::optional<OperatorTiming> t = streamTiming(badOp))
+            return t;
           auto call = dyn_cast<CallOpInterface>(badOp);
           if (!call)
             return std::nullopt;
@@ -3459,6 +3470,92 @@ public:
 
 private:
   std::map<std::string, int64_t> latencies;
+
+  /// A blocking access occupies its stream object's one port for a cycle
+  /// (N82: two reads, or two writes, of one stream per iteration give II 2;
+  /// accesses to two different streams give II 1).
+  static constexpr unsigned kStreamAccessesPerCycle = 1;
+
+  /// The blocking hls::stream access `op` makes (read / operator>>, write /
+  /// operator<<), or nullopt. The non-blocking forms and empty / full are
+  /// not covered (no kernel yet).
+  static std::optional<StringRef> streamAccessClass(Operation *op) {
+    auto call = dyn_cast<func::CallOp>(op);
+    if (!call)
+      return std::nullopt;
+    std::optional<circt::hls_analysis::StreamTemplate> t =
+        circt::hls_analysis::parseStreamMethod(call.getCallee());
+    if (!t)
+      return std::nullopt;
+    StringRef memoryOp = t->method;
+    if ((memoryOp.starts_with("4read") && !memoryOp.starts_with("4read_nb")) ||
+        memoryOp.starts_with("rs"))
+      return StringRef(kStreamRead);
+    if (memoryOp.starts_with("5write") || memoryOp.starts_with("ls"))
+      return StringRef(kStreamWrite);
+    return std::nullopt;
+  }
+
+  /// A view of a stream handle (polygeist.subindex, memref.cast).
+  static bool isHandleView(Operation *op) {
+    return op->getName().getStringRef() == "polygeist.subindex" ||
+           isa<memref::CastOp>(op);
+  }
+
+  /// True when every use of `op`'s results is, through further views, an
+  /// operand of a blocking stream access.
+  static bool reachesOnlyStreamAccesses(Operation *op) {
+    for (Value r : op->getResults())
+      for (Operation *user : r.getUsers()) {
+        if (isHandleView(user) ? !reachesOnlyStreamAccesses(user)
+                               : !streamAccessClass(user))
+          return false;
+      }
+    return true;
+  }
+
+  /// The stream object a handle names: the root value and the indices of
+  /// the views taken from it (a constant index by value, another by its SSA
+  /// value), as a resource key.
+  static std::string streamObjectKey(Value handle) {
+    std::string key;
+    llvm::raw_string_ostream os(key);
+    SmallVector<std::string> indices;
+    while (Operation *def = handle.getDefiningOp()) {
+      if (!isHandleView(def))
+        break;
+      if (def->getNumOperands() == 2) {
+        APInt valueHandle;
+        if (matchPattern(def->getOperand(1), m_ConstantInt(&valueHandle)))
+          indices.push_back(std::to_string(valueHandle.getSExtValue()));
+        else
+          indices.push_back("v" +
+                            std::to_string(hash_value(def->getOperand(1))));
+      }
+      handle = def->getOperand(0);
+    }
+    os << hash_value(handle);
+    for (const std::string &loopIndex : llvm::reverse(indices))
+      os << "[" << loopIndex << "]";
+    return key;
+  }
+
+  /// The timing of a stream access, or of a view feeding only stream
+  /// accesses (a wire), when the stream classes are configured.
+  std::optional<OperatorTiming> streamTiming(Operation *op) const {
+    if (!latencies.count(kStreamRead) || !latencies.count(kStreamWrite))
+      return std::nullopt;
+    if (isHandleView(op))
+      return reachesOnlyStreamAccesses(op) ? std::optional(make("comb"))
+                                           : std::nullopt;
+    std::optional<StringRef> cls = streamAccessClass(op);
+    if (!cls || op->getNumOperands() == 0)
+      return std::nullopt;
+    OperatorTiming t = make(*cls);
+    t.unitLimit = kStreamAccessesPerCycle;
+    t.unitInstance = streamObjectKey(op->getOperand(0));
+    return t;
+  }
 
   int64_t latency(StringRef cls) const {
     auto it = latencies.find(cls.str());

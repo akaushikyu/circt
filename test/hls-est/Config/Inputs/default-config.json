@@ -366,7 +366,7 @@
     },
     "timing": {
       "_model": "plugin name (a operator_timing_model): The OperatorTimingModel [S-02]",
-      "_operator_latencies": "map of int, cycles: Latency per operator class of calyx-fixed (unconfirmed against Vitis); call / kept_call -1: the loop stays sequential; the optional fpdiv_f32 / fpdiv_f64 / fpsqrt_f32 / fpsqrt_f64 replace fpdiv / fpsqrt for that element type (VITIS_NOTES N78) [S-01, S-03, S-04]",
+      "_operator_latencies": "map of int, cycles: Latency per operator class of calyx-fixed (unconfirmed against Vitis); call / kept_call -1: the loop stays sequential; the optional fpdiv_f32 / fpdiv_f64 / fpsqrt_f32 / fpsqrt_f64 replace fpdiv / fpsqrt for that element type (VITIS_NOTES N78); the optional stream_read / stream_write time a blocking hls::stream access on its stream's one port (N82; absent: the loop stays sequential) [S-01, S-03, S-04]",
       "model": "calyx-fixed",
       "operator_latencies": {
         "call": -1,

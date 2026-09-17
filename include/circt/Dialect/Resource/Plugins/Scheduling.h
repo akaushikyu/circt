@@ -62,6 +62,10 @@ struct OperatorTiming {
   ResourceVector cost; ///< per unit (empty today; Phase 6)
   unsigned occupancy = 1; ///< cycles a unit is held (recorded, ignored)
   std::optional<unsigned> unitLimit; ///< allocation limit; nullopt: unlimited
+  /// With unitLimit: the units are per object rather than per class (one
+  /// resource per distinct instance key, e.g. one port per hls::stream object,
+  /// VITIS_NOTES N82); empty: one resource for the class.
+  std::string unitInstance;
 };
 
 using OperatorTimingMap = llvm::DenseMap<mlir::Operation *, OperatorTiming>;
