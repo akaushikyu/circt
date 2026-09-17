@@ -112,6 +112,87 @@ unsigned maxReplicationCopies() {
 
 
 
+// The accesses (indices into the access list of one stretch, in program
+// order) an operation depends on: every index below `prefix`, plus the set
+// bits of `tail` at or above it. Dependences in a stretch mostly form chains
+// (each access ordered after all earlier ones), which this keeps at constant
+// size; one k-bit vector per operation of the stretch was quadratic in time
+// and memory (hlsyn gemm-blocked: 131k accesses of one bank in one stretch,
+// over 600 s and 4.6 GB; OPEN_ISSUES O103 (2)). The sets it describes are
+// exactly those of the bit vectors it replaced.
+class DepSet {
+public:
+  bool test(unsigned i) const {
+    return i < prefix || (i < tail.size() && tail.test(i));
+  }
+  bool any() const { return prefix > 0 || firstTailBit(0) >= 0; }
+  /// Every index below this is in the set.
+  unsigned prefixSize() const { return prefix; }
+  void set(unsigned i) {
+    if (i < prefix)
+      return;
+    if (i >= tail.size())
+      tail.resize(i + 1);
+    tail.set(i);
+    normalize();
+  }
+  /// Adds every index below `n`.
+  void setPrefix(unsigned n) {
+    if (n <= prefix)
+      return;
+    prefix = n;
+    normalize();
+  }
+  DepSet &operator|=(const DepSet &o) {
+    prefix = std::max(prefix, o.prefix);
+    if (o.firstTailBit(prefix) >= 0) {
+      if (tail.size() < o.tail.size())
+        tail.resize(o.tail.size());
+      tail |= o.tail;
+    }
+    normalize();
+    return *this;
+  }
+  /// Whether some index of this set is missing from `o` (BitVector::test).
+  bool hasIndexNotIn(const DepSet &o) const {
+    if (prefix > o.prefix)
+      return true; // o.prefix itself is not in o (normalized)
+    for (int b = firstTailBit(o.prefix); b >= 0;
+         b = tail.find_next(static_cast<unsigned>(b)))
+      if (!o.test(static_cast<unsigned>(b)))
+        return true;
+    return false;
+  }
+  /// The smallest index >= `from` that is not in the set.
+  unsigned nextUnset(unsigned from) const {
+    from = std::max(from, prefix);
+    if (from >= tail.size())
+      return from;
+    int u = tail.find_first_unset_in(from, tail.size());
+    return u < 0 ? static_cast<unsigned>(tail.size()) : static_cast<unsigned>(u);
+  }
+
+private:
+  unsigned prefix = 0;
+  llvm::BitVector tail; ///< absolute indices; bits below prefix are ignored
+
+  int firstTailBit(unsigned from) const {
+    from = std::max(from, prefix);
+    return from < tail.size() ? tail.find_first_in(from, tail.size()) : -1;
+  }
+  /// Moves the run of set bits at `prefix` into the prefix and drops a tail
+  /// that holds nothing above it.
+  void normalize() {
+    if (prefix < tail.size() && tail.test(prefix)) {
+      int u = tail.find_first_unset_in(prefix, tail.size());
+      prefix = u < 0 ? static_cast<unsigned>(tail.size())
+                     : static_cast<unsigned>(u);
+    }
+    if (!tail.empty() && firstTailBit(prefix) < 0)
+      tail = llvm::BitVector();
+  }
+};
+
 // Two accesses of `accs` (one bank, one stretch of a sequential scope, in
 // program order) that Vitis issues in the same state, or none.
 static std::optional<std::pair<const AccessSummary *, const AccessSummary *>>
@@ -130,9 +211,13 @@ findSameStatePair(ArrayRef<const AccessSummary *> accs,
   }
   unsigned lo = ord.front(), hi = ord.back();
   // deps[p - lo]: the accesses (indices into accs) the op at ordinal p
-  // depends on, through SSA values or memory order.
-  std::vector<llvm::BitVector> deps(hi - lo + 1, llvm::BitVector(k));
-  llvm::BitVector barrier(k);
+  // depends on, through SSA values or memory order. Invariant: an access in
+  // a set brings its own dependences along (i in d implies deps[i] in d), so
+  // an access already in d never needs to be looked at again.
+  std::vector<DepSet> deps(hi - lo + 1);
+  // Every access before the last other use of the bank (a prefix: accs is
+  // in program order).
+  unsigned barrier = 0;
   // The arms an access was hoisted out of by --convert-affine-to-loopschedule
   // (hls.if_arms: [if id, arm, ...]).
   SmallVector<ArrayRef<int64_t>> hoistedArms(k);
@@ -155,14 +240,33 @@ findSameStatePair(ArrayRef<const AccessSummary *> accs,
   };
   std::vector<MemEvent> events;
   SmallVector<MemTouch, 2> touches;
-  // Events per storage key, and those touching any storage (a null key).
-  DenseMap<const void *, SmallVector<unsigned>> eventsByKey;
-  SmallVector<unsigned> anyStorageEvents, candidates;
+  // Events per storage key, and those touching any storage (a null key); an
+  // access of `accs` inherits nothing from another access of `accs` (they
+  // are ordered by their addresses below), so the events that are not
+  // accesses are also indexed on their own.
+  struct EventIndex {
+    DenseMap<const void *, SmallVector<unsigned>> byKey;
+    SmallVector<unsigned> anyStorage, all;
+    void add(unsigned ei, ArrayRef<MemTouch> touches) {
+      all.push_back(ei);
+      if (llvm::any_of(touches,
+                       [](const MemTouch &t) { return t.key == nullptr; }))
+        anyStorage.push_back(ei);
+      for (const MemTouch &t : touches)
+        if (t.key) {
+          SmallVector<unsigned> &ids = byKey[t.key];
+          if (ids.empty() || ids.back() != ei)
+            ids.push_back(ei);
+        }
+    }
+  };
+  EventIndex allEvents, otherEvents;
+  SmallVector<unsigned> candidates;
   SmallVector<unsigned> seenStamp; // per event: the op that listed it last
   unsigned stamp = 0;
   for (unsigned p = lo; p <= hi; ++p) {
     Operation *op = ops[p];
-    llvm::BitVector &d = deps[p - lo];
+    DepSet &d = deps[p - lo];
     auto addValue = [&](Value v) {
       Operation *def = v.getDefiningOp();
       if (!def)
@@ -189,7 +293,8 @@ findSameStatePair(ArrayRef<const AccessSummary *> accs,
     // bank are ordered below, by their addresses).
     touches.clear();
     memTouches(op, touches);
-    if (!touches.empty() && !events.empty()) {
+    const EventIndex &index = selfAcc >= 0 ? otherEvents : allEvents;
+    if (!touches.empty() && !index.all.empty()) {
       const SeqScopeIndex::OpInfo &opInfo = s.info.find(op)->second;
       ArrayRef<int64_t> opHoisted = hoistedArmsOf(op);
       // Only events that can conflict with a touch of op: the same storage,
@@ -201,8 +306,7 @@ findSameStatePair(ArrayRef<const AccessSummary *> accs,
       bool anyStorage = llvm::any_of(
           touches, [](const MemTouch &t) { return t.key == nullptr; });
       if (anyStorage) {
-        for (unsigned ei = 0; ei < events.size(); ++ei)
-          candidates.push_back(ei);
+        candidates.append(index.all.begin(), index.all.end());
       } else {
         ++stamp;
         auto add = [&](ArrayRef<unsigned> ids) {
@@ -212,19 +316,17 @@ findSameStatePair(ArrayRef<const AccessSummary *> accs,
               candidates.push_back(ei);
             }
         };
-        add(anyStorageEvents);
+        add(index.anyStorage);
         for (const MemTouch &t : touches) {
-          auto it = eventsByKey.find(t.key);
-          if (it != eventsByKey.end())
+          auto it = index.byKey.find(t.key);
+          if (it != index.byKey.end())
             add(it->second);
         }
       }
       for (unsigned ei : candidates) {
         const MemEvent &e = events[ei];
-        if (selfAcc >= 0 && e.acc >= 0)
-          continue;
-        const llvm::BitVector &ed = deps[e.pos - lo];
-        if (!ed.test(d) && !(e.acc >= 0 && !d.test(e.acc)))
+        const DepSet &ed = deps[e.pos - lo];
+        if (!ed.hasIndexNotIn(d) && !(e.acc >= 0 && !d.test(e.acc)))
           continue; // nothing to inherit
         if (inExclusiveArms(s.info.find(e.op)->second, hoistedArmsOf(e.op),
                             opInfo, opHoisted))
@@ -245,37 +347,36 @@ findSameStatePair(ArrayRef<const AccessSummary *> accs,
       unsigned ei = events.size();
       events.push_back({op, p, selfAcc, touches});
       seenStamp.push_back(0);
-      if (llvm::any_of(touches,
-                       [](const MemTouch &t) { return t.key == nullptr; }))
-        anyStorageEvents.push_back(ei);
-      for (const MemTouch &t : touches)
-        if (t.key) {
-          SmallVector<unsigned> &ids = eventsByKey[t.key];
-          if (ids.empty() || ids.back() != ei)
-            ids.push_back(ei);
-        }
+      allEvents.add(ei, touches);
+      if (selfAcc < 0)
+        otherEvents.add(ei, touches);
     }
     if (selfAcc < 0) {
       // Another use of the bank (a call, a view): every access after it is
       // ordered after every access before it.
       if (llvm::any_of(op->getOperands(),
                        [&](Value v) { return bankValues.contains(v); }))
-        for (unsigned i = 0; i < k && ord[i] < p; ++i)
-          barrier.set(i);
+        barrier = std::max<unsigned>(
+            barrier, static_cast<unsigned>(llvm::lower_bound(ord, p) -
+                                           ord.begin()));
       continue;
     }
     unsigned j = self->second;
-    d |= barrier;
-    for (unsigned i = 0; i < j; ++i) {
-      if (exclusive(i, j) || !(accs[i]->isWrite || accs[j]->isWrite))
+    d.setPrefix(barrier);
+    // The earlier accesses this one is ordered after by address. Latest
+    // first: the set is a union, and an access already in it (with its own
+    // dependences) adds nothing, so a chain is settled by its last link.
+    for (unsigned i = j; i-- > d.prefixSize();) {
+      if (d.test(i) || exclusive(i, j) ||
+          !(accs[i]->isWrite || accs[j]->isWrite))
         continue;
       if (compareAddresses(accs[i]->op, op) != AddrRelation::Disjoint) {
         d.set(i);
         d |= deps[ord[i] - lo];
       }
     }
-    for (unsigned i = 0; i < j; ++i) {
-      if (d.test(i) || exclusive(i, j))
+    for (unsigned i = d.nextUnset(0); i < j; i = d.nextUnset(i + 1)) {
+      if (exclusive(i, j))
         continue;
       if (!accs[i]->isWrite && !accs[j]->isWrite &&
           compareAddresses(accs[i]->op, op) == AddrRelation::Same)
