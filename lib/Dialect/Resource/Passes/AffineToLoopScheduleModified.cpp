@@ -55,6 +55,7 @@
 #include <map>
 #include <mlir/IR/IntegerSet.h>
 #include <queue>
+#include <set>
 #include <unordered_map>
 
 #define DEBUG_TYPE "affine-to-loopschedule"
@@ -1098,6 +1099,70 @@ static bool definedOutside(ValueRange values, Operation *ifOp) {
   });
 }
 
+/// The memory touchers of an if arm by the memref they touch, with the
+/// position of the arm's op they are nested in: mayConflict over every
+/// earlier (later) op of the arm is the same question asked of the touchers
+/// of the alias set's members at smaller (larger) positions, which is what
+/// keeps movableAccesses from scanning the whole arm per access (hlsyn
+/// symm-opt-medium over 600 s; OPEN_ISSUES O103 (3)).
+struct ArmTouchers {
+  using Entry = std::pair<unsigned, const ConflictSummary::Toucher *>;
+  DenseMap<Value, SmallVector<Entry>> byMemref;
+  SmallVector<unsigned> callPositions; ///< arm ops that hold a call
+  DenseMap<Operation *, unsigned> position;
+
+  ArmTouchers(Block *block, ConflictSummaries &summaries) {
+    unsigned pos = 0;
+    for (Operation &op : *block) {
+      position[&op] = pos;
+      const ConflictSummary &stringValue = summaries.get(&op);
+      if (stringValue.hasCall)
+        callPositions.push_back(pos);
+      for (const ConflictSummary::Toucher &t : stringValue.touchers)
+        for (Value valueHandle : t.memrefs) {
+          SmallVector<Entry> &list = byMemref[valueHandle];
+          if (list.empty() || list.back().second != &t)
+            list.push_back({pos, &t});
+        }
+      ++pos;
+    }
+  }
+
+  /// mayConflict(op, ...) for some op of the arm before (`before`) or after
+  /// the op at `pos`.
+  bool anyConflict(unsigned pos, bool before, Value mem,
+                   const MemrefAliasInfo &alias, const AccessAddr &addr,
+                   bool readsConflict) const {
+    auto inRange = [&](unsigned queueValue) {
+      return before ? queueValue < pos : queueValue > pos;
+    };
+    if (alias.passedToCall && llvm::any_of(callPositions, inRange))
+      return true;
+    for (Value member : alias.members) {
+      auto it = byMemref.find(member);
+      if (it == byMemref.end())
+        continue;
+      for (const Entry &e : it->second) {
+        if (!inRange(e.first))
+          continue;
+        const ConflictSummary::Toucher &t = *e.second;
+        Operation *op = t.op;
+        if (isa<ViewLikeOpInterface>(op))
+          continue;
+        bool isLoad = isa<AffineLoadOp>(op), isStore = isa<AffineStoreOp>(op);
+        if ((isLoad || isStore) && accessMemref(op) == mem) {
+          if (isLoad && !readsConflict)
+            continue;
+          if (compareAddresses(*t.addr, addr) == AddrRelation::Disjoint)
+            continue;
+        }
+        return true;
+      }
+    }
+    return false;
+  }
+};
+
 /// The loads of `arm` that no earlier op of the arm may overwrite, and the
 /// stores of `arm` that no later op of the arm may read or overwrite, whose
 /// memref is tracked and whose address operands are defined outside `ifOp`.
@@ -1107,6 +1172,7 @@ movableAccesses(IfArm arm, Operation *ifOp,
                 SmallVectorImpl<AffineLoadOp> &loads,
                 SmallVectorImpl<AffineStoreOp> &stores,
                 ConflictSummaries &summaries) {
+  ArmTouchers touchers(arm.block, summaries);
   for (Operation &op : arm.block->without_terminator()) {
     auto load = dyn_cast<AffineLoadOp>(op);
     if (!load || !definedOutside(load.getMapOperands(), ifOp))
@@ -1114,18 +1180,9 @@ movableAccesses(IfArm arm, Operation *ifOp,
     const MemrefAliasInfo *alias = tracked(load.getMemRef());
     if (!alias)
       continue;
-    AccessAddr addr = accessAddr(load);
-    bool clobbered = false;
-    for (Operation &before : *arm.block) {
-      if (&before == &op)
-        break;
-      if (mayConflict(&before, load.getMemRef(), *alias, addr, false,
-                      summaries)) {
-        clobbered = true;
-        break;
-      }
-    }
-    if (!clobbered)
+    if (!touchers.anyConflict(touchers.position.lookup(&op), true,
+                              load.getMemRef(), *alias, accessAddr(load),
+                              false))
       loads.push_back(load);
   }
   for (Operation &op : arm.block->without_terminator()) {
@@ -1135,16 +1192,9 @@ movableAccesses(IfArm arm, Operation *ifOp,
     const MemrefAliasInfo *alias = tracked(store.getMemRef());
     if (!alias)
       continue;
-    AccessAddr addr = accessAddr(store);
-    bool used = false;
-    for (Operation *after = op.getNextNode(); after;
-         after = after->getNextNode())
-      if (mayConflict(after, store.getMemRef(), *alias, addr, true,
-                      summaries)) {
-        used = true;
-        break;
-      }
-    if (!used)
+    if (!touchers.anyConflict(touchers.position.lookup(&op), false,
+                              store.getMemRef(), *alias, accessAddr(store),
+                              true))
       stores.push_back(store);
   }
 }
@@ -1344,6 +1394,255 @@ void AffineToLoopSchedule::mergeConditionalLoads() {
                           << " loads under ifs (GVN load PRE)\n");
 }
 
+namespace {
+/// The affine accesses of the ops of one block, by memref and address, for
+/// the backward search of mergeIfElseAccesses' load forwarding: the nearest
+/// earlier op of the block that is a load of the same address or may write
+/// it. The scan op by op was quadratic in a fully unrolled body (hlsyn
+/// symm-opt-medium: 48,000 arm loads, each scanning up to the start of the
+/// pipelined body; over 600 s, OPEN_ISSUES O103 (3)).
+///
+/// compareAddresses decides two addresses by the difference of their maps:
+/// a nonzero constant in some result is Disjoint, zero in all is Same. An
+/// address is (shape, constants): the operands and the non-constant part of
+/// every result, and the constant term of every result. For two shapes the
+/// difference of the non-constant parts is, per result, a constant k or not
+/// constant; the difference of two addresses is then k + c_a - c_b in the
+/// results where k is constant. So the accesses of one shape that are Same
+/// as (or not Disjoint from) a query are those whose constants equal
+/// c_a + k in those results, found by a lookup per shape. Any other use of
+/// the memref (a non-affine access, a call) leaves the answer Unknown and
+/// the caller scans as before.
+class BlockAccessIndex {
+public:
+  enum class Answer { Unknown, None, Earlier, Blocked };
+  DenseMap<Operation *, unsigned> position;
+
+  BlockAccessIndex(Block *block, ConflictSummaries &summaries) {
+    unsigned pos = 0;
+    for (Operation &op : *block) {
+      position[&op] = pos;
+      const ConflictSummary &stringValue = summaries.get(&op);
+      if (stringValue.hasCall)
+        callPositions.push_back(pos);
+      for (const ConflictSummary::Toucher &t : stringValue.touchers)
+        add(t, &op, pos);
+      ++pos;
+    }
+  }
+
+  /// What the backward scan from the op at `pos` finds for a load of `mem`
+  /// at `addr` (alias set `alias`); `earlier` receives the load on Earlier.
+  Answer query(unsigned pos, Value mem, const MemrefAliasInfo &alias,
+               const AccessAddr &addr, Operation *&earlier) {
+    if (alias.members.size() != 1 || !alias.members.contains(mem))
+      return Answer::Unknown;
+    if (alias.passedToCall && !callPositions.empty() &&
+        callPositions.front() < pos)
+      return Answer::Unknown;
+    auto mit = perMemref.find(mem);
+    if (mit == perMemref.end())
+      return Answer::None;
+    MemrefEntries &memoryOp = mit->second;
+    if (!memoryOp.irregular.empty() && memoryOp.irregular.front() < pos)
+      return Answer::Unknown;
+    Constants ca = constantsOf(addr);
+    const Entry *best = nullptr;
+    bool bestSame = false;
+    for (auto &[shape, sh] : memoryOp.shapes) {
+      if (sh.entries.empty() || sh.entries.front().pos >= pos)
+        continue;
+
+      SmallVector<std::optional<int64_t>, 4> k =
+          partDifference(addr, sh.entries.front().addr);
+      bool full = k.size() == ca.size() && llvm::all_of(k, [](auto exprValue) {
+                    return exprValue.has_value();
+                  });
+      uint64_t mask = 0;
+      Constants target;
+      for (unsigned r = 0; r < k.size() && r < 64; ++r)
+        if (k[r]) {
+          mask |= uint64_t(1) << r;
+          target.push_back(ca[r] + *k[r]);
+        }
+      const std::vector<unsigned> *bucket =
+          sh.bucket(mask, k.size() == ca.size() ? k.size() : 0, full, target);
+      if (!bucket)
+        continue;
+
+      auto it = llvm::lower_bound(
+          *bucket, pos, [&](unsigned loopIndex, unsigned portValue) {
+            return sh.entries[loopIndex].pos < portValue;
+          });
+      while (it != bucket->begin()) {
+        --it;
+        const Entry &e = sh.entries[*it];
+        if (!e.alive)
+          continue;
+        if (!best || e.pos > best->pos) {
+          best = &e;
+          bestSame = full;
+        }
+        break;
+      }
+    }
+    if (!best)
+      return Answer::None;
+    if (bestSame && best->topLoad) {
+      earlier = best->op;
+      return Answer::Earlier;
+    }
+    return Answer::Blocked;
+  }
+
+  /// `op` (an access nested in an op of the block) goes away.
+  void erase(Operation *op) {
+    auto it = entryOfOp.find(op);
+    if (it == entryOfOp.end())
+      return;
+    it->second.first->entries[it->second.second].alive = false;
+    entryOfOp.erase(it);
+  }
+
+private:
+  using ShapeKey = std::vector<const void *>;
+  using Constants = std::vector<int64_t>;
+  struct Entry {
+    unsigned pos;
+    Operation *op;
+    bool topLoad; ///< an affine.load that is itself an op of the block
+    bool isStore;
+    AccessAddr addr;
+    bool alive = true;
+  };
+  struct Shape {
+    std::vector<Entry> entries; ///< in position order
+    /// Per (mask of the results compared, full): entry indices by the
+    /// constants of those results. Full (every result compared): stores and
+    /// the block's own loads (Same); otherwise stores only (may alias).
+    std::map<std::pair<uint64_t, bool>,
+             std::map<Constants, std::vector<unsigned>>>
+        buckets;
+    const std::vector<unsigned> *bucket(uint64_t mask, unsigned numResults,
+                                        bool full, const Constants &target) {
+      auto [it, inserted] = buckets.try_emplace({mask, full});
+      if (inserted)
+        for (unsigned loopIndex = 0; loopIndex < entries.size(); ++loopIndex) {
+          const Entry &e = entries[loopIndex];
+          if (!e.isStore && !(full && e.topLoad))
+            continue;
+          Constants candidateValue = constantsOf(e.addr), proj;
+          for (unsigned r = 0; r < candidateValue.size() && r < 64; ++r)
+            if (mask & (uint64_t(1) << r))
+              proj.push_back(candidateValue[r]);
+          it->second[proj].push_back(loopIndex);
+        }
+      (void)numResults;
+      auto buildPoint = it->second.find(target);
+      return buildPoint == it->second.end() ? nullptr : &buildPoint->second;
+    }
+  };
+  struct MemrefEntries {
+    std::vector<unsigned> irregular; ///< positions of any other use
+    std::map<ShapeKey, Shape> shapes;
+  };
+  DenseMap<Value, MemrefEntries> perMemref;
+  DenseMap<Operation *, std::pair<Shape *, unsigned>> entryOfOp;
+  SmallVector<unsigned> callPositions;
+
+  static ShapeKey shapeOf(const AccessAddr &a) {
+    ShapeKey k;
+    for (Value valueHandle : a.operands)
+      k.push_back(valueHandle.getAsOpaquePointer());
+    k.push_back(reinterpret_cast<const void *>(
+        static_cast<uintptr_t>(a.map.getNumDims())));
+    k.push_back(reinterpret_cast<const void *>(
+        static_cast<uintptr_t>(a.map.getNumSymbols())));
+    k.push_back(reinterpret_cast<const void *>(
+        static_cast<uintptr_t>(a.map.getNumResults())));
+    for (AffineExpr e : a.map.getResults())
+      k.push_back(splitConstantTerm(e).first.getAsOpaquePointer());
+    return k;
+  }
+  static Constants constantsOf(const AccessAddr &a) {
+    Constants candidateValue;
+    for (AffineExpr e : a.map.getResults())
+      candidateValue.push_back(splitConstantTerm(e).second);
+    return candidateValue;
+  }
+  /// `a` without the constant terms of its results.
+  static AffineMap partsOf(const AccessAddr &a) {
+    SmallVector<AffineExpr, 4> parts;
+    for (AffineExpr e : a.map.getResults()) {
+      AffineExpr portValue = splitConstantTerm(e).first;
+      parts.push_back(portValue ? portValue
+                                : getAffineConstantExpr(0, a.map.getContext()));
+    }
+    return AffineMap::get(a.map.getNumDims(), a.map.getNumSymbols(), parts,
+                          a.map.getContext());
+  }
+  /// Per result, the difference of the non-constant parts of `a` and `b`
+  /// when it is a constant (empty when the result counts differ). Memoized
+  /// per pair of shapes: it depends on nothing else.
+  SmallVector<std::optional<int64_t>, 4>
+  partDifference(const AccessAddr &a, const AccessAddr &buildPoint) {
+    SmallVector<std::optional<int64_t>, 4> k;
+    if (a.map.getNumResults() != buildPoint.map.getNumResults())
+      return k;
+    std::pair<ShapeKey, ShapeKey> key{shapeOf(a), shapeOf(buildPoint)};
+    auto it = differenceCache.find(key);
+    if (it != differenceCache.end())
+      return it->second;
+    AffineValueMap va(partsOf(a), a.operands),
+        vb(partsOf(buildPoint), buildPoint.operands), diff;
+    AffineValueMap::difference(va, vb, &diff);
+    for (unsigned r = 0, elementCount = diff.getNumResults(); r < elementCount;
+         ++r) {
+      if (auto candidateValue = dyn_cast<AffineConstantExpr>(diff.getResult(r)))
+        k.push_back(candidateValue.getValue());
+      else
+        k.push_back(std::nullopt);
+    }
+    differenceCache[key] = k;
+    return k;
+  }
+  std::map<std::pair<ShapeKey, ShapeKey>,
+           SmallVector<std::optional<int64_t>, 4>>
+      differenceCache;
+
+  void add(const ConflictSummary::Toucher &t, Operation *top, unsigned pos) {
+    Operation *op = t.op;
+    if (isa<ViewLikeOpInterface>(op))
+      return;
+    bool isLoad = isa<AffineLoadOp>(op), isStore = isa<AffineStoreOp>(op);
+    for (Value valueHandle : t.memrefs) {
+      MemrefEntries &memoryOp = perMemref[valueHandle];
+      if (!(isLoad || isStore) || accessMemref(op) != valueHandle) {
+        if (memoryOp.irregular.empty() || memoryOp.irregular.back() != pos)
+          memoryOp.irregular.push_back(pos);
+        continue;
+      }
+      Shape &sh = memoryOp.shapes[shapeOf(*t.addr)];
+      sh.buckets.clear();
+      entryOfOp[op] = {&sh, static_cast<unsigned>(sh.entries.size())};
+      sh.entries.push_back({pos, op, isLoad && op == top, isStore, *t.addr});
+    }
+  }
+};
+} // namespace
+
+/// Whether replacing `v` in `user` changes the address an affine access
+/// records (a map operand of the access, or an affine.apply its maps compose).
+static bool changesAnAddress(Operation *user, Value valueHandle) {
+  if (isa<AffineApplyOp>(user))
+    return true;
+  if (auto lowerIndex = dyn_cast<AffineLoadOp>(user))
+    return llvm::is_contained(lowerIndex.getMapOperands(), valueHandle);
+  if (auto st = dyn_cast<AffineStoreOp>(user))
+    return llvm::is_contained(st.getMapOperands(), valueHandle);
+  return false;
+}
+
 void AffineToLoopSchedule::mergeIfElseAccesses() {
   SmallVector<Operation *> ifs;
   getOperation().walk([&](Operation *op) {
@@ -1385,6 +1684,14 @@ void AffineToLoopSchedule::mergeIfElseAccesses() {
     if (isa_and_present<scf::IfOp, AffineIfOp>(load->getParentOp()))
       armLoads.push_back(load);
   });
+
+  DenseMap<Block *, std::unique_ptr<BlockAccessIndex>> blockIndex;
+  auto indexOf = [&](Block *block) -> BlockAccessIndex & {
+    std::unique_ptr<BlockAccessIndex> &slot = blockIndex[block];
+    if (!slot)
+      slot = std::make_unique<BlockAccessIndex>(block, summaries);
+    return *slot;
+  };
   for (AffineLoadOp load : armLoads) {
     const MemrefAliasInfo *alias = tracked(load.getMemRef());
     if (!alias)
@@ -1396,20 +1703,33 @@ void AffineToLoopSchedule::mergeIfElseAccesses() {
     AffineLoadOp earlier;
     bool blocked = false;
     for (Operation *cur = load; cur && !earlier && !blocked;) {
-      for (Operation *op = cur->getPrevNode(); op; op = op->getPrevNode()) {
-        if (auto lowerIndex = dyn_cast<AffineLoadOp>(op);
-            lowerIndex && lowerIndex != load &&
-            lowerIndex.getMemRef() == load.getMemRef() &&
-            compareAddresses(loadAddr(lowerIndex), addr) ==
-                AddrRelation::Same) {
-          earlier = lowerIndex;
-          break;
-        }
-        if (conflicts(op)) {
-          blocked = true;
-          break;
-        }
+      BlockAccessIndex &index = indexOf(cur->getBlock());
+      Operation *found = nullptr;
+      BlockAccessIndex::Answer answer = index.query(
+          index.position.lookup(cur), load.getMemRef(), *alias, addr, found);
+      if (answer == BlockAccessIndex::Answer::Earlier) {
+        earlier = cast<AffineLoadOp>(found);
+        break;
       }
+      if (answer == BlockAccessIndex::Answer::Blocked) {
+        blocked = true;
+        break;
+      }
+      if (answer == BlockAccessIndex::Answer::Unknown)
+        for (Operation *op = cur->getPrevNode(); op; op = op->getPrevNode()) {
+          if (auto lowerIndex = dyn_cast<AffineLoadOp>(op);
+              lowerIndex && lowerIndex != load &&
+              lowerIndex.getMemRef() == load.getMemRef() &&
+              compareAddresses(loadAddr(lowerIndex), addr) ==
+                  AddrRelation::Same) {
+            earlier = lowerIndex;
+            break;
+          }
+          if (conflicts(op)) {
+            blocked = true;
+            break;
+          }
+        }
       Operation *parent = cur->getParentOp();
       if (!isa_and_present<scf::IfOp, AffineIfOp>(parent))
         break;
@@ -1420,11 +1740,22 @@ void AffineToLoopSchedule::mergeIfElseAccesses() {
     addCounterAttr(earlier, "hls.merged_loads",
                    1 + counterAttr(load, "hls.merged_loads"));
 
-    for (Operation *user : load.getResult().getUsers()) {
+    Value loaded = load.getResult();
+    for (Operation *user : loaded.getUsers()) {
       summaries.invalidate(user);
       loadAddrs.erase(user);
+
+      if (changesAnAddress(user, loaded))
+        for (Operation *a = user; a; a = a->getParentOp())
+          blockIndex.erase(a->getBlock());
     }
     load.getResult().replaceAllUsesWith(earlier.getResult());
+    for (Operation *a = load; a && !isa<func::FuncOp>(a);
+         a = a->getParentOp()) {
+      auto it = blockIndex.find(a->getBlock());
+      if (it != blockIndex.end())
+        it->second->erase(load);
+    }
     summaries.invalidate(load);
     loadAddrs.erase(load.getOperation());
     load.erase();
