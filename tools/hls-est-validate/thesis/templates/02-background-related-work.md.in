@@ -1,0 +1,111 @@
+# 2. Background and related work
+
+**Draft.** Citations are Pandoc keys into `references.bib`; entries whose details could not be verified
+online are marked `unverified` there.
+
+## 2.1 Vitis HLS and what is open
+
+Vitis HLS [@amd2025ug1399] compiles a C/C++ top function and its pragmas into RTL. For this thesis the
+flow has four stages, which differ in how much of them can be observed.
+
+| stage | what it does | open? | how hls-est observes it |
+|---|---|---|---|
+| front end | clang parses C/C++ with the `ap_int` / `ap_fixed` / `hls::stream` headers, attaches pragmas, emits LLVM IR (`ap_fixed<W,I>` becomes an `iW` integer) | open: AMD's `hls-llvm-project` [@xilinx_hlsllvm] | source code; `db/a.g.ld.5.gdce.ll` |
+| middle end ("reflow") | applies pragmas, infers partitions, inlines, removes dead code, narrows widths | closed LLVM passes | `db/a.o.{1,2,3}.ll`, the `[HLS 214-*]` messages of the log |
+| back end | schedules, binds, chooses RAM types, generates RTL | closed (not LLVM) | loop and memory tables of the report, `.adb` files, the generated Verilog |
+| resource formula | BRAM_18K per memory from depth, width and ports | the 7-series formula is readable in the open repository (`queryBRAM`), but its `XilinxPlat` files carry no licence grant, so it is read, never copied | N6, N8 reconcile it with measurements |
+
+The front end is the part AMD open-sourced in 2021 (the `clang`, `clang-tools-extra` and `llvm` trees of
+`hls-llvm-project`, with a branch per release). Its Xilinx-specific files are Apache-2.0 and the LLVM base
+is under the University of Illinois/NCSA licence, so they could be ported into cgeist with their notices
+kept (MEMOS #40). Everything after the front end is a black box that has to be observed.
+
+**Pragmas and automatic decisions.** The user pragmas relevant to memory are `pipeline` (with a target
+initiation interval, II), `unroll`, `loop_flatten`, `array_partition` (cyclic, block or complete, per
+dimension), `array_reshape`, `bind_storage` (a storage kind and implementation), `stream`, `dataflow`,
+`inline` and `interface`. Without pragmas, Vitis still decides: it pipelines loops whose nested trip-count
+products stay under a limit (`config_compile -pipeline_loops`, 64 by default, N3) and unrolls the loops
+inside them, it inlines small functions automatically (N18), it partitions small or constant-indexed arrays
+(N7, N43, N61), and it chooses a storage kind per memory: single-port (`RAM_1P`), simple or true dual-port
+(`RAM_2P`, `RAM_T2P`), a read-replicated memory with one write port (`RAM_1WNR`, N4), or a ROM (N26).
+
+**Throughput-driven partitioning.** Vitis 2025.1 can partition arrays automatically to meet the target II
+(`syn.array_partition.throughput_driven`). With it on (`auto`) the partitioning depends on port pressure;
+with it off, only the partitions in N7 / N43 remain. The ground truth of this thesis is `off`, the setting
+of the original project; the `auto` behaviour was recorded on a second, informational run set (N2) and is
+modelled only behind an option (O2, MEMOS #1).
+
+**Block RAM on 7-series devices.** A RAMB18 holds 18 Kbit and can be configured with different aspect
+ratios (16K x 1 up to 512 x 36 in simple dual-port mode, at most 18 bits wide per port in true
+dual-port mode) [@amd_ug473]. The number of
+BRAM_18K of a memory therefore depends on its depth, its element width, the number of ports used in the
+same cycle and the replication factor (N6, N8). Memories below a size threshold go to LUT RAM instead and
+cost no BRAM (N5).
+
+## 2.2 Estimating HLS results
+
+Work on predicting HLS outcomes falls into three groups.
+
+**Analytical models.** COMBA [@zhao2017comba] analyses the effect of pragmas on functions, loops and
+arrays with analytical models and drives pragma exploration with them; Lin-Analyzer [@zhong2016lin]
+estimates the performance of a kernel under pragma combinations without running HLS; Aladdin [@shao2014aladdin] models accelerators pre-RTL from C through dynamic data
+dependence graphs. These models describe an *idealised* HLS tool: they predict what a reasonable tool
+would do with the pragmas, typically latency and aggregate resources, and calibrate against the tool's
+reports. They do not try to reproduce the automatic decisions of a specific commercial tool per memory.
+
+**Machine learning.** A second line learns the mapping from a design to its results. Dai et al.
+[@dai2018fast] and Pyramid [@makrani2019pyramid] learn post-implementation resources and timing from HLS
+report features. Graph neural networks predict HLS results from a program graph: Ustun et al.
+[@ustun2020delay] predict operation delays and DSP mapping, Wu et al. [@wu2022hlsgnn] predict resources
+and timing on a benchmark of synthetic and real programs, IronMan [@wu2021ironman] combines a GNN
+predictor with reinforcement learning for exploration, PowerGear [@lin2022powergear] predicts power, and
+GNN-DSE [@sohrabizadeh2022gnndse] replaces the HLS tool by a GNN surrogate inside pragma exploration, with
+the HLSyn benchmark [@bai2023hlsyn] as a shared dataset (part of HLSyn is in the catalogue used here as
+the `hlsyn-vitis` dataset). These models are fast and can be accurate on aggregates within their
+training distribution, but they are opaque: they neither explain a prediction nor say which decision of
+the tool caused it, and they need thousands of synthesis runs for training. HLSFactory
+[@abikaram2024hlsfactory], the catalogue this thesis evaluates on, was built to produce such datasets.
+
+**This thesis** sits between the two. Like the analytical models it is a white-box model with an
+explanation for every number; like the learned models it is fitted to a specific tool, but the fitting is
+done by a human-readable rule per behaviour, proven on minimal kernels, rather than by learned weights.
+Its target is not a design-space-exploration objective but the tool's own per-memory decision.
+
+## 2.3 Open HLS compilers
+
+Open HLS compilers produce their own schedules and resources. Bambu (PandA) [@ferrandi2021bambu] and
+LegUp [@canis2011legup] compile C to RTL with a classic static schedule; Dynamatic
+[@josipovic2018dynamatic] generates dynamically scheduled (elastic) circuits; Google's XLS [@xls] compiles
+its own DSLX language. On MLIR, ScaleHLS [@ye2022scalehls] optimises designs at several IR levels and
+emits HLS C++ for Vitis, Allo [@chen2024allo] composes hardware customisations in a Python-embedded
+language, and CIRCT [@circt] hosts hardware dialects, including Calyx [@nigam2021calyx], the LoopSchedule
+dialect and the scheduling infrastructure that hls-est builds on. Modulo scheduling, the core of loop
+pipelining in all of them, goes back to Rau [@rau1994]; CIRCT's scheduling infrastructure is in the tradition of exact
+formulations such as that of Oppermann et al. [@oppermann2019]; hls-est uses CIRCT's
+simplex-based modulo scheduler and a greedy one of its own (Chapter 5).
+
+These compilers are complementary to this thesis: none of them reproduces what Vitis decides, and a
+design synthesised with them has different memories from the same design synthesised with Vitis.
+hls-est reuses the infrastructure of this line (MLIR, CIRCT's LoopSchedule dialect and schedulers,
+Polygeist [@moses2021polygeist] as the C front end) but replaces the policy with the inferred Vitis
+policy. Its RTL back end (Chapter 7) is a by-product, not a competing compiler.
+
+## 2.4 Black-box inference of closed systems
+
+Inferring the behaviour of a closed system from its inputs and outputs is established practice in other
+fields. uops.info [@abel2019uops] derives the latency, throughput and port usage of x86 instructions from
+generated micro-benchmarks, a direct analogue of the minimal Vitis kernels used here. Model learning
+[@vaandrager2017model], building on Angluin's L\* algorithm [@angluin1987], learns state machines of
+black-box hardware and software components from queries and counterexamples. The inference in this thesis
+is manual rather than automated: hypotheses come from mismatches on real designs, are tested with kernel
+sweeps, and are accepted only when they hold on every kernel run; Chapter 3 describes the method and
+Chapter 8 its limits.
+
+## 2.5 Benchmarks
+
+The HLSFactory catalogue [@abikaram2024hlsfactory] collects published HLS benchmark suites and course and
+research designs. Its datasets include PolyBench [@pouchet2012polybench], MachSuite
+[@reagen2014machsuite], CHStone [@hara2008chstone], Rosetta [@zhou2018rosetta] and HLSyn [@bai2023hlsyn],
+together with course projects (the `class_ece8893_*` datasets) and a dataset of generated dataflow
+designs (`stream_hls`). Table `tables/frame-related-work.md` summarises how hls-est
+differs from the approaches above.

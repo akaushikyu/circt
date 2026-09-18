@@ -1,0 +1,221 @@
+# 5. Implementation
+
+**Draft.** This chapter condenses `hls-doc/architecture.md` and the pass pages in `hls-doc/passes/`;
+those pages hold the details, options and worked examples. Code: `~/circt` branch
+`hls-est-vitis-match` ({{circt_commits}} commits on top of `main` at `{{circt_head}}`) and Polygeist
+branch `hls-est-vitis-match` ({{polygeist_commits}} commits on top of `main` at `{{polygeist_head}}`).
+
+## 5.1 Overview
+
+hls-est turns a C/C++ HLS kernel into a per-memory BRAM_18K estimate in three steps, each a separate
+program:
+
+```
+kernel.cpp + #pragma HLS
+   | cgeist (Polygeist): clang front end with the real Vitis headers, pragmas -> hls.* attributes,
+   |                     Vitis-like front-end behaviours, loops raised to the affine dialect
+   v
+kernel.mlir  (func / affine / memref / arith / scf / math / llvm ops with hls.* attributes)
+   | hls-est: an mlir-opt style driver running a {{pipeline_passes}}-pass pipeline,
+   |          configured by a JSON document and plugins
+   v
+one block per memory (kind, banks, copies, BRAM_18K), m_axi adapters, math cores, "Total BRAM: N"
+   + an optional debug report (text or JSON) that explains every number
+   | harness (tools/hls-est-validate): joins the estimate with the Vitis ground truth per array
+   v
+per-design and per-array comparison, workbook, results pages, lit regression tests
+```
+
+The order of hls-est's stages follows the order in which Vitis takes the corresponding decisions,
+established from the intermediate files Vitis writes (N1a, N9): arrays are deleted and folded before
+`a.o.1.ll`; pipelining, unrolling and automatic partitioning are decided before `a.o.1.ll`; widths are
+narrowed between `a.o.1.ll` and `a.o.2.ll`; scheduling, binding and the RAM types come after. Each hls-est
+stage must see the IR its Vitis counterpart sees, and a stage placed too early can break a later decision
+(an early loop-invariant code motion, for example, makes perfect loop nests look imperfect and changes the
+flatten decision).
+
+## 5.2 The front end: cgeist with the real Vitis headers
+
+cgeist is the C/C++ front end of Polygeist [@moses2021polygeist], extended for HLS. The HLS-specific
+code is in {{files_cgeist_hls}} files (`tools/cgeist/Lib/*HLS*`, `*Xlx*`, {{loc_cgeist_hls}} lines). It
+does four things hls-est depends on.
+
+**Pragmas.** `--hls-annotate` turns every `#pragma HLS` into an `hls.*` attribute on the function,
+parameter, loop, local or global it applies to (`hls.pipeline`, `hls.unroll`, `hls.array_partition`,
+`hls.bind_storage`, `hls.interface`, `hls.stream`, `hls.dataflow`, `hls.inline_off`, ...). The contract
+between cgeist and hls-est is written down in Polygeist's `docs/hls-pragmas.md`; what each pragma becomes
+is in `hls-doc/frontend-pragmas.md`.
+
+**Vitis' front-end behaviours.** Where Vitis' front end makes a decision that changes the IR hls-est sees,
+cgeist copies it: two `array_partition` pragmas on one dimension are merged the Vitis way (the larger
+factor wins, `complete` wins; N24, N28); functions Vitis keeps as calls stay calls, by Vitis' automatic
+inlining rule (N18) and by `inline off` (N14); a loop whose counter is narrower than a run-time bound is
+raised to an affine loop and marked `hls.uncounted` (N15).
+
+**The real Vitis headers.** Originally cgeist compiled designs against hand-written stand-ins ("shims")
+of `ap_int.h`, `ap_fixed.h` and `hls_stream.h`. Because every header change required a shim change
+(MEMOS #39), cgeist now compiles the headers of the Vitis {{vitis_versions}} installation the way the
+Vitis front end does: a patched clang reads `__attribute__((bitwidth(N)))` as an exact N-bit integer, the
+Xilinx bit, part-select and concatenation builtins and the `__fpga_*` intrinsics are lowered, `hls_math.h`
+calls are marked as math cores, and `ap_int` / `ap_fixed` objects are passed to hls-est as plain `iN`
+integers (MEMOS #66, #67; the shims remain selectable for comparisons). Some of this code was ported from
+AMD's Apache-2.0 front-end files with their notices kept (MEMOS #40).
+
+**Loops and memories.** `--raise-scf-to-affine` raises loops to `affine.for` where it can and
+`--memref-fullrank` keeps arrays as full-rank memrefs; every local carries its C name
+(`polygeist.varname`), which the harness uses to match arrays with Vitis' memory table.
+
+**Semantic validation.** An estimate is only meaningful if the MLIR computes what the C program computes.
+`check_semantics.py` lowers each design's MLIR to LLVM, runs it on seeded inputs and compares every output
+buffer bit for bit with a native build against the real Vitis headers (`hls-doc/semantics.md`). Of the
+{{sem_records}} designs with a record, {{sem_equal}} are bit-exact, {{sem_mismatch}} mismatch and
+{{sem_na}} cannot be checked (for most of them the native reference itself is defective: uninitialised
+reads, out-of-bounds accesses, missing third-party headers; `hls-doc/done-exclusions.md` lists
+{{dod_defective_refs}} such designs and the {{dod_vitis_rejects}} designs whose source Vitis itself rejects).
+
+## 5.3 Data model: memrefs and attributes
+
+A memory is a memref: a `memref.alloca` (a local array), a `memref.alloc`, or a `memref.global` with all
+its `memref.get_global` uses (a file-scope or `static` array). hls-est attaches a
+`MemoryResourceOpInterface` (element type, shape, size in bits, storage pragma, partition) to allocas and
+globals as an external model. After banking, every bank is a memref of its own, linked to its array by
+`hls.bank_of`. The memref arguments of the top function are the interface ports; they are priced only
+through the m_axi adapter and interface rules.
+
+All decisions travel as attributes in the IR: the pass that makes a decision writes an `hls.*` attribute
+and the passes that use it read the attribute; no pass reads another pass's in-memory state. This makes
+every intermediate IR inspectable (the Compiler Explorer integration in `tools/hls-est-ce/` shows the IR
+after every pass) and every pass testable in isolation with a small MLIR input. Schedules use CIRCT's
+LoopSchedule dialect (`loopschedule.pipeline` with II, trip count and stages).
+
+## 5.4 The pass pipeline
+
+The default pipeline is listed in Table `tables/frame-pipeline.md` ({{pipeline_passes}} passes, of which
+{{pipeline_own_passes}} were written or modified for this work; {{pass_pages}} pass pages in
+`hls-doc/passes/`). The harness prepends MLIR's `--symbol-privatize` / `--symbol-dce` to keep only the
+top function and what it calls. The passes form five blocks.
+
+1. **Front block** (Vitis' front end and the first reflow stage): `--lower-polygeist-subindex` removes
+   cgeist's row and offset views; `--inline` inlines every call Vitis does not keep;
+   `--split-struct-memrefs` gives every struct member its own memory, or one packed memory under an
+   `aggregate` pragma (N29, N37); `--mark-constant-fills` marks arrays written only with constants, which
+   become ROMs whose width comes from their values (N26); MLIR's `--canonicalize` and `--sccp`;
+   `--vitis-fold` reproduces Vitis' folding of integer division by zero to its undefined value (N13); and
+   `--dead-memory-elimination` removes arrays whose values reach no output, seeded from the top function's
+   outputs (N1, N1a, N66).
+2. **Loop structure**: `--affine-loop-normalize` and `--auto-pipeline-unroll`, Vitis' automatic
+   pipeline / unroll / flatten decision (N3, with the trip-count-1 and flatten-refusal cases of N40, N64,
+   N76).
+3. **Memory structure**: `--infer-vitis-split-array=td=off` adds the automatic partitions that remain
+   with throughput-driven partitioning off (small arrays, constant indices: N7, N43, N57, N61, N77);
+   `--narrow-ram-widths` narrows a RAM's element width to the bits its stored values need and its loads
+   demand (N35, N41); `--memory-banking-bram` splits partitioned arrays into banks and rewrites every
+   access to its bank, with predicated stores (`hls.store_enable`) where the bank is only known at run time.
+4. **Schedule**: `--convert-affine-to-loopschedule` performs Vitis' middle-end clean-ups (invariant-load
+   hoisting, load CSE, store-to-load forwarding: N42, N70, N73) and then modulo-schedules every pipelined
+   loop with per-bank port limits. It is a modified copy of CIRCT's `AffineToLoopSchedule`; the schedulers
+   are CIRCT's simplex scheduler and a greedy resource-bound modulo scheduler written for large flattened
+   bodies, selected by body size.
+5. **Estimate**: `--bram-analysis` prices every memory (Section 5.5).
+
+## 5.5 Inside `--bram-analysis`
+
+`--bram-analysis` decides what each memref is and what its accesses demand, and asks the configured
+plugins how it is built and what it costs.
+
+- **What is it?** Registers (fully partitioned), excluded types, dead or zero ROMs cost nothing; an
+  `hls::stream` is a FIFO (shift registers when shallow or small, else RAMB18 bands at x18; N31, N49,
+  N58, N67, N72); a dataflow channel is a ping-pong buffer (PIPO), doubled exactly when a second process
+  drives a port of it (N33, N36, N48, N84).
+- **Storage tier.** Words x narrowed bits below 1024 goes to distributed (LUT) RAM and costs no BRAM (N5).
+- **Port demand.** For every access, through calls, the analysis finds its scope: in a pipeline, the
+  stage modulo the II; in sequential code, straight-line stretches where two independent accesses share a
+  state (N12). The port demand of a bank is the maximum number of accesses in one cycle.
+- **Memory architecture.** A bank read more often than its two ports allow in a pipelined loop is
+  replicated as `RAM_1WNR` with a copy count from reads, writes and II (N4, N38), unless it is
+  port-bound (a written global, a parameter bound to several arrays: N75, N85); the policy also chooses
+  the storage kind (`RAM_1P`, `RAM_2P`, `RAM_T2P`, ROM) and the priced port configuration (simple
+  dual-port allows x36, true dual-port at most x18).
+- **Mapping.** The number of RAMB18 per copy follows the 7-series depth bands and aspect modes (N6, N8).
+- **Instances.** A memory of a function Vitis keeps as a call is counted once per instance (N14, N59).
+- **Implicit buffers and cores.** Each m_axi bundle adds an adapter with a read FIFO and a write buffer
+  (N1a, N50, N56, N63), and each `hls::` math core instance adds the BRAM of its tables (N16, N45).
+
+The scheduler and the estimate use the same memory-architecture plugin for the port pools, so the II the
+scheduler finds and the copies the estimate prices come from one model.
+
+## 5.6 Configuration and plugins
+
+Every architectural assumption that is data is a key of one JSON configuration document; what cannot be
+data is a plugin interface (MEMOS #37, #38). The default configuration is the compiled-in device
+`amd-xc7z020clg400-1` with the tool profile `vitis-2025.1`; with it, hls-est's output is byte-identical
+to the output before configuration existed.
+
+- **Configuration.** {{config_keys}} keys (counted from `hls-doc/configuration.md`, which is generated
+  from `hls-est --dump-config-schema`) in sections `run`, `device` (resource classes, memory primitives
+  and their geometries, port configurations), `tool` (the HLS policies and the memory back end),
+  `frontend` and `scheduling`. Files given with `--hls-config` and single keys given with `--config-set`
+  override the defaults; a pass option on the command line overrides both. Unknown keys, wrong types and
+  inconsistent combinations are errors that name the key and the file.
+- **Plugins.** {{plugin_interfaces}} interfaces (Table `tables/frame-plugins.md`) with
+  {{plugin_builtins}} builtin implementations: storage selector, memory architecture policy, memory
+  mapper, memory grouping, implicit buffer model, pipeline policy, partition policy, fold rule set, and
+  five scheduling interfaces (operator timing, dependences, modulo scheduler, sequential scheduler,
+  binder). No interface names an AMD resource or a Vitis storage kind: costs are vectors over the device's
+  resource classes and memories are device memory ids, so the Vitis rules are one tool-policy
+  implementation among possible others. A separately compiled library is loaded with `--load-plugin`; an
+  example plugin with its own build is exercised by the lit tests in `test/hls-est/Plugins/`.
+- **A second architecture.** `hls-doc/new-architecture.md` retargets hls-est to Microchip PolarFire
+  (LSRAM and uSRAM, each with a fabric overhead) with a new device file and one new storage-selector
+  plugin. It is explicitly unvalidated: no Microchip tool was run, and the selection rules are designer
+  knobs, not observations.
+
+## 5.7 The debug report
+
+`--bram-debug` (text) and `--bram-debug-json` (JSON, version 2) explain every number: per memref its
+status and reason, provenance (C name, function, location), partitioning and its source, every access with
+its scope, II and stage, the port demand per scope, the replication decision and its limiting loop, the RAM
+type and reason, and the bank arithmetic (configured width, depth bands, blocks per copy); plus the
+pipelines, call instances, folds and the configuration in effect. JSON changes are additive. Debug output
+must never change an estimate: `check_debug_invariance.py` (also a build target) runs a set of designs with
+and without every debug flag and compares the estimates, and one lit test compares the two outputs with
+`diff`.
+
+## 5.8 Harness and regression net
+
+The harness (`tools/hls-est-validate/`, {{files_harness}} Python scripts, {{loc_harness}} lines) has four
+parts.
+
+- **Ground truth.** `run_vitis.py` synthesises every catalogue design once with Vitis through `cmd.exe`
+  (Vitis runs on the Windows host, hls-est in WSL) and records totals, memory and loop tables and the
+  transformation log in `results/vitis.json` ({{vitis_records}} records, {{vitis_ok}} successful).
+  `vitis_adhoc.py` runs the minimal kernels of the inference experiments into a separate experiment cache,
+  never into the ground truth.
+- **Predictions and comparison.** `run_hlsest.py` runs cgeist (cached) and hls-est on every design under a
+  memory cap; `compare.py` joins hls-est and Vitis per design and per array, matching arrays by their C
+  name through the debug JSON. Generators render the workbook, the comparison CSVs and the results pages.
+- **Regression net.** `check-hls-est` runs lit over `test/hls-est`: {{lit_passes}} hand-written pass tests,
+  {{lit_estimation}} end-to-end estimation tests, configuration and plugin tests, and the generated Mirror
+  suite: one hls-est test per cgeist HLS lit test ({{mirror_tests}} Mirror tests for {{cgeist_hls_tests}}
+  cgeist tests; {{mirror_no_test}} cgeist tests cannot be compiled and are listed with their reason), whose
+  CHECK lines pin hls-est's current output, with the Vitis number as a comment and never as a CHECK. A
+  change that is meant to change estimates must name every CHECK it changes in the changelog.
+- **Gates.** Every change must keep lit no worse, keep four PolyBench designs exact (bicg
+  {{gate_bicg_vitis}}, gesummv {{gate_gesummv_vitis}}, mvt {{gate_mvt_vitis}}, syrk {{gate_syrk_vitis}}:
+  {{gates_all_exact}} in the newest run) and keep every exact design exact unless an open issue explains
+  the change per array.
+
+Every change is recorded in `hls-doc/notes/CHANGELOG.md` with its measured effect ({{changelog_entries}}
+entries from {{changelog_first}} to {{changelog_last}}), decisions in `MEMOS.md` ({{memos_decisions}}
+numbered decisions) and open problems in `OPEN_ISSUES.md` ({{o_count}} issues, O1 to O{{o_last}}).
+
+## 5.9 Size
+
+| part | files | lines |
+|---|---:|---:|
+| hls-est models, passes, configuration, plugins (`lib/` and `include/` of `Dialect/Resource`) | {{files_resource}} | {{loc_resource}} |
+| cgeist HLS front-end code (`tools/cgeist/Lib/*HLS*`, `*Xlx*`) | {{files_cgeist_hls}} | {{loc_cgeist_hls}} |
+| harness (`tools/hls-est-validate/*.py`) | {{files_harness}} | {{loc_harness}} |
+
+The `Dialect/Resource` count includes the estimator this work started from; the changelog separates the
+contributions of this project.
