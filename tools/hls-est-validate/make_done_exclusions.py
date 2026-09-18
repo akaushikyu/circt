@@ -64,6 +64,8 @@ MISSING_FILE = re.compile(r"\[HLS 207-812\] '([^']+)' file not found \(([A-Za-z]
 
 TB_FILE = re.compile(r"^[ \t]*add_files[ \t]+-tb[ \t]+([^\s;\[\]$]+)[ \t]*$", re.M)
 ERROR_FILE = re.compile(r"\(([A-Za-z]:/[^:()]+):\d+:\d+\)")
+REL_ERROR_FILE = re.compile(r"\(([^:()]+):\d+:\d+\)")
+TOP_NOT_FOUND = re.compile(r"no function named '([^']+)'")
 _CATALOG = None
 
 
@@ -80,9 +82,12 @@ def stale_catalogue_script(line, key):
     """Why a reject-looking line comes from the catalogue's synthesis script rather than the source
     (W9r9 review D5), or ''.  (a) [HLS 214-157] (top not found) when the script's own testbench files are
     not in the design tree: the script was copied from another project (class_ece8893 lab3 scripts that
-    name lab2's compute_attention_HLS and its Q/K/V tensors).  (b) an error located in a file the script
-    never names, compiled only because none of its design files exists (the harness's fallback, e.g. a
-    generate_matrices.cpp helper next to a script that adds a missing top_dense.cpp)."""
+    name lab2's compute_attention_HLS and its Q/K/V tensors), and any other [HLS 214-157]: a top the
+    script sets but no compiled source defines is a defect of the script (W9r10 review D3, Dehazing
+    debayer_csynth).  (b) any error of a design none of whose script design files exists (the harness's
+    fallback compiled every C/C++ file of the tree, e.g. a generate_matrices.cpp helper next to a script
+    that adds a missing top_dense.cpp, or Monte-Carlo's genRandNums.cpp next to a script that adds an
+    absent mersenneTwister.cpp)."""
     rec = catalog_record(key)
     if not rec:
         return ""
@@ -101,13 +106,22 @@ def stale_catalogue_script(line, key):
             return ("stale catalogue script: %s names a top no source defines and adds testbench files the "
                     "design tree does not hold (%s); it belongs to another project, the design needs its own "
                     "top and a Vitis re-run" % (script, ", ".join(absent[:3])))
-    m = ERROR_FILE.search(line)
-    if m and v2.get("source_rule") == "fallback":
-        name = Path(m.group(1)).name
-        if name not in text:
-            return ("harness fallback: %s adds no existing design file (%s), so every C/C++ file was compiled; "
-                    "the error is in %s, which the script never names; the design needs its own file list "
-                    "and a Vitis re-run" % (script, "; ".join(v2.get("source_notes", [])[:1]), name))
+        # W9r10 review D3: "Top function not found" is a property of the script (its set_top), never a
+        # rejection of the source (Dehazing debayer_csynth sets top 'pipeline'; the source's top is
+        # img_pipeline).
+        top = TOP_NOT_FOUND.search(line)
+        return ("stale catalogue script: %s sets top '%s', which no compiled source defines; a defect of "
+                "the script, not a rejection of the source; the design needs its own top and a Vitis "
+                "re-run" % (script, top.group(1) if top else "?"))
+    if v2.get("source_rule") == "fallback":
+        # W9r10 review D3: none of the script's design files exists, so Vitis compiled the harness's choice
+        # of files, not the author's design (also when the error is in a file the script names, e.g. a
+        # header that the absent design files would have provided).
+        m = ERROR_FILE.search(line) or REL_ERROR_FILE.search(line)
+        where = (", the error is in %s" % Path(m.group(1)).name) if m else ""
+        return ("harness fallback: %s adds no existing design file (%s), so every C/C++ file was compiled%s; "
+                "the design needs its own file list and a Vitis re-run"
+                % (script, "; ".join(v2.get("source_notes", [])[:1]), where))
     return ""
 
 

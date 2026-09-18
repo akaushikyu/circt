@@ -1,12 +1,13 @@
 {
-  "_doc": "Input of make_done_exclusions.py: the short list of MEMOS #70 (3), designs that may stay out of the DoD-5 band (exact or at most 15 % over), each with its per-array cause, the Vitis evidence and why it is out of scope. 'status' says whether Peter has accepted the entry; 'proposed' entries come from a prove report and wait for him.",
-  "entries": [
+  "_doc": "Input of make_done_exclusions.py: the short list of MEMOS #70 (3), designs that may stay out of the DoD-5 band (exact or at most 15 % over), each with its per-array cause, the Vitis evidence and why it is out of scope. 'status' says whether Peter has accepted the entry; 'proposed' entries come from a prove report and wait for him. '_withdrawn' keeps entries taken off the list, with the reason; the script ignores it.",
+  "entries": [],
+  "_withdrawn": [
     {
       "key": "class_ece8893_2023_spring/ECG_Classifier__HLS__Baseline",
       "cause": "conv1d_2 / conv1d_3 / conv1d_4: Vitis does not flatten the parent loop with its auto-pipelined child ([HLS 200-960] '... either the parent loop or sub loop is do-while loop'), so the child runs alone at II 1 and the temp_* weights are RAM_1WNR with 4 copies; hls-est flattens, gets II 10 and RAM_2P (-156); the remaining -3 is a register-sized array",
       "vitis_evidence": "VITIS_NOTES N64 (11 kernels w9r8p_*) and N76 (9 kernels w9r9p_n64_*): the refusal does not depend on the parent's trip count (92/64), the element type (float/int), the nesting depth (x loop removed) or the child's trip (5/3); it disappears with an explicit pipeline on the child (n64_cpipe) or an explicit unroll on the grandchild (n64_kunr), and with an if on c or k inside the grandchild (n64_ifconly / n64_ifkonly), but not with an if on l + k (n64_iflonly, the ECG shape) or without an if (dw_noif); in every refused kernel db/a.o.1.ll has the parent l in do-while form with the hoisted address l + 1 as its increment",
       "why_out_of_scope": "candidate rule (N76, unconfirmed): a parent is not flattened when its child is pipelined only by the automatic pipeline (214-376), the child holds a sub-loop that only that pipeline unrolls (214-291), and no condition on the child's or sub-loop's index guards the sub-loop body; it is backed by 13 kernels but its two flattening exceptions (if on c / k) are not derived from a mechanism, and 10 of the 14 corpus designs with this warning are exact today, so adopting it needs a per-loop check first",
-      "status": "proposed (W9r8-prove 2026-10-20; evidence updated W9r9-prove 2026-10-21)"
+      "status": "withdrawn (W9r10 review D4, 2026-10-21): N76 records a candidate rule backed by 13 kernels, so by the notes' own evidence the design is not shown to be unfixable; it stays open work until the per-loop check of N76 (10 of the 14 corpus designs with the [HLS 200-960] warning are exact today) has been done"
     }
   ]
 }
