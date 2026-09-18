@@ -29,6 +29,7 @@
 #include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/Support/FormatVariadic.h"
+#include "llvm/Support/MathExtras.h"
 
 #include <circt/Dialect/Resource/Interfaces/MemoryOpInterface.h.inc>
 
@@ -80,6 +81,90 @@ constantBankThroughInductionVars(AffineMap accessMap, ArrayRef<Value> operands,
           dyn_cast<AffineConstantExpr>(simplifyAffineExpr(bank, nDims, nSyms)))
     return candidateValue.getValue();
   return std::nullopt;
+}
+
+using IndexRange = std::pair<int64_t, int64_t>;
+static std::optional<IndexRange>
+rangeOf(AffineExpr entryValue, ArrayRef<Value> operands, unsigned nDims) {
+  if (auto candidateValue = dyn_cast<AffineConstantExpr>(entryValue))
+    return IndexRange{candidateValue.getValue(), candidateValue.getValue()};
+  if (auto dimensionIndex = dyn_cast<AffineDimExpr>(entryValue)) {
+    Value valueHandle = operands[dimensionIndex.getPosition()];
+    if (!affine::isAffineForInductionVar(valueHandle))
+      return std::nullopt;
+    affine::AffineForOp owner = affine::getForInductionVarOwner(valueHandle);
+    if (!owner.hasConstantBounds())
+      return std::nullopt;
+    int64_t lb = owner.getConstantLowerBound();
+    int64_t ub = owner.getConstantUpperBound();
+    int64_t step = owner.getStepAsInt();
+    if (ub <= lb || step <= 0)
+      return std::nullopt;
+    return IndexRange{lb, lb + ((ub - 1 - lb) / step) * step};
+  }
+  auto bin = dyn_cast<AffineBinaryOpExpr>(entryValue);
+  if (!bin)
+    return std::nullopt;
+  std::optional<IndexRange> lowerIndex = rangeOf(bin.getLHS(), operands, nDims);
+  if (!lowerIndex)
+    return std::nullopt;
+  auto rc = dyn_cast<AffineConstantExpr>(bin.getRHS());
+  switch (entryValue.getKind()) {
+  case AffineExprKind::Add: {
+    std::optional<IndexRange> resultValue =
+        rangeOf(bin.getRHS(), operands, nDims);
+    if (!resultValue)
+      return std::nullopt;
+    return IndexRange{lowerIndex->first + resultValue->first,
+                      lowerIndex->second + resultValue->second};
+  }
+  case AffineExprKind::Mul: {
+    if (!rc)
+      return std::nullopt;
+    int64_t arrayValue = lowerIndex->first * rc.getValue(),
+            buildPoint = lowerIndex->second * rc.getValue();
+    return IndexRange{std::min(arrayValue, buildPoint),
+                      std::max(arrayValue, buildPoint)};
+  }
+  case AffineExprKind::FloorDiv: {
+    if (!rc || rc.getValue() <= 0)
+      return std::nullopt;
+    return IndexRange{
+        llvm::divideFloorSigned(lowerIndex->first, rc.getValue()),
+        llvm::divideFloorSigned(lowerIndex->second, rc.getValue())};
+  }
+  case AffineExprKind::Mod: {
+    if (!rc || rc.getValue() <= 0)
+      return std::nullopt;
+    int64_t memoryOp = rc.getValue();
+    if (llvm::divideFloorSigned(lowerIndex->first, memoryOp) !=
+        llvm::divideFloorSigned(lowerIndex->second, memoryOp))
+      return IndexRange{0, memoryOp - 1};
+    return IndexRange{llvm::mod(lowerIndex->first, memoryOp),
+                      llvm::mod(lowerIndex->second, memoryOp)};
+  }
+  default:
+    return std::nullopt;
+  }
+}
+
+static std::optional<int64_t>
+constantBankThroughRanges(AffineMap accessMap, ArrayRef<Value> operands,
+                          const DimPartition &portValue) {
+  if (portValue.kind != PartitionSpec::Block ||
+      !circt::hlsest::Config::get()
+           .tool.hls.partitioning.blockBankFromLoopRange)
+    return std::nullopt;
+  std::optional<IndexRange> resultValue = rangeOf(
+      accessMap.getResult(portValue.dim), operands, accessMap.getNumDims());
+  if (!resultValue || resultValue->first < 0 ||
+      resultValue->second >= portValue.extent)
+    return std::nullopt;
+  int64_t lo = resultValue->first / portValue.depth,
+          hi = resultValue->second / portValue.depth;
+  if (lo != hi)
+    return std::nullopt;
+  return lo;
 }
 
 struct BankChoice {
@@ -155,6 +240,9 @@ static AffineBanking resolveAffine(AffineMap accessMap,
     else
       candidateValue =
           constantBankThroughInductionVars(accessMap, operands, portValue);
+    if (!candidateValue)
+      candidateValue =
+          constantBankThroughRanges(accessMap, operands, portValue);
     ab.choice.constBank.push_back(candidateValue);
     if (!candidateValue) {
       ab.choice.rotating.push_back(innerIndex);

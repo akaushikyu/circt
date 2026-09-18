@@ -951,6 +951,8 @@ void fillTool(const json::Object &t, ToolProfile &tool) {
       boolean(obj(pa, "constant_index"), "globals", true);
   h.partitioning.compoundAssignTwoStores =
       boolean(pa, "compound_assign_two_stores", true);
+  h.partitioning.blockBankFromLoopRange =
+      boolean(pa, "block_bank_from_loop_range", true);
   const json::Object &inf = obj(pa, "inference");
   PartitionInferenceConfig &pi = h.partitioning.inference;
   pi.targetII = integer(inf, "target_ii");

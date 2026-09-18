@@ -374,6 +374,10 @@ struct PartitioningConfig {
   /// An ap_fixed compound assignment (cgeist's hls.ap_compound_assign) to a
   /// bank chosen at run time writes that bank twice (VITIS_NOTES N38 R-cmpd).
   bool compoundAssignTwoStores = true;
+  /// A block-partitioned dimension whose index stays in one block over the
+  /// constant iteration range of its loops has a constant bank (W9r10
+  /// review D2; VITIS_NOTES N86).
+  bool blockBankFromLoopRange = true;
   PartitionInferenceConfig inference;
   bool steerAffineLoads = true;
   /// Steered load groups follow N74: a group spans every partitioned

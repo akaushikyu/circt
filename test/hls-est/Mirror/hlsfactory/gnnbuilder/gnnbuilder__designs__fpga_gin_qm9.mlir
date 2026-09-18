@@ -2982,13 +2982,13 @@ module {
 // CHECK-NEXT: kind=PIPO  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
 // CHECK: memref.global @ loc("{{[^"]*}}":42:3){{$}}
-// CHECK-NEXT: kind=RAM_T2P  bram=2{{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
 // CHECK: memref.global @ loc("{{[^"]*}}":42:3){{$}}
-// CHECK-NEXT: kind=RAM_T2P  bram=2{{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
 // CHECK: memref.global @ loc("{{[^"]*}}":42:3){{$}}
-// CHECK-NEXT: kind=RAM_T2P  bram=2{{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
 // CHECK: memref.global @ loc("{{[^"]*}}":43:3){{$}}
 // CHECK-NEXT: kind=PIPO  bram=1{{$}}
@@ -5909,4 +5909,4 @@ module {
 // CHECK: memref.alloca @ loc("{{[^"]*}}":1798:15){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: Total BRAM: 10524{{$}}
+// CHECK: Total BRAM: 10521{{$}}

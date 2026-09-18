@@ -83,6 +83,7 @@
         },
         "steer_affine_loads": true,
         "compound_assign_two_stores": true,
+        "block_bank_from_loop_range": true,
         "steer_window_groups": true
       },
       "folding": { "rule_set": "vitis-undef", "canonicalize": true, "max_rounds": 16 },

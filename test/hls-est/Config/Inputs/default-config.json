@@ -684,12 +684,14 @@
         "pipeline_loops": 64
       },
       "partitioning": {
+        "_block_bank_from_loop_range": "bool: A block-partitioned dimension whose index stays inside one block over the constant iteration range of its enclosing loops (buf[i + 64], i < 64, block depth 64) is accessed in that one bank, not through a store per candidate bank (VITIS_NOTES N86)",
         "_compound_assign_two_stores": "bool: An ap_fixed compound assignment (/=, *=, +=, -=; cgeist marks its store hls.ap_compound_assign) to a bank chosen at run time writes that bank twice: never RAM_1WNR, two writes per iteration (VITIS_NOTES N38 R-cmpd)",
         "_constant_index": "object: Rule (b): a dimension every access indexes with a constant [Q-03]",
         "_inference": "object: The td=auto port-pressure search [Q-06..Q-08]",
         "_policy": "plugin name (a partition_policy): The PartitionPolicy [Q-03, Q-04, Q-08, Q-15]",
         "_steer_affine_loads": "bool: Unrolled copies of a partitioned load with distinct constant offsets read each bank once",
         "_steer_window_groups": "bool: Unrolled window reads (one runtime base plus constants on every partitioned dimension) read each bank once per member of a residue class: a steered group spans several partitioned dimensions, and copies that share a residue class form further groups (VITIS_NOTES N74; off: one dimension, distinct residues only)",
+        "block_bank_from_loop_range": true,
         "compound_assign_two_stores": true,
         "constant_index": {
           "_after_user_partition": "bool: Rule (b) also applies to an array with a user cyclic / block array_partition, on every part (VITIS_NOTES N57) [Q-03]",

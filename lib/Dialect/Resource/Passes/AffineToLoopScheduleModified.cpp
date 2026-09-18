@@ -25,13 +25,13 @@
 #include "mlir/Dialect/Affine/Analysis/LoopAnalysis.h"
 #include "mlir/Dialect/Affine/IR/AffineMemoryOpInterfaces.h"
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
-#include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/Affine/IR/AffineValueMap.h"
 #include "mlir/Dialect/Affine/LoopUtils.h"
 #include "mlir/Dialect/Affine/Utils.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlow.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/LLVMIR/LLVMTypes.h"
 #include "mlir/Dialect/Math/IR/Math.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
@@ -3238,6 +3238,66 @@ static Value accessedMemref(Operation *op, bool &isLoad) {
   return Value();
 }
 
+namespace {
+/// An operation that holds one unit of an allocation-limited resource.
+struct UnitUser {
+  Operation *op;
+  std::string unit;
+  unsigned limit;
+};
+} // namespace
+
+/// The (if, arm) pairs of `op`'s `hls.if_arms` (hoistIfBodies).
+static SmallVector<std::pair<int64_t, int64_t>> ifArmsOf(Operation *op) {
+  SmallVector<std::pair<int64_t, int64_t>> arms;
+  if (auto at = op->getAttrOfType<DenseI64ArrayAttr>(
+          circt::hls_analysis::kIfArmsAttr))
+    for (size_t loopIndex = 0; loopIndex + 1 < at.size(); loopIndex += 2)
+      arms.push_back({at[loopIndex], at[loopIndex + 1]});
+  return arms;
+}
+
+/// True when `op` is shadowed on `unit` by the other arm of an if it was
+/// hoisted out of (`hls.if_arms`): only one arm executes per iteration, so
+/// the if's demand is the larger arm's count, not the sum. The arm with more
+/// users of the unit (the then arm on a tie) keeps its links; the other
+/// arm's users are dropped. Vitis evidence: two reads of one hls::stream in
+/// the exclusive arms of an if pipeline at II 1 (w9r10rv rv_sc_cond,
+/// VITIS_NOTES N82; the W9r10 review's D1).
+static bool
+shadowedByOtherArm(Operation *op, StringRef unit,
+                   ArrayRef<std::pair<Operation *, StringRef>> unitOf) {
+  for (auto [ifId, arm] : ifArmsOf(op)) {
+    unsigned own = 0, other = 0;
+    for (auto [opHandle, useValue] : unitOf) {
+      if (useValue != unit)
+        continue;
+      for (auto [id, a] : ifArmsOf(opHandle))
+        if (id == ifId)
+          ++(a == arm ? own : other);
+    }
+    if (other > own || (other == own && arm != 0))
+      return true;
+  }
+  return false;
+}
+
+/// Links every unit user to its resource, except users shadowed by the other
+/// arm of an enclosing if (shadowedByOtherArm).
+static void linkUnitResources(ArrayRef<UnitUser> users,
+                              ModuloProblem &problem) {
+  SmallVector<std::pair<Operation *, StringRef>> unitOf;
+  for (const UnitUser &useValue : users)
+    unitOf.push_back({useValue.op, useValue.unit});
+  for (const UnitUser &useValue : users) {
+    if (shadowedByOtherArm(useValue.op, useValue.unit, unitOf))
+      continue;
+    Problem::ResourceType r = problem.getOrInsertResourceType(useValue.unit);
+    problem.setLimit(r, useValue.limit);
+    problem.setLinkedResourceTypes(useValue.op, {r});
+  }
+}
+
 /// Populate the scheduling problem's operator types: the timing model's
 /// library first (calyx-fixed: comb, seq, multicycle, fpmul, fpaddsub,
 /// fpdiv, fpsqrt, fptrans, in that order), then every operation of the loop
@@ -3258,6 +3318,7 @@ LogicalResult AffineToLoopSchedule::populateOperatorTypes(
   llvm::StringMap<unsigned> latencyOfClass;
   Operation *unsupported = nullptr;
   Operation *inconsistent = nullptr;
+  SmallVector<UnitUser> unitUsers;
   WalkResult result = loopBody(loop)->walk([&](Operation *op) {
     std::optional<circt::hlsest::OperatorTiming> t =
         timingModel->timing(op, schedulingContext);
@@ -3284,9 +3345,7 @@ LogicalResult AffineToLoopSchedule::populateOperatorTypes(
       std::string unit = "unit_" + t->cls;
       if (!t->unitInstance.empty())
         unit += "@" + t->unitInstance;
-      Problem::ResourceType r = problem.getOrInsertResourceType(unit);
-      problem.setLimit(r, *t->unitLimit);
-      problem.setLinkedResourceTypes(op, {r});
+      unitUsers.push_back({op, unit, *t->unitLimit});
     }
     if (emitDetail) {
       Builder buildPoint(op->getContext());
@@ -3312,6 +3371,7 @@ LogicalResult AffineToLoopSchedule::populateOperatorTypes(
         << *unsupported;
     return failure();
   }
+  linkUnitResources(unitUsers, problem);
   return success();
 }
 
@@ -3742,8 +3802,7 @@ public:
               TruncIOp, ExtSIOp, ExtUIOp, NegFOp, CmpFOp, ExtFOp, TruncFOp,
               SIToFPOp, UIToFPOp, FPToSIOp, FPToUIOp, BitcastOp>(
             [&](Operation *) { return make("comb"); })
-        // An integer max / min is a compare and a select (both comb above);
-        // a member of an SSA struct value is a wire (OPEN_ISSUES O111 (b)).
+
         .Case<MaxSIOp, MinSIOp, MaxUIOp, MinUIOp, LLVM::InsertValueOp,
               LLVM::ExtractValueOp>([&](Operation *) { return make("comb"); })
         .Case<AffineStoreOp, memref::StoreOp, AffineLoadOp, memref::LoadOp,
@@ -3850,9 +3909,29 @@ private:
     return true;
   }
 
+  /// How deep structuralKey looks through an index expression.
+  static constexpr unsigned kIndexKeyDepth = 8;
+
+  /// A hash of how `v` is computed: two side-effect-free, region-free
+  /// computations of one expression from the same operands (copies CSE did
+  /// not merge) get one key; a block argument, an op with effects or regions,
+  /// or depth 0 is keyed by its SSA value (the W9r10 review's D1 note).
+  static llvm::hash_code structuralKey(Value valueHandle, unsigned depth) {
+    Operation *def = valueHandle.getDefiningOp();
+    if (!def || depth == 0 || def->getNumRegions() != 0 ||
+        !isMemoryEffectFree(def))
+      return hash_value(valueHandle);
+    llvm::hash_code h = llvm::hash_combine(
+        def->getName().getStringRef(), def->getAttrDictionary(),
+        cast<OpResult>(valueHandle).getResultNumber());
+    for (Value operand : def->getOperands())
+      h = llvm::hash_combine(h, structuralKey(operand, depth - 1));
+    return h;
+  }
+
   /// The stream object a handle names: the root value and the indices of
-  /// the views taken from it (a constant index by value, another by its SSA
-  /// value), as a resource key.
+  /// the views taken from it (a constant index by value, another by how it
+  /// is computed, structuralKey), as a resource key.
   static std::string streamObjectKey(Value handle) {
     std::string key;
     llvm::raw_string_ostream os(key);
@@ -3865,8 +3944,8 @@ private:
         if (matchPattern(def->getOperand(1), m_ConstantInt(&valueHandle)))
           indices.push_back(std::to_string(valueHandle.getSExtValue()));
         else
-          indices.push_back("v" +
-                            std::to_string(hash_value(def->getOperand(1))));
+          indices.push_back("v" + std::to_string(structuralKey(
+                                      def->getOperand(1), kIndexKeyDepth)));
       }
       handle = def->getOperand(0);
     }
