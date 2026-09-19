@@ -2752,9 +2752,11 @@ void AffineToLoopSchedule::runOnOperation() {
 
   {
     SmallVector<Operation *> dead;
-    getOperation().walk([&](Operation *op) {
-      if (isOpTriviallyDead(op))
-        dead.push_back(op);
+    getOperation().walk<WalkOrder::PreOrder>([&](Operation *op) {
+      if (op == getOperation().getOperation() || !isOpTriviallyDead(op))
+        return WalkResult::advance();
+      dead.push_back(op);
+      return WalkResult::skip();
     });
     for (Operation *op : llvm::reverse(dead))
       op->erase();
