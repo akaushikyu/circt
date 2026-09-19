@@ -22,6 +22,7 @@ add_mlir_library(HLSPasses
         DataflowChannels.cpp
         RamWidthNarrowing.cpp
         AccessOrder.cpp
+        FoldUnrolledGuards.cpp
         ../Plugins/Builtin/MAxiBuffers.cpp
         ../Plugins/Builtin/Mappers.cpp
         ../Plugins/Builtin/MemoryArchitecture.cpp

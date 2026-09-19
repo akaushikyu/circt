@@ -343,6 +343,10 @@ struct PipelineDecisionConfig {
   /// The straight-line code of flattened parents runs in the pipeline
   /// (VITIS_NOTES N65).
   bool sinkParentCode = true;
+  /// After the unroll decisions, an affine.if whose set is empty (or
+  /// universal) once an unrolled copy's constant index is substituted loses
+  /// its dead arm (VITIS_NOTES N89).
+  bool foldUnrolledGuards = true;
 };
 
 struct PartitionInferenceConfig {

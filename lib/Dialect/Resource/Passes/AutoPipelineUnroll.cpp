@@ -7,6 +7,7 @@
 #include "circt/Dialect/Resource/Config/ConfigUtils.h"
 #include "circt/Dialect/Resource/Passes/CallInstances.h"
 #include "circt/Dialect/Resource/Passes/FloatOps.h"
+#include "circt/Dialect/Resource/Passes/FoldUnrolledGuards.h"
 #include "circt/Dialect/Resource/Passes/LoopPragmas.h"
 #include "circt/Dialect/Resource/Plugins/PassPolicies.h"
 #include "circt/Dialect/Resource/Plugins/Registry.h"
@@ -1815,6 +1816,9 @@ struct AutoPipelineUnrollPass
     }
     if (failed(policy->decide(module, options)))
       return signalPassFailure();
+
+    if (pd.foldUnrolledGuards)
+      circt::hls_analysis::foldConstantAffineIfs(module);
   }
 
   /// The Vitis decision procedure (the builtin PipelinePolicy
