@@ -2,8 +2,11 @@
 
 **Draft.** This chapter condenses `hls-doc/architecture.md` and the pass pages in `hls-doc/passes/`;
 those pages hold the details, options and worked examples. Code: `~/circt` branch
-`hls-est-vitis-match` ({{circt_commits}} commits on top of `main` at `{{circt_head}}`) and Polygeist
-branch `hls-est-vitis-match` ({{polygeist_commits}} commits on top of `main` at `{{polygeist_head}}`).
+`hls-est-vitis-match` ({{circt_commits}} commits on top of `main` up to the snapshot commit `{{circt_head}}`,
+which records the final evaluation run) and Polygeist branch `hls-est-vitis-match` ({{polygeist_commits}}
+commits on top of `main` up to `{{polygeist_head}}`, the commit of the cgeist binary that produced the
+evaluated MLIR). Counts and sizes are read from git at these commits, so they do not change when later
+commits land.
 
 ## 5.1 Overview
 
@@ -90,7 +93,7 @@ LoopSchedule dialect (`loopschedule.pipeline` with II, trip count and stages).
 
 ## 5.4 The pass pipeline
 
-The default pipeline is listed in Table `tables/frame-pipeline.md` ({{pipeline_passes}} passes, of which
+The default pipeline is listed in Table 5.1 (`tables/frame-pipeline.md`; {{pipeline_passes}} passes, of which
 {{pipeline_own_passes}} were written or modified for this work; {{pass_pages}} pass pages in
 `hls-doc/passes/`). The harness prepends MLIR's `--symbol-privatize` / `--symbol-dce` to keep only the
 top function and what it calls. The passes form five blocks.
@@ -157,7 +160,7 @@ to the output before configuration existed.
   `frontend` and `scheduling`. Files given with `--hls-config` and single keys given with `--config-set`
   override the defaults; a pass option on the command line overrides both. Unknown keys, wrong types and
   inconsistent combinations are errors that name the key and the file.
-- **Plugins.** {{plugin_interfaces}} interfaces (Table `tables/frame-plugins.md`) with
+- **Plugins.** {{plugin_interfaces}} interfaces (Table 5.2, `tables/frame-plugins.md`) with
   {{plugin_builtins}} builtin implementations: storage selector, memory architecture policy, memory
   mapper, memory grouping, implicit buffer model, pipeline policy, partition policy, fold rule set, and
   five scheduling interfaces (operator timing, dependences, modulo scheduler, sequential scheduler,
@@ -177,9 +180,11 @@ status and reason, provenance (C name, function, location), partitioning and its
 its scope, II and stage, the port demand per scope, the replication decision and its limiting loop, the RAM
 type and reason, and the bank arithmetic (configured width, depth bands, blocks per copy); plus the
 pipelines, call instances, folds and the configuration in effect. JSON changes are additive. Debug output
-must never change an estimate: `check_debug_invariance.py` (also a build target) runs a set of designs with
-and without every debug flag and compares the estimates, and one lit test compares the two outputs with
-`diff`.
+must never change an estimate. This is tested, not proven: `check_debug_invariance.py` (also a build
+target) runs the {{inv_cases}} estimation test inputs with and without every debug flag and compares the
+estimates, and one lit test compares the two outputs with `diff`. The most recent change-log record reads
+"{{inv_record}}". The one tool error is an old MLIR input (`chstone_xilinx/sha.mlir`) that hls-est rejects
+at parse time; it is marked UNSUPPORTED in lit, and both runs fail identically.
 
 ## 5.8 Harness and regression net
 
@@ -217,5 +222,6 @@ numbered decisions) and open problems in `OPEN_ISSUES.md` ({{o_count}} issues, O
 | cgeist HLS front-end code (`tools/cgeist/Lib/*HLS*`, `*Xlx*`) | {{files_cgeist_hls}} | {{loc_cgeist_hls}} |
 | harness (`tools/hls-est-validate/*.py`) | {{files_harness}} | {{loc_harness}} |
 
-The `Dialect/Resource` count includes the estimator this work started from; the changelog separates the
-contributions of this project.
+The `Dialect/Resource` count includes the estimator this work started from. At the branch point
+`{{circt_branch_point}}` ({{circt_branch_point_date}}), the same directories held {{files_resource_before}}
+files and {{loc_resource_before}} lines. Section 1.6 states how the rest was produced.

@@ -1,26 +1,29 @@
 # 3 Inferring a closed compiler's decisions
 
 hls-est is not derived from a specification of Vitis HLS, because there is none at the level it needs:
-the documentation states what pragmas mean, not when the tool pipelines a loop it was not asked to
+the documentation [@amd2025ug1399] states what pragmas mean, not when the tool pipelines a loop it was not asked to
 pipeline, how many copies of a memory it builds, or which arrays it deletes. The decision procedure has to
 be inferred from the outside. This chapter describes how: what is observable (3.1), the ground truth that
 every claim is measured against (3.2), the experiment loop that turns an unexplained difference into a
 rule (3.3), the per-array comparison (3.4), the criterion for adopting a modelled rule (3.5), the review
-cycle (3.6), and what makes the results reproducible (3.7). Section 3.8 shows the effect of the loop
+cycle (3.6), and what makes the results reproducible (3.7). The method follows the micro-benchmark
+tradition of measuring closed processors [@abel2019uops] and is a manual form of model learning
+[@vaandrager2017model]. Section 3.8 shows the effect of the loop
 over the project's rounds, and 3.9 the threats to validity. Chapter 4 states the rules the method
 produced.
 
 ## 3.1 What can be observed
 
 Vitis HLS 2025.1 is a chain of four stages with different visibility (Table 3.1). The front end is an
-open-source clang/LLVM 7 fork (`hls-llvm-project`) and its output, `db/a.g.ld.5.gdce.ll`, is kept in
+open-source clang/LLVM 7 fork (`hls-llvm-project` [@xilinx_hlsllvm]) and its output, `db/a.g.ld.5.gdce.ll`, is kept in
 every run's `db/` directory. The closed "reflow" LLVM passes apply the pragmas, infer partitions, inline,
 remove dead code and narrow types; they are visible only through the bitcode they leave after each
 stage (`db/a.o.1.ll`, `a.o.2.ll`, `a.o.3.ll`, disassembled by the harness) and the `[HLS 214-*]`
 messages of the compile log. The scheduler and binder are closed and not LLVM-based; their decisions
 appear in the loop and memory tables of the reports, in `[HLS 200-*]` messages, in the verbose schedule
 and bind reports, and in the RTL. The RAMB18 count of a memory is computed by an open-source function
-(`MemoryQuerier::queryBRAM` in `CoreQuerier.cpp`), which can be read but not called.
+(`MemoryQuerier::queryBRAM` in `CoreQuerier.cpp`), which can be read but not called. The RAMB18
+primitive itself is documented in UG473 [@amd_ug473].
 
 **Table 3.1.** Stages of Vitis HLS and where each is observed.
 
@@ -60,7 +63,9 @@ work root: doing so once corrupted results, and the runner now refuses it.
 pragma variants of polybench), {{cat_designs}} designs in {{cat_datasets}} datasets in the newest
 comparison, of which {{cat_compared}} have both a Vitis result and an hls-est estimate. A smaller
 "harness subset" of six datasets ({{subset_names}}) served as the development set before the full
-catalogue was available and is still reported.
+catalogue was available and is still reported. From the first full-catalogue run on, the whole catalogue
+was the development set: rounds started from its mismatches, so the catalogue is not a held-out test set
+(Section 3.9).
 
 ## 3.3 The experiment loop
 
@@ -92,9 +97,16 @@ it into a rule, or into a recorded open question.
    the RTL.
 7. **Check against the open source.** Where the open-source front end or resource formula covers the
    behaviour, transcribe it and compare it with every measured row. For the RAMB18 formula, the
-   transcription reproduces {{fr_open}} of {{fr_rows}} memory rows of the ground truth and {{fr_exp_open}}
-   of {{fr_exp_rows}} experiment rows when fed the port types the binder chose, and the measured model
-   {{fr_n6}} and {{fr_exp_n6}}; the disagreements were each decided by new kernels (VITIS_NOTES N8).
+   transcription was checked on {{fr_date}} against the ground truth of that time, before the HLSFactory catalogue
+   was merged into it. It reproduced {{fr_open}} of its {{fr_rows}} memory rows
+   and {{fr_exp_open}} of {{fr_exp_rows}} experiment rows when fed the port types the binder chose; the
+   measured model reproduced {{fr_n6}} and {{fr_exp_n6}}. The disagreements were each decided by new kernels
+   (VITIS_NOTES N8). Re-run on the full current ground truth ({{frf_rows}} memory rows of every design with
+   a memory table), the transcription reproduces {{frf_open}} rows and the measured model {{frf_n6}}. The
+   difference is mostly a missing input, not a wrong formula: Vitis's own port vectors (from its bind
+   reports) are available for only {{frf_vec_rows}} rows, and on those the transcription reproduces
+   {{frf_vec_match}}. For the other rows the port mode (x36 or x18) is guessed from the storage type, and
+   most misses are rows where the other port mode matches (`data/formula-reconcile-full.csv`).
 8. **Record.** Write the rule into `VITIS_NOTES.md` with its kernels, their run directories and the
    evidence, marked *confirmed* only when standalone kernels reproduce it; a behaviour seen only in corpus
    designs stays *unconfirmed*. Wrong statements are corrected in place, with the correction marked,
@@ -103,12 +115,23 @@ it into a rule, or into a recorded open question.
    design, array or size), with lit tests built from the kernels, and run the catalogue; adoption
    follows Section 3.5.
 
-**Scale.** The ad-hoc kernel cache holds {{exp_runs}} Vitis runs of {{exp_names}} distinct kernels
-({{exp_ok}} synthesised, {{exp_failed}} rejected by Vitis, most of them on purpose, and {{exp_timeout}}
-timeouts); {{exp_cited}} of the kernel names appear verbatim in `VITIS_NOTES.md`. Figure 3.1 shows when
-the runs were made. The notes hold {{n_notes}} rule entries (N-numbers; {{n_notes_confirmed}} confirmed in
-their heading, {{n_notes_partly}} partly, {{n_notes_unconfirmed}} unconfirmed), {{n_open}} open-issue
-entries (O-numbers) and {{n_memos}} recorded decisions.
+**Scale.** Up to the thesis snapshot ({{exp_cutoff}}), the ad-hoc kernel cache holds {{exp_runs}} Vitis
+runs of {{exp_names}} distinct kernels ({{exp_ok}} synthesised, {{exp_failed}} rejected by Vitis, most of
+them on purpose, and {{exp_timeout}} timeouts); {{exp_cited}} of the kernel names appear verbatim in
+`VITIS_NOTES.md`. Figure 3.1 shows when the runs were made. The notes hold {{n_notes}} entries
+(N-numbers), {{n_open}} open-issue entries (O-numbers) and {{n_memos}} recorded decisions.
+
+**Status of a note.** One parser reads the status from each note's heading, and every chapter counts
+with it. A note is *confirmed* when its heading says so. Confirmed notes are further split by whether
+the heading names standalone kernels ({{n_notes_confirmed_kernels}} notes) or only catalogue designs and
+ground-truth reports ({{n_notes_confirmed_corpus}}: {{n_notes_corpus_list}}). A note is *partly
+confirmed* when the heading says "partly confirmed" or "confirmed except where marked"
+({{n_notes_partly}}). It is *unconfirmed* when the heading says so, or names a superseded rule, a corpus
+observation, or data without a rule ({{n_notes_unconfirmed}}: {{n_notes_unconfirmed_list}}). Two notes
+without a status are notes on method ({{n_notes_method}}). In total: {{n_notes_confirmed}} confirmed,
+{{n_notes_partly}} partly confirmed, {{n_notes_unconfirmed}} unconfirmed, {{n_notes_method}} method.
+Chapter 4 counts *rules*, not notes: one rule can draw on several notes and one note can feed several
+rules, so its counts differ.
 
 ![Figure 3.1: ad-hoc Vitis kernel runs per day](figures/ch3-experiment-runs.png)
 
@@ -122,8 +145,10 @@ family of kernels on one `int cnt[4096]`: only a fill (`w9r8p_dm_wo`, {{k_dm_wo}
 unused loads (`w9r8p_dm_rd`, {{k_dm_rd}}), a fill and a self-increment (`w9r8p_dm_self`, {{k_dm_self}}),
 then a cycle through two arrays (`w9r8i_dm_cyc2`, {{k_dm_cyc2}}), a load that only decides a store
 (`w9r8i_dm_ctl`, {{k_dm_ctl}}), and an accumulator that LICM keeps in a register (`w9r8i_dm_acc0`,
-{{k_dm_acc0}}). Together they give the rule of Chapter 4 (FE-4): LLVM's store deletion, which never
-proves a load-store cycle dead. The mechanism was added to `--dead-memory-elimination` behind a
+{{k_dm_acc0}}). Together they give the rule of Chapter 4 (FE-4): a store is deleted only once its array
+has no used load, so a load-store cycle is never proven dead. The notes record this behaviour (N66). That
+it comes from LLVM's dead-store and dead-global deletion is our interpretation, consistent with the IR
+stages but not proven. The mechanism was added to `--dead-memory-elimination` behind a
 configuration key and adopted after the catalogue run, whose change-log record reads: "{{dm_effect}}"
 
 ## 3.4 The per-array comparison
@@ -137,7 +162,9 @@ BRAM outside the memory tables (m_axi adapters, FIFOs) is matched by name (`<bun
 non-array BRAM, the design total minus the sum of its memory rows. That difference also holds the
 further instances of modules whose memory rows a report lists once, and it is large: in the newest
 comparison {{non_array_bram}} of the {{vitis_bram_total}} BRAM_18K of the compared designs. A comparison
-of memory tables alone would miss it.
+of memory tables alone would miss it. The name join has a limited reach. In the final run only part of the BRAM-carrying array rows align by
+name on both sides (Section 6.2 measures it), so per-array agreement is reported with its coverage and
+never as a claim about every array.
 
 A design counts as **exact** when its total equals Vitis's, and **in the goal band** when it is exact or
 over-counts by at most 15 % of the Vitis value; an under-count is out of the band whatever its size,
@@ -147,14 +174,14 @@ results pages is generated from the run files by the harness scripts (`make_comp
 
 ## 3.5 Adopting a rule
 
-A mechanism that models a confirmed rule is not adopted automatically. Rule 4 of the working loop
+A mechanism that models a confirmed rule is not adopted automatically. The project's adoption rule (rule 4 of its working loop)
 decides: **keep the change only if the net number of exact designs rises (or stays equal with a lower
 error and per-array improvements), and every design that stops matching is explained per array by a
 named open issue that it used to cancel.** Otherwise the change is reverted, or kept behind an option
 that is off by default, and the dependency is recorded as an open issue. The rule protects against a
 mechanism that is right per array but exposes a second, unmodelled behaviour that happened to cancel
-the first. Table 3.4 lists the change-log entries whose mechanism was built but left opt-in or off by
-default; for example, the stream-access timing of rule SC-5 matches all its kernels but would lose exact
+the first. Table 3.3 lists the change-log entries whose mechanism was built but left opt-in or off by
+default. For example, the stream-access timing of rule SC-5 matches all its kernels but would lose exact
 designs until loop-carried memory dependences reach the scheduler (OPEN_ISSUES O1, O114).
 
 The table shows the decision at the time of the entry: several of these mechanisms became defaults later,
@@ -162,7 +189,7 @@ once the issue they depended on was resolved (the integer folds, dead-memory eli
 of 2026-10-10 joined the default pipeline the same day, by recorded decision, after the shim that gives
 them integer-backed fixed-point types became the default).
 
-**Table 3.4.** Change-log entries whose mechanism stayed opt-in or off by default.
+**Table 3.3.** Change-log entries whose mechanism stayed opt-in or off by default.
 
 {{table_optin}}
 
@@ -174,43 +201,53 @@ log.
 
 ## 3.6 The review cycle
 
-Every substantive change is followed by an independent review, by an agent that did not write it and
-is instructed to break it: re-run the cited kernels under fresh names, write new kernels at the edges of
+Every substantive change is followed by a review by an AI agent session that did not write the change
+and is instructed to break it. The reviewing sessions run on the same model family as the implementing
+ones, so the review is independent of the implementing session, not of the model (Section 1.6). The
+reviewer's instructions are to re-run the cited kernels under fresh names, write new kernels at the edges of
 the stated rule, and check every claimed number against the run files. The defects it finds are fixed
 in a separate commit, recorded in the change log. Of the {{n_changelog}} change-log entries,
 {{n_changelog_review}} name a review in their title. The work was organised in rounds of four steps (prove
-the rules with kernels, implement them, review, fix); the coordinator's directory holds
-{{n_round_reports}} round reports, {{n_round_review}} of them reviews. Reviews regularly overturned
+the rules with kernels, implement them, review, fix); the coordinating session kept {{n_round_reports}}
+round reports, {{n_round_review}} of them reviews. Reviews regularly overturned
 claims: a rule stated from corpus data alone was refuted by kernels (VITIS_NOTES N50, superseded by
 N56), a "confirmed" label was withdrawn where the evidence was only read from a header (N37), and a
 claimed exact result was traced to a fold that Vitis performs at another time (N52).
 
 ## 3.7 Reproducibility
 
-- **Debug output that cannot change an estimate.** `--bram-debug` and `--bram-debug-json` (JSON
+- **Debug output tested not to change an estimate.** `--bram-debug` and `--bram-debug-json` (JSON
   version {{debug_json_version}}) report for every memory its status and reason, provenance,
   partitioning and its source, accesses with scope, II and stage, replication, RAM kind and the bank
   arithmetic. `check_debug_invariance.py` runs the estimation tests with and without the debug options
-  and requires identical output; the most recent change-log record of it reads {{invariance}}.
+  and requires identical output. This is a test over those inputs, not a proof. The most recent
+change-log record of it reads {{invariance}}. The one tool error is an old input,
+`chstone_xilinx/sha.mlir`, that hls-est rejects at parse time; it is UNSUPPORTED in lit, and both runs
+fail identically.
 - **Regression net.** Every cgeist front-end test of the HLS corpus is mirrored as an hls-est lit test
   whose CHECK lines are hls-est's current output and whose comment holds the Vitis number
   ({{n_mirror}} MLIR files under `test/hls-est/Mirror/`); a CHECK may change only with a change-log entry naming the cause. The
   most recent change-log record of the suite reads {{lit}}.
 - **Pinned inputs.** A catalogue run records the hls-est git hash and binary hash, the cgeist binary and
   its md5, the shim, the pipeline and the configuration hash; long runs use a frozen copy of the binary.
-  The newest run: hls-est {{run_git}}, cgeist md5 {{run_cgeist}}, shim `{{run_shim}}`, pipeline
-  `{{run_pipeline}}`.
+  The final evaluation run: hls-est {{run_git}}, shim `{{run_shim}}`, pipeline `{{run_pipeline}}`.
+  Its MLIR was not compiled in that run but taken from an earlier run (`{{run_mlir_from}}`), whose cgeist
+  binary has md5 {{run_cgeist}}. The run file records its Polygeist commit as "{{run_polygeist_recorded}}",
+  because that binary was a private build. The change log names it as Polygeist `{{run_polygeist}}`, and
+  the cgeist installed from that commit has the same md5 ({{run_cgeist_snapshot}}). The commit is
+  therefore known from the change log and the md5, not from the run file. This is a gap in the run
+  metadata.
 - **Generated pages.** Every page under `hls-doc/` that shows numbers names its generator and input
   in its first line, and so do the chapters of this thesis.
 
 ## 3.8 Progress over the rounds
 
-Table 3.5 and Figure 3.2 re-compare the catalogue run each round published against today's ground
+Table 3.4 and Figure 3.2 re-compare the catalogue run each round published against today's ground
 truth, so that every row is measured on the same Vitis results; a design that a run did not estimate
 counts as not compared. The front end changed along the way (a stand-in header shim until the real Vitis
 headers became the default), which the shim column shows.
 
-**Table 3.5.** Published catalogue runs, re-compared against the current ground truth.
+**Table 3.4.** Published catalogue runs, re-compared against the current ground truth.
 
 {{table_runs}}
 
@@ -229,6 +266,11 @@ of each published run, re-compared against the current ground truth.
   Kernels are chosen by the experimenter, so a rule can fit them and still be wrong elsewhere; the
   reviews (3.6) and the corpus re-runs (3.8) are the mitigation, and the rules whose trigger is not known
   are marked unconfirmed rather than guessed.
+- **Development set = evaluation set.** The catalogue whose mismatches started each round is the
+  catalogue the results are reported on. Kernels were written to explain those mismatches, so they are not
+  an independent sample either. Accuracy on unseen designs is not measured.
+- **Repeatability of Vitis.** No ground-truth run was repeated on purpose; Section 6.8 reports the only,
+  indirect evidence (copies of one design synthesised separately agree).
 - **Corpus composition.** The catalogue is dominated by a few families (stream_hls, WIP, polybench
   variants, class labs); an exact count is therefore not a uniform sample of HLS code. Results are
   reported per dataset.

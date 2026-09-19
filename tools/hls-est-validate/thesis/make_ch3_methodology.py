@@ -37,26 +37,26 @@ GATES = ["bicg", "gesummv", "mvt", "syrk"]
 # The catalogue run each step published (results pages / comparison CSVs), in order. Paths only; every
 # number comes from re-comparing the file against today's ground truth.
 RUNS = [
-    ("v2 baseline (W8c)", L.RESULTS / "baseline" / "hlsest-2026-10-13-v2-defaults.json"),
-    ("hls::stream FIFOs (W9-FIFO)", SCRATCH / "w9fifo_impl" / "after_merged.json"),
-    ("PIPO channels (W9-PIPO)", SCRATCH / "w9pipo_impl" / "after6_merged.json"),
-    ("width narrowing (W9r2)", SCRATCH / "w9r2i" / "after8.json"),
-    ("W9r2 review fixes", SCRATCH / "w9r2fix" / "after.json"),
+    ("first full-catalogue run (baseline)", L.RESULTS / "baseline" / "hlsest-2026-10-13-v2-defaults.json"),
+    ("hls::stream FIFOs", SCRATCH / "w9fifo_impl" / "after_merged.json"),
+    ("PIPO channels", SCRATCH / "w9pipo_impl" / "after6_merged.json"),
+    ("width narrowing (round 2)", SCRATCH / "w9r2i" / "after8.json"),
+    ("round 2, review fixes", SCRATCH / "w9r2fix" / "after.json"),
     ("process merges (N36)", SCRATCH / "n36impl" / "after.json"),
     ("copy-count inputs (N38)", SCRATCH / "n38impl" / "t7.json"),
     ("structs (N37)", SCRATCH / "n37impl" / "v10.json"),
-    ("W9r4 review fixes", SCRATCH / "w9r4fix" / "cg_f7.json"),
-    ("W9 round 5", SCRATCH / "w9r5fix" / "final.json"),
-    ("real Vitis headers (W11)", SCRATCH / "w11adopt" / "C1.json"),
-    ("W9 round 6", SCRATCH / "w9r6i" / "F1.json"),
-    ("W9r6 review fixes", SCRATCH / "w9r6fix" / "G1.json"),
-    ("W9 round 7", SCRATCH / "w9r7i" / "F.json"),
-    ("W9r7 review fixes", SCRATCH / "w9r7fix" / "R4.json"),
-    ("W9 round 8", SCRATCH / "w9r8g" / "A.json"),
-    ("W9 round 9", SCRATCH / "w9r9i" / "P2.json"),
-    ("W9r9 review fixes", SCRATCH / "w9r9fix" / "F.json"),
-    ("W9 round 10", SCRATCH / "w9r10i" / "R10.json"),
-    ("W9r10 review fixes", SCRATCH / "w9r10fx" / "X2.json"),
+    ("round 4, review fixes", SCRATCH / "w9r4fix" / "cg_f7.json"),
+    ("round 5", SCRATCH / "w9r5fix" / "final.json"),
+    ("real Vitis headers", SCRATCH / "w11adopt" / "C1.json"),
+    ("round 6", SCRATCH / "w9r6i" / "F1.json"),
+    ("round 6, review fixes", SCRATCH / "w9r6fix" / "G1.json"),
+    ("round 7", SCRATCH / "w9r7i" / "F.json"),
+    ("round 7, review fixes", SCRATCH / "w9r7fix" / "R4.json"),
+    ("round 8", SCRATCH / "w9r8g" / "A.json"),
+    ("round 9", SCRATCH / "w9r9i" / "P2.json"),
+    ("round 9, review fixes", SCRATCH / "w9r9fix" / "F.json"),
+    ("round 10", SCRATCH / "w9r10i" / "R10.json"),
+    ("round 10, review fixes (final evaluation run)", SCRATCH / "w9r10fx" / "X2.json"),
 ]
 
 STAGE_ROWS = [
@@ -99,6 +99,7 @@ def changelog_counts():
         txt = m.group(1)
         if re.search(r"opt-in|off by default|kept off|stay out of the default|out of the default", txt, re.I):
             day, _, title = h.partition(" — ")
+            title, txt = L.readable(title), L.readable(txt)
             optin.append([day, title[:150] + ("..." if len(title) > 150 else ""), txt.strip()[:160]])
     return ents, review, optin
 
@@ -167,6 +168,9 @@ def main():
               "~/hls-est-work/experiments/*/*/result.json", "hls-doc/notes/*.md",
               "~/hls-est-work/coord/scratch/reports/", "test/hls-est/Mirror/"]
     gen = L.header(__file__, inputs)
+    import json as _json
+    snap = _json.loads((Path(__file__).parent / "ch06_manifest.json").read_text())["snapshot"]
+    cutoff = datetime.datetime.fromisoformat(snap["experiments_cutoff"])
     L.FIGURES.mkdir(parents=True, exist_ok=True)
     v = {}
 
@@ -204,9 +208,17 @@ def main():
     a_, e_ = fr["[vitis.json] all rows"], fr["[experiments] all rows"]
     v["fr_rows"], v["fr_open"], v["fr_n6"] = a_["rows"], a_["open"], a_["n6"]
     v["fr_exp_rows"], v["fr_exp_open"], v["fr_exp_n6"] = e_["rows"], e_["open"], e_["n6"]
+    v["fr_date"] = datetime.date.fromtimestamp(os.path.getmtime(L.RESULTS / "formula_reconcile_summary.csv")).isoformat()
+    full = L.THESIS / "data" / "formula-reconcile-full.csv"
+    with open(full) as fh:
+        ff = {r["subset"]: r for r in csv.DictReader(fh)}
+    fa = ff["[vitis.json] all rows"]
+    v["frf_rows"], v["frf_open"], v["frf_n6"] = fa["rows"], fa["open"], fa["n6"]
+    v["frf_vec_rows"], v["frf_vec_match"] = fa["vec_rows"], fa["vec_match"]
 
     # experiments
-    idx = L.experiment_index()
+    idx = L.experiment_index(cutoff)
+    v["exp_cutoff"] = snap["experiments_cutoff"].replace("T", " ")
     names = {n for n, _, _ in idx}
     sts = collections.Counter(s for _, s, _ in idx)
     v["exp_runs"], v["exp_names"] = len(idx), len(names)
@@ -220,11 +232,13 @@ def main():
     figure_experiments(idx, gen)
 
     # notes
-    heads = L.vitis_note_headings()
-    hc = collections.Counter(s for _, _, s in heads)
-    v["n_notes"] = len(heads)
-    v["n_notes_confirmed"], v["n_notes_partly"] = hc["confirmed"], hc["partly confirmed"]
-    v["n_notes_unconfirmed"] = hc["unconfirmed"] + hc["superseded"]
+    import thesis_data as T
+    nc = T.note_status_counts()
+    v["n_notes"] = nc["notes"]
+    v["n_notes_confirmed"], v["n_notes_partly"] = nc["confirmed"], nc["partly"]
+    v["n_notes_confirmed_kernels"], v["n_notes_confirmed_corpus"] = nc["confirmed_kernels"], nc["confirmed_corpus"]
+    v["n_notes_unconfirmed"], v["n_notes_method"] = nc["unconfirmed"], nc["method"]
+    v["n_notes_corpus_list"], v["n_notes_unconfirmed_list"] = nc["confirmed_corpus_list"], nc["unconfirmed_list"]
     v["n_corrections"] = len(re.findall(r"[Cc]orrected", notes_text))
     v["n_open"] = len(re.findall(r"^## O\d+\.", L.read_text(L.NOTES / "OPEN_ISSUES.md"), flags=re.M))
     memos = L.read_text(L.NOTES / "MEMOS.md")
@@ -280,6 +294,9 @@ def main():
     v["run_git"], v["run_cgeist"] = meta.get("hls_est_git"), meta.get("cgeist_md5", "?")[:8]
     v["run_shim"] = Path(str(meta.get("shim"))).name
     v["run_pipeline"] = meta.get("pipeline")
+    v["run_mlir_from"] = Path(str(meta.get("mlir_from", ""))).parent.name + "/" + Path(str(meta.get("mlir_from", ""))).name
+    v["run_polygeist_recorded"] = meta.get("polygeist_head") or "not recorded"
+    v["run_polygeist"], v["run_cgeist_snapshot"] = snap["polygeist_commit"], snap["cgeist_md5"]
 
     # worked example
     for k in ("dm_wo", "dm_rd", "dm_self"):
@@ -291,7 +308,7 @@ def main():
 
     text = L.fill_template(L.read_text(Path(__file__).parent / "templates" / "ch3_methodology.md.in"), v)
     with open(OUT, "w") as fh:
-        fh.write(gen + "\n\n" + text.rstrip() + "\n")
+        fh.write(f"<!-- {gen} -->\n\n" + text.rstrip() + "\n")
     print(f"wrote {L.rel(OUT)}")
 
 

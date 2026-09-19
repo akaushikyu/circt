@@ -22,6 +22,7 @@ import ch34_lib as L  # noqa: E402
 import ch4_rule_data as D  # noqa: E402
 
 OUT = L.THESIS / "04-inferred-decision-model.md"
+APPENDIX = L.THESIS / "A-rule-kernels.md"
 INPUTS = ["tools/hls-est-validate/thesis/ch4_rule_data.py",
           "~/hls-est-work/experiments/*/*/result.json (cited kernels)",
           "hls-doc/notes/{VITIS_NOTES,OPEN_ISSUES,CHANGELOG}.md",
@@ -78,34 +79,45 @@ def kernel_table(r, used):
                        "messages in the log"], rows, ["---", "---", "---:", "---", "---", "---"])
 
 
-def render_rule(r, used, oi_titles, cited_oi):
+def render_rule(r, used, oi_titles, cited_oi, appendix_ref):
+    """(chapter text, appendix text) of one rule.  The chapter keeps the statement, the status, the
+    hls-est status and one example kernel; the appendix holds every kernel, the evidence, the mechanism,
+    the configuration keys and the catalogue effect."""
     out = [f"### {r['id']}. {r['title']}", ""]
-    out.append(f"*VITIS_NOTES:* {', '.join(r['notes'])}.")
+    out.append(f"*VITIS_NOTES:* {', '.join(r['notes'])}. *Status:* {r['status']}.")
     out.append("")
     out.append(L.expand_kernel_refs(r["statement"], used))
     out.append("")
+    app = [f"### {r['id']}. {r['title']}", ""]
     if r["kernels"]:
-        out.append(kernel_table(r, used))
-        out.append("")
+        k0 = r["kernels"][0]
+        s0 = L.kernel_summary(k0[0], k0[2] if len(k0) > 2 else {})
+        used.add(k0[0])
+        more = len(r["kernels"]) - 1
+        out.append(f"- **Example kernel:** `{k0[0]}` ({k0[1]}): Vitis {s0['bram']} BRAM_18K"
+                   + (f"; {s0['detail']}" if s0["detail"] else "") + "."
+                   + (f" {more} more kernel{'s' if more > 1 else ''} in {appendix_ref}." if more else
+                      f" Details in {appendix_ref}."))
+        app.append(kernel_table(r, used))
+        app.append("")
     else:
-        out.append("*No standalone kernel: the rule rests on corpus designs only.*")
-        out.append("")
-    out.append(f"- **Evidence:** {'; '.join(r['evidence'])}.")
-    out.append(f"- **Status:** {r['status']}.")
+        out.append("- *No standalone kernel: the rule rests on corpus designs only.*")
     hl = r["hlsest"]
     for o in re.findall(r"O\d+", hl):
         cited_oi.add(o)
     out.append(f"- **hls-est:** {hl}.")
+    out.append("")
+    app.append(f"- **Evidence:** {'; '.join(r['evidence'])}.")
     if r["mechanism"]:
-        out.append(f"- **Mechanism:** {', '.join('`' + m + '`' for m in r['mechanism'])}.")
+        app.append(f"- **Mechanism:** {', '.join('`' + m + '`' for m in r['mechanism'])}.")
     if r["keys"]:
-        out.append(f"- **Configuration keys:** {', '.join('`' + k + '`' for k in r['keys'])}.")
+        app.append(f"- **Configuration keys:** {', '.join('`' + k + '`' for k in r['keys'])}.")
     if r["effect"]:
         head, quote = L.changelog_effect(*r["effect"])
-        out.append(f"- **Catalogue effect** (CHANGELOG, {head.split(' — ')[0]}, \"{head.split(' — ', 1)[1]}\"):")
-        out.append(f"  > {quote}")
-    out.append("")
-    return "\n".join(out)
+        app.append(f"- **Catalogue effect** (CHANGELOG, {head.split(' — ')[0]}, \"{head.split(' — ', 1)[1]}\"):")
+        app.append(f"  > {quote}")
+    app.append("")
+    return "\n".join(out), "\n".join(app)
 
 
 def figure(stats, gen_line):
@@ -159,6 +171,7 @@ def main():
     stats = {s: {"confirmed": 0, "partly confirmed": 0, "unconfirmed": 0, "kernels": 0}
              for s, _, _ in D.STAGES}
     body = []
+    appendix = []
     per_stage_kernels = {s: set() for s, _, _ in D.STAGES}
     for si, (sid, title, intro) in enumerate(D.STAGES, start=1):
         rules = [r for r in D.RULES if r["stage"] == sid]
@@ -166,9 +179,13 @@ def main():
         body.append("")
         body.append(intro)
         body.append("")
+        appendix.append(f"## A.{si} {title}")
+        appendix.append("")
         for r in rules:
             before = set(used)
-            body.append(render_rule(r, used, oi_titles, cited_oi))
+            chap, app = render_rule(r, used, oi_titles, cited_oi, f"Appendix A.{si}")
+            body.append(chap)
+            appendix.append(app)
             per_stage_kernels[sid] |= {k[0] for k in r["kernels"]} | (used - before)
             stats[sid][status_class(r["status"])] += 1
         stats[sid]["kernels"] = len(per_stage_kernels[sid])
@@ -245,14 +262,28 @@ def main():
                 "they cite (right).", "",
                 "**Table 4.2.** The rule catalogue.", "", cat_md, ""]
 
-    text = "\n".join([gen, "", intro, "\n".join(overview), "\n".join(body), "\n".join(surpr), "\n".join(lim)])
+    body = [L.readable(b) for b in body]
+    lim = [L.readable(x) for x in lim]
+    surpr = [L.readable(x) for x in surpr]
+    text = "\n".join([f"<!-- {gen} -->", "", intro, "\n".join(overview), "\n".join(body), "\n".join(surpr), "\n".join(lim)])
+    app_intro = ["# Appendix A. Kernels and evidence of the rules of Chapter 4", "",
+                 "For every rule of Chapter 4: the minimal kernels that show it, each read from its own Vitis "
+                 "run (the columns are explained in Section 4.0), where in Vitis the behaviour is visible, the "
+                 "hls-est mechanism and configuration keys, and the catalogue effect recorded in the change log "
+                 "when the rule was adopted.", ""]
+    app_text = "\n".join([f"<!-- {gen} -->", ""] + app_intro + appendix)
+    leftover = re.findall(r"\[\[[^\]]+\]\]|\{\{[^}]+\}\}", app_text)
+    if leftover:
+        raise SystemExit(f"unresolved references in the appendix: {leftover[:5]}")
+    with open(APPENDIX, "w") as fh:
+        fh.write(app_text.rstrip() + "\n")
     leftover = re.findall(r"\[\[[^\]]+\]\]|\{\{[^}]+\}\}", text)
     if leftover:
         raise SystemExit(f"unresolved references: {leftover[:5]}")
     L.THESIS.mkdir(parents=True, exist_ok=True)
     with open(OUT, "w") as fh:
         fh.write(text.rstrip() + "\n")
-    print(f"wrote {L.rel(OUT)}: {len(D.RULES)} rules, {len(used)} kernels")
+    print(f"wrote {L.rel(OUT)} and {L.rel(APPENDIX)}: {len(D.RULES)} rules, {len(used)} kernels")
 
 
 if __name__ == "__main__":

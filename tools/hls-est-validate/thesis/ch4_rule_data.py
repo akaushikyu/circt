@@ -104,8 +104,9 @@ RULES = [
         statement=(
             "An array (local, global or static) whose loads never reach a top-level output is removed in "
             "the first optimisation stage, together with the computation that only fed it; no message "
-            "reports it, the array simply has no memory row. The test is LLVM's, not a whole-program "
-            "liveness: a store is deleted only once its array has no used load, so a write-only array or "
+            "reports it, the array simply has no memory row. The test is not a whole-program liveness: a "
+            "store is deleted only once its array has no used load (that this is LLVM's dead-store and "
+            "dead-global deletion is our interpretation of the behaviour, not observed directly), so a write-only array or "
             "one whose loaded values are unused disappears, but an array whose loads feed stores into "
             "itself (a histogram `t[x]++` never read otherwise) or into another array of such a cycle is "
             "kept. Arrays Vitis has already turned into registers do not keep a cycle alive, and an "
@@ -153,7 +154,8 @@ RULES = [
         notes=["N13", "N1a"],
         statement=(
             "The first back-end transform turns an integer `sdiv`, `udiv` or `srem` by a constant 0 into "
-            "LLVM's undefined value U and then applies LLVM's undef folds use by use: a store of U is "
+            "an undefined value U and then folds it use by use, as LLVM's undef folds would (the "
+            "behaviour per use is measured; that LLVM's folds produce it is our interpretation): a store of U is "
             "deleted, `x * U` and `sext U` become 0, `x + U` stays U, a compare of U is decided by "
             "`isTrueWhenEqual`. An unsigned `urem x, 0` is 0. Because the fixed-point operators "
             "sign-extend their operands first, every ap_fixed use sees `sext(U) = 0`: an ap_fixed `x / 0` "
@@ -853,7 +855,7 @@ RULES = [
             "Loop-invariant loads are hoisted out of the pipelined loop (not counted) when the array is "
             "not stored in that loop and the nest is not flattened, also when they sit under a condition "
             "or an early break. Loads of one address in non-exclusive ifs of one iteration are one read "
-            "(LLVM's GVN load PRE) unless a store intervenes; `c ? A[i] : A[j]` on lvalues of one array is "
+            "(consistent with LLVM's GVN load PRE; our interpretation) unless a store intervenes; `c ? A[i] : A[j]` on lvalues of one array is "
             "one read at a selected address. A scalar running value (`m = a[..]; if (a[..] > m) m = ...`) "
             "is a register and carries no memory recurrence."),
         kernels=[("w9r_b9condinv", "32 invariant loads under a break", {}),

@@ -1,7 +1,8 @@
-% References of the frame chapters (00, 01, 02, 05, 07, 08) of the hls-est thesis draft.
+% References of the hls-est thesis draft (all chapters).
 % Checked online on 2026-10-21 (web search: title, authors, venue, year; pages / DOI where the search showed
-% them).  Entries with "unverified" in their note field were NOT checked online and must be checked before
-% submission.
+% them); on 2026-10-22 the entries marked "Crossref 2026-10-22" were re-checked against their Crossref record
+% (api.crossref.org/works/<doi>).  Entries with "unverified" in their note field were NOT checked online and
+% must be checked before submission.
 
 @inproceedings{zhao2017comba,
   author    = {Jieru Zhao and Liang Feng and Sharad Sinha and Wei Zhang and Yun Liang and Bingsheng He},
@@ -90,21 +91,23 @@
 }
 
 @inproceedings{abikaram2024hlsfactory,
-  author    = {Stefan Abi-Karam and others},
+  author    = {Stefan Abi-Karam and Rishov Sarkar and Allison Seigler and Sean Lowe and Zhigang Wei and Hanqiu Chen and Nanditha Rao and Lizy John and Aman Arora and Cong Hao},
   title     = {{HLSFactory}: A Framework Empowering High-Level Synthesis Datasets for Machine Learning and Beyond},
   booktitle = {Proceedings of the ACM/IEEE International Symposium on Machine Learning for CAD (MLCAD)},
+  pages     = {1--9},
   year      = {2024},
   doi       = {10.1145/3670474.3685961},
-  note      = {ten authors; full list to be filled in}
+  note      = {Crossref 2026-10-22}
 }
 
 @inproceedings{ferrandi2021bambu,
-  author    = {Fabrizio Ferrandi and others},
+  author    = {Fabrizio Ferrandi and Vito Giovanni Castellana and Serena Curzel and Pietro Fezzardi and Michele Fiorito and Marco Lattuada and Marco Minutoli and Christian Pilato and Antonino Tumeo},
   title     = {Invited: {Bambu}: an Open-Source Research Framework for the High-Level Synthesis of Complex Applications},
   booktitle = {Proceedings of the 58th ACM/IEEE Design Automation Conference (DAC)},
   pages     = {1327--1330},
   year      = {2021},
-  note      = {co-author list to be filled in}
+  doi       = {10.1109/DAC18074.2021.9586110},
+  note      = {Crossref 2026-10-22}
 }
 
 @inproceedings{canis2011legup,
@@ -157,7 +160,7 @@
   author       = {{The CIRCT contributors}},
   title        = {{CIRCT}: Circuit {IR} Compilers and Tools},
   howpublished = {\url{https://github.com/llvm/circt}},
-  note         = {software; accessed 2026-10-21; unverified (not searched)}
+  note         = {software (an LLVM incubator project); repository URL checked 2026-10-22; there is no archival paper for CIRCT as a whole}
 }
 
 @inproceedings{lattner2021mlir,
@@ -186,8 +189,11 @@
 @manual{amd_ug473,
   author       = {{Advanced Micro Devices}},
   title        = {7 Series {FPGAs} Memory Resources User Guide (UG473)},
-  organization = {AMD (Xilinx)},
-  note         = {unverified (not searched): document number and title from memory}
+  organization = {Xilinx (now AMD)},
+  edition      = {v1.14},
+  year         = {2019},
+  month        = jul,
+  note         = {title and latest revision (v1.14, July 2019) checked by web search 2026-10-22}
 }
 
 @misc{xilinx_hlsllvm,
@@ -213,8 +219,9 @@
   volume  = {60},
   number  = {2},
   year    = {2017},
+  pages   = {86--95},
   doi     = {10.1145/2967606},
-  note    = {volume and number unverified}
+  note    = {Crossref 2026-10-22}
 }
 
 @article{angluin1987,
@@ -225,7 +232,8 @@
   number  = {2},
   pages   = {87--106},
   year    = {1987},
-  note    = {unverified (not searched)}
+  doi     = {10.1016/0890-5401(87)90052-6},
+  note    = {Crossref 2026-10-22}
 }
 
 @article{lahti2019,
@@ -240,14 +248,15 @@
 }
 
 @article{cong2022fpga,
-  author  = {Jason Cong and others},
+  author  = {Jason Cong and Jason Lau and Gai Liu and Stephen Neuendorffer and Peichen Pan and Kees Vissers and Zhiru Zhang},
   title   = {{FPGA} {HLS} Today: Successes, Challenges, and Opportunities},
   journal = {ACM Transactions on Reconfigurable Technology and Systems},
   volume  = {15},
   number  = {4},
+  pages   = {1--42},
   year    = {2022},
   doi     = {10.1145/3530775},
-  note    = {co-author list to be filled in}
+  note    = {Crossref 2026-10-22}
 }
 
 @inproceedings{rau1994,
@@ -285,12 +294,13 @@
 }
 
 @inproceedings{zhou2018rosetta,
-  author    = {Yuan Zhou and others},
-  title     = {Rosetta: A Realistic High-Level Synthesis Benchmark Suite for Software-Programmable {FPGAs}},
+  author    = {Yuan Zhou and Udit Gupta and Steve Dai and Ritchie Zhao and Nitish Srivastava and Hanchen Jin and Joseph Featherston and Yi-Hsiang Lai and Gai Liu and Gustavo Angarita Velasquez and Wenping Wang and Zhiru Zhang},
+  title     = {Rosetta: A Realistic High-Level Synthesis Benchmark Suite for Software Programmable {FPGAs}},
   booktitle = {Proceedings of the ACM/SIGDA International Symposium on Field-Programmable Gate Arrays (FPGA)},
   pages     = {269--278},
   year      = {2018},
-  note      = {co-author list to be filled in}
+  doi       = {10.1145/3174243.3174255},
+  note      = {Crossref 2026-10-22}
 }
 
 @inproceedings{hara2008chstone,
@@ -301,9 +311,71 @@
 }
 
 @misc{pouchet2012polybench,
-  author       = {Louis-No{\"e}l Pouchet},
+  author       = {Louis-No{\"e}l Pouchet and Tomofumi Yuki},
   title        = {{PolyBench/C}: the Polyhedral Benchmark Suite},
   howpublished = {\url{https://sourceforge.net/projects/polybench/}},
-  year         = {2012},
-  note         = {unverified (not searched)}
+  year         = {2016},
+  note         = {version 4.2.1 (beta), released 2016-05-20; contacts and release checked by web search 2026-10-22. The bib key keeps its old year}
+}
+
+@article{cong2011memorypartition,
+  author  = {Jason Cong and Wei Jiang and Bin Liu and Yi Zou},
+  title   = {Automatic Memory Partitioning and Scheduling for Throughput and Power Optimization},
+  journal = {ACM Transactions on Design Automation of Electronic Systems},
+  volume  = {16},
+  number  = {2},
+  pages   = {1--25},
+  year    = {2011},
+  doi     = {10.1145/1929943.1929947},
+  note    = {Crossref 2026-10-22}
+}
+
+@inproceedings{wang2014memorypartition,
+  author    = {Yuxin Wang and Peng Li and Jason Cong},
+  title     = {Theory and Algorithm for Generalized Memory Partitioning in High-Level Synthesis},
+  booktitle = {Proceedings of the ACM/SIGDA International Symposium on Field-Programmable Gate Arrays (FPGA)},
+  pages     = {199--208},
+  year      = {2014},
+  doi       = {10.1145/2554688.2554780},
+  note      = {Crossref 2026-10-22}
+}
+
+@inproceedings{herklotz2021reliability,
+  author    = {Yann Herklotz and Zewei Du and Nadesh Ramanathan and John Wickerson},
+  title     = {An Empirical Study of the Reliability of High-Level Synthesis Tools},
+  booktitle = {Proceedings of the IEEE 29th Annual International Symposium on Field-Programmable Custom Computing Machines (FCCM)},
+  pages     = {219--223},
+  year      = {2021},
+  doi       = {10.1109/FCCM51124.2021.00034},
+  note      = {Crossref 2026-10-22}
+}
+
+@article{herklotz2021vericert,
+  author  = {Yann Herklotz and James D. Pollard and Nadesh Ramanathan and John Wickerson},
+  title   = {Formal Verification of High-Level Synthesis},
+  journal = {Proceedings of the ACM on Programming Languages},
+  volume  = {5},
+  number  = {OOPSLA},
+  pages   = {1--30},
+  year    = {2021},
+  doi     = {10.1145/3485494},
+  note    = {Vericert; Crossref 2026-10-22}
+}
+
+@inproceedings{qin2024progsg,
+  author    = {Zongyue Qin and Yunsheng Bai and Atefeh Sohrabizadeh and Zijian Ding and Ziniu Hu and Yizhou Sun and Jason Cong},
+  title     = {Cross-Modality Program Representation Learning for Electronic Design Automation with High-Level Synthesis},
+  booktitle = {Proceedings of the ACM/IEEE International Symposium on Machine Learning for CAD (MLCAD)},
+  pages     = {1--12},
+  year      = {2024},
+  doi       = {10.1145/3670474.3685952},
+  note      = {Crossref 2026-10-22}
+}
+
+@misc{xu2025intelligent4dse,
+  author       = {Lei Xu and Shanshan Wang and Emmanuel Casseau and Chenglong Xiao},
+  title        = {{Intelligent4DSE}: Optimizing High-Level Synthesis Design Space Exploration with Graph Neural Networks and Large Language Models},
+  howpublished = {arXiv:2504.19649},
+  year         = {2025},
+  note         = {preprint; title, authors and date checked against the arXiv record 2026-10-22; venue (if any) unverified}
 }

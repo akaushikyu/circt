@@ -17,10 +17,13 @@ Inputs (paths are recorded in data/frame-numbers.json):
   tools/hls-est-validate/results/comparison-summary.csv, comparison.csv  (make_compare_csv.py, newest run)
   tools/hls-est-validate/results/vitis.json                              (Vitis 2025.1 ground truth)
   hls-doc/hls-est-vs-vitis.csv                                           (time columns)
-  hls-doc/notes/{VITIS_NOTES,OPEN_ISSUES,MEMOS,CHANGELOG}.md             (counts of notes and issues)
+  hls-doc/thesis/data/ch06-numbers.json                                  (chapter 6's numbers, as ev_*;
+                                                                         run make_thesis_tables.py first)
+  hls-doc/notes/{VITIS_NOTES,OPEN_ISSUES,MEMOS,CHANGELOG}.md at the snapshot commit (counts of notes and
+                                                                         issues; ch06_manifest.json snapshot)
   hls-doc/plugins.md, configuration.md, passes/README.md, tests.md, done-exclusions.md
   the check_semantics records listed in done-exclusions.md (later wins)
-  git: branch hls-est-vitis-match of ~/circt and /mnt/d/HLS (commit counts),
+  git: the snapshot commits of ~/circt and /mnt/d/HLS (commit counts, co-author trailers, source sizes),
        branch rtl-backend: hls-doc/rtl-coverage.md, hls-doc/design/rtl-backend-float.md, tools/rtl-backend/kernels/
   test/hls-est/ (test files with a RUN line)
 
@@ -35,6 +38,9 @@ import statistics
 import subprocess
 import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import thesis_data as T  # noqa: E402  (the shared note-status parser)
 
 HERE = Path(__file__).resolve().parent
 VALIDATE = HERE.parent
@@ -199,49 +205,33 @@ def collect_times(N):
             continue
     N.put("util_designs", len(util), src)
     N.put("util_bram_highest", sum(u[0] > 0 and u[0] >= max(u[1:]) for u in util), src)
-    N.put("util_bram_over100", sum(u[0] > 100 for u in util), src)
     N.put("time_hlsest_median", "%.1f" % statistics.median(p[0] for p in pairs), src)
     N.put("time_vitis_median", "%.1f" % statistics.median(p[1] for p in pairs), src)
     N.put("time_hlsest_total_h", "%.1f" % (sum(p[0] for p in pairs) / 3600.0), src)
     N.put("time_vitis_total_h", "%.1f" % (sum(p[1] for p in pairs) / 3600.0), src)
-    ratios = [p[1] / p[0] for p in pairs if p[0] > 0]
-    N.put("time_speedup_median", "%.0f" % statistics.median(ratios), src)
 
 
 def collect_notes(N):
     notes = DOC / "notes"
-    vn = (notes / "VITIS_NOTES.md").read_text()
-    heads = re.findall(r"^## (N\d+[a-z]?)\. (.*)$", vn, re.M)
-    N.put("n_notes", len(heads), notes / "VITIS_NOTES.md")
-    N.put("n_last", max(int(re.sub(r"\D", "", h[0])) for h in heads), notes / "VITIS_NOTES.md")
-
-    def status(title):
-        t = title.lower()
-        if "unconfirmed" in t or "rule unconfirmed" in t:
-            return "unconfirmed"
-        if "partly confirmed" in t:
-            return "partly"
-        if "(confirmed" in t or "confirmed;" in t or "confirmed," in t or "confirmed)" in t:
-            return "confirmed"
-        if "observation" in t:
-            return "observation"
-        return "other"
-
-    st = [status(t) for _, t in heads]
-    for s in ("confirmed", "partly", "unconfirmed", "observation", "other"):
-        N.put("n_notes_%s" % s, st.count(s), notes / "VITIS_NOTES.md")
+    index = T.vitis_notes_index()
+    N.put("n_notes", len(index), notes / "VITIS_NOTES.md")
+    N.put("n_last", max(int(re.sub(r"\D", "", h)) for h in index), notes / "VITIS_NOTES.md")
+    counts = T.note_status_counts(index)
+    for k in ("confirmed", "confirmed_kernels", "confirmed_corpus", "partly", "unconfirmed", "method",
+              "confirmed_corpus_list", "unconfirmed_list", "partly_list", "method_list"):
+        N.put("n_notes_%s" % k, counts[k], "%s (thesis_data.note_status)" % (notes / "VITIS_NOTES.md"))
     per = {}
-    for nid, title in heads:
-        m = re.search(r"(\d+)(?: \+ \d+)* (?:v1 )?kernels", title)
-        per[nid] = {"status": status(title), "kernels": int(m.group(1)) if m else None}
-    oi = (notes / "OPEN_ISSUES.md").read_text()
+    for nid, e in index.items():
+        m = re.search(r"(\d+)(?: \+ \d+)* (?:v1 )?kernels", e["title"])
+        per[nid] = {"status": e["status"], "kernels": int(m.group(1)) if m else None}
+    oi = T.notes_text("OPEN_ISSUES.md")
     onums = [int(x) for x in re.findall(r"^## O(\d+)\.", oi, re.M)]
     N.put("o_count", len(onums), notes / "OPEN_ISSUES.md")
     N.put("o_last", max(onums), notes / "OPEN_ISSUES.md")
-    memos = (notes / "MEMOS.md").read_text()
+    memos = T.notes_text("MEMOS.md")
     drows = re.findall(r"^\| (\d+) \|", memos, re.M)
     N.put("memos_decisions", len(set(drows)), notes / "MEMOS.md")
-    cl = (notes / "CHANGELOG.md").read_text()
+    cl = T.notes_text("CHANGELOG.md")
     dates = re.findall(r"^## (\d{4}-\d{2}-\d{2})", cl, re.M)
     N.put("changelog_entries", len(dates), notes / "CHANGELOG.md")
     N.put("changelog_first", min(dates), notes / "CHANGELOG.md")
@@ -286,7 +276,7 @@ def collect_docs(N):
         rows_ = d.get("rows", d) if isinstance(d, dict) else {r["key"]: r for r in d}
         if isinstance(rows_, list):
             rows_ = {r["key"]: r for r in rows_}
-        merged.update(rows_)
+        merged.update({k: v for k, v in rows_.items() if not k.startswith("_")})
     st = [v.get("status") for v in merged.values()]
     N.put("sem_records", len(merged), "semantics records listed in hls-doc/done-exclusions.md")
     N.put("sem_equal", st.count("equal"), "semantics records listed in hls-doc/done-exclusions.md")
@@ -297,6 +287,14 @@ def collect_docs(N):
     return prow, rows
 
 
+def collect_invariance(N):
+    """The newest change-log record of the debug-invariance check ("debug invariance N cases, ...")."""
+    src = DOC / "notes" / "CHANGELOG.md"
+    m = re.search(r"debug invariance (\d+) cases, (\d+) pass(?:, \d+ fail)?, (\d+) tool error", T.notes_text("CHANGELOG.md"))
+    N.put("inv_cases", int(m.group(1)), src)
+    N.put("inv_record", m.group(0), src)
+
+
 def collect_tests(N):
     root = CIRCT / "test" / "hls-est"
     for sub in ("Passes", "Estimation", "Mirror", "Config", "Plugins"):
@@ -305,31 +303,50 @@ def collect_tests(N):
         N.put("lit_%s" % sub.lower(), len(files), root / sub)
 
 
-def collect_loc(N):
-    def lines(paths):
-        return sum(len(p.read_text(errors="replace").splitlines()) for p in paths)
-    res = list((CIRCT / "lib" / "Dialect" / "Resource").rglob("*.cpp")) + \
-        list((CIRCT / "include" / "circt" / "Dialect" / "Resource").rglob("*.h"))
-    N.put("loc_resource", fmt_int(lines(res)), "lib/Dialect/Resource/**/*.cpp + include/circt/Dialect/Resource/**/*.h")
-    N.put("files_resource", len(res), "lib/Dialect/Resource, include/circt/Dialect/Resource")
-    py = list(VALIDATE.glob("*.py"))
-    N.put("loc_harness", fmt_int(lines(py)), "tools/hls-est-validate/*.py")
-    N.put("files_harness", len(py), "tools/hls-est-validate/*.py")
-    hls = [p for p in (POLYGEIST / "Polygeist" / "tools" / "cgeist" / "Lib").glob("*")
-           if p.is_file() and ("HLS" in p.name or "Xlx" in p.name)]
-    N.put("loc_cgeist_hls", fmt_int(lines(hls)), "Polygeist tools/cgeist/Lib/*{HLS,Xlx}*")
-    N.put("files_cgeist_hls", len(hls), "Polygeist tools/cgeist/Lib/*{HLS,Xlx}*")
+def collect_loc(N, snap):
+    """Source sizes read from git at the snapshot commits (not the working tree)."""
+    def tree(repo, commit, paths, keep):
+        names = [n for n in git(repo, "ls-tree", "-r", "--name-only", commit, *paths).splitlines() if keep(n)]
+        return names, sum(len(git(repo, "show", "%s:%s" % (commit, n)).splitlines()) for n in names)
+    res_paths = ["lib/Dialect/Resource", "include/circt/Dialect/Resource"]
+    is_src = lambda n: n.endswith((".cpp", ".h"))
+    c = snap["circt_commit"]
+    files, lines = tree(CIRCT, c, res_paths, is_src)
+    N.put("loc_resource", fmt_int(lines), "git %s: lib/Dialect/Resource/**/*.cpp + include/circt/Dialect/Resource/**/*.h" % c)
+    N.put("files_resource", len(files), "git %s: lib/Dialect/Resource, include/circt/Dialect/Resource" % c)
+    base = git(CIRCT, "merge-base", "main", c).strip()
+    files0, lines0 = tree(CIRCT, base, res_paths, is_src)
+    N.put("loc_resource_before", fmt_int(lines0), "git %s (branch point): the same paths" % base[:9])
+    N.put("files_resource_before", len(files0), "git %s (branch point): the same paths" % base[:9])
+    py, pylines = tree(CIRCT, c, ["tools/hls-est-validate"],
+                       lambda n: n.endswith(".py") and n.count("/") == 2)
+    N.put("loc_harness", fmt_int(pylines), "git %s: tools/hls-est-validate/*.py" % c)
+    N.put("files_harness", len(py), "git %s: tools/hls-est-validate/*.py" % c)
+    p = snap["polygeist_commit"]
+    hls, hlslines = tree(POLYGEIST, p, ["Polygeist/tools/cgeist/Lib"],
+                         lambda n: n.count("/") == 4 and ("HLS" in n.rsplit("/", 1)[1] or "Xlx" in n.rsplit("/", 1)[1]))
+    N.put("loc_cgeist_hls", fmt_int(hlslines), "git %s: Polygeist tools/cgeist/Lib/*{HLS,Xlx}*" % p)
+    N.put("files_cgeist_hls", len(hls), "git %s: Polygeist tools/cgeist/Lib/*{HLS,Xlx}*" % p)
 
 
-def collect_git(N):
-    N.put("circt_commits", int(git(CIRCT, "rev-list", "--count", "hls-est-vitis-match", "^main")),
-          "git rev-list hls-est-vitis-match ^main (~/circt)")
-    N.put("circt_head", git(CIRCT, "rev-parse", "--short=9", "hls-est-vitis-match").strip(), "git (~/circt)")
-    N.put("polygeist_commits",
-          int(git(POLYGEIST, "rev-list", "--count", "hls-est-vitis-match", "^main")),
-          "git rev-list hls-est-vitis-match ^main (/mnt/d/HLS)")
-    N.put("polygeist_head", git(POLYGEIST, "rev-parse", "--short=8", "hls-est-vitis-match").strip(),
-          "git (/mnt/d/HLS)")
+def collect_git(N, snap):
+    """Commit counts at the frozen snapshot commits (ch06_manifest.json `snapshot`), so that they do not
+    change when the thesis commits themselves land."""
+    c, p = snap["circt_commit"], snap["polygeist_commit"]
+    N.put("circt_commits", int(git(CIRCT, "rev-list", "--count", c, "^main")),
+          "git rev-list %s ^main (~/circt)" % c)
+    N.put("circt_head", c, "ch06_manifest.json snapshot")
+    N.put("circt_commits_coauthored", int(git(CIRCT, "log", "--format=%B", c, "^main").lower().count(
+        "co-authored-by: claude")), "git log %s ^main trailers (~/circt)" % c)
+    N.put("polygeist_commits", int(git(POLYGEIST, "rev-list", "--count", p, "^main")),
+          "git rev-list %s ^main (/mnt/d/HLS)" % p)
+    N.put("polygeist_head", p, "ch06_manifest.json snapshot")
+    N.put("polygeist_commits_coauthored", int(git(POLYGEIST, "log", "--format=%B", p, "^main").lower().count(
+        "co-authored-by: claude")), "git log %s ^main trailers (/mnt/d/HLS)" % p)
+    base = git(CIRCT, "merge-base", "main", c).strip()
+    N.put("circt_branch_point", base[:9], "git merge-base main %s" % c)
+    N.put("circt_branch_point_date", git(CIRCT, "log", "-1", "--format=%ad", "--date=short", base).strip(),
+          "git log %s" % base)
 
 
 def collect_rtl(N):
@@ -383,6 +400,15 @@ def collect_rtl(N):
     return funnel, wns
 
 
+def collect_evaluation(N, out):
+    """Every number of chapter 6 (data/ch06-numbers.json, written by make_thesis_tables.py, which must run
+    first), as ev_<key>, so that the abstract, the introduction and the limitations quote the same values."""
+    src = out / "data" / "ch06-numbers.json"
+    nums = json.loads(src.read_text())["numbers"]
+    for k, v in nums.items():
+        N.put("ev_" + k, v, src)
+
+
 # ---------------------------------------------------------------------------------------------- tables
 
 def tex_escape(s):
@@ -424,13 +450,21 @@ RELATED = [
      "IronMan [@wu2021ironman], PowerGear [@lin2022powergear], Ustun et al. [@ustun2020delay]",
      "program / IR graph + pragmas", "latency, LUT/FF/DSP/BRAM, power, delay (aggregate)",
      "HLS tool or implementation", "learned, opaque"),
+    ("Language models", "ProgSG [@qin2024progsg], Intelligent4DSE [@xu2025intelligent4dse]",
+     "source code + program graph", "latency, resources (aggregate)", "HLS tool", "learned, opaque"),
+    ("Memory partitioning", "Cong et al. [@cong2011memorypartition], Wang et al. [@wang2014memorypartition]",
+     "affine loop nests", "a conflict-free bank layout (designed, not predicted)", "their own schedule",
+     "algorithmic"),
+    ("HLS tool testing / verification", "Herklotz et al. [@herklotz2021reliability], Vericert [@herklotz2021vericert]",
+     "generated or given C programs", "miscompilations; proven-correct RTL", "simulation; a proof",
+     "black-box testing; verified compiler"),
     ("Open HLS compilers", "Bambu [@ferrandi2021bambu], LegUp [@canis2011legup], "
      "Dynamatic [@josipovic2018dynamatic], XLS [@xls], ScaleHLS [@ye2022scalehls], Allo [@chen2024allo], "
      "CIRCT/Calyx [@nigam2021calyx]", "C/C++, DSLs, MLIR", "their own schedules and resources",
      "themselves", "open, but a different tool"),
     ("This work (hls-est)", "black-box inference of Vitis HLS 2025.1, MLIR/CIRCT passes",
      "C/C++ + pragmas, real Vitis headers", "per-memory BRAM_18K decisions (kind, banks, copies, blocks)",
-     "Vitis csynth, per array", "open, rule-based, every rule cited"),
+     "Vitis csynth totals; per array where names align", "open, rule-based, every rule cited"),
 ]
 
 
@@ -540,15 +574,19 @@ def main():
         (out / d).mkdir(parents=True, exist_ok=True)
 
     N = Numbers()
+    snap = json.loads((HERE / "ch06_manifest.json").read_text())["snapshot"]
+    collect_evaluation(N, out)
     under, _ = collect_comparison(N)
     collect_vitis(N)
     collect_times(N)
     notes = collect_notes(N)
     prow, plugrows = collect_docs(N)
     collect_tests(N)
-    collect_git(N)
-    collect_loc(N)
+    collect_invariance(N)
+    collect_git(N, snap)
+    collect_loc(N, snap)
     funnel, wns = collect_rtl(N)
+    N.put("rtl_verilog_pct", pct(N.values["rtl_verilog"], N.values["rtl_catalogue"]), "rtl_verilog / rtl_catalogue")
     for nid, v in notes.items():
         N.put("%s.status" % nid, v["status"], DOC / "notes" / "VITIS_NOTES.md")
         if v["kernels"] is not None:
@@ -556,29 +594,29 @@ def main():
     N.put("generated", datetime.date.today().isoformat(), "date of the run")
 
     # tables
-    write_table(out, "frame-pipeline", "The default hls-est pass pipeline (hls-doc/passes/README.md)",
+    write_table(out, "frame-pipeline", "Table 5.1. The default hls-est pass pipeline (hls-doc/passes/README.md)",
                 ["#", "pass", "kind", "what it does"],
                 [[r[0], r[1].split("](")[0].lstrip("["), r[2], r[3]] for r in prow],
                 ["r", "l", "l", "6.5cm"], "hls-doc/passes/README.md")
-    write_table(out, "frame-plugins", "Plugin interfaces of hls-est and their default builtins "
+    write_table(out, "frame-plugins", "Table 5.2. Plugin interfaces of hls-est and their default builtins "
                 "(hls-doc/plugins.md)", ["interface", "selected by", "builtins (default first)"],
                 [[r[0], r[2], r[3]] for r in plugrows], ["l", "5cm", "4.5cm"], "hls-doc/plugins.md")
     top_under = under[:10]
-    write_table(out, "frame-undercounts", "The %d largest under-counts of the newest run" % len(top_under),
+    write_table(out, "frame-undercounts", "Table 8.1. The %d largest under-counts of the final evaluation run" % len(top_under),
                 ["dataset", "design", "Vitis", "hls-est", "diff", "largest per-array differences"],
                 [[r["dataset"], r["benchmark"][:60], r["vitis_bram_18k"], r["hlsest_bram_18k"],
                   r["diff_hlsest_minus_vitis"], "; ".join(x[:60] for x in r["largest_array_differences"].split("; ")[:2])]
                  for r in top_under], ["l", "4cm", "r", "r", "r", "5.5cm"],
                 "tools/hls-est-validate/results/comparison.csv")
-    write_table(out, "frame-rtl-coverage", "RTL back end: coverage of the catalogue (branch rtl-backend, "
+    write_table(out, "frame-rtl-coverage", "Table 7.1. RTL back end: coverage of the catalogue (branch rtl-backend, "
                 "hls-doc/rtl-coverage.md, %s)" % N.values["rtl_date"], ["stage", "designs"],
                 [[l, v] for l, v in funnel], ["l", "r"], "git show rtl-backend:hls-doc/rtl-coverage.md")
-    write_table(out, "frame-rtl-timing", "Out-of-context Vivado synthesis of floating-point RTL kernels "
+    write_table(out, "frame-rtl-timing", "Table 7.2. Out-of-context Vivado synthesis of floating-point RTL kernels "
                 "(xc7z020clg400-1, 10 ns; rtl-backend-float.md section 8)",
                 ["kernel", "WNS", "critical path", "LUT / FF / DSP", "Vitis csynth estimate"],
                 [r[:5] for r in wns], ["3cm", "r", "3.5cm", "l", "3.5cm"],
                 "git show rtl-backend:hls-doc/design/rtl-backend-float.md")
-    write_table(out, "frame-related-work", "How hls-est differs from earlier estimation and HLS work",
+    write_table(out, "frame-related-work", "Table 2.2. How hls-est differs from earlier estimation and HLS work",
                 ["approach", "representative work", "input", "predicts", "ground truth", "model"],
                 [list(r) for r in RELATED], ["2.2cm", "4cm", "2.2cm", "2.6cm", "2cm", "2cm"],
                 "hand-written classification (no numbers)")
@@ -596,10 +634,7 @@ def main():
                "Edit the template, not this file. -->\n\n" % (t.name, N.values["generated"]))
         (out / name).write_text(hdr + text)
     bib = (HERE / "templates" / "references.bib").read_text()
-    target = out / "references.bib"
-    if target.exists() and not target.read_text().startswith(bib.splitlines()[0]):
-        target = out / "references-frame.bib"   # another chapter set owns references.bib
-    target.write_text(bib)
+    (out / "references.bib").write_text(bib)   # the one bibliography of every chapter
     (out / "data" / "frame-numbers.json").write_text(json.dumps(
         {k: {"value": N.values[k], "source": N.sources[k]} for k in sorted(N.values)}, indent=1) + "\n")
     write_readme(out, N)

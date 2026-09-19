@@ -4,30 +4,45 @@
 `data/frame-numbers.json`; nothing is typed by hand.
 
 High-level synthesis (HLS) tools turn C/C++ into hardware, but the decisions that set the cost of the
-result (which loops are pipelined, unrolled or flattened, how arrays are partitioned, which memories are
-replicated, and how each memory is mapped onto the device's block RAM) are taken inside closed
-commercial tools. A designer sees them only after synthesis, and existing estimators either model an
-idealised HLS tool or learn aggregate numbers from many synthesis runs without explaining them.
+result are taken inside closed commercial tools: which loops are pipelined, unrolled or flattened, how
+arrays are partitioned, which memories are replicated, and how each memory is mapped onto the device's
+block RAM. A designer sees them only after synthesis. Existing estimators either model an idealised HLS
+tool or learn aggregate numbers from many synthesis runs without explaining them.
 
 This thesis takes a different route. It infers the decision procedure of one commercial tool, AMD Vitis
-HLS {{vitis_versions}}, by black-box experiments: minimal kernels that vary one parameter at a time are
-synthesised and the documented outputs of the tool (reports, transformation log, the LLVM IR it writes
-between its stages) are read, together with AMD's open-sourced front end. The result is a catalogue of
-{{n_notes}} numbered observations, each tied to its kernels and run directories; {{n_notes_confirmed}} of
-them are marked confirmed, and the others are marked as only partly confirmed, as unconfirmed, or as
-notes on measurement method. The rules are implemented as
-a {{pipeline_passes}}-pass MLIR/CIRCT pipeline, *hls-est*, fed by a Polygeist (cgeist) front end that
-compiles the real Vitis headers. hls-est predicts the block RAM (BRAM_18K) of every memory of a design and
-explains each number.
+HLS {{vitis_versions}}, by black-box experiments. Minimal kernels that vary one parameter at a time are
+synthesised, and the documented outputs of the tool are read: reports, the transformation log, and the
+LLVM IR it writes between its stages. AMD's open-sourced front end is read alongside them. The result is
+a catalogue of {{n_notes}} numbered observations, each tied to its kernels and run directories.
+{{n_notes_confirmed}} of them are confirmed ({{n_notes_confirmed_kernels}} by standalone kernels,
+{{n_notes_confirmed_corpus}} on catalogue designs only), {{n_notes_partly}} partly confirmed,
+{{n_notes_unconfirmed}} unconfirmed, and {{n_notes_method}} are notes on measurement method. The rules
+are implemented as a {{pipeline_passes}}-pass MLIR/CIRCT pipeline, *hls-est*, fed by a Polygeist (cgeist)
+front end that compiles the real Vitis headers. hls-est predicts the block RAM (BRAM_18K) of every memory
+of a design and explains each number.
 
-hls-est is validated per design and per array against {{vitis_ok}} Vitis syntheses ({{vitis_parts}},
-{{vitis_clocks}}, automatic throughput-driven partitioning off) of the {{designs}}-design HLSFactory
-catalogue. Of the {{compared}} designs with both a Vitis result and an estimate, {{exact}}
-({{exact_pct}} %) match Vitis exactly and {{in_goal}} ({{in_goal_pct}} %) are exact or over-count by at
-most 15 %; the summed absolute error is {{abs_err}} BRAM_18K. The median estimate takes {{time_hlsest_median}} s
-against {{time_vitis_median}} s for Vitis' C synthesis. The remaining errors are attributed per array to
-open issues; the largest classes are loops hls-est does not schedule and loop-carried memory dependences
-that do not yet reach its modulo scheduler. Every architectural assumption is exposed as one of
-{{config_keys}} configuration keys or one of {{plugin_interfaces}} plugin interfaces. As an application,
-hls-est's decisions are lowered to Verilog: {{rtl_verilog}} catalogue designs get RTL and
-{{rtl_cosim_pass}} pass co-simulation against their own C testbenches, with no wrong-code mismatch.
+hls-est is validated against {{vitis_ok}} Vitis syntheses ({{vitis_parts}}, {{vitis_clocks}}, automatic
+throughput-driven partitioning off) of the {{designs}}-design HLSFactory catalogue. The rules were found
+on the same catalogue, so every accuracy number is in-sample. Counting each distinct source once and
+leaving out the designs for which Vitis allocates no BRAM, {{ev_distinct_nonzero_exact}} of
+{{ev_distinct_nonzero_compared}} designs ({{ev_distinct_nonzero_exact_pct}} %) match Vitis's BRAM total
+exactly, and {{ev_distinct_nonzero_in_band}} ({{ev_distinct_nonzero_in_band_pct}} %) are exact or
+over-count by at most 15 %. Over all {{compared}} compared designs, including copies and zero-BRAM
+designs, the figures are {{exact}} ({{exact_pct}} %) and {{in_goal}} ({{in_goal_pct}} %), and the summed
+absolute error is {{abs_err}} BRAM_18K. A naive model that prices every declared array with the same RAMB18
+formula is exact on {{ev_b0_exact}} of these designs. Per array, the comparison can be scored only where
+the two tools' memory names align: {{ev_pa_aligned_pct}} % of the array rows that carry BRAM. Of these,
+{{ev_pa_aligned_equal_pct}} % agree. {{ev_over_device_compared}} of the compared designs need more BRAM
+than the part has.
+
+The estimation step alone takes a median of {{ev_time_hlsest_median_s2}} s per design, without the cgeist
+front end and with eight estimates running in parallel under WSL. A whole Vitis run on the Windows host
+takes {{ev_time_vitis_median_s}} s, so the two times indicate orders of magnitude, not a benchmark. The
+largest remaining error classes, by the summed error of the out-of-band designs, are
+{{ev_oob1_class}}, {{ev_oob2_class}} and {{ev_oob3_class}} (Chapter 6). Every architectural assumption is exposed as one of {{config_keys}} configuration
+keys or one of {{plugin_interfaces}} plugin interfaces; the retargeting they allow is not validated.
+
+As an application, a separate branch of hls-est lowers its decisions to Verilog. {{rtl_verilog}} of the
+{{rtl_catalogue}} catalogue designs ({{rtl_verilog_pct}} %) get RTL, and {{rtl_cosim_pass}} pass
+co-simulation against their own C testbenches. Only {{rtl_selfcheck}} of those testbenches notice inverted
+outputs, and this result comes from a different hls-est commit than the evaluation.

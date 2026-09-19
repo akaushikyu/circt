@@ -180,24 +180,103 @@ def distinct_groups(rows, runs):
     return groups
 
 
-def vitis_notes_index(path=CIRCT / "hls-doc" / "notes" / "VITIS_NOTES.md"):
-    """{'N31': {'title': ..., 'status': 'confirmed' | 'partly confirmed' | 'unconfirmed' | 'data' | ''}}."""
+NOTES_DIR = CIRCT / "hls-doc" / "notes"
+
+
+def snapshot():
+    with open(HERE / "ch06_manifest.json") as f:
+        return json.load(f)["snapshot"]
+
+
+def notes_text(name):
+    """A notes file (VITIS_NOTES.md, OPEN_ISSUES.md, MEMOS.md, CHANGELOG.md) as it stood at the snapshot
+    commit, so that the thesis counts the notes that belong to the evaluated run, not later rounds."""
+    import subprocess
+    return subprocess.run(["git", "-C", str(CIRCT), "show", f"{snapshot()['circt_commit']}:hls-doc/notes/{name}"],
+                          check=True, capture_output=True, text=True).stdout
+
+
+def _status_group(title):
+    """The parenthesis of a note heading that states its status: the last top-level group mentioning
+    confirmed / unconfirmed / observation / data / superseded (titles contain other parentheses)."""
+    groups, depth, start = [], 0, None
+    for i, ch in enumerate(title):
+        if ch == "(":
+            if depth == 0:
+                start = i + 1
+            depth += 1
+        elif ch == ")" and depth:
+            depth -= 1
+            if depth == 0:
+                groups.append(title[start:i])
+    if depth and start is not None:      # a heading cut before its closing parenthesis
+        groups.append(title[start:])
+    hits = [g for g in groups if re.search(r"confirm|observation|\bdata\b|superseded", g, re.I)]
+    return hits[-1] if hits else ""
+
+
+def note_status(title):
+    """(status, basis) of one VITIS_NOTES heading.  This is the one status parser of the thesis
+    generators (chapters 1, 3, 4, 6 and 8 all count with it).
+
+    status: "confirmed" | "partly confirmed" | "unconfirmed" | "method"
+      - "unconfirmed": the status names a superseded rule, a corpus observation, data without a rule, or
+        says "unconfirmed";
+      - "partly confirmed": "partly confirmed", or "confirmed except where marked" / "where marked";
+      - "confirmed": any other "confirmed";
+      - "method": no status at all (notes on the measurement method, N8 and N9).
+    basis (only for confirmed / partly confirmed): "kernels" when the status counts or names standalone
+    kernels ("41 kernels", "kernel `w9r6_dfi4`"), else "corpus only" (confirmed on catalogue designs or ground-truth reports, no standalone kernel)."""
+    g = _status_group(title).lower()
+    if not g:
+        return "method", ""
+    if ("superseded" in g or "observation" in g or re.search(r"\bdata\b", g)
+            or re.search(r"\bunconfirmed\b", g) and "partly" not in g and "except" not in g):
+        return "unconfirmed", ""
+    if "partly confirmed" in g or "where marked" in g:
+        status = "partly confirmed"
+    elif re.search(r"(?<!un)confirmed", g):
+        status = "confirmed"
+    else:
+        return "unconfirmed", ""
+    named = re.search(r"\d+ (?:\+ \d+ )*(?:\w+ )?kernels?\b|kernels? `", g)
+    return status, ("kernels" if named else "corpus only")
+
+
+def vitis_notes_index(path=None):
+    """{'N31': {'title', 'status', 'basis'}} in file order (see note_status); by default VITIS_NOTES.md at
+    the snapshot commit."""
     out = {}
-    with open(path) as f:
-        for line in f:
+    text = notes_text("VITIS_NOTES.md") if path is None else Path(path).read_text()
+    if True:
+        for line in text.splitlines():
             m = re.match(r"^## (N\d+[a-z]?)\. (.*)$", line.rstrip())
             if not m:
                 continue
-            title = m.group(2)
-            # the status opens a parenthesis: "(confirmed; 41 kernels ...", "(partly confirmed; ...",
-            # "(data; rule unconfirmed; ..."; titles contain other, nested parentheses
-            found = re.findall(r"\((partly confirmed|unconfirmed|confirmed|data)([^;)]*)(;[^;)]*)?", title)
-            status = ""
-            if found:
-                word, _, nxt = found[-1]
-                status = "unconfirmed (data)" if word == "data" and "unconfirmed" in (nxt or "") else word
-            out[m.group(1)] = {"title": title, "status": status}
+            status, basis = note_status(m.group(2))
+            out[m.group(1)] = {"title": m.group(2), "status": status, "basis": basis}
     return out
+
+
+def note_status_counts(index=None):
+    """Counts of the shared status classes, with the confirmed notes split by their basis."""
+    index = index or vitis_notes_index()
+    c = {"notes": len(index), "confirmed": 0, "confirmed_kernels": 0, "confirmed_corpus": 0,
+         "partly": 0, "unconfirmed": 0, "method": 0}
+    for v in index.values():
+        if v["status"] == "confirmed":
+            c["confirmed"] += 1
+            c["confirmed_kernels" if v["basis"] == "kernels" else "confirmed_corpus"] += 1
+        elif v["status"] == "partly confirmed":
+            c["partly"] += 1
+        else:
+            c[v["status"]] += 1
+    c["confirmed_corpus_list"] = ", ".join(k for k, v in index.items()
+                                            if v["status"] == "confirmed" and v["basis"] != "kernels")
+    c["unconfirmed_list"] = ", ".join(k for k, v in index.items() if v["status"] == "unconfirmed")
+    c["partly_list"] = ", ".join(k for k, v in index.items() if v["status"] == "partly confirmed")
+    c["method_list"] = ", ".join(k for k, v in index.items() if v["status"] == "method")
+    return c
 
 
 def read_timing_csv(path):

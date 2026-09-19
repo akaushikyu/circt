@@ -11,6 +11,11 @@ Inputs (named in ch06_manifest.json; nothing is typed by hand):
   * hls-doc/hls-est-vs-vitis.csv for the hls-est and Vitis time columns;
   * the round-10 out-of-band classification (final.json, classes.md of the W9r10-prove step);
   * hls-doc/notes/VITIS_NOTES.md headings for the confirmation status of each rule.
+  * the newest run's .cmp.json `arrays` (compare.py's per-array join) for the per-array table;
+  * the MLIR files the newest run used, priced by naive_baseline.py (the naive baselines);
+  * results/vitis.json memory tables (repeatability of byte-identical copies);
+  * test/hls-est/Config/Inputs/default-config.json (the part's BRAM_18K capacity);
+  * ch06_manifest.json `snapshot` (the frozen commits; notes are read at its circt commit).
 
 Outputs under --out:
   tables/ch06-<name>.md and .tex (booktabs), data/ch06-numbers.json (every number the chapter uses),
@@ -27,6 +32,7 @@ import sys
 from datetime import date
 from pathlib import Path
 
+import naive_baseline as NB
 import thesis_data as T
 
 HERE = Path(__file__).resolve().parent
@@ -94,22 +100,29 @@ class Table:
 
 # ----------------------------------------------------------------------------- analyses
 
-def headline(rows, runs, subset):
-    """Overall, distinct-source, nonzero-Vitis and harness-subset views of one run."""
+def headline(rows, runs, subset, capacity):
+    """The views of one run: all designs; distinct sources; Vitis BRAM > 0; distinct sources with Vitis
+    BRAM > 0 (the strictest view: no copies, no zero-BRAM designs); designs that fit the device; harness
+    subset."""
     allv = T.summarize(rows)
     groups = T.distinct_groups(rows, runs)
     reps = [g[0] for g in groups.values()]
-    # designs not compared keep their rows so the design counts stay meaningful
-    distinct_rows = reps + [r for r in rows if r["status"] != "compared"]
-    dist = T.summarize(distinct_rows)
-    for k in ("designs", "cgeist_ok", "hlsest_ok", "vitis_ok"):
-        dist[k] = None  # copies are only identified among compared designs
-    nonzero = T.summarize([r for r in rows if r["status"] != "compared" or r["vitis"] > 0])
-    for k in ("designs", "cgeist_ok", "hlsest_ok", "vitis_ok"):
-        nonzero[k] = None
+    rep_keys = {r["key"] for r in reps}
+    not_compared = [r for r in rows if r["status"] != "compared"]
+
+    def view(sel):
+        s = T.summarize(sel + not_compared)
+        for k in ("designs", "cgeist_ok", "hlsest_ok", "vitis_ok"):
+            s[k] = None  # these views select among compared designs only
+        return s
+    comp = [r for r in rows if r["status"] == "compared"]
+    dist = view(reps)
+    nonzero = view([r for r in comp if r["vitis"] > 0])
+    dist_nonzero = view([r for r in comp if r["key"] in rep_keys and r["vitis"] > 0])
+    fits = view([r for r in comp if r["vitis"] <= capacity])
     sub = T.summarize([r for r in rows if r["dataset"] in subset])
-    return {"all": allv, "distinct": dist, "nonzero": nonzero, "subset": sub,
-            "duplicate_copies": len([r for r in rows if r["status"] == "compared"]) - len(reps)}
+    return {"all": allv, "distinct": dist, "nonzero": nonzero, "distinct_nonzero": dist_nonzero, "fits": fits,
+            "subset": sub, "duplicate_copies": len(comp) - len(reps)}
 
 
 HEAD_COLS = [("designs", "designs"), ("cgeist_ok", "compiled"), ("hlsest_ok", "estimated"), ("compared", "compared"),
@@ -118,12 +131,139 @@ HEAD_COLS = [("designs", "designs"), ("cgeist_ok", "compiled"), ("hlsest_ok", "e
              ("mean_abs_rel_pct", "mean |rel| %"), ("median_abs_rel_nonexact_pct", "median |rel| % (non-exact)")]
 
 
-def headline_table(h, label):
+def headline_table(h, label, capacity):
     views = [("all designs", h["all"]), ("distinct sources", h["distinct"]),
-             ("Vitis BRAM > 0", h["nonzero"]), ("harness subset", h["subset"])]
+             ("Vitis BRAM > 0", h["nonzero"]), ("distinct sources, Vitis BRAM > 0", h["distinct_nonzero"]),
+             (f"fits the device (Vitis ≤ {capacity})", h["fits"]), ("harness subset", h["subset"])]
     rows = [[name] + [fmt(s[k]) for k, _ in HEAD_COLS] for name, s in views]
-    return Table("headline", f"Headline accuracy of hls-est against Vitis 2025.1 (run {label})",
+    return Table("headline", f"Headline accuracy of hls-est against Vitis 2025.1 ({label})",
                  ["view"] + [c for _, c in HEAD_COLS], "l" + "r" * len(HEAD_COLS), rows, label)
+
+
+def per_array(cmp_path):
+    """The per-array comparison of compare.py (the `arrays` of every compared row of the run's .cmp.json).
+
+    An array row *carries BRAM* when either side gives it at least one BRAM_18K.  It is *aligned* when both
+    sides have a row of that name (compare.py matches by C variable name), *Vitis-only* / *hls-est-only*
+    when only one side has it.  Unaligned rows are mostly naming artefacts (a FIFO or a generated name on
+    one side, a module-level name on the other), but the comparison cannot tell an artefact from a real
+    missing or extra memory, so they are reported, not scored.  BRAM outside the memory tables (m_axi
+    adapters, FIFOs of further instances; compare.py's `vitis_non_array_bram`) is never matched per array."""
+    with open(cmp_path) as f:
+        rows = [r for r in json.load(f)["rows"] if r.get("status") == "compared"]
+    c = {"designs": len(rows), "rows": 0, "aligned": 0, "aligned_equal": 0, "aligned_differ": 0,
+         "hlsest_only": 0, "vitis_only": 0, "vitis_bram_aligned": 0, "vitis_bram_total": 0, "non_array": 0,
+         "exact_total": 0, "exact_all_rows_zero": 0, "exact_with_artefacts": 0, "exact_real_mismatch": 0,
+         "exact_artefact_rows_hlsest_only": 0, "exact_artefact_rows_vitis_only": 0, "exact_rows_both_differ": 0,
+         "designs_all_aligned_equal": 0, "designs_aligned_rows_equal": 0}
+    for r in rows:
+        c["vitis_bram_total"] += r["vitis_bram"]
+        c["non_array"] += r.get("vitis_non_array_bram") or 0
+        all_aligned, aligned_equal = True, True
+        for a in r.get("arrays") or []:
+            hb, vb = a["hlsest_bram"], a["vitis_bram"]
+            if not ((hb or 0) > 0 or (vb or 0) > 0):
+                continue
+            c["rows"] += 1
+            if hb is None:
+                c["vitis_only"] += 1
+                all_aligned = False
+            elif vb is None:
+                c["hlsest_only"] += 1
+                all_aligned = False
+            else:
+                c["aligned"] += 1
+                c["vitis_bram_aligned"] += vb
+                if hb == vb:
+                    c["aligned_equal"] += 1
+                else:
+                    c["aligned_differ"] += 1
+                    aligned_equal = False
+        c["designs_all_aligned_equal"] += all_aligned and aligned_equal
+        c["designs_aligned_rows_equal"] += aligned_equal
+        if r["exact"]:
+            c["exact_total"] += 1
+            bad = [a for a in r.get("arrays") or [] if a["diff"]]
+            if not bad:
+                c["exact_all_rows_zero"] += 1
+                continue
+            c["exact_with_artefacts"] += 1
+            both = [a for a in bad if a["hlsest_bram"] is not None and a["vitis_bram"] is not None]
+            c["exact_real_mismatch"] += bool(both)
+            c["exact_rows_both_differ"] += len(both)
+            c["exact_artefact_rows_hlsest_only"] += sum(a["vitis_bram"] is None for a in bad)
+            c["exact_artefact_rows_vitis_only"] += sum(a["hlsest_bram"] is None for a in bad)
+    pc = lambda a, b: 100.0 * a / b if b else None
+    c["aligned_pct"] = pc(c["aligned"], c["rows"])
+    c["aligned_equal_pct"] = pc(c["aligned_equal"], c["aligned"])
+    c["vitis_bram_aligned_pct"] = pc(c["vitis_bram_aligned"], c["vitis_bram_total"])
+    c["non_array_pct"] = pc(c["non_array"], c["vitis_bram_total"])
+    return c
+
+
+def per_array_table(pa, label):
+    rows = [["array rows that carry BRAM (either side > 0)", fmt(pa["rows"]), ""],
+            ["  aligned by name on both sides", fmt(pa["aligned"]), f"{fmt(pa['aligned_pct'])} % of the rows"],
+            ["    equal BRAM_18K", fmt(pa["aligned_equal"]), f"{fmt(pa['aligned_equal_pct'])} % of the aligned rows"],
+            ["    different BRAM_18K", fmt(pa["aligned_differ"]), ""],
+            ["  hls-est only (no Vitis row of that name)", fmt(pa["hlsest_only"]), "alignment artefact or extra memory"],
+            ["  Vitis only (no hls-est row of that name)", fmt(pa["vitis_only"]), "alignment artefact or missing memory"],
+            ["Vitis BRAM_18K in aligned rows", fmt(pa["vitis_bram_aligned"]),
+             f"{fmt(pa['vitis_bram_aligned_pct'])} % of Σ Vitis {fmt(pa['vitis_bram_total'])}"],
+            ["Vitis BRAM_18K outside the memory tables", fmt(pa["non_array"]),
+             f"{fmt(pa['non_array_pct'])} % of Σ Vitis; never matched per array"],
+            ["designs: every BRAM row aligned and equal", fmt(pa["designs_all_aligned_equal"]),
+             f"of {fmt(pa['designs'])} compared"],
+            ["designs: exact total, every array row equal", fmt(pa["exact_all_rows_zero"]),
+             f"of {fmt(pa['exact_total'])} exact totals"],
+            ["designs: exact total with unaligned rows only", fmt(pa["exact_with_artefacts"] - pa["exact_real_mismatch"]), ""],
+            ["designs: exact total with an aligned row that differs", fmt(pa["exact_real_mismatch"]),
+             f"{fmt(pa['exact_rows_both_differ'])} rows"]]
+    return Table("per_array", f"Per-array agreement and its alignment coverage ({label})",
+                 ["quantity", "count", "share"], ["p{7.2cm}", "r", "p{5.5cm}"], rows, f"{label}, .cmp.json arrays")
+
+
+def baseline_view(rows, base, which):
+    """Score a naive baseline on exactly the designs the run compares."""
+    comp = [r for r in rows if r["status"] == "compared" and r["key"] in base]
+    out = []
+    for r in comp:
+        hb = base[r["key"]][which]
+        out.append({**r, "hlsest": hb, "diff": hb - r["vitis"], "band": T.band(r["vitis"], hb)})
+    return T.summarize(out)
+
+
+def baseline_table(h_all, b0, b1, label):
+    cols = [("compared", "compared"), ("exact", "exact"), ("in_band", "in band"), ("under", "under"),
+            ("over_gt15", "over >15 %"), ("abs_err", "Σ|err|"), ("weighted_err_pct", "weighted err %")]
+    rows = [["B0: declared arrays, RAMB18 formula, two ports", *[fmt(b0[k]) for k, _ in cols]],
+            ["B1: B0 + LUT RAM below 1024 bits (N5)", *[fmt(b1[k]) for k, _ in cols]],
+            ["hls-est (all inferred decisions)", *[fmt(h_all[k]) for k, _ in cols]]]
+    return Table("baseline", f"Naive baselines against hls-est on the same compared designs ({label})",
+                 ["model"] + [c for _, c in cols], "l" + "r" * len(cols), rows, "naive_baseline.py on the run's MLIR")
+
+
+def vitis_repeatability(rows, runs, vitis_raw):
+    """Independent Vitis runs of byte-identical inputs: designs whose cgeist MLIR and top are identical
+    were synthesised as separate Vitis runs (different catalogue paths, so different cache keys).  Do the
+    totals and the memory tables agree?  This is the only repeatability evidence the ground truth holds;
+    it is not a repeat of one run."""
+    import hashlib
+    import os
+    groups = {}
+    for key, rec in runs.items():
+        v = vitis_raw.get(key)
+        if not isinstance(v, dict) or v.get("status") != "ok" or not rec.get("mlir") or not os.path.exists(rec["mlir"]):
+            continue
+        with open(rec["mlir"], "rb") as f:
+            h = hashlib.md5(f.read()).hexdigest()
+        groups.setdefault((h, rec.get("top")), []).append(v)
+    multi = [g for g in groups.values() if len(g) > 1]
+    sig = lambda v: sorted((str(m.get("Words")), str(m.get("Bits")), str(m.get("BRAM_18K"))) for m in v.get("memories") or [])
+    return {"groups": len(multi), "designs": sum(len(g) for g in multi),
+            "distinct_keys": sum(len({v.get("key") for v in g}) == len(g) for g in multi),
+            "totals_agree": sum(len({v["totals"]["BRAM"] for v in g}) == 1 for g in multi),
+            "memtables_agree": sum(len({json.dumps(sig(v)) for v in g}) == 1 for g in multi)}
 
 
 def per_dataset_table(rows, label):
@@ -153,16 +293,17 @@ def history(manifest, vitis, subset):
 
 
 def history_table(hist):
-    rows = [[h["label"], h["date"], h["shim"], fmt(h["summary"]["cgeist_ok"]), fmt(h["summary"]["compared"]),
+    shim = {"real": "real headers", "exactclass": "exactclass shim"}
+    rows = [[h["label"], h["date"], shim.get(h["shim"], h["shim"]), fmt(h["summary"]["cgeist_ok"]), fmt(h["summary"]["compared"]),
              fmt(h["summary"]["exact"]), fmt(h["summary"]["in_band"]), fmt(h["summary"]["abs_err"]),
              fmt(h["subset"]["exact"]),
-             (f"{h['recorded']['exact']} / {h['recorded']['abs_err']:,}" if h["recorded"] else "–"),
-             Path(T.expand(h["run"])).relative_to(Path.home()).as_posix()]
+             (f"{h['recorded']['exact']} / {h['recorded']['abs_err']:,}" if h["recorded"] else "–")]
             for h in hist]
-    return Table("history", "Accuracy after each round on the full catalogue (all runs re-scored against the current ground truth)",
-                 ["round", "date", "shim", "compiled", "compared", "exact", "in band", "Σ|err|", "subset exact",
-                  "as recorded: exact / Σ|err|", "run"],
-                 list("lllrrrrrrr") + ["p{4.5cm}"], rows, "ch06_manifest.json history")
+    return Table("history", "Accuracy after each milestone on the full catalogue (all runs re-scored against the "
+                 "current ground truth; the run files are listed in ch06_manifest.json)",
+                 ["milestone", "date", "front end", "compiled", "compared", "exact", "in band", "Σ|err|",
+                  "subset exact", "as recorded: exact / Σ|err|"],
+                 list("lllrrrrrrr"), rows, "ch06_manifest.json history")
 
 
 def rule_contributions(manifest, vitis):
@@ -179,33 +320,74 @@ def rule_contributions(manifest, vitis):
         left = sum(on[k]["band"] not in T.IN_BAND and off[k]["band"] in T.IN_BAND for k in both)
         changed = sum(on[k]["hlsest"] != off[k]["hlsest"] for k in both)
         d_err = sum(abs(on[k]["diff"]) for k in both) - sum(abs(off[k]["diff"]) for k in both)
+        left_designs = sorted(k for k in both if on[k]["band"] not in T.IN_BAND and off[k]["band"] in T.IN_BAND)
+        changed_designs = sorted(k for k in both if on[k]["hlsest"] != off[k]["hlsest"])
         s_off, s_on = T.summarize(list(off.values())), T.summarize(list(on.values()))
         out.append({**p, "newly_exact": len(newly), "lost_exact": len(lost), "into_band": into, "left_band": left,
                     "changed": changed, "d_abs_err_common": d_err, "common": len(both),
                     "d_compared": s_on["compared"] - s_off["compared"], "d_exact": s_on["exact"] - s_off["exact"],
                     "d_in_band": s_on["in_band"] - s_off["in_band"], "d_abs_err": s_on["abs_err"] - s_off["abs_err"],
-                    "newly_exact_designs": newly, "lost_exact_designs": lost})
+                    "newly_exact_designs": newly, "lost_exact_designs": lost, "left_band_designs": left_designs,
+                    "changed_designs": changed_designs})
     return out
+
+
+CONTROLLED = ("one key off", "three keys off", "config key chain", "pass off / on")
+
+
+def is_controlled(c):
+    """A pair is controlled when the two runs share the MLIR and differ only in the rule's keys or pass;
+    consecutive runs of the history also mix in other commits, cgeist builds or a shim change."""
+    return c["method"].startswith(CONTROLLED) and "control binary differs" not in c["method"]
 
 
 def note_status(notes_field, index):
     st = []
     for n in re.findall(r"N\d+[a-z]?", notes_field):
-        st.append(f"{n} {index.get(n, {}).get('status') or 'n/a'}")
-    return ", ".join(st) if st else "open issue / frontend"
+        e = index.get(n, {})
+        s = e.get("status") or "n/a"
+        if s in ("confirmed", "partly confirmed") and e.get("basis") == "corpus only":
+            s += " (corpus only)"
+        st.append(f"{n} {s}")
+    return ", ".join(st) if st else "open issue, no Vitis note"
+
+
+def rule_label(c):
+    return c["rule"] + (" [front-end swap, not a rule]" if c.get("kind") == "frontend" else "")
 
 
 def rule_table(contrib, index):
     ranked = sorted(contrib, key=lambda c: (c["d_abs_err_common"], -c["newly_exact"]))
-    rows = [[i + 1, c["rule"], c["notes"], note_status(c["notes"], index), c["round"], fmt(c["changed"]),
+    rows = [[i + 1, rule_label(c), c["notes"], note_status(c["notes"], index), c["round"], fmt(c["changed"]),
              f"+{c['newly_exact']}" if c["newly_exact"] else "0", f"−{c['lost_exact']}" if c["lost_exact"] else "0",
-             f"+{c['into_band']} / −{c['left_band']}", f"{c['d_abs_err_common']:+,d}", c["method"]]
+             f"+{c['into_band']} / −{c['left_band']}", f"{c['d_abs_err_common']:+,d}",
+             ("controlled: " if is_controlled(c) else "historical, not controlled: ") + c["method"]]
             for i, c in enumerate(ranked)]
     return Table("rule_contributions",
-                 "Contribution of each modelled Vitis rule (designs compared in both runs; ranked by Σ|err| change)",
+                 "Contribution of each modelled Vitis rule (designs compared in both runs; ranked by Σ|err| change). "
+                 "Controlled rows differ only in the rule; historical rows compare consecutive published runs and "
+                 "include every other change made between them",
                  ["#", "rule", "notes", "evidence", "round", "changed", "newly exact", "lost exact",
                   "band in/out", "Δ Σ|err|", "method"],
-                 ["r", "p{3.6cm}", "l", "p{2.2cm}", "l", "r", "r", "r", "r", "r", "p{2.2cm}"], rows, "ch06_manifest.json rule_pairs")
+                 ["r", "p{3.6cm}", "l", "p{2.2cm}", "l", "r", "r", "r", "r", "r", "p{2.6cm}"], rows, "ch06_manifest.json rule_pairs")
+
+
+def rule_interactions(contrib, rows):
+    """How many compared designs of the newest run are changed by two or more of the rule pairs (a proxy for
+    the designs that exercise several rules at once; historical pairs over-count, see is_controlled)."""
+    comp = {r["key"] for r in rows if r["status"] == "compared"}
+    hits, hits_ctl = {}, {}
+    for c in contrib:
+        if c.get("kind") == "frontend":
+            continue
+        for k in c["changed_designs"]:
+            if k in comp:
+                hits[k] = hits.get(k, 0) + 1
+                if is_controlled(c):
+                    hits_ctl[k] = hits_ctl.get(k, 0) + 1
+    return {"compared": len(comp), "one_or_more": len(hits), "two_or_more": sum(v >= 2 for v in hits.values()),
+            "three_or_more": sum(v >= 3 for v in hits.values()), "max_rules": max(hits.values() or [0]),
+            "ctl_one_or_more": len(hits_ctl), "ctl_two_or_more": sum(v >= 2 for v in hits_ctl.values())}
 
 
 def ablation(manifest, vitis):
@@ -228,7 +410,9 @@ def ablation_table(ref, ab):
             for a in sorted(ab, key=lambda a: -a["d_exact"])]
     rows.append(["(full pipeline)", fmt(ref["compared"]), fmt(ref["exact"]), "", fmt(ref["in_band"]),
                  fmt(ref["abs_err"]), ""])
-    return Table("pass_ablation", "Pass ablation of the W9r5 pipeline (exactclass shim): the pipeline without one pass",
+    return Table("pass_ablation", "Historical pass ablation (round 5 pipeline, exactclass shim, not re-run on the final "
+                 "pipeline): the pipeline without one pass. Compared counts differ per row because removing a pass "
+                 "changes which designs finish",
                  ["pass removed", "compared", "exact", "exact lost", "in band", "Σ|err|", "Σ|err| increase"],
                  "lrrrrrr", rows, "ch06_manifest.json ablation")
 
@@ -285,16 +469,27 @@ def out_of_band(rows, manifest):
     return oob, groups, desc
 
 
-def oob_table(groups, desc, label):
+def class_name(k, manifest):
+    names = manifest["outofband_classes"].get("names", {})
+    return names.get(k, {}).get("name", k) if k != "unclassified" else "not classified"
+
+
+def class_cause(k, desc, manifest):
+    names = manifest["outofband_classes"].get("names", {})
+    if k in names and names[k].get("cause"):
+        return names[k]["cause"]
+    return re.sub(r"\bNEW:?\s*", "", desc.get(k, "out of band in this run, not out of band (or not present) in the ranked run"))
+
+
+def oob_table(groups, desc, label, manifest):
     rows = []
     for k, g in sorted(groups.items(), key=lambda kv: -kv[1]["sum_abs_d"]):
-        d = desc.get(k, "out of band in this run, not out of band (or not present) in the ranked run")
-        rows.append([k, fmt(len(g["designs"])), fmt(g["sum_abs_d"]), f"{g['net']:+,d}",
-                     sum(r["diff"] < 0 for r in g["designs"]), g["changed"], d])
-    return Table("out_of_band", f"Out-of-band designs of run {label} grouped by the dominant cause class",
-                 ["class", "designs", "Σ|d|", "net", "under", "changed since ranking", "cause (round-10 ranking)"],
-                 list("lrrrrr") + ["p{6.5cm}"], rows,
-                 "w9r10p final.json + classes.md")
+        rows.append([class_name(k, manifest), fmt(len(g["designs"])), fmt(g["sum_abs_d"]), f"{g['net']:+,d}",
+                     sum(r["diff"] < 0 for r in g["designs"]), g["changed"], class_cause(k, desc, manifest)])
+    return Table("out_of_band", f"Out-of-band designs of the {label} grouped by the dominant cause class",
+                 ["cause class", "designs", "Σ|d|", "net", "under", "changed since ranking", "cause"],
+                 ["p{3cm}"] + list("rrrrr") + ["p{6cm}"], rows,
+                 "out-of-band ranking final.json + classes.md, names and causes from ch06_manifest.json")
 
 
 def oob_design_table(oob, manifest):
@@ -302,10 +497,12 @@ def oob_design_table(oob, manifest):
     rows = []
     for r in sorted(oob, key=lambda r: -abs(r["diff"])):
         p = per.get(r["key"], {})
-        net = ", ".join(f"{k} {v:+d}" for k, v in sorted(p.get("net", {}).items(), key=lambda kv: -abs(kv[1])))
+        net = ", ".join(f"{class_name(k, manifest)} {v:+d}"
+                        for k, v in sorted(p.get("net", {}).items(), key=lambda kv: -abs(kv[1])))
         rows.append([r["key"], fmt(r["vitis"]), fmt(r["hlsest"]), f"{r['diff']:+,d}", net or "–"])
     return Table("out_of_band_designs", "Every out-of-band design with its per-class net error",
-                 ["design", "Vitis", "hls-est", "d", "classes (net)"], ["p{7cm}", "r", "r", "r", "p{3.5cm}"], rows, "w9r10p final.json")
+                 ["design", "Vitis", "hls-est", "d", "classes (net)"], ["p{6cm}", "r", "r", "r", "p{5cm}"], rows,
+                 "out-of-band ranking final.json")
 
 
 # ----------------------------------------------------------------------------- figures
@@ -325,7 +522,7 @@ def setup_mpl():
 def save(plt, fig, out, name):
     d = out / "figures"
     d.mkdir(parents=True, exist_ok=True)
-    fig.savefig(d / f"{PREFIX}{name}.pdf")
+    fig.savefig(d / f"{PREFIX}{name}.pdf", metadata={"CreationDate": None})
     fig.savefig(d / f"{PREFIX}{name}.png", dpi=200)
     plt.close(fig)
 
@@ -458,6 +655,16 @@ def flat_numbers(prefix, d, out, digits=1):
             out[f"{prefix}{k}"] = "–"
 
 
+def device_capacity(path=T.CIRCT / "test" / "hls-est" / "Config" / "Inputs" / "default-config.json"):
+    """BRAM_18K of the target part, from hls-est's default configuration dump (device.resource_classes)."""
+    with open(path) as f:
+        d = json.load(f)
+    for rc in d["device"]["resource_classes"]:
+        if rc["name"] == "BRAM_18K":
+            return rc["capacity"]
+    raise KeyError("BRAM_18K capacity")
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--manifest", default=str(HERE / "ch06_manifest.json"))
@@ -476,6 +683,9 @@ def main():
     subset = manifest["harness_subset"]
     label = manifest["newest_run_label"]
     vitis = T.load_vitis()
+    with open(T.RESULTS / "vitis.json") as f:
+        vitis_raw = json.load(f)
+    capacity = device_capacity()
 
     runs, meta = T.load_run(manifest["newest_run"])
     rows = T.score(runs, vitis)
@@ -483,42 +693,68 @@ def main():
     check = T.check_against_cmp(rows, cmp_path) if cmp_path.exists() else (None, "no .cmp.json next to the run")
     print(f"newest run {label}: {check[1]}", file=sys.stderr)
 
-    h = headline(rows, runs, subset)
+    h = headline(rows, runs, subset, capacity)
+    pa = per_array(cmp_path)
+    base = NB.baselines(manifest["newest_run"], runs)
+    b0, b1 = baseline_view(rows, base, "b0"), baseline_view(rows, base, "b1")
+    rep = vitis_repeatability(rows, runs, vitis_raw)
     hist = history(manifest, vitis, subset)
     contrib = rule_contributions(manifest, vitis)
+    inter = rule_interactions(contrib, rows)
     ab_ref, ab = ablation(manifest, vitis)
     t = timing(T.read_timing_csv(T.expand(manifest["timing_csv"])))
     oob, groups, desc = out_of_band(rows, manifest)
     index = T.vitis_notes_index()
 
     tables = {tb.name: tb for tb in (
-        headline_table(h, label), per_dataset_table(rows, label), history_table(hist), rule_table(contrib, index),
-        ablation_table(ab_ref, ab), timing_table(t), oob_table(groups, desc, label), oob_design_table(oob, manifest))}
+        headline_table(h, label, capacity), per_array_table(pa, label), baseline_table(h["all"], b0, b1, label),
+        per_dataset_table(rows, label), history_table(hist), rule_table(contrib, index),
+        ablation_table(ab_ref, ab), timing_table(t), oob_table(groups, desc, label, manifest),
+        oob_design_table(oob, manifest))}
     for tb in tables.values():
         tb.write(out)
 
-    numbers = {"newest_label": label, "newest_run": str(T.expand(manifest["newest_run"])),
-               "newest_hlsest_git": meta.get("hls_est_git") or "", "newest_cgeist_md5": meta.get("cgeist_md5") or "",
+    snap = manifest["snapshot"]
+    numbers = {"newest_label": label, "newest_run": str(T.expand(manifest["newest_run"])).replace(str(Path.home()), "~"),
+               "newest_hlsest_git": meta.get("hls_est_git") or "", "newest_cgeist_md5": (meta.get("cgeist_md5") or "")[:8],
+               "newest_polygeist": snap["polygeist_commit"], "newest_polygeist_recorded": meta.get("polygeist_head") or "",
                "rescore_check": check[1], "generated": date.today().isoformat(),
                "band_over_pct": fmt(100 * T.BAND_OVER, 0), "duplicate_copies": fmt(h["duplicate_copies"]),
                "history_first": hist[0]["label"], "history_last": hist[-1]["label"], "history_rounds": len(hist),
                "rules_n": len(contrib), "oob_classes_n": len(groups),
                "oob_unclassified": fmt(len(groups.get("unclassified", {"designs": []})["designs"])),
-               "vitis_over_device": fmt(sum(1 for r in rows if r["status"] == "compared"
-                                            and isinstance(vitis[r["key"]]["bram_util_pct"], int)
-                                            and vitis[r["key"]]["bram_util_pct"] > 100)),
-               "ablation_ref_exact": fmt(ab_ref["exact"])}
+               "device_capacity": capacity,
+               "ablation_ref_exact": fmt(ab_ref["exact"]), "ablation_ref_compared": fmt(ab_ref["compared"]),
+               "ablation_min_compared": fmt(min(a["summary"]["compared"] for a in ab)),
+               "ablation_max_compared": fmt(max(a["summary"]["compared"] for a in ab))}
+    comp = [r for r in rows if r["status"] == "compared"]
+    numbers["over_device_compared"] = fmt(sum(r["vitis"] > capacity for r in comp))
+    numbers["over_device_compared_pct"] = fmt(100.0 * sum(r["vitis"] > capacity for r in comp) / len(comp), 0)
+    ok_all = [v for v in vitis.values() if v["ok"] and v["bram"] is not None]
+    numbers["over_device_vitis"] = fmt(sum(v["bram"] > capacity for v in ok_all))
+    numbers["vitis_results"] = fmt(len(ok_all))
     for ds in sorted({r["dataset"] for r in rows}):
         flat_numbers("ds_" + re.sub(r"[^A-Za-z0-9]", "_", ds) + "_", T.summarize([r for r in rows if r["dataset"] == ds]),
                      numbers)
     in_run = [r for r in rows if r["in_run"]]
     numbers["all_cgeist_fail"] = fmt(sum(not r["cgeist_ok"] for r in in_run))
     numbers["all_hlsest_fail"] = fmt(sum(r["cgeist_ok"] and not r["hlsest_ok"] for r in in_run))
-    numbers["all_vitis_missing"] = fmt(sum(r["status"] == "vitis missing" for r in in_run))
+    numbers["all_no_estimate"] = fmt(sum(not r["hlsest_ok"] for r in in_run))
+    numbers["all_estimated_no_vitis"] = fmt(sum(r["hlsest_ok"] and not r["vitis_ok"] for r in in_run))
+    numbers["all_no_vitis"] = fmt(sum(not r["vitis_ok"] for r in in_run))
     numbers["all_both_missing"] = fmt(sum(not r["vitis_ok"] and not r["hlsest_ok"] for r in in_run))
+    numbers["all_hlsest_fail_with_vitis"] = fmt(sum(r["cgeist_ok"] and not r["hlsest_ok"] and r["vitis_ok"] for r in in_run))
     numbers["oob_changed_since_ranking"] = fmt(sum(g["changed"] for g in groups.values()))
-    for view in ("all", "distinct", "nonzero", "subset"):
+    for view in ("all", "distinct", "nonzero", "distinct_nonzero", "fits", "subset"):
         flat_numbers(f"{view}_", h[view], numbers)
+    flat_numbers("pa_", pa, numbers)
+    numbers["pa_exact_artefact_only"] = fmt(pa["exact_with_artefacts"] - pa["exact_real_mismatch"])
+    flat_numbers("b0_", b0, numbers)
+    flat_numbers("b1_", b1, numbers)
+    numbers["baseline_skipped_arrays"] = fmt(sum(v["skipped"] for v in base.values()))
+    numbers["baseline_skipped_designs"] = fmt(sum(1 for v in base.values() if v["skipped"]))
+    flat_numbers("rep_", rep, numbers)
+    flat_numbers("inter_", inter, numbers)
     flat_numbers("hist0_", hist[0]["summary"], numbers)
     flat_numbers("histN_", hist[-1]["summary"], numbers)
     i_real = next(i for i, x in enumerate(hist) if x["shim"] == "real")
@@ -527,18 +763,45 @@ def main():
     flat_numbers("time_", {k: v for k, v in t.items() if k != "pairs"}, numbers)
     numbers["time_speedup_median"] = fmt(t["speedup_median"], 0)
     numbers["time_speedup_total"] = fmt(t["speedup_total"], 0)
-    ranked = sorted(contrib, key=lambda c: c["d_abs_err_common"])
+    numbers["time_hlsest_median_s2"] = fmt(t["hlsest_median_s"], 2)
+    # the hls-est time column must be this run's (the CSV's generator takes it from a named run)
+    run_times = {k: r.get("elapsed_s") for k, r in runs.items()}
+    csv_rows = T.read_timing_csv(T.expand(manifest["timing_csv"]))
+    same = sum(1 for r in csv_rows if r.get("hls-est time (s)") and r["dataset"] + "/" + r["benchmark"] in run_times
+               and run_times[r["dataset"] + "/" + r["benchmark"]] is not None
+               and abs(float(r["hls-est time (s)"]) - float(run_times[r["dataset"] + "/" + r["benchmark"]])) < 0.051)
+    numbers["time_rows_from_run"] = fmt(same)
+    numbers["time_rows_with_hlsest"] = fmt(sum(1 for r in csv_rows if r.get("hls-est time (s)")))
+    ranked = sorted([c for c in contrib if c.get("kind") != "frontend"], key=lambda c: c["d_abs_err_common"])
     for i, c in enumerate(ranked[:3]):
         numbers[f"rule{i + 1}_name"] = c["rule"]
         numbers[f"rule{i + 1}_notes"] = c["notes"]
         numbers[f"rule{i + 1}_derr"] = f"{c['d_abs_err_common']:+,d}"
         numbers[f"rule{i + 1}_newly"] = c["newly_exact"]
+        numbers[f"rule{i + 1}_ctl"] = "controlled" if is_controlled(c) else "historical"
+    numbers["rules_controlled"] = sum(1 for c in contrib if is_controlled(c))
+    numbers["rules_historical"] = sum(1 for c in contrib if not is_controlled(c))
     numbers["rules_lost_any"] = sum(1 for c in contrib if c["lost_exact"])
     numbers["rules_lost_total"] = sum(c["lost_exact"] for c in contrib)
     numbers["rules_zero_effect"] = sum(1 for c in contrib if c["changed"] == 0)
     numbers["rules_zero_list"] = ", ".join(f"{c['notes']} ({c['rule']})" for c in contrib if c["changed"] == 0)
     numbers["rules_lost_list"] = "; ".join(f"{c['notes']}: " + ", ".join(f"`{k}`" for k in c["lost_exact_designs"])
                                            for c in contrib if c["lost_exact"])
+    # designs that left the band in a pair: where are they in the newest run?
+    final_band = {r["key"]: r["band"] for r in rows}
+    left_rows = []
+    for c in sorted(contrib, key=lambda c: c["d_abs_err_common"]):
+        if not c["left_band"]:
+            continue
+        back = sum(final_band.get(k) in T.IN_BAND for k in c["left_band_designs"])
+        left_rows.append(f"{c['notes']}{' front-end swap' if c.get('kind') == 'frontend' else ''} "
+                         f"({'controlled' if is_controlled(c) else 'historical'}): "
+                         f"{len(c['left_band_designs'])} left the band, {back} of them in band in the final run "
+                         f"({', '.join('`' + k + '`' for k in c['left_band_designs'])})")
+    numbers["rules_left_band_n"] = sum(1 for c in contrib if c["left_band"])
+    numbers["rules_left_band_designs"] = sum(c["left_band"] for c in contrib)
+    numbers["rules_left_band_back"] = sum(sum(final_band.get(k) in T.IN_BAND for k in c["left_band_designs"]) for c in contrib)
+    numbers["rules_left_band_list"] = "\n".join("- " + x for x in left_rows)
     statuses = [runs[r["key"]].get("status") or "" for r in in_run if r["cgeist_ok"] and not r["hlsest_ok"]]
     numbers["all_top_not_found"] = sum(st == "top not found" for st in statuses)
     numbers["all_hlsest_timeout"] = sum(st.startswith("hls-est timeout") for st in statuses)
@@ -552,16 +815,20 @@ def main():
     numbers["ablation_zero"] = sum(1 for a in ab if a["d_exact"] == 0 and a["abs_err_without"] == ab_ref["abs_err"])
     big = sorted(groups.items(), key=lambda kv: -kv[1]["sum_abs_d"])
     for i, (k, g) in enumerate(big[:3]):
-        numbers[f"oob{i + 1}_class"] = k
+        numbers[f"oob{i + 1}_class"] = class_name(k, manifest)
         numbers[f"oob{i + 1}_designs"] = len(g["designs"])
         numbers[f"oob{i + 1}_sumd"] = fmt(g["sum_abs_d"])
     numbers["oob_sumd"] = fmt(sum(abs(r["diff"]) for r in oob))
     numbers["oob_under"] = fmt(sum(r["diff"] < 0 for r in oob))
+    for k in ("confirmed", "confirmed_kernels", "confirmed_corpus", "partly", "unconfirmed", "method", "notes",
+              "confirmed_corpus_list", "unconfirmed_list", "partly_list", "method_list"):
+        numbers[f"notes_{k}"] = T.note_status_counts(index)[k]
 
     (out / "data").mkdir(parents=True, exist_ok=True)
     detail = {"numbers": numbers, "history": [{k: v for k, v in x.items() if k != "meta"} | {"meta": x["meta"]} for x in hist],
               "rule_contributions": contrib, "ablation": {"reference": ab_ref, "passes": ab},
-              "timing": {k: v for k, v in t.items() if k != "pairs"}}
+              "timing": {k: v for k, v in t.items() if k != "pairs"}, "per_array": pa,
+              "baseline": {"b0": b0, "b1": b1}, "vitis_repeatability": rep, "rule_interactions": inter}
     (out / "data" / f"{PREFIX}numbers.json").write_text(json.dumps(detail, indent=1, default=str) + "\n")
 
     if not args.no_figures:
@@ -577,7 +844,7 @@ def main():
         text = render(tpl.read_text(), numbers, tables)
         (out / "06-evaluation.md").write_text(text)
     print(json.dumps({k: numbers[k] for k in ("all_compared", "all_exact", "all_in_band", "all_abs_err",
-                                               "all_weighted_err_pct", "time_speedup_median")}))
+                                               "distinct_nonzero_exact", "pa_aligned_pct", "time_speedup_median")}))
 
 
 if __name__ == "__main__":

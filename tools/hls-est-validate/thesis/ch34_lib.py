@@ -68,6 +68,21 @@ def rel(p):
             return str(p)
 
 
+_JARGON = [(r"\bW9r(\d+)-impl\b", r"round \1 implementation"), (r"\bW9r(\d+)-prove\b", r"round \1 proofs"),
+           (r"\bW9r(\d+) review\b", r"round \1 review"), (r"\bW9r(\d+)\b", r"round \1"),
+           (r"\bW9 round (\d+)\b", r"round \1"), (r"\bW11-integrate\b", "real-headers integration"),
+           (r"\bW11-adopt\b", "real-headers adoption"), (r"\bW11\b", "the real-headers switch"),
+           (r"\bthe coordinator\b", "the coordinating session")]
+
+
+def readable(text):
+    """Replace the project's internal track names (W9r7, W11, ...) by readable names for thesis prose.
+    Verbatim change-log quotes are not passed through it."""
+    for pat, rep in _JARGON:
+        text = re.sub(pat, rep, text)
+    return text
+
+
 def git_head():
     try:
         return subprocess.check_output(["git", "-C", str(REPO), "rev-parse", "--short=9", "HEAD"],
@@ -99,10 +114,13 @@ def experiment(name):
     return d
 
 
-def experiment_index():
-    """Every ad-hoc run: (name, status, date of its result file)."""
+def experiment_index(cutoff=None):
+    """Every ad-hoc run: (name, status, date of its result file).  With cutoff (a datetime), only result
+    files written up to it count, so that the chapter's counts are frozen at the thesis snapshot."""
     out = []
     for f in glob.glob(str(EXPERIMENTS / "*" / "*" / "result.json")):
+        if cutoff is not None and datetime.datetime.fromtimestamp(os.path.getmtime(f)) > cutoff:
+            continue
         try:
             with open(f) as fh:
                 st = json.load(fh).get("status")
@@ -248,35 +266,18 @@ def expand_kernel_refs(text, used=None):
 # ---------------------------------------------------------------------------------------------
 
 def read_text(p):
+    """A file's text; the notes files are read at the thesis snapshot commit (thesis_data.notes_text)."""
+    if Path(p).parent == NOTES:
+        import thesis_data as T
+        return T.notes_text(Path(p).name)
     with open(p, encoding="utf-8") as fh:
         return fh.read()
 
 
 def vitis_note_headings():
-    """[(id, title, status)] of VITIS_NOTES.md, status from the heading's parenthesis."""
-    out = []
-    for line in read_text(NOTES / "VITIS_NOTES.md").splitlines():
-        m = re.match(r"^## (N\d+[a-z]?)\. (.*)$", line)
-        if not m:
-            continue
-        nid, title = m.group(1), m.group(2)
-        low = title.lower()
-        plain = re.search(r"(?<!un)confirmed", low)
-        if "superseded" in low:
-            st = "superseded"
-        elif "rule unconfirmed" in low:
-            st = "unconfirmed"
-        elif ("partly confirmed" in low or "except where marked" in low or "where marked" in low
-              or (plain and "unconfirmed" in low)):
-            st = "partly confirmed"
-        elif plain:
-            st = "confirmed"
-        elif "unconfirmed" in low:
-            st = "unconfirmed"
-        else:
-            st = "not classified in the heading"
-        out.append((nid, title, st))
-    return out
+    """[(id, title, status)] of VITIS_NOTES.md, status from the shared parser thesis_data.note_status."""
+    import thesis_data as T
+    return [(i, v["title"], v["status"]) for i, v in T.vitis_notes_index().items()]
 
 
 def note_title(nid):
@@ -390,7 +391,7 @@ def write_table(basename, headers, rows, caption, label, gen_line, colspec=None,
     TABLES.mkdir(parents=True, exist_ok=True)
     md = md_table(headers, rows, md_align)
     with open(TABLES / f"{basename}.md", "w") as fh:
-        fh.write(f"{gen_line}\n\n**{caption}**\n\n{md}\n")
+        fh.write(f"<!-- {gen_line} -->\n\n**{caption}**\n\n{md}\n")
     with open(TABLES / f"{basename}.tex", "w") as fh:
         fh.write(tex_table(headers, rows, caption, label, colspec, gen_line))
     return md

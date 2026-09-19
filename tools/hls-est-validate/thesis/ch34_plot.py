@@ -28,6 +28,6 @@ def style(ax):
 
 def save(fig, path_stem, gen_line):
     """Save <stem>.pdf and <stem>.png; the generator line goes into the PDF metadata."""
-    fig.savefig(f"{path_stem}.pdf", metadata={"Subject": gen_line})
+    fig.savefig(f"{path_stem}.pdf", metadata={"Subject": gen_line, "CreationDate": None})
     fig.savefig(f"{path_stem}.png", dpi=200)
     plt.close(fig)
