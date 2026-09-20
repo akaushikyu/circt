@@ -77,6 +77,48 @@ CONFIG_FILENAME = "hlsfactory.toml"
 LEGACY_SYNTH_TCL = "dataset_hls.tcl"
 SYNTH_FLOW = "VitisHLSSynthFlow"
 
+# Designs whose catalogue script is stale (OPEN_ISSUES O110): the script names a top or files of another
+# lab, so Vitis and the harness compiled something the authors did not synthesise.  The override takes the
+# authors' own top and file list (their script.tcl, or the file that defines the top when the directory has
+# no other script), and is recorded on the record (v2.override) so the reason is visible in every report.
+# A changed top or file list changes the Vitis cache key: the ground truth is re-run for these keys only.
+CATALOGUE_OVERRIDES = {
+    "class_ece8893_spring_2025/michael_meng_ece_8893_spring_25__lab3": {
+        "top": "sparse_matrix_multiply_HLS", "sources": ["top.cpp"],
+        "reason": "dataset_hls.tcl is lab2's (set_top compute_attention_HLS, -tb Q_tensor.bin ...; none in "
+                  "this directory); the authors' script.tcl: set_top sparse_matrix_multiply_HLS, add_files top.cpp"},
+    "class_ece8893_spring_2025/kaihong_lin_lab3": {
+        "top": "sparse_matrix_multiply_HLS", "sources": ["top.cpp"],
+        "reason": "dataset_hls.tcl is lab2's (set_top compute_attention_HLS); the authors' script.tcl: "
+                  "set_top sparse_matrix_multiply_HLS, add_files top.cpp"},
+    "class_ece8893_spring_2025/sreenidhireddy_bommu_ece8893_spring25_lab3": {
+        "top": "sparse_matrix_multiply_HLS", "sources": ["top.cpp"],
+        "reason": "dataset_hls.tcl is lab2's (set_top compute_attention_HLS) and there is no other script; "
+                  "top.cpp defines sparse_matrix_multiply_HLS, the lab3 top of the same class"},
+    "class_ece8893_spring_2025/mizanur_Lab3_2025": {
+        "top": "sparse_matrix_multiply_HLS", "sources": ["top.cpp"],
+        "reason": "dataset_hls.tcl adds top_dense.cpp, which does not exist, so the fallback compiled every "
+                  "C/C++ file including the testbench helper generate_matrices.cpp ([HLS 207-3776] 'time' "
+                  "undeclared); top.cpp defines the top"},
+    "class_ece8893_2022_fall/Dehazing-denoising__source_code__src__debayer_csynth": {
+        "top": "img_pipeline",
+        "reason": "debayer_csynth.tcl: set_top pipeline, but pipeline.cpp defines img_pipeline ([HLS 214-157]); "
+                  "the directory's top_csynth.tcl synthesises img_pipeline from the same files"},
+}
+
+
+def apply_catalogue_overrides(records: list[dict]) -> None:
+    """Replace top / sources / includes of the records CATALOGUE_OVERRIDES names (in place)."""
+    for r in records:
+        o = CATALOGUE_OVERRIDES.get(f"{r['dataset']}/{r['benchmark']}")
+        if not o:
+            continue
+        before = {k: r.get(k) for k in ("top", "sources", "includes")}
+        for k in ("top", "sources", "includes"):
+            if k in o:
+                r[k] = list(o[k]) if isinstance(o[k], list) else o[k]
+        r.setdefault("v2", {})["override"] = {"reason": o["reason"], "before": before}
+
 C_SRC_EXT = {".c", ".cc", ".cpp", ".cxx"}
 HDR_EXT = {".h", ".hh", ".hpp", ".hxx", ".inc", ".tcc", ".ipp"}
 # harvest.py's testbench-name rule (fallback source selection only)
@@ -2126,6 +2168,7 @@ def load(root: str, polygeist_records: list[dict], test_hls_wsl: str, problems: 
                  "mode": d.get("mode")}
                 for d in polygeist_records if id(d) not in matched_pg]
     _drain_io_errors(problems)
+    apply_catalogue_overrides(out)
     return out, {"skipped": skipped, "vanished": vanished, "root": root}
 
 
