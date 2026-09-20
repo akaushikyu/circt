@@ -13,6 +13,7 @@
       "memory_architecture": {
         "plugin": "vitis-auto",
         "untracked_memory_ports": 2,
+        "partitioned_argument_bank_ports": true,
         "port_occupancy_cycles": 1,
         "replication": {
           "max_copies": 16,

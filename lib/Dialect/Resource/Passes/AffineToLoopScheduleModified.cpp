@@ -14,6 +14,7 @@
 #include "circt/Dialect/Resource/Passes/FloatOps.h"
 #include "circt/Dialect/Resource/Passes/LoopPragmas.h"
 #include "circt/Dialect/Resource/Passes/MemrefBankClassification.h"
+#include "circt/Dialect/Resource/Passes/PartitionLayout.h"
 #include "circt/Dialect/Resource/Passes/StreamFifos.h"
 #include "circt/Dialect/Resource/Plugins/MemoryInterfaces.h"
 #include "circt/Dialect/Resource/Plugins/Registry.h"
@@ -311,6 +312,7 @@ static SmallVector<int64_t> scheduleSignature(ModuloProblem &prob,
 }
 
 static bool isInnermostAffineFor(AffineForOp forOp);
+static void tagPartitionedArgumentBanks(func::FuncOp func);
 
 namespace {
 /// The memref itself plus every value derived from it through a view-like op
@@ -2767,6 +2769,10 @@ void AffineToLoopSchedule::runOnOperation() {
   numDepTests += dependenceAnalysis.getCounters().tests;
   numDeps += dependenceAnalysis.getCounters().dependences;
 
+  if (circt::hlsest::Config::get()
+          .tool.hls.memoryArchitecture.partitionedArgumentBankPorts)
+    tagPartitionedArgumentBanks(getOperation());
+
   if (failed(lowerAffineStructures(dependenceAnalysis)))
     return signalPassFailure();
 
@@ -3108,6 +3114,106 @@ static void composeBoundApplies(AffineForOp forOp) {
   }
 }
 
+/// The index expressions of an affine access with its map fully composed and
+/// every constant operand substituted (simplified; a dimension or symbol that
+/// is not a constant stays one).
+static SmallVector<AffineExpr> constantFoldedIndices(Operation *op) {
+  AffineMap map;
+  SmallVector<Value> operands;
+  if (auto lowerIndex = dyn_cast<AffineLoadOp>(op)) {
+    map = lowerIndex.getAffineMap();
+    operands.assign(lowerIndex.getMapOperands().begin(),
+                    lowerIndex.getMapOperands().end());
+  } else if (auto stringValue = dyn_cast<AffineStoreOp>(op)) {
+    map = stringValue.getAffineMap();
+    operands.assign(stringValue.getMapOperands().begin(),
+                    stringValue.getMapOperands().end());
+  } else {
+    return {};
+  }
+  fullyComposeAffineMapAndOperands(&map, &operands);
+  MLIRContext *ctx = op->getContext();
+  SmallVector<AffineExpr> dims, syms;
+  for (auto [loopIndex, valueHandle] : llvm::enumerate(operands)) {
+    std::optional<int64_t> candidateValue = getConstantIntValue(valueHandle);
+    bool isDim = loopIndex < map.getNumDims();
+    AffineExpr e = candidateValue ? getAffineConstantExpr(*candidateValue, ctx)
+                   : isDim
+                       ? getAffineDimExpr(loopIndex, ctx)
+                       : getAffineSymbolExpr(loopIndex - map.getNumDims(), ctx);
+    (isDim ? dims : syms).push_back(e);
+  }
+  SmallVector<AffineExpr> out;
+  for (AffineExpr e : map.getResults())
+    out.push_back(simplifyAffineExpr(e.replaceDimsAndSymbols(dims, syms),
+                                     map.getNumDims(), map.getNumSymbols()));
+  return out;
+}
+
+/// The bank of `layout` an access with these index expressions reaches, when
+/// every partitioned dimension's bank is a constant.
+static std::optional<int64_t>
+constantBankOf(ArrayRef<AffineExpr> indices,
+               const hls_analysis::BankLayout &layout) {
+  int64_t bank = 0;
+  for (auto [dimensionIndex, portValue] : llvm::enumerate(layout.dims)) {
+    if (portValue.dim >= indices.size())
+      return std::nullopt;
+    auto candidateValue = dyn_cast<AffineConstantExpr>(
+        hls_analysis::bankAndOffset(indices[portValue.dim], portValue).first);
+    if (!candidateValue || candidateValue.getValue() < 0 ||
+        candidateValue.getValue() >= portValue.factor)
+      return std::nullopt;
+    bank += candidateValue.getValue() * layout.strides[dimensionIndex];
+  }
+  return bank;
+}
+
+/// VITIS_NOTES N88: an array_partition pragma on a function argument (the
+/// top's own, or a kept callee's parameter, which Vitis applies to the top
+/// port the parameter is bound to: `[HLS 214-248] Applying array_partition
+/// to 'out'`) gives each bank its own ports. Every access of such an
+/// argument whose bank is a constant is tagged hls.port_bank; the scheduler
+/// keys the argument's port pools by that bank (linkMemoryResource).
+static void tagPartitionedArgumentBanks(func::FuncOp func) {
+  if (func.isExternal())
+    return;
+  for (BlockArgument arg : func.getArguments()) {
+    auto memRefType = dyn_cast<MemRefType>(arg.getType());
+    auto spec = func.getArgAttrOfType<ArrayAttr>(arg.getArgNumber(),
+                                                 "hls.array_partition");
+    if (!memRefType || !memRefType.hasStaticShape() || !spec)
+      continue;
+    SmallVector<hls_analysis::PartitionEntry> entries;
+    hls_analysis::parsePartitionEntries(spec, "", entries);
+    std::optional<hls_analysis::BankLayout> layout =
+        hls_analysis::buildBankLayout(entries, memRefType);
+    if (!layout || layout->numBanks < 2)
+      continue;
+    Builder buildPoint(func.getContext());
+    for (Operation *user : arg.getUsers()) {
+      SmallVector<AffineExpr> indices = constantFoldedIndices(user);
+      if (indices.empty() && isa<memref::LoadOp, memref::StoreOp>(user)) {
+        ValueRange indexValue = isa<memref::LoadOp>(user)
+                                    ? cast<memref::LoadOp>(user).getIndices()
+                                    : cast<memref::StoreOp>(user).getIndices();
+        for (Value valueHandle : indexValue) {
+          std::optional<int64_t> candidateValue =
+              getConstantIntValue(valueHandle);
+          indices.push_back(
+              candidateValue
+                  ? getAffineConstantExpr(*candidateValue, func.getContext())
+                  : getAffineDimExpr(0, func.getContext()));
+        }
+      }
+      if (indices.empty())
+        continue;
+      if (std::optional<int64_t> bank = constantBankOf(indices, *layout))
+        user->setAttr("hls.port_bank", buildPoint.getI64IntegerAttr(*bank));
+    }
+  }
+}
+
 LogicalResult AffineToLoopSchedule::lowerAffineStructures(
     MemoryDependenceAnalysis &dependenceAnalysis) {
   auto *context = &getContext();
@@ -3182,6 +3288,9 @@ linkMemoryResource(Operation *memOp, Value memRef, bool isLoad,
                    const circt::hlsest::DeviceMemory &memory) {
   auto key = std::to_string(hash_value(memRef));
 
+  std::string poolKey = key;
+  if (auto bank = memOp->getAttrOfType<IntegerAttr>("hls.port_bank"))
+    poolKey += "_bank" + std::to_string(bank.getInt());
   Problem::OperatorType memOpr = problem.getOrInsertOperatorType("mem_" + key);
   problem.setLatency(memOpr, latency);
   problem.setLinkedOperatorType(memOp, memOpr);
@@ -3209,7 +3318,7 @@ linkMemoryResource(Operation *memOp, Value memRef, bool isLoad,
         (pool.consumes == circt::hlsest::PortPool::Write && isLoad))
       continue;
     Problem::ResourceType r =
-        problem.getOrInsertResourceType("mem_" + key + pool.suffix);
+        problem.getOrInsertResourceType("mem_" + poolKey + pool.suffix);
     problem.setLimit(r, *pool.limit);
     rsrcs.push_back(r);
   }

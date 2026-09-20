@@ -254,6 +254,10 @@ struct RomConfig {
 struct MemoryArchitectureConfig {
   std::string plugin;
   int64_t untrackedMemoryPorts = 2;
+  /// A function argument with an array_partition pragma (its own, or a kept
+  /// callee parameter's) has the ports of each bank: an access whose bank is
+  /// a constant takes a slot of that bank's pool (VITIS_NOTES N88).
+  bool partitionedArgumentBankPorts = true;
   int64_t portOccupancyCycles = 1;
   ReplicationConfig replication;
   RomConfig rom;

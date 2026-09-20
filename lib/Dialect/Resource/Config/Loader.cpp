@@ -844,6 +844,8 @@ void fillTool(const json::Object &t, ToolProfile &tool) {
   MemoryArchitectureConfig &m = h.memoryArchitecture;
   m.plugin = str(ma, "plugin");
   m.untrackedMemoryPorts = integer(ma, "untracked_memory_ports");
+  m.partitionedArgumentBankPorts =
+      boolean(ma, "partitioned_argument_bank_ports", true);
   m.portOccupancyCycles = integer(ma, "port_occupancy_cycles");
   const json::Object &rep = obj(ma, "replication");
   m.replication.maxCopies = integer(rep, "max_copies");
