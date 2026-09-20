@@ -760,9 +760,11 @@ static void recordAccesses(ArrayRef<AccessSummary> accesses,
       ar.inFunc = fn.getName().str();
     if (a.via) {
       std::string valueHandle = "call";
+
       if (auto call = dyn_cast<CallOpInterface>(a.via))
-        if (auto callee = resolveDefinedCallee(call))
-          valueHandle += " @" + callee.getName().str();
+        if (auto symbolName = dyn_cast_or_null<SymbolRefAttr>(
+                call.getCallableForCallee().dyn_cast<SymbolRefAttr>()))
+          valueHandle += " @" + symbolName.getLeafReference().str();
       ar.viaCall = valueHandle + " @ " + locString(a.via->getLoc());
     }
     ar.portBound = a.portBound;
@@ -1094,27 +1096,45 @@ public:
     if (!scope)
       return own;
     std::string found;
-    scope->walk([&](Operation *other) {
-      if (other == op || !found.empty() || other->getName() != op->getName() ||
-          other->getAttrOfType<StringAttr>("hls.bank_of") != bankOf ||
-          other->getAttr("hls.bank_count") != op->getAttr("hls.bank_count"))
-        return;
+
+    for (Operation *other : banksOf(scope)[bankKey(op)]) {
+      if (other == op)
+        continue;
       const std::string &pair = ofBank(other);
       if (pair.empty())
-        return;
+        continue;
       found = "another bank of the array";
       if (auto bi = other->getAttrOfType<IntegerAttr>("hls.bank_index"))
         found += " (bank " + std::to_string(bi.getInt()) + ")";
       found += " shares its RAM module: " + pair;
-    });
+      break;
+    }
     return found;
   }
 
 private:
+  /// The ops of one array's banks: same op name, hls.bank_of, hls.bank_count.
+  using BankKey = std::tuple<const void *, const void *, const void *>;
+  static BankKey bankKey(Operation *op) {
+    return {op->getName().getAsOpaquePointer(),
+            op->getAttr("hls.bank_of").getAsOpaquePointer(),
+            op->getAttr("hls.bank_count").getAsOpaquePointer()};
+  }
+  std::map<BankKey, SmallVector<Operation *>> &banksOf(Operation *scope) {
+    auto [it, fresh] = bankIndex.try_emplace(scope);
+    if (fresh)
+      scope->walk([&](Operation *other) {
+        if (other->getAttrOfType<StringAttr>("hls.bank_of"))
+          it->second[bankKey(other)].push_back(other);
+      });
+    return it->second;
+  }
+
   SeqContext *seq;
   const InstanceModel *instances;
   SitesFn sitesOf;
   DenseMap<Operation *, std::string> cache;
+  DenseMap<Operation *, std::map<BankKey, SmallVector<Operation *>>> bankIndex;
 };
 
 /// The number of elements of a statically shaped alloca / alloc / global.

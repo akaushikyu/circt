@@ -518,6 +518,8 @@ static bool hasNoNestedLoop(AffineForOp forOp) {
 
 circt::analysis::MemoryDependenceAnalysis::MemoryDependenceAnalysis(
     Operation *op, Scope scope) {
+  if (scope == Scope::None)
+    return;
   auto funcOp = cast<func::FuncOp>(op);
   [[maybe_unused]] auto t0 = std::chrono::steady_clock::now();
 

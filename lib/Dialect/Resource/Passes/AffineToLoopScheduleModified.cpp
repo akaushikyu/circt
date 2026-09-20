@@ -2771,7 +2771,12 @@ void AffineToLoopSchedule::runOnOperation() {
       op->erase();
   }
 
-  auto dependenceAnalysis = getAnalysis<InnermostLoopDependenceAnalysis>();
+  auto dependenceAnalysis =
+      dependenceModel->name() == "cached-o1"
+          ? InnermostLoopDependenceAnalysis(
+                getOperation(),
+                InnermostLoopDependenceAnalysis::ComputeNothing{})
+          : getAnalysis<InnermostLoopDependenceAnalysis>();
   numDepPairs += dependenceAnalysis.getCounters().pairs;
   numDepTests += dependenceAnalysis.getCounters().tests;
   numDeps += dependenceAnalysis.getCounters().dependences;

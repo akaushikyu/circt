@@ -220,6 +220,13 @@ struct InstanceModel {
   bool isWrittenGlobal(mlir::Operation *global) const;
   /// Cache of isWrittenGlobal.
   mutable llvm::DenseMap<mlir::Operation *, bool> writtenGlobals;
+  /// The get_global sites of every global of a symbol table, collected in one
+  /// walk per table (isWrittenGlobal walked the table once per global:
+  /// hp_fft n1024 UF32, OPEN_ISSUES O103).
+  mutable llvm::DenseMap<mlir::Operation *,
+                         llvm::DenseMap<mlir::StringAttr,
+                                        llvm::SmallVector<mlir::Value>>>
+      globalSitesByTable;
 
   /// Cache of the roots bound to a parameter that binds several arrays.
   mutable std::optional<llvm::SmallVector<StorageRoot>> severalArraysRoots;

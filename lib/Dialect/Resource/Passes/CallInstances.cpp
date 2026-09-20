@@ -1113,11 +1113,17 @@ bool InstanceModel::isWrittenGlobal(Operation *global) const {
   if (!inserted)
     return it->second;
   SmallVector<Value> sites;
-  if (Operation *table = SymbolTable::getNearestSymbolTable(global))
-    table->walk([&](memref::GetGlobalOp globalUse) {
-      if (globalUse.getName() == globalOp.getSymName())
-        sites.push_back(globalUse.getResult());
-    });
+  if (Operation *table = SymbolTable::getNearestSymbolTable(global)) {
+    auto [tit, fresh] = globalSitesByTable.try_emplace(table);
+    if (fresh)
+      table->walk([&](memref::GetGlobalOp globalUse) {
+        tit->second[globalUse.getNameAttr().getAttr()].push_back(
+            globalUse.getResult());
+      });
+    auto sit = tit->second.find(globalOp.getSymNameAttr());
+    if (sit != tit->second.end())
+      sites = sit->second;
+  }
   bool written = !sites.empty() && !neverWritten(sites);
   writtenGlobals[global] = written;
   return written;

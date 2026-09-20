@@ -34,9 +34,9 @@
 // CHECK: Total BRAM: 8
 
 // STATS: AffineToLoopSchedule
-// STATS-NEXT: (S) 2 dependence-pairs
-// STATS-NEXT: (S) 2 dependence-tests
-// STATS-NEXT: (S) 1 dependences
+// STATS-NEXT: (S) 0 dependence-pairs
+// STATS-NEXT: (S) 0 dependence-tests
+// STATS-NEXT: (S) 0 dependences
 
 func.func @siblings(%in: memref<4x1024xi32>, %out: memref<4x1024xi32>) {
   %c1 = arith.constant 1 : i32

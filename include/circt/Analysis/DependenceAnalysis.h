@@ -93,6 +93,9 @@ protected:
     // loop in its body), at that loop's depth; see
     // InnermostLoopDependenceAnalysis.
     InnermostLoops,
+    // MODIFIED for hls-est: nothing is examined (an empty analysis, for a
+    // dependence model that does not read it).
+    None,
   };
   MemoryDependenceAnalysis(Operation *funcOp, Scope scope);
 
@@ -128,6 +131,12 @@ private:
 struct InnermostLoopDependenceAnalysis : public MemoryDependenceAnalysis {
   explicit InnermostLoopDependenceAnalysis(Operation *funcOp)
       : MemoryDependenceAnalysis(funcOp, Scope::InnermostLoops) {}
+  /// An analysis that records no dependence (computeNothing tag): what
+  /// --convert-affine-to-loopschedule passes on when the configured dependence
+  /// model does not read it (cached-o1; OPEN_ISSUES O103 (1)).
+  struct ComputeNothing {};
+  InnermostLoopDependenceAnalysis(Operation *funcOp, ComputeNothing)
+      : MemoryDependenceAnalysis(funcOp, Scope::None) {}
 };
 
 } // namespace analysis
