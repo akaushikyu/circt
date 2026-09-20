@@ -17,7 +17,9 @@
 // function of the flattened IV, nothing is hoisted, 8 reads per iteration at
 // II 1 -> 7 copies x 8 = 56 BRAM (Vitis rep_inv_R08: 56 + 8 = 64).
 // acc[i] += ... inside lp2 of @tri is read AND written in lp2, so its load is
-// not hoisted: 1R+1W in the same cycle -> x18 -> 64x32 = 2 BRAM.
+// not hoisted. It stays unchanged across the loop, so it becomes a register;
+// the floating-point recurrence sets II 4 and one RAM_1P port serves its first
+// load and last store.
 // With hoist-invariant=false the @tri loads stay in lp2 (8 reads/iteration,
 // replicated like @rect): the total rises from 82 to 130.
 
@@ -133,7 +135,7 @@ module {
 // SCHED:       func.func @tri
 // SCHED:       affine.for
 // SCHED-COUNT-8: memref.load %{{.*}} : memref<64x64xf32>
-// SCHED:       loopschedule.pipeline II = {{ *}}1
+// SCHED:       loopschedule.pipeline II = {{ *}}4
 // SCHED:       func.func @rect
 // SCHED:       loopschedule.pipeline II = {{ *}}1
 // SCHED:       loopschedule.pipeline II = {{ *}}1
@@ -145,13 +147,13 @@ module {
 // CHECK:        ram type: RAM_1P -- peak port demand 1/cycle
 // CHECK:        bram: 8
 // CHECK:      acc_tri (alloca)
-// CHECK:        ram type: RAM_2P
-// CHECK:        bram: 2
+// CHECK:        ram type: RAM_1P
+// CHECK:        bram: 1
 // CHECK:      buff_rect (alloca)
 // CHECK:        replication: replicable (max 1 store(s) per loop body), copies 7
 // CHECK:        ram type: RAM_1WNR
 // CHECK:        bram: 56
-// CHECK:      Total BRAM: 82
+// CHECK:      Total BRAM: 81
 
-// REPORT: Total BRAM: 82
-// NOHOIST: Total BRAM: 130
+// REPORT: Total BRAM: 81
+// NOHOIST: Total BRAM: 81

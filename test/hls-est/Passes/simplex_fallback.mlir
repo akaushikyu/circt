@@ -17,7 +17,7 @@
 // TEXT: pipeline @ {{.*}} in @viterbi: ii=1 trip=64 {{.*}} scheduler=simplex{{$}}
 // TEXT: pipeline @ {{.*}} in @viterbi: ii=32 trip=64 {{.*}} scheduler=greedy (simplex failed){{$}}
 // TEXT: pipeline @ {{.*}} in @viterbi: ii=1 trip=63 {{.*}} scheduler=simplex{{$}}
-// TEXT: pipeline @ {{.*}} in @viterbi: ii=32 trip=139 {{.*}} scheduler=greedy (simplex failed){{$}}
+// TEXT: pipeline @ {{.*}} in @viterbi: ii=32 trip=139 {{.*}} scheduler=greedy (simplex failed) memory_recurrence=R3 ii>=6 (distance 1, chain 6, {{.*}}
 // JSON: "pipelines": [
 // JSON: "scheduler": "simplex",
 // JSON: "scheduler": "greedy (simplex failed)",

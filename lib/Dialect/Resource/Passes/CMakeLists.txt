@@ -23,6 +23,7 @@ add_mlir_library(HLSPasses
         RamWidthNarrowing.cpp
         AccessOrder.cpp
         FoldUnrolledGuards.cpp
+        MemoryRecurrences.cpp
         ../Plugins/Builtin/MAxiBuffers.cpp
         ../Plugins/Builtin/Mappers.cpp
         ../Plugins/Builtin/MemoryArchitecture.cpp

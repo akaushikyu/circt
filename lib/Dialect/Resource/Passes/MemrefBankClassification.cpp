@@ -5,6 +5,7 @@
 #include "circt/Dialect/Resource/HLS/HLSOps.h"
 #include "circt/Dialect/Resource/Passes/CallInstances.h"
 #include "circt/Dialect/Resource/Passes/LoopPragmas.h"
+#include "circt/Dialect/Resource/Passes/MemoryRecurrences.h"
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
@@ -111,6 +112,9 @@ StorageMode classifyMode(unsigned maxStoresPerLoop) {
 /// null Value for any other op.
 static Value getAccessedMemRef(Operation *op, bool &isLoad, bool &isStore) {
   isLoad = isStore = false;
+
+  if (hls_analysis::isPromotedAccess(op))
+    return Value{};
   return TypeSwitch<Operation *, Value>(op)
       .Case<affine::AffineLoadOp, memref::LoadOp>([&](auto lowerIndex) {
         isLoad = true;

@@ -96,6 +96,8 @@
         "merge_if_else_accesses": true,
         "gvn_loads": true,
         "gvn_conditional_loads": true,
+        "dse_guarded_stores": true,
+        "forward_to_guarded_loads": true,
         "store_forwarding": true,
         "dead_memory": {
           "overwritten_stores": true,
@@ -165,7 +167,11 @@
         "kept_call": 1
       }
     },
-    "dependences": { "model": "cached-o1" },
+    "dependences": {
+      "model": "cached-o1",
+      "memory_recurrences": true,
+      "recurrence_latencies": { "comb": 0, "multicycle": 0, "fpaddsub_f32": 4, "fpaddsub_f64": 5, "fpmul_f32": 3, "fpmul_f64": 6 }
+    },
     "modulo": {
       "model": "greedy-simplex",
       "fast_threshold": 150,

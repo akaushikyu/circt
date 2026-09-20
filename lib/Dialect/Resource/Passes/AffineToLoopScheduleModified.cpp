@@ -13,6 +13,7 @@
 #include "circt/Dialect/Resource/Passes/CyclicSchedulingAnalysisModified.h"
 #include "circt/Dialect/Resource/Passes/FloatOps.h"
 #include "circt/Dialect/Resource/Passes/LoopPragmas.h"
+#include "circt/Dialect/Resource/Passes/MemoryRecurrences.h"
 #include "circt/Dialect/Resource/Passes/MemrefBankClassification.h"
 #include "circt/Dialect/Resource/Passes/PartitionLayout.h"
 #include "circt/Dialect/Resource/Passes/StreamFifos.h"
@@ -131,6 +132,8 @@ private:
   void sinkFlattenedParentCode();
 
   void hoistInvariantLoads();
+  void tagMemoryRecurrences();
+  int64_t recurrenceLatency(Operation *op) const;
   void cleanupRedundantAccesses();
   void mergeIfElseAccesses();
   void mergeConditionalLoads();
@@ -313,6 +316,10 @@ static SmallVector<int64_t> scheduleSignature(ModuloProblem &prob,
 
 static bool isInnermostAffineFor(AffineForOp forOp);
 static void tagPartitionedArgumentBanks(func::FuncOp func);
+/// `hls.memory_recurrence` on a pipelined loop: the bound of its memory
+/// recurrences (tagMemoryRecurrences); read by the scheduler and, carried
+/// onto the pipeline op, by --bram-debug.
+constexpr llvm::StringLiteral kMemoryRecurrenceAttr = "hls.memory_recurrence";
 
 namespace {
 /// The memref itself plus every value derived from it through a view-like op
@@ -2772,6 +2779,10 @@ void AffineToLoopSchedule::runOnOperation() {
   if (circt::hlsest::Config::get()
           .tool.hls.memoryArchitecture.partitionedArgumentBankPorts)
     tagPartitionedArgumentBanks(getOperation());
+  if (circt::hlsest::Config::get().scheduling.memoryRecurrences ||
+      circt::hlsest::Config::get().tool.hls.middleEnd.dseGuardedStores ||
+      circt::hlsest::Config::get().tool.hls.middleEnd.forwardToGuardedLoads)
+    tagMemoryRecurrences();
 
   if (failed(lowerAffineStructures(dependenceAnalysis)))
     return signalPassFailure();
@@ -3214,6 +3225,98 @@ static void tagPartitionedArgumentBanks(func::FuncOp func) {
   }
 }
 
+/// The cycles `op` adds to a memory recurrence chain:
+/// scheduling.dependences.recurrence_latencies of its class (typed first),
+/// else its operator latency; an operation the timing model does not time
+/// adds nothing.
+int64_t AffineToLoopSchedule::recurrenceLatency(Operation *op) const {
+  std::optional<circt::hlsest::OperatorTiming> t =
+      timingModel->timing(op, schedulingContext);
+  if (!t)
+    return 0;
+  const auto &table =
+      circt::hlsest::Config::get().scheduling.recurrenceLatencies;
+  if (op->getNumResults() == 1)
+    if (auto ft = dyn_cast<FloatType>(op->getResult(0).getType())) {
+      auto it = table.find(t->cls + "_f" + std::to_string(ft.getWidth()));
+      if (it != table.end())
+        return it->second;
+    }
+
+  StringRef cls = t->cls;
+  auto it = table.find(cls.str());
+  if (it == table.end())
+    it = table.find(cls.split('_').first.str());
+  if (it != table.end())
+    return it->second;
+  return t->latency;
+}
+
+/// VITIS_NOTES N87 (OPEN_ISSUES O1): the II bound of each pipelined loop's
+/// memory recurrences (findMemoryRecurrence), recorded on the loop as
+/// hls.memory_recurrence = {ii, distance, chain, rule, load, store} for the
+/// scheduler (solveSchedulingProblem) and --bram-debug.
+void AffineToLoopSchedule::tagMemoryRecurrences() {
+  SmallVector<Operation *> loops;
+  getOperation().walk([&](Operation *op) {
+    if (auto forOp = dyn_cast<AffineForOp>(op)) {
+      if (!forOp->hasAttr(circt::hls_analysis::kLoopCallBoundaryAttr) &&
+          isInnermostAffineFor(forOp))
+        loops.push_back(op);
+    } else if (auto forOp = dyn_cast<scf::ForOp>(op)) {
+      if (isScheduledRuntimeFor(forOp))
+        loops.push_back(op);
+    }
+  });
+  const circt::hlsest::Config &cfg = circt::hlsest::Config::get();
+  circt::hls_analysis::MemoryRecurrenceOptions options;
+  options.recurrences = cfg.scheduling.memoryRecurrences;
+  options.guardedStoreElimination = cfg.tool.hls.middleEnd.dseGuardedStores;
+  options.forwardToGuardedLoads = cfg.tool.hls.middleEnd.forwardToGuardedLoads;
+  Builder buildPoint(&getContext());
+  auto locText = [](Operation *op) {
+    std::string stringValue;
+    llvm::raw_string_ostream os(stringValue);
+    if (auto fl = dyn_cast<FileLineColLoc>(op->getLoc()))
+      os << fl.getFilename().getValue() << ":" << fl.getLine() << ":"
+         << fl.getColumn();
+    else
+      op->getLoc().print(os);
+    return stringValue;
+  };
+  for (Operation *loop : loops) {
+    loop->removeAttr(kMemoryRecurrenceAttr);
+    circt::hls_analysis::MemoryRecurrences found =
+        circt::hls_analysis::findMemoryRecurrences(
+            loop, [&](Operation *op) { return recurrenceLatency(op); },
+            options);
+    for (Operation *op : found.promoted)
+      op->setAttr(circt::hls_analysis::kPromotedAccessAttr,
+                  buildPoint.getUnitAttr());
+    for (auto [op, elementCount] : found.standsFor)
+      op->setAttr(circt::hls_analysis::kPromotedCountAttr,
+                  buildPoint.getI64IntegerAttr(elementCount));
+    std::optional<circt::hls_analysis::MemoryRecurrence> &rec = found.bound;
+    if (!rec)
+      continue;
+    loop->setAttr(
+        kMemoryRecurrenceAttr,
+        buildPoint.getDictionaryAttr(
+            {buildPoint.getNamedAttr("ii",
+                                     buildPoint.getI64IntegerAttr(rec->ii)),
+             buildPoint.getNamedAttr(
+                 "distance", buildPoint.getI64IntegerAttr(rec->distance)),
+             buildPoint.getNamedAttr("chain",
+                                     buildPoint.getI64IntegerAttr(rec->chain)),
+             buildPoint.getNamedAttr("rule",
+                                     buildPoint.getStringAttr(rec->rule)),
+             buildPoint.getNamedAttr(
+                 "load", buildPoint.getStringAttr(locText(rec->load))),
+             buildPoint.getNamedAttr(
+                 "store", buildPoint.getStringAttr(locText(rec->store)))}));
+  }
+}
+
 LogicalResult AffineToLoopSchedule::lowerAffineStructures(
     MemoryDependenceAnalysis &dependenceAnalysis) {
   auto *context = &getContext();
@@ -3322,7 +3425,8 @@ linkMemoryResource(Operation *memOp, Value memRef, bool isLoad,
     problem.setLimit(r, *pool.limit);
     rsrcs.push_back(r);
   }
-  if (!rsrcs.empty())
+
+  if (!rsrcs.empty() && !hls_analysis::isPromotedAccess(memOp))
     problem.setLinkedResourceTypes(memOp, rsrcs);
 
   LLVM_DEBUG(llvm::dbgs() << "linked " << (isLoad ? "load" : "store") << " to "
@@ -3525,6 +3629,10 @@ AffineToLoopSchedule::solveSchedulingProblem(Operation *loop,
   const bool reuse = reuseSchedules && moduloScheduler->isFunctionOfProblem();
   unsigned targetII = userIITarget ? userTargetII(loop) : 0u;
 
+  if (auto rec = loop->getAttrOfType<DictionaryAttr>(kMemoryRecurrenceAttr))
+    if (auto ii = rec.getAs<IntegerAttr>("ii"))
+      targetII = std::max<unsigned>(targetII, ii.getInt());
+
   SmallVector<int64_t> signature;
   size_t signatureHash = 0;
   const CachedSchedule *reused = nullptr;
@@ -3675,11 +3783,12 @@ AffineToLoopSchedule::createLoopSchedulePipeline(Operation *loop,
   auto pipeline = LoopSchedulePipelineOp::create(builder, resultTypes, ii,
                                                  tripCountAttr, iterArgs);
 
-  for (StringRef name : {circt::hls_analysis::kLoopPipelineAttr,
-                         circt::hls_analysis::kLoopFlattenedParentsAttr,
-                         circt::hls_analysis::kLoopAutoUnrolledAttr,
-                         circt::hls_analysis::kLoopUnrollPartialAttr,
-                         circt::hls_analysis::kLoopSchedulerAttr})
+  for (StringRef name :
+       {circt::hls_analysis::kLoopPipelineAttr,
+        circt::hls_analysis::kLoopFlattenedParentsAttr,
+        circt::hls_analysis::kLoopAutoUnrolledAttr,
+        circt::hls_analysis::kLoopUnrollPartialAttr,
+        circt::hls_analysis::kLoopSchedulerAttr, kMemoryRecurrenceAttr})
     if (Attribute a = loop->getAttr(name))
       pipeline->setAttr(name, a);
 

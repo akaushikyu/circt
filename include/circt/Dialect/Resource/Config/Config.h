@@ -416,6 +416,13 @@ struct MiddleEndConfig {
   bool gvnLoads = true;
   bool gvnConditionalLoads = true;
   bool storeForwarding = true;
+  /// A store under an if of a pipelined body that a later store of the same
+  /// address at the body's top level overwrites in the same iteration (only
+  /// loads of that address between) uses no port (GVN load PRE + DSE).
+  bool dseGuardedStores = true;
+  /// A load under an if of a pipelined body that reads what a store at the
+  /// body's top level wrote earlier in the same iteration uses no port.
+  bool forwardToGuardedLoads = true;
   DeadMemoryConfig deadMemory;
 };
 
@@ -551,6 +558,13 @@ struct SchedulingConfig {
   std::string timingModel;
   std::map<std::string, int64_t> operatorLatencies;
   std::string dependenceModel;
+  /// Loop-carried memory recurrences bound the II of a pipelined loop
+  /// (VITIS_NOTES N87, MemoryRecurrences.h).
+  bool memoryRecurrences = true;
+  /// Cycles an operator class adds to such a recurrence chain
+  /// (`<class>_f32` / `<class>_f64` before `<class>`); a class not listed
+  /// adds its operator latency (VITIS_NOTES N83).
+  std::map<std::string, int64_t> recurrenceLatencies;
   std::string moduloModel;
   int64_t fastThreshold = 150;
   int64_t fastOpsThreshold = 4096;

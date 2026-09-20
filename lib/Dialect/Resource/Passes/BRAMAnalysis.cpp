@@ -9,6 +9,7 @@
 #include "circt/Dialect/Resource/Passes/DataflowChannels.h"
 #include "circt/Dialect/Resource/Passes/LoopPragmas.h"
 #include "circt/Dialect/Resource/Passes/MathCores.h"
+#include "circt/Dialect/Resource/Passes/MemoryRecurrences.h"
 #include "circt/Dialect/Resource/Passes/MemrefBankClassification.h"
 #include "circt/Dialect/Resource/Passes/PolygeistCompat.h"
 #include "circt/Dialect/Resource/Passes/ReadOnlyMemory.h"
@@ -204,6 +205,8 @@ struct AccessRecord {
   unsigned forwardedLoads = 0;
   unsigned removedStores = 0;
 
+  unsigned registerPromoted = 0;
+
   unsigned mergedIfElseStores = 0;
 
   bool hoistedConditional = false;
@@ -308,7 +311,7 @@ struct MemrefRecord {
   std::optional<std::string> excludeReason;
 
   PartitionRecord partition;
-  SmallVector<AccessRecord> accesses;
+  std::vector<AccessRecord> accesses;
   bool accessesAttributed = false;
   bool rom = false;
   std::optional<AdapterRecord> adapter;
@@ -574,6 +577,9 @@ collectAccessesFrom(Value mem, Operation *via, StringRef portBoundReason,
     bool isWrite = false;
     if (!classifyAccess(user, mem, isWrite))
       continue;
+
+    if (circt::hls_analysis::isPromotedAccess(user))
+      continue;
     if (!seen.insert(user).second)
       continue;
 
@@ -746,6 +752,8 @@ static void recordAccesses(ArrayRef<AccessSummary> accesses,
     ar.mergedLoads = counterAttr(a.op, "hls.merged_loads");
     ar.forwardedLoads = counterAttr(a.op, "hls.forwarded_loads");
     ar.removedStores = counterAttr(a.op, "hls.removed_stores");
+    ar.registerPromoted =
+        counterAttr(a.op, circt::hls_analysis::kPromotedCountAttr);
     ar.mergedIfElseStores = counterAttr(a.op, "hls.merged_if_else_stores");
     ar.hoistedConditional = a.op->hasAttr("hls.hoisted_conditional");
     if (auto fn = a.op->getParentOfType<func::FuncOp>())
@@ -1695,6 +1703,8 @@ struct PipelineRecord {
     int64_t factor = 0;
   };
   SmallVector<Unrolled> unrolled;
+
+  DictionaryAttr memoryRecurrence;
 };
 
 static SmallVector<PipelineRecord>
@@ -1727,6 +1737,8 @@ collectPipelineRecords(ModuleOp module, const TopScope &scope) {
     if (auto stringValue =
             portValue->getAttrOfType<StringAttr>(kLoopSchedulerAttr))
       resultValue.scheduler = stringValue.getValue().str();
+    resultValue.memoryRecurrence =
+        portValue->getAttrOfType<DictionaryAttr>("hls.memory_recurrence");
     if (auto arr = portValue->getAttrOfType<ArrayAttr>(kLoopAutoUnrolledAttr))
       for (Attribute a : arr) {
         auto dict = dyn_cast<DictionaryAttr>(a);
@@ -2155,6 +2167,19 @@ static void printDebugText(ArrayRef<MemrefRecord> records,
       os << " unroll_partial=" << *portValue.unrollPartial;
     if (!portValue.scheduler.empty())
       os << " scheduler=" << portValue.scheduler;
+    if (DictionaryAttr memoryOp = portValue.memoryRecurrence) {
+      auto num = [&](StringRef keyValue) {
+        auto a = memoryOp.getAs<IntegerAttr>(keyValue);
+        return a ? a.getInt() : int64_t(0);
+      };
+      auto str = [&](StringRef keyValue) {
+        auto a = memoryOp.getAs<StringAttr>(keyValue);
+        return a ? a.getValue() : StringRef();
+      };
+      os << " memory_recurrence=" << str("rule") << " ii>=" << num("ii")
+         << " (distance " << num("distance") << ", chain " << num("chain")
+         << ", load @ " << str("load") << ", store @ " << str("store") << ")";
+    }
     os << "\n";
     for (const PipelineRecord::Unrolled &useValue : portValue.unrolled)
       os << "    unrolled x" << useValue.factor << " @ " << useValue.loc
@@ -2367,6 +2392,7 @@ static llvm::json::Object toJson(const MemrefRecord &resultValue) {
     ao["merged_loads"] = static_cast<int64_t>(a.mergedLoads);
     ao["forwarded_loads"] = static_cast<int64_t>(a.forwardedLoads);
     ao["removed_stores"] = static_cast<int64_t>(a.removedStores);
+    ao["register_promoted_accesses"] = static_cast<int64_t>(a.registerPromoted);
 
     ao["merged_if_else_stores"] = static_cast<int64_t>(a.mergedIfElseStores);
     ao["hoisted_conditional"] = a.hoistedConditional;
@@ -2567,6 +2593,18 @@ static std::error_code writeDebugJson(ArrayRef<MemrefRecord> records,
     po["scheduler"] = portValue.scheduler.empty()
                           ? llvm::json::Value(nullptr)
                           : llvm::json::Value(portValue.scheduler);
+    if (DictionaryAttr memoryOp = portValue.memoryRecurrence) {
+      llvm::json::Object mo;
+      for (NamedAttribute a : memoryOp) {
+        if (auto loopIndex = dyn_cast<IntegerAttr>(a.getValue()))
+          mo[a.getName().strref()] = loopIndex.getInt();
+        else if (auto stringValue = dyn_cast<StringAttr>(a.getValue()))
+          mo[a.getName().strref()] = stringValue.getValue().str();
+      }
+      po["memory_recurrence"] = std::move(mo);
+    } else {
+      po["memory_recurrence"] = nullptr;
+    }
     llvm::json::Array unrolled;
     for (const PipelineRecord::Unrolled &useValue : portValue.unrolled) {
       llvm::json::Object uo;

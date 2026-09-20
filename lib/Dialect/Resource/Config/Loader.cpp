@@ -985,6 +985,8 @@ void fillTool(const json::Object &t, ToolProfile &tool) {
   mid.mergeIfElseAccesses = boolean(me, "merge_if_else_accesses");
   mid.gvnLoads = boolean(me, "gvn_loads");
   mid.gvnConditionalLoads = boolean(me, "gvn_conditional_loads", true);
+  mid.dseGuardedStores = boolean(me, "dse_guarded_stores", true);
+  mid.forwardToGuardedLoads = boolean(me, "forward_to_guarded_loads", true);
   mid.storeForwarding = boolean(me, "store_forwarding");
   const json::Object &dm = obj(me, "dead_memory");
   mid.deadMemory.overwrittenStores = boolean(dm, "overwritten_stores");
@@ -1060,7 +1062,12 @@ void fillScheduling(const json::Object &s, SchedulingConfig &sc) {
   for (const auto &kv : obj(t, "operator_latencies"))
     if (std::optional<int64_t> i = kv.second.getAsInteger())
       sc.operatorLatencies[kv.first.str()] = *i;
-  sc.dependenceModel = str(obj(s, "dependences"), "model");
+  const json::Object &de = obj(s, "dependences");
+  sc.dependenceModel = str(de, "model");
+  sc.memoryRecurrences = boolean(de, "memory_recurrences", true);
+  for (const auto &kv : obj(de, "recurrence_latencies"))
+    if (std::optional<int64_t> i = kv.second.getAsInteger())
+      sc.recurrenceLatencies[kv.first.str()] = *i;
   const json::Object &mo = obj(s, "modulo");
   sc.moduloModel = str(mo, "model");
   sc.fastThreshold = integer(mo, "fast_threshold");
