@@ -131,6 +131,8 @@ struct MemoryPlan {
 struct PlanContext {
   bool attributed = true;      ///< the bank's accesses were all attributed
   bool anyStoreEnable = false; ///< some write is a predicated store
+  /// Every access of the bank lies in one pipelined loop body.
+  bool onePipelinedScope = false;
 };
 
 class MemoryArchitecturePolicy : public PluginBase {

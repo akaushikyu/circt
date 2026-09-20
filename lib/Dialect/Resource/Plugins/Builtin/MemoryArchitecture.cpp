@@ -709,6 +709,10 @@ static std::string ramReasonFor(const PortDemand &d, const KindResult &kr,
   if (d.total <= 1 && !demandClamped)
     os << ": at most one live port -> " << kindName(kr.kind) << " (x"
        << blockDataWidth(kr.kind) << " wide, no TDP constraint)";
+  else if (kr.kind == StorageKind::RAM_S2P)
+    os << ": one read and one write per cycle, all in one pipelined loop -> "
+          "RAM_S2P (a read-only and a write-only port, x"
+       << blockDataWidth(kr.kind) << ", simple dual port; N90)";
   else
     os << ": two ports live in the same cycle -> " << kindName(kr.kind)
        << " (x" << blockDataWidth(kr.kind) << "/port, true dual port)";
@@ -843,6 +847,11 @@ public:
           d.reads = d.writes = 1;
       }
       kr = selectStorageKind(d);
+      // VITIS_NOTES N90: one pipelined loop with one read and one write per
+      // cycle, and no other access, binds a read-only and a write-only port.
+      if (m.oneLoopReadWriteSdp && ctx.onePipelinedScope && !demandClamped &&
+          kr.kind == StorageKind::RAM_2P && d.reads == 1 && d.writes == 1)
+        kr.kind = StorageKind::RAM_S2P;
       p.pricedConfig = pricedConfigOf(kr.kind, d);
     }
     p.label = kindName(kr.kind);

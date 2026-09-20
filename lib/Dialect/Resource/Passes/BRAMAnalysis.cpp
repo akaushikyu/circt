@@ -1557,9 +1557,9 @@ static BRAMCost estimateBRAM(MemoryResourceOpInterface iface, MemrefRecord &rec,
     request.readOnly = true;
     request.needsInit = true;
     request.narrowed = false;
-    circt::hlsest::PlanContext context;
-    context.attributed = true;
-    circt::hlsest::MemoryPlan plan = policy.plan(demand, rep, request, context);
+    circt::hlsest::PlanContext ctx;
+    ctx.attributed = true;
+    circt::hlsest::MemoryPlan plan = policy.plan(demand, rep, request, ctx);
     if (plan.copies > 1) {
       int64_t perCopy = mapBlocks(*models.mapper, *memory, plan.pricedConfig,
                                   numElems, elemBits, &rec.bankMath);
@@ -1598,11 +1598,28 @@ static BRAMCost estimateBRAM(MemoryResourceOpInterface iface, MemrefRecord &rec,
   }
 
   recordAccesses(accesses, rec, seq);
-  circt::hlsest::PlanContext context;
-  context.attributed = rec.accessesAttributed;
-  context.anyStoreEnable = llvm::any_of(
+  circt::hlsest::PlanContext ctx;
+  ctx.attributed = rec.accessesAttributed;
+  ctx.anyStoreEnable = llvm::any_of(
       rec.accesses, [](const AccessRecord &a) { return a.storeEnable; });
-  circt::hlsest::MemoryPlan plan = policy.plan(demand, rep, request, context);
+
+  ctx.onePipelinedScope =
+      !accesses.empty() &&
+      isa_and_present<LoopSchedulePipelineOp>(accesses.front().scope) &&
+      llvm::all_of(accesses, [&](const AccessSummary &a) {
+        return a.scope == accesses.front().scope;
+      });
+  if (ctx.onePipelinedScope) {
+    DenseSet<Operation *> accessOps;
+    for (const AccessSummary &a : accesses)
+      accessOps.insert(a.op);
+    for (Value bank : banks)
+      for (Operation *user : bank.getUsers())
+        if (!accessOps.contains(user) && !isa<memref::DeallocOp>(user) &&
+            !circt::hls_analysis::isPromotedAccess(user))
+          ctx.onePipelinedScope = false;
+  }
+  circt::hlsest::MemoryPlan plan = policy.plan(demand, rep, request, ctx);
   if (!memory->portConfig(plan.pricedConfig)) {
 
     iface->emitError("--bram-analysis: the memory architecture policy prices "

@@ -148,11 +148,11 @@ module {
 // CHECK-NEXT:   ram type: RAM_T2P
 // CHECK:      b_disjoint (alloca)
 // CHECK:          ii=1: 1R+1W per iteration
-// CHECK-NEXT:   ram type: RAM_2P
-// CHECK:      Total BRAM: 5
+// CHECK-NEXT:   ram type: RAM_S2P
+// CHECK:      Total BRAM: 4
 
-// REPORT: Total BRAM: 5
+// REPORT: Total BRAM: 4
 
 // Default (no forwarding): acc has 8R+9W per iteration, not replicable, II 9,
 // a true-dual-port 64x32 RAM = 2 BRAM (total 6).
-// NOFWD: Total BRAM: 6
+// NOFWD: Total BRAM: 5

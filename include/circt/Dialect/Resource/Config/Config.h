@@ -258,6 +258,10 @@ struct MemoryArchitectureConfig {
   /// callee parameter's) has the ports of each bank: an access whose bank is
   /// a constant takes a slot of that bank's pool (VITIS_NOTES N88).
   bool partitionedArgumentBankPorts = true;
+  /// A bank that only one pipelined loop accesses, one read and one write
+  /// per cycle, gets a read-only and a write-only port: RAM_S2P, simple dual
+  /// port (x36) (W9r11, VITIS_NOTES N90).
+  bool oneLoopReadWriteSdp = true;
   int64_t portOccupancyCycles = 1;
   ReplicationConfig replication;
   RomConfig rom;
