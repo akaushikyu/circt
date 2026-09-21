@@ -177,6 +177,13 @@ def main():
             log_text = log.read_text(errors="replace")
         m = VITIS_REJECT.search(v.get("note") or "") or VITIS_REJECT.search(log_text)
         if not m:
+            # A run stopped by the harness (memory cap, time limit) rejected nothing: listed with
+            # the failures that are not rejections (W9r11-impl: kaihong_lin lab3, 8 GB cap).
+            status = str(v.get("status") or "")
+            if "memory limit" in status or "timeout" in status:
+                not_rejects.append((k, status + (f" ({v.get('note')})" if v.get("note") else ""),
+                                    r.get("cgeist_status"), r.get("status"),
+                                    "the harness stopped the Vitis run (resource limit), not a rejection"))
             continue
         line = m.group(0)
         why = not_a_rejection(line, log_text, v, k)
