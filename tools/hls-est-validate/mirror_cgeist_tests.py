@@ -331,7 +331,7 @@ def lit_quote(a):
     return shlex.quote(a)
 
 
-def run_line(top, timeout=None, capped=False):
+def run_line(top, timeout=None, capped=False, spaced=False):
     """The RUN line. A test that is XFAIL because hls-est failed (capped) runs hls-est under the memory
     cap it failed under at generation (C.MEM_LIMIT_GB, prlimit --data, as run_hlsest), so that lit
     reproduces the failure instead of an unbounded run that can exhaust WSL's memory (MEMOS #65):
@@ -344,7 +344,9 @@ def run_line(top, timeout=None, capped=False):
         lead = f"prlimit --data={int(C.MEM_LIMIT_GB * 2**30)} -- {lead}"
     if timeout:
         lead = f"timeout {timeout} {lead}"
-    return f"{lead} %s {cmd} -o /dev/null | FileCheck %s"
+    # %s of a test whose path has whitespace (Monte-Carlo "Random 100 Paths") is quoted for the shell.
+    s = '"%s"' if spaced else "%s"
+    return f"{lead} {s} {cmd} -o /dev/null | FileCheck {s}"
 
 
 def run_hlsest(path, top, timeout):
@@ -397,7 +399,7 @@ def recheck_existing(path, timeout):
     text = path.read_text()
     if "// XFAIL:" in text:
         return path, "xfail (unchanged)"
-    run = re.search(r"^// RUN: (?:timeout \d+ )?hls-est %s (.*) -o /dev/null \| FileCheck %s$", text, re.M)
+    run = re.search(r'^// RUN: (?:timeout \d+ )?hls-est "?%s"? (.*) -o /dev/null \| FileCheck "?%s"?$', text, re.M)
     if not run:
         return path, "no RUN line"
     args = [a.replace(MATH_COSTS_SUBST, str(RH.DEFAULT_MATH_COSTS)) for a in shlex.split(run.group(1))]
@@ -484,13 +486,15 @@ def write_mirror(e, mlir_path, meta, args, V):
     out = mirror_path(e["test"])
     out.parent.mkdir(parents=True, exist_ok=True)
 
+    spaced = re.search(r"\s", str(out)) is not None
+
     def emit(run, extra, checks, trailer=()):
         lines = header(e, meta, top, vit, top_note + extra) + [f"// RUN: {run}"] + extra_directives
         text = "\n".join(lines) + "\n\n" + body.rstrip("\n") + "\n\n" + "\n".join([*checks, *trailer]) + "\n"
         out.write_text(text)
 
     extra_directives = []
-    emit(run_line(top), [], ["// CHECK: Total BRAM:"])
+    emit(run_line(top, spaced=spaced), [], ["// CHECK: Total BRAM:"])
     st, stdout, el = run_hlsest(out, top, args.timeout)
     slow = st.startswith("hls-est timeout")
     if slow:
@@ -505,7 +509,7 @@ def write_mirror(e, mlir_path, meta, args, V):
             note = [f"// slow: hls-est took {el:.0f} s at generation (over the {args.timeout} s timeout, inside the "
                     f"{args.long_timeout} s retry); this test costs about as long in every lit run"]
             res["hlsest_s"] = round(el)
-        emit(run_line(top), [], checks, note)
+        emit(run_line(top, spaced=spaced), [], checks, note)
         total, mems = RH.parse_hlsest_output(stdout)
         res.update({"outcome": "pass", "hlsest_bram": total, "memrefs": len(mems)})
     elif st.startswith("hls-est timeout"):
@@ -513,11 +517,11 @@ def write_mirror(e, mlir_path, meta, args, V):
         reason = (f"expected to fail: hls-est did not finish within {args.long_timeout} s at generation; the RUN line "
                   f"stops it after {args.timeout} s")
         extra_directives = ["// XFAIL: *"]
-        emit(run_line(top, args.timeout), [reason], ["// CHECK: Total BRAM:"])
+        emit(run_line(top, args.timeout, spaced=spaced), [reason], ["// CHECK: Total BRAM:"])
         res.update({"outcome": "xfail", "reason": f"hls-est timeout (> {args.long_timeout} s)"})
     else:
         extra_directives = ["// XFAIL: *"]
-        emit(run_line(top, args.timeout, capped=True),
+        emit(run_line(top, args.timeout, capped=True, spaced=spaced),
              [f"expected to fail: {st} (under a {C.MEM_LIMIT_GB:g} GB memory cap, as the RUN line; "
               f"the RUN line also stops it after {args.timeout} s)"],
              ["// CHECK: Total BRAM:"])

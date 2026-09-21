@@ -18,7 +18,7 @@ WIP,stream_hls__MultiHeadSelfAttention1__opt1,1480,1480,0,0,True,exact,compared,
 WIP,stream_hls__MultiHeadSelfAttention1__opt2,1368,1368,0,0,True,exact,compared,ok,ok,v275: hls-est 64 vs Vitis None; v277: hls-est 64 vs Vitis None; v278: hls-est 64 vs Vitis None
 WIP,stream_hls__MultiHeadSelfAttention1__opt3,2272,2336,64,64,False,over<=15%,compared,ok,ok,v337: hls-est 128 vs Vitis None; v338: hls-est 128 vs Vitis None; v341: hls-est 128 vs Vitis 64
 WIP,stream_hls__MultiHeadSelfAttention1__opt4,2048,2052,4,4,False,over<=15%,compared,ok,ok,v337: hls-est 128 vs Vitis None; v338: hls-est 128 vs Vitis None; v339: hls-est 128 vs Vitis None
-WIP,stream_hls__MultiHeadSelfAttention1__opt5,2688,2305,-383,383,False,under,compared,ok,ok,v168: hls-est 32 vs Vitis 256; v169: hls-est 32 vs Vitis 256; v337: hls-est 128 vs Vitis None
+WIP,stream_hls__MultiHeadSelfAttention1__opt5,2688,2304,-384,384,False,under,compared,ok,ok,v168: hls-est 32 vs Vitis 256; v169: hls-est 32 vs Vitis 256; v337: hls-est 128 vs Vitis None
 WIP,stream_hls__ResMLP__opt1,3701,3701,0,0,True,exact,compared,ok,ok,v165: hls-est 1024 vs Vitis None; v160: hls-est 512 vs Vitis None; v157: hls-est 256 vs Vitis None
 WIP,stream_hls__ResMLP__opt2,3709,3709,0,0,True,exact,compared,ok,ok,v165: hls-est 1024 vs Vitis None; v160: hls-est 512 vs Vitis None; v157: hls-est 256 vs Vitis None
 WIP,stream_hls__ResMLP__opt3,3829,3829,0,0,True,exact,compared,ok,ok,v197: hls-est 1024 vs Vitis None; v192: hls-est 512 vs Vitis None; v189: hls-est 256 vs Vitis None
@@ -48,7 +48,7 @@ WIP,stream_hls______processed_dataset__MultiHeadSelfAttention1__opt1,1480,1480,0
 WIP,stream_hls______processed_dataset__MultiHeadSelfAttention1__opt2,1368,1368,0,0,True,exact,compared,ok,ok,v275: hls-est 64 vs Vitis None; v277: hls-est 64 vs Vitis None; v278: hls-est 64 vs Vitis None
 WIP,stream_hls______processed_dataset__MultiHeadSelfAttention1__opt3,2272,2336,64,64,False,over<=15%,compared,ok,ok,v337: hls-est 128 vs Vitis None; v338: hls-est 128 vs Vitis None; v341: hls-est 128 vs Vitis 64
 WIP,stream_hls______processed_dataset__MultiHeadSelfAttention1__opt4,2048,2052,4,4,False,over<=15%,compared,ok,ok,v337: hls-est 128 vs Vitis None; v338: hls-est 128 vs Vitis None; v339: hls-est 128 vs Vitis None
-WIP,stream_hls______processed_dataset__MultiHeadSelfAttention1__opt5,2688,2305,-383,383,False,under,compared,ok,ok,v168: hls-est 32 vs Vitis 256; v169: hls-est 32 vs Vitis 256; v337: hls-est 128 vs Vitis None
+WIP,stream_hls______processed_dataset__MultiHeadSelfAttention1__opt5,2688,2304,-384,384,False,under,compared,ok,ok,v168: hls-est 32 vs Vitis 256; v169: hls-est 32 vs Vitis 256; v337: hls-est 128 vs Vitis None
 WIP,stream_hls______processed_dataset__ResMLP__opt1,3701,3701,0,0,True,exact,compared,ok,ok,v165: hls-est 1024 vs Vitis None; v160: hls-est 512 vs Vitis None; v157: hls-est 256 vs Vitis None
 WIP,stream_hls______processed_dataset__ResMLP__opt2,3709,3709,0,0,True,exact,compared,ok,ok,v165: hls-est 1024 vs Vitis None; v160: hls-est 512 vs Vitis None; v157: hls-est 256 vs Vitis None
 WIP,stream_hls______processed_dataset__ResMLP__opt3,3829,3829,0,0,True,exact,compared,ok,ok,v197: hls-est 1024 vs Vitis None; v192: hls-est 512 vs Vitis None; v189: hls-est 256 vs Vitis None
@@ -230,7 +230,7 @@ class_ece8893_2023_spring,GradCAM__src_hls__linear_fc,8,8,0,0,True,exact,compare
 class_ece8893_2023_spring,GradCAM__src_hls__maxpool,22,22,0,0,True,exact,compared,ok,ok,
 class_ece8893_2023_spring,Monte-Carlo__MersenneTwister,4,4,0,0,True,exact,compared,ok,ok,
 class_ece8893_2023_spring,Monte-Carlo__Paths,294,264,-30,30,False,under,compared,ok,ok,math_core:pow_generic_double_s: hls-est None vs Vitis 30
-class_ece8893_2023_spring,Monte-Carlo__Random 100 Paths,,,,,False,,vitis missing,vitis failed,cgeist error: genRandNums.cpp:2:10: fatal error: './mersenneTwister.hpp' file not found,
+class_ece8893_2023_spring,Monte-Carlo__Random 100 Paths,78,78,0,0,True,exact,compared,ok,ok,
 class_ece8893_2023_spring,YOLOv4-Tiny-Accelerator__HLS_C__CSP_Layer1Layer2,133,133,0,0,True,exact,compared,ok,ok,
 class_ece8893_2023_spring,YOLOv4-Tiny-Accelerator__HLS_C__Conv2D_Layer1Layer2,54,54,0,0,True,exact,compared,ok,ok,
 class_ece8893_2023_spring,YOLOv4-Tiny-Accelerator__HLS_C__Maxpool_Layer,15,15,0,0,True,exact,compared,ok,ok,
@@ -729,7 +729,7 @@ stream_hls,MultiHeadSelfAttention1__opt1,1480,1480,0,0,True,exact,compared,ok,ok
 stream_hls,MultiHeadSelfAttention1__opt2,1368,1368,0,0,True,exact,compared,ok,ok,v275: hls-est 64 vs Vitis None; v277: hls-est 64 vs Vitis None; v278: hls-est 64 vs Vitis None
 stream_hls,MultiHeadSelfAttention1__opt3,2272,2336,64,64,False,over<=15%,compared,ok,ok,v337: hls-est 128 vs Vitis None; v338: hls-est 128 vs Vitis None; v341: hls-est 128 vs Vitis 64
 stream_hls,MultiHeadSelfAttention1__opt4,2048,2052,4,4,False,over<=15%,compared,ok,ok,v337: hls-est 128 vs Vitis None; v338: hls-est 128 vs Vitis None; v339: hls-est 128 vs Vitis None
-stream_hls,MultiHeadSelfAttention1__opt5,2688,2305,-383,383,False,under,compared,ok,ok,v168: hls-est 32 vs Vitis 256; v169: hls-est 32 vs Vitis 256; v337: hls-est 128 vs Vitis None
+stream_hls,MultiHeadSelfAttention1__opt5,2688,2304,-384,384,False,under,compared,ok,ok,v168: hls-est 32 vs Vitis 256; v169: hls-est 32 vs Vitis 256; v337: hls-est 128 vs Vitis None
 stream_hls,ResMLP__opt1,3701,3701,0,0,True,exact,compared,ok,ok,v165: hls-est 1024 vs Vitis None; v160: hls-est 512 vs Vitis None; v157: hls-est 256 vs Vitis None
 stream_hls,ResMLP__opt2,3709,3709,0,0,True,exact,compared,ok,ok,v165: hls-est 1024 vs Vitis None; v160: hls-est 512 vs Vitis None; v157: hls-est 256 vs Vitis None
 stream_hls,ResMLP__opt3,3829,3829,0,0,True,exact,compared,ok,ok,v197: hls-est 1024 vs Vitis None; v192: hls-est 512 vs Vitis None; v189: hls-est 256 vs Vitis None
