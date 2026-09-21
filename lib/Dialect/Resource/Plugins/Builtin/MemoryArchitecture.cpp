@@ -710,7 +710,8 @@ static std::string ramReasonFor(const PortDemand &d, const KindResult &kr,
     os << ": at most one live port -> " << kindName(kr.kind) << " (x"
        << blockDataWidth(kr.kind) << " wide, no TDP constraint)";
   else if (kr.kind == StorageKind::RAM_S2P)
-    os << ": one read and one write per cycle, all in one pipelined loop -> "
+    os << ": every read in one pipelined loop, at most one read and one "
+          "write per cycle, other loops only write -> "
           "RAM_S2P (a read-only and a write-only port, x"
        << blockDataWidth(kr.kind) << ", simple dual port; N90)";
   else
@@ -847,11 +848,20 @@ public:
           d.reads = d.writes = 1;
       }
       kr = selectStorageKind(d);
-      // VITIS_NOTES N90: one pipelined loop with one read and one write per
-      // cycle, and no other access, binds a read-only and a write-only port.
-      if (m.oneLoopReadWriteSdp && ctx.onePipelinedScope && !demandClamped &&
-          kr.kind == StorageKind::RAM_2P && d.reads == 1 && d.writes == 1)
+      // VITIS_NOTES N90 (c): one pipelined loop with one read and one
+      // write per cycle and no other access, or one read per iteration of
+      // one pipelined loop, at most one write per cycle once spread over its
+      // II, and loops that only write: a read-only and a write-only port.
+      bool oneLoop = ctx.onePipelinedScope && kr.kind == StorageKind::RAM_2P &&
+                     d.reads == 1 && d.writes == 1;
+      bool split = ctx.readWriteSplit &&
+                   (kr.kind == StorageKind::RAM_2P ||
+                    kr.kind == StorageKind::RAM_T2P) &&
+                   d.total <= blockPorts();
+      if (m.oneLoopReadWriteSdp && !demandClamped && (oneLoop || split)) {
         kr.kind = StorageKind::RAM_S2P;
+        d.reads = d.writes = 1;
+      }
       p.pricedConfig = pricedConfigOf(kr.kind, d);
     }
     p.label = kindName(kr.kind);

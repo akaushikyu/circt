@@ -1817,8 +1817,13 @@ struct AutoPipelineUnrollPass
     if (failed(policy->decide(module, options)))
       return signalPassFailure();
 
-    if (pd.foldUnrolledGuards)
-      circt::hls_analysis::foldConstantAffineIfs(module);
+    if (pd.foldUnrolledGuards) {
+      circt::hls_analysis::FoldedGuards fieldValue =
+          circt::hls_analysis::foldConstantAffineIfs(module);
+      LLVM_DEBUG(llvm::dbgs() << "folded " << fieldValue.folded << " guard(s) ("
+                              << fieldValue.scfIfs << " scf.if), pinned "
+                              << fieldValue.pinnedOperands << " operand(s)\n");
+    }
   }
 
   /// The Vitis decision procedure (the builtin PipelinePolicy

@@ -59,9 +59,11 @@ module {
 // llvm::json prints object keys sorted, one per line.
 // CHECK:      "pipelines": [
 // CHECK:        "flattened_parents": 1,
+// CHECK-NEXT:   "folded_guards": 0,
 // CHECK-NEXT:   "func": "kernel",
 // CHECK-NEXT:   "ii": {{[0-9]+}},
 // CHECK-NEXT:   "memory_recurrence": null,
+// CHECK-NEXT:   "pinned_guard_operands": 0,
 // CHECK-NEXT:   "scheduler": "simplex",
 // CHECK-NEXT:   "scope_loc": "k.cpp:13:5",
 // CHECK-NEXT:   "source": "auto",
@@ -69,9 +71,11 @@ module {
 // CHECK-NEXT:   "unroll_partial": null,
 // CHECK-NEXT:   "unrolled": []
 // CHECK:        "flattened_parents": 0,
+// CHECK-NEXT:   "folded_guards": 0,
 // CHECK-NEXT:   "func": "kernel",
 // CHECK-NEXT:   "ii": {{[0-9]+}},
 // CHECK-NEXT:   "memory_recurrence": null,
+// CHECK-NEXT:   "pinned_guard_operands": 0,
 // CHECK-NEXT:   "scheduler": "simplex",
 // CHECK-NEXT:   "scope_loc": "k.cpp:19:3",
 // CHECK-NEXT:   "source": "auto",

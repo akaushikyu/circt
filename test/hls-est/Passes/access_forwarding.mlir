@@ -145,17 +145,21 @@ module {
 // CHECK:      b_mayalias (alloca)
 // CHECK:        replication: not replicable (max 2 store(s) per loop body)
 // CHECK:          ii=2: 1R+2W per iteration
-// CHECK-NEXT:   ram type: RAM_T2P
+// CHECK-NEXT:   ram type: RAM_S2P
 // CHECK:      b_disjoint (alloca)
 // CHECK:          ii=1: 1R+1W per iteration
 // CHECK-NEXT:   ram type: RAM_S2P
-// CHECK:      Total BRAM: 4
+// CHECK:      Total BRAM: 3
 
 // b_disjoint is read and written once per iteration of the one pipelined loop
 // that accesses it: a read-only and a write-only port, x36 (VITIS_NOTES N90,
-// W9r11-impl; RAM_2P x18 = 2 before, total 5).
-// REPORT: Total BRAM: 4
+// W9r11-impl; RAM_2P x18 = 2 before, total 5). b_mayalias, one read and two
+// writes per iteration at II 2 in its only loop, is one read and one write
+// per cycle once the writes are spread over the II: RAM_S2P x36 = 1 (N90 (c),
+// W9r11 review D1, kernels w9r11rev_gd_pre / gd_post; RAM_T2P x18 = 2 before,
+// total 4).
+// REPORT: Total BRAM: 3
 
 // Default (no forwarding): acc has 8R+9W per iteration, not replicable, II 9,
-// a true-dual-port 64x32 RAM = 2 BRAM (total 6).
-// NOFWD: Total BRAM: 5
+// a true-dual-port 64x32 RAM = 2 BRAM (total 6; 5 before W9r11 review D1).
+// NOFWD: Total BRAM: 4

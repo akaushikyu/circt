@@ -1645,7 +1645,7 @@ module {
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
 // CHECK: memref.alloca @ loc("{{[^"]*}}":279:17){{$}}
-// CHECK-NEXT: kind=RAM_T2P  bram=2{{$}}
+// CHECK-NEXT: kind=RAM_S2P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
 // CHECK: memref.alloca @ loc("{{[^"]*}}":279:17){{$}}
 // CHECK-NEXT: kind=RAM_S2P  bram=1{{$}}
@@ -3300,4 +3300,4 @@ module {
 // CHECK: memref.alloca @ loc("{{[^"]*}}":807:18){{$}}
 // CHECK-NEXT: kind=FIFO  bram=128{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: Total BRAM: 2305{{$}}
+// CHECK: Total BRAM: 2304{{$}}

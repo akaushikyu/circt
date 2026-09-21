@@ -563,6 +563,7 @@ static void eliminateGuardedStores(Operation *loop, Block *body,
         continue; // a load of the address: served by the guarded value
       if (next.op->getBlock() == body) {
         result.promoted.insert(guarded.op);
+        result.rule[guarded.op] = "N90a";
         ++result.standsFor[next.op];
       }
       break;
@@ -595,8 +596,10 @@ static void forwardToGuardedLoads(Block *body, ArrayRef<Access> accesses,
       const Access &next = accesses[ordered[m]];
       if (next.isStore || !sameAddressInIteration(next, store))
         break;
-      if (next.op->getBlock() != body && result.promoted.insert(next.op))
+      if (next.op->getBlock() != body && result.promoted.insert(next.op)) {
+        result.rule[next.op] = "N90b";
         ++result.standsFor[store.op];
+      }
     }
   }
 }
@@ -696,8 +699,10 @@ MemoryRecurrences circt::hls_analysis::findMemoryRecurrences(
       }
       for (unsigned i : idx)
         if (&accesses[i] != firstLoad && &accesses[i] != lastStore &&
-            result.promoted.insert(accesses[i].op))
+            result.promoted.insert(accesses[i].op)) {
+          result.rule[accesses[i].op] = "R1";
           ++result.standsFor[firstLoad->op];
+        }
     };
 
     if (options.guardedStoreElimination)
@@ -747,8 +752,10 @@ MemoryRecurrences circt::hls_analysis::findMemoryRecurrences(
         }
         if (rec.rule == "R1")
           promoteElement();
-        else if (rec.rule == "R3" && result.promoted.insert(load.op))
+        else if (rec.rule == "R3" && result.promoted.insert(load.op)) {
+          result.rule[load.op] = "R3";
           ++result.standsFor[store.op];
+        }
         bool throughRegister = rec.rule != "R2";
         int64_t ii = throughRegister
                          ? chain

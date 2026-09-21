@@ -12,6 +12,7 @@
 #include "circt/Dialect/Resource/Passes/CallInstances.h"
 #include "circt/Dialect/Resource/Passes/CyclicSchedulingAnalysisModified.h"
 #include "circt/Dialect/Resource/Passes/FloatOps.h"
+#include "circt/Dialect/Resource/Passes/FoldUnrolledGuards.h"
 #include "circt/Dialect/Resource/Passes/LoopPragmas.h"
 #include "circt/Dialect/Resource/Passes/MemoryRecurrences.h"
 #include "circt/Dialect/Resource/Passes/MemrefBankClassification.h"
@@ -2081,6 +2082,10 @@ void AffineToLoopSchedule::coalescePerfectNests() {
         innermost->getAttr(circt::hls_analysis::kLoopAutoUnrolledAttr);
     Attribute unrollPartial =
         innermost->getAttr(circt::hls_analysis::kLoopUnrollPartialAttr);
+    Attribute foldedGuards =
+        innermost->getAttr(circt::hls_analysis::kFoldedGuardsAttr);
+    Attribute pinnedOperands =
+        innermost->getAttr(circt::hls_analysis::kPinnedGuardOperandsAttr);
     unsigned flattened = circt::hls_analysis::getFlattenedParents(innermost);
     unsigned levels = band.size() - 1;
     if (failed(coalesceLoops(MutableArrayRef<AffineForOp>(band)))) {
@@ -2100,6 +2105,11 @@ void AffineToLoopSchedule::coalescePerfectNests() {
     if (unrollPartial)
       outer->setAttr(circt::hls_analysis::kLoopUnrollPartialAttr,
                      unrollPartial);
+    if (foldedGuards)
+      outer->setAttr(circt::hls_analysis::kFoldedGuardsAttr, foldedGuards);
+    if (pinnedOperands)
+      outer->setAttr(circt::hls_analysis::kPinnedGuardOperandsAttr,
+                     pinnedOperands);
     if (flattened > levels)
       outer->setAttr(circt::hls_analysis::kLoopFlattenedParentsAttr,
                      IntegerAttr::get(IntegerType::get(outer.getContext(), 64),
@@ -3031,8 +3041,10 @@ struct AffineStoreEnableLowering
     if (!indexValue)
       return rewriter.notifyMatchFailure(op, "could not expand access map");
 
+    SmallVector<NamedAttribute> hlsAttrs = hlsAttrsOf(op);
     auto lowered = rewriter.replaceOpWithNewOp<hls_analysis::StoreEnableOp>(
         op, adaptor.getValue(), en, adaptor.getMemref(), *indexValue);
+    setAttrs(lowered, hlsAttrs);
 
     dependenceAnalysis.replaceOp(op, lowered);
     return success();
@@ -3190,7 +3202,11 @@ constantBankOf(ArrayRef<AffineExpr> indices,
 /// port the parameter is bound to: `[HLS 214-248] Applying array_partition
 /// to 'out'`) gives each bank its own ports. Every access of such an
 /// argument whose bank is a constant is tagged hls.port_bank; the scheduler
-/// keys the argument's port pools by that bank (linkMemoryResource).
+/// keys the argument's port pools by that bank (linkMemoryResource). An
+/// access whose bank is not a constant may reach any bank: it is tagged
+/// hls.port_banks = the number of banks and takes a port of every bank's
+/// pool (kernel w9r11rev_pa_var3: a[16][8] cyclic 4 on dim 2, two
+/// constant-bank reads per bank plus `a[i][idx[i] & 7]`: Vitis II 2).
 static void tagPartitionedArgumentBanks(func::FuncOp func) {
   if (func.isExternal())
     return;
@@ -3226,6 +3242,9 @@ static void tagPartitionedArgumentBanks(func::FuncOp func) {
         continue;
       if (std::optional<int64_t> bank = constantBankOf(indices, *layout))
         user->setAttr("hls.port_bank", buildPoint.getI64IntegerAttr(*bank));
+      else
+        user->setAttr("hls.port_banks",
+                      buildPoint.getI64IntegerAttr(layout->numBanks));
     }
   }
 }
@@ -3257,10 +3276,12 @@ int64_t AffineToLoopSchedule::recurrenceLatency(Operation *op) const {
   return t->latency;
 }
 
-/// VITIS_NOTES N87 (OPEN_ISSUES O1): the II bound of each pipelined loop's
-/// memory recurrences (findMemoryRecurrence), recorded on the loop as
-/// hls.memory_recurrence = {ii, distance, chain, rule, load, store} for the
-/// scheduler (solveSchedulingProblem) and --bram-debug.
+/// VITIS_NOTES N87 (OPEN_ISSUES O1): the II bound of the memory recurrences
+/// of each innermost loop to be scheduled (a `pipeline off` loop included:
+/// its register-served accesses take no port; W9r11 review D9)
+/// (findMemoryRecurrences), recorded on the loop as hls.memory_recurrence =
+/// {ii, distance, chain, rule, load, store} for the scheduler
+/// (solveSchedulingProblem) and --bram-debug.
 void AffineToLoopSchedule::tagMemoryRecurrences() {
   SmallVector<Operation *> loops;
   getOperation().walk([&](Operation *op) {
@@ -3297,7 +3318,7 @@ void AffineToLoopSchedule::tagMemoryRecurrences() {
             options);
     for (Operation *op : found.promoted)
       op->setAttr(circt::hls_analysis::kPromotedAccessAttr,
-                  buildPoint.getUnitAttr());
+                  buildPoint.getStringAttr(found.rule.lookup(op)));
     for (auto [op, elementCount] : found.standsFor)
       op->setAttr(circt::hls_analysis::kPromotedCountAttr,
                   buildPoint.getI64IntegerAttr(elementCount));
@@ -3396,9 +3417,16 @@ linkMemoryResource(Operation *memOp, Value memRef, bool isLoad,
                    const circt::hlsest::DeviceMemory &memory) {
   auto key = std::to_string(hash_value(memRef));
 
-  std::string poolKey = key;
+  SmallVector<std::string, 4> poolKeys;
   if (auto bank = memOp->getAttrOfType<IntegerAttr>("hls.port_bank"))
-    poolKey += "_bank" + std::to_string(bank.getInt());
+    poolKeys.push_back(key + "_bank" + std::to_string(bank.getInt()));
+  else if (auto elementCount =
+               memOp->getAttrOfType<IntegerAttr>("hls.port_banks"))
+    for (int64_t buildPoint = 0; buildPoint < elementCount.getInt();
+         ++buildPoint)
+      poolKeys.push_back(key + "_bank" + std::to_string(buildPoint));
+  else
+    poolKeys.push_back(key);
   Problem::OperatorType memOpr = problem.getOrInsertOperatorType("mem_" + key);
   problem.setLatency(memOpr, latency);
   problem.setLinkedOperatorType(memOp, memOpr);
@@ -3425,10 +3453,12 @@ linkMemoryResource(Operation *memOp, Value memRef, bool isLoad,
     if ((pool.consumes == circt::hlsest::PortPool::Read && !isLoad) ||
         (pool.consumes == circt::hlsest::PortPool::Write && isLoad))
       continue;
-    Problem::ResourceType r =
-        problem.getOrInsertResourceType("mem_" + poolKey + pool.suffix);
-    problem.setLimit(r, *pool.limit);
-    rsrcs.push_back(r);
+    for (const std::string &poolKey : poolKeys) {
+      Problem::ResourceType r =
+          problem.getOrInsertResourceType("mem_" + poolKey + pool.suffix);
+      problem.setLimit(r, *pool.limit);
+      rsrcs.push_back(r);
+    }
   }
 
   if (!rsrcs.empty() && !hls_analysis::isPromotedAccess(memOp))
@@ -3793,7 +3823,9 @@ AffineToLoopSchedule::createLoopSchedulePipeline(Operation *loop,
         circt::hls_analysis::kLoopFlattenedParentsAttr,
         circt::hls_analysis::kLoopAutoUnrolledAttr,
         circt::hls_analysis::kLoopUnrollPartialAttr,
-        circt::hls_analysis::kLoopSchedulerAttr, kMemoryRecurrenceAttr})
+        circt::hls_analysis::kLoopSchedulerAttr, kMemoryRecurrenceAttr,
+        circt::hls_analysis::kFoldedGuardsAttr,
+        circt::hls_analysis::kPinnedGuardOperandsAttr})
     if (Attribute a = loop->getAttr(name))
       pipeline->setAttr(name, a);
 

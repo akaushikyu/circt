@@ -3,10 +3,12 @@
 #include "circt/Dialect/Resource/Passes/BRAMAnalysis.h"
 #include "circt/Dialect/LoopSchedule/LoopScheduleOps.h"
 #include "circt/Dialect/Resource/Config/ConfigUtils.h"
+#include "circt/Dialect/Resource/HLS/HLSOps.h"
 #include "circt/Dialect/Resource/Interfaces/MemoryInterface.h"
 #include "circt/Dialect/Resource/Model/AccessOrder.h"
 #include "circt/Dialect/Resource/Passes/CallInstances.h"
 #include "circt/Dialect/Resource/Passes/DataflowChannels.h"
+#include "circt/Dialect/Resource/Passes/FoldUnrolledGuards.h"
 #include "circt/Dialect/Resource/Passes/LoopPragmas.h"
 #include "circt/Dialect/Resource/Passes/MathCores.h"
 #include "circt/Dialect/Resource/Passes/MemoryRecurrences.h"
@@ -210,6 +212,8 @@ struct AccessRecord {
   unsigned mergedIfElseStores = 0;
 
   bool hoistedConditional = false;
+
+  std::string portBank;
   Operation *scope = nullptr;
 
   std::string inFunc;
@@ -312,6 +316,11 @@ struct MemrefRecord {
 
   PartitionRecord partition;
   std::vector<AccessRecord> accesses;
+
+  struct RegisterServed {
+    std::string op, rw, loc, rule;
+  };
+  std::vector<RegisterServed> registerServed;
   bool accessesAttributed = false;
   bool rom = false;
   std::optional<AdapterRecord> adapter;
@@ -756,6 +765,11 @@ static void recordAccesses(ArrayRef<AccessSummary> accesses,
         counterAttr(a.op, circt::hls_analysis::kPromotedCountAttr);
     ar.mergedIfElseStores = counterAttr(a.op, "hls.merged_if_else_stores");
     ar.hoistedConditional = a.op->hasAttr("hls.hoisted_conditional");
+    if (auto buildPoint = a.op->getAttrOfType<IntegerAttr>("hls.port_bank"))
+      ar.portBank = std::to_string(buildPoint.getInt());
+    else if (auto elementCount =
+                 a.op->getAttrOfType<IntegerAttr>("hls.port_banks"))
+      ar.portBank = "any of " + std::to_string(elementCount.getInt());
     if (auto fn = a.op->getParentOfType<func::FuncOp>())
       ar.inFunc = fn.getName().str();
     if (a.via) {
@@ -1287,6 +1301,40 @@ staticProfile(ArrayRef<AccessSummary> accesses, unsigned width, int64_t words) {
   return portValue;
 }
 
+static bool readWriteSplitFits(ArrayRef<AccessSummary> accesses,
+                               SeqContext *seq) {
+  Operation *readScope = nullptr;
+  for (const AccessSummary &a : accesses) {
+    if (a.isWrite)
+      continue;
+    if (readScope && a.scope != readScope)
+      return false;
+    readScope = a.scope;
+  }
+  if (!isa_and_present<LoopSchedulePipelineOp>(readScope))
+    return false;
+  SmallVector<Operation *> scopes;
+  for (const AccessSummary &a : accesses)
+    if (!llvm::is_contained(scopes, a.scope))
+      scopes.push_back(a.scope);
+  for (Operation *scope : scopes) {
+    SmallVector<const AccessSummary *> group;
+    for (const AccessSummary &a : accesses)
+      if (a.scope == scope)
+        group.push_back(&a);
+    if (scope == readScope) {
+      unsigned ii = group.front()->ii;
+      unsigned reads = llvm::count_if(
+          group, [](const AccessSummary *a) { return !a->isWrite; });
+      if (ii == 0 || reads != 1 || group.size() - reads > ii)
+        return false;
+    } else if (scopeDemand(group, seq).writes > 1) {
+      return false;
+    }
+  }
+  return true;
+}
+
 static BRAMCost estimateBRAM(MemoryResourceOpInterface iface, MemrefRecord &rec,
                              ArrayRef<Value> banks, bool attributed,
                              SeqContext *seq, const Models &models,
@@ -1317,6 +1365,20 @@ static BRAMCost estimateBRAM(MemoryResourceOpInterface iface, MemrefRecord &rec,
     if (!dynamic)
       rec.words = elementCount;
     rec.accessesAttributed = attributed;
+    rec.registerServed.clear();
+    for (Value bank : banks)
+      for (Operation *user : bank.getUsers()) {
+        auto rule = user->getAttrOfType<StringAttr>(
+            circt::hls_analysis::kPromotedAccessAttr);
+        if (!rule)
+          continue;
+        bool isWrite = false;
+        if (!classifyAccess(user, bank, isWrite))
+          continue;
+        rec.registerServed.push_back(
+            {user->getName().getStringRef().str(), isWrite ? "write" : "read",
+             locString(user->getLoc()), rule.getValue().str()});
+      }
   }
 
   {
@@ -1629,7 +1691,9 @@ static BRAMCost estimateBRAM(MemoryResourceOpInterface iface, MemrefRecord &rec,
       llvm::all_of(accesses, [&](const AccessSummary &a) {
         return a.scope == accesses.front().scope;
       });
-  if (ctx.onePipelinedScope) {
+  ctx.readWriteSplit = readWriteSplitFits(accesses, seq);
+
+  if (ctx.onePipelinedScope || ctx.readWriteSplit) {
     DenseSet<Operation *> accessOps;
     for (const AccessSummary &a : accesses)
       accessOps.insert(a.op);
@@ -1637,7 +1701,7 @@ static BRAMCost estimateBRAM(MemoryResourceOpInterface iface, MemrefRecord &rec,
       for (Operation *user : bank.getUsers())
         if (!accessOps.contains(user) && !isa<memref::DeallocOp>(user) &&
             !circt::hls_analysis::isPromotedAccess(user))
-          ctx.onePipelinedScope = false;
+          ctx.onePipelinedScope = ctx.readWriteSplit = false;
   }
   circt::hlsest::MemoryPlan plan = policy.plan(demand, rep, request, ctx);
   if (!memory->portConfig(plan.pricedConfig)) {
@@ -1742,11 +1806,31 @@ struct PipelineRecord {
   SmallVector<Unrolled> unrolled;
 
   DictionaryAttr memoryRecurrence;
+
+  int64_t foldedGuards = 0;
+  int64_t pinnedGuardOperands = 0;
+
+  std::map<std::string, int64_t> argumentBankPorts;
 };
 
-static SmallVector<PipelineRecord>
+static Value accessedMemrefOf(Operation *op, bool &isLoad) {
+  isLoad = isa<memref::LoadOp, affine::AffineLoadOp>(op);
+  if (auto lowerIndex = dyn_cast<memref::LoadOp>(op))
+    return lowerIndex.getMemRef();
+  if (auto lowerIndex = dyn_cast<affine::AffineLoadOp>(op))
+    return lowerIndex.getMemRef();
+  if (auto stringValue = dyn_cast<memref::StoreOp>(op))
+    return stringValue.getMemRef();
+  if (auto stringValue = dyn_cast<affine::AffineStoreOp>(op))
+    return stringValue.getMemRef();
+  if (auto stringValue = dyn_cast<circt::hls_analysis::StoreEnableOp>(op))
+    return stringValue.getMemref();
+  return Value();
+}
+
+static std::vector<PipelineRecord>
 collectPipelineRecords(ModuleOp module, const TopScope &scope) {
-  SmallVector<PipelineRecord> out;
+  std::vector<PipelineRecord> out;
   module.walk([&](LoopSchedulePipelineOp portValue) {
     if (!scope.covers(portValue))
       return;
@@ -1776,6 +1860,26 @@ collectPipelineRecords(ModuleOp module, const TopScope &scope) {
       resultValue.scheduler = stringValue.getValue().str();
     resultValue.memoryRecurrence =
         portValue->getAttrOfType<DictionaryAttr>("hls.memory_recurrence");
+    if (auto fieldValue = portValue->getAttrOfType<IntegerAttr>(
+            circt::hls_analysis::kFoldedGuardsAttr))
+      resultValue.foldedGuards = fieldValue.getInt();
+    if (auto fieldValue = portValue->getAttrOfType<IntegerAttr>(
+            circt::hls_analysis::kPinnedGuardOperandsAttr))
+      resultValue.pinnedGuardOperands = fieldValue.getInt();
+    portValue->walk([&](Operation *op) {
+      auto bank = op->getAttrOfType<IntegerAttr>("hls.port_bank");
+      auto banks = op->getAttrOfType<IntegerAttr>("hls.port_banks");
+      if (!bank && !banks)
+        return;
+      bool isLoad = false;
+      Value mem = accessedMemrefOf(op, isLoad);
+      auto arg = dyn_cast_or_null<BlockArgument>(mem);
+      std::string key =
+          arg ? "arg" + std::to_string(arg.getArgNumber()) : std::string("?");
+      key += bank ? " bank " + std::to_string(bank.getInt())
+                  : " any of " + std::to_string(banks.getInt());
+      ++resultValue.argumentBankPorts[key];
+    });
     if (auto arr = portValue->getAttrOfType<ArrayAttr>(kLoopAutoUnrolledAttr))
       for (Attribute a : arr) {
         auto dict = dyn_cast<DictionaryAttr>(a);
@@ -2102,8 +2206,15 @@ static void printDebugText(ArrayRef<MemrefRecord> records,
         if (a.hoistedConditional)
           os << " (loop-invariant load hoisted out of an if of the loop "
                 "body)";
+        if (!a.portBank.empty())
+          os << " (ports of argument bank " << a.portBank << ", N88)";
         os << "\n";
       }
+      for (const MemrefRecord::RegisterServed &exprValue :
+           resultValue.registerServed)
+        os << "    served by a register (" << exprValue.rule
+           << "): " << exprValue.op << " (" << exprValue.rw << ") @ "
+           << exprValue.loc << "\n";
       os << "  port demand: reads=" << resultValue.demand.reads
          << " writes=" << resultValue.demand.writes
          << " total=" << resultValue.demand.total << " (max over scopes"
@@ -2216,6 +2327,19 @@ static void printDebugText(ArrayRef<MemrefRecord> records,
       os << " memory_recurrence=" << str("rule") << " ii>=" << num("ii")
          << " (distance " << num("distance") << ", chain " << num("chain")
          << ", load @ " << str("load") << ", store @ " << str("store") << ")";
+    }
+    if (portValue.foldedGuards || portValue.pinnedGuardOperands)
+      os << " folded_guards=" << portValue.foldedGuards
+         << " pinned_guard_operands=" << portValue.pinnedGuardOperands
+         << " (N89)";
+    if (!portValue.argumentBankPorts.empty()) {
+      os << " argument_bank_ports=[";
+      bool first = true;
+      for (const auto &[keyValue, elementCount] : portValue.argumentBankPorts) {
+        os << (first ? "" : ", ") << keyValue << ": " << elementCount;
+        first = false;
+      }
+      os << "] (N88)";
     }
     os << "\n";
     for (const PipelineRecord::Unrolled &useValue : portValue.unrolled)
@@ -2443,9 +2567,21 @@ static llvm::json::Object toJson(const MemrefRecord &resultValue) {
     ao["port_bound_reason"] = a.portBoundReason.empty()
                                   ? llvm::json::Value(nullptr)
                                   : llvm::json::Value(a.portBoundReason);
+
+    ao["port_bank"] = a.portBank.empty() ? llvm::json::Value(nullptr)
+                                         : llvm::json::Value(a.portBank);
     accesses.push_back(std::move(ao));
   }
   o["accesses"] = std::move(accesses);
+
+  llvm::json::Array served;
+  for (const MemrefRecord::RegisterServed &exprValue :
+       resultValue.registerServed)
+    served.push_back(llvm::json::Object{{"op", exprValue.op},
+                                        {"rw", exprValue.rw},
+                                        {"loc", exprValue.loc},
+                                        {"rule", exprValue.rule}});
+  o["register_served_accesses"] = std::move(served);
 
   llvm::json::Object pd;
   pd["reads"] = static_cast<int64_t>(resultValue.demand.reads);
@@ -2642,6 +2778,13 @@ static std::error_code writeDebugJson(ArrayRef<MemrefRecord> records,
     } else {
       po["memory_recurrence"] = nullptr;
     }
+
+    po["folded_guards"] = portValue.foldedGuards;
+    po["pinned_guard_operands"] = portValue.pinnedGuardOperands;
+    llvm::json::Object abp;
+    for (const auto &[keyValue, elementCount] : portValue.argumentBankPorts)
+      abp[keyValue] = elementCount;
+    po["argument_bank_ports"] = std::move(abp);
     llvm::json::Array unrolled;
     for (const PipelineRecord::Unrolled &useValue : portValue.unrolled) {
       llvm::json::Object uo;
@@ -3485,7 +3628,7 @@ struct BRAMAnalysisLoopSchedule
                       records.end());
     }
 
-    SmallVector<PipelineRecord> pipelines;
+    std::vector<PipelineRecord> pipelines;
     if (bramDebugOpt || !bramDebugJsonOpt.empty())
       pipelines = collectPipelineRecords(getOperation(), scope);
     SmallVector<InstanceRecord> instanceRecords;

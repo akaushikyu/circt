@@ -104,6 +104,12 @@ CATALOGUE_OVERRIDES = {
         "top": "img_pipeline",
         "reason": "debayer_csynth.tcl: set_top pipeline, but pipeline.cpp defines img_pipeline ([HLS 214-157]); "
                   "the directory's top_csynth.tcl synthesises img_pipeline from the same files"},
+    "class_ece8893_2023_spring/Monte-Carlo__Random 100 Paths": {
+        "top": "genRandNums", "sources": ["genRandNums.cpp"], "includes": [".", "../MersenneTwister"],
+        "reason": "script.tcl is a copy of ../MersenneTwister/mersenneScript.tcl with set_top genRandNums (add_files "
+                  "mersenneTwister.cpp, absent here); genRandNums.cpp defines the top, sgenrand and genrand itself and "
+                  "includes \"./mersenneTwister.hpp\", which exists only in the sibling ../MersenneTwister "
+                  "([HLS 207-812] file not found without that include directory)"},
 }
 
 

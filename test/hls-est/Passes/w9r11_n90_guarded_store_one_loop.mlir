@@ -4,14 +4,15 @@
 // acc accessed only inside this loop. Vitis: II 1, acc RAM_AUTO_1R1W 512x32 = 1 (the guarded init store takes no port: one read, one write per cycle).
 // hls-est: the guarded store a later top-level store of the same address overwrites (only same-address loads between) uses no port
 // (tool.hls.middle_end.dse_guarded_stores, hls.register_promoted), and a bank only one pipelined loop accesses with one read and one write per cycle is RAM_S2P (x36).
-// Off: three accesses on two ports, II 2, RAM_T2P 2.
+// Off: three accesses on two ports, II 2; one read and two writes per iteration spread over the II are still one read and one write
+// per cycle: RAM_S2P 1 (N90 (c) as amended by W9r11 review D1, kernels w9r11rev_gd_pre / gd_post: Vitis II 2, 1 BRAM; RAM_T2P 2 before).
 // Kernel w9r11i_gd_f (~/hls-est-work/exp-src/w9r11i/gd_f.cpp); MLIR from cgeist 537d6614 (installed), --shim real flags.
 // Vitis 2025.1 td=off: II 1, 1 BRAM_18K.
 // CHECK: ram type: RAM_S2P
 // CHECK: pipeline @ {{.*}}: ii=1 trip=8192
 // CHECK: Total BRAM: 1{{$}}
 // OFF: pipeline @ {{.*}}: ii=2 trip=8192
-// OFF: Total BRAM: 2{{$}}
+// OFF: Total BRAM: 1{{$}}
 
 #set = affine_set<(d0) : (d0 == 0)>
 #set1 = affine_set<(d0) : (d0 - 15 == 0)>

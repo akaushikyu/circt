@@ -7,7 +7,13 @@
 //===----------------------------------------------------------------------===//
 //
 // The II bound a loop-carried memory recurrence puts on a pipelined loop, as
-// Vitis sets it (VITIS_NOTES N87, 23 kernels w9r11p_rr_*; OPEN_ISSUES O1):
+// Vitis sets it (VITIS_NOTES N87, 23 kernels w9r11p_rr_*; OPEN_ISSUES O1).
+// --convert-affine-to-loopschedule runs it on every innermost loop it
+// schedules, a `pipeline off` loop included: there the bound changes no II,
+// and the register-served accesses (R1 / R3, N90 (a) / (b)) take no port
+// either (W9r11 review D9: kernel w9r11rev_gd_np, gd_f with `pipeline off`:
+// Vitis 1 BRAM = hls-est; w9r11rev_rr_np: Vitis 1, hls-est 2, the extra
+// port from the sequential port model N12, not from this rule):
 //
 //   A load L and a store S of one memory, with a data path from L's value to
 //   the value S stores (the read-modify-write chain; a store and a later load
@@ -37,6 +43,7 @@
 #define CIRCT_DIALECT_RESOURCE_PASSES_MEMORYRECURRENCES_H
 
 #include "mlir/IR/Operation.h"
+#include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/STLFunctionalExtras.h"
 #include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/SetVector.h"
@@ -66,6 +73,10 @@ struct MemoryRecurrences {
   /// under R3 the forwarded load, and the dead guarded stores
   /// (MemoryRecurrenceOptions::guardedStoreElimination). They use no port.
   llvm::SetVector<mlir::Operation *> promoted;
+  /// The rule that serves each promoted access from a register: "R1", "R3"
+  /// (N87), "N90a" (a guarded store a later store overwrites), "N90b" (a
+  /// guarded load after a store of its address); a --bram-debug record.
+  llvm::DenseMap<mlir::Operation *, llvm::StringRef> rule;
   /// The access that stands for promoted ones (the R1 element's first load,
   /// the R3 store) and how many: a --bram-debug record.
   llvm::MapVector<mlir::Operation *, unsigned> standsFor;
@@ -95,8 +106,8 @@ MemoryRecurrences findMemoryRecurrences(
     const MemoryRecurrenceOptions &options, unsigned window = 512);
 
 /// The attribute on an access served by a register (MemoryRecurrences::
-/// promoted): no port pool in the scheduler, no port demand in
-/// --bram-analysis.
+/// promoted), a string naming the rule (MemoryRecurrences::rule): no port
+/// pool in the scheduler, no port demand in --bram-analysis.
 constexpr llvm::StringLiteral kPromotedAccessAttr = "hls.register_promoted";
 
 /// The counter on the access that stands for them (MemoryRecurrences::

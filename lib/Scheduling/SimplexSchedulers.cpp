@@ -851,24 +851,25 @@ LogicalResult SharedOperatorsSimplexScheduler::schedule() {
     auto maybeRsrcs = prob.getLinkedResourceTypes(op);
     assert(maybeRsrcs && "Limited operation must have linked resource types");
 
-    auto &rsrcs = *maybeRsrcs;
-    assert(rsrcs.size() == 1 &&
-           "Multi-resource operations are not yet supported by this scheduler");
-
-    auto rsrc = rsrcs[0];
-    unsigned limit = prob.getLimit(rsrc).value_or(0);
-    assert(limit > 0);
+    SmallVector<std::pair<Problem::ResourceType, unsigned>, 2> limited;
+    for (auto rsrc : *maybeRsrcs)
+      if (unsigned limit = prob.getLimit(rsrc).value_or(0))
+        limited.push_back({rsrc, limit});
+    assert(!limited.empty());
 
     unsigned startTimeVar = startTimeVariables[op];
     unsigned candTime = getStartTime(startTimeVar);
-    while (reservationTable[rsrc].lookup(candTime) == limit)
+    while (llvm::any_of(limited, [&](auto &rl) {
+      return reservationTable[rl.first].lookup(candTime) == rl.second;
+    }))
       ++candTime;
 
     auto fixed = scheduleAt(startTimeVar, candTime);
     assert(succeeded(fixed));
     (void)fixed;
 
-    ++reservationTable[rsrc][candTime];
+    for (auto &rl : limited)
+      ++reservationTable[rl.first][candTime];
 
     LLVM_DEBUG(dbgs() << "After scheduling " << startTimeVar
                       << " to t=" << candTime << ":\n";
@@ -912,41 +913,38 @@ LogicalResult ModuloSimplexScheduler::MRT::enter(Operation *op,
   auto maybeRsrcs = sched.prob.getLinkedResourceTypes(op);
   assert(maybeRsrcs && "Operation must have linked resource types");
 
-  auto &rsrcs = *maybeRsrcs;
-  assert(rsrcs.size() == 1 &&
-         "Multi-resource operations are not yet supported by MRT");
-
-  auto rsrc = rsrcs[0];
-  auto lim = *sched.prob.getLimit(rsrc);
-  assert(lim > 0);
-
-  auto &revTab = reverseTables[rsrc];
-  assert(!revTab.count(op));
+  SmallVector<Problem::ResourceType, 2> limited;
+  for (auto rsrc : *maybeRsrcs)
+    if (sched.prob.getLimit(rsrc).value_or(0) > 0)
+      limited.push_back(rsrc);
+  assert(!limited.empty());
 
   unsigned slot = timeStep % sched.parameterT;
-  auto &cell = tables[rsrc][slot];
-  if (cell.size() < lim) {
-    cell.insert(op);
-    revTab[op] = slot;
-    return success();
+  for (auto rsrc : limited) {
+    assert(!reverseTables[rsrc].count(op));
+    if (tables[rsrc][slot].size() >= *sched.prob.getLimit(rsrc))
+      return failure();
   }
-  return failure();
+  for (auto rsrc : limited) {
+    tables[rsrc][slot].insert(op);
+    reverseTables[rsrc][op] = slot;
+  }
+  return success();
 }
 
 void ModuloSimplexScheduler::MRT::release(Operation *op) {
   auto maybeRsrcs = sched.prob.getLinkedResourceTypes(op);
   assert(maybeRsrcs && "Operation must have linked resource types");
 
-  auto &rsrcs = *maybeRsrcs;
-  assert(rsrcs.size() == 1 &&
-         "Multi-resource operations are not yet supported by MRT");
-
-  auto rsrc = rsrcs[0];
-  auto &revTab = reverseTables[rsrc];
-  auto it = revTab.find(op);
-  assert(it != revTab.end());
-  tables[rsrc][it->second].erase(op);
-  revTab.erase(it);
+  for (auto rsrc : *maybeRsrcs) {
+    if (sched.prob.getLimit(rsrc).value_or(0) == 0)
+      continue;
+    auto &revTab = reverseTables[rsrc];
+    auto it = revTab.find(op);
+    assert(it != revTab.end());
+    tables[rsrc][it->second].erase(op);
+    revTab.erase(it);
+  }
 }
 
 bool ModuloSimplexScheduler::fillObjectiveRow(SmallVector<int> &row,

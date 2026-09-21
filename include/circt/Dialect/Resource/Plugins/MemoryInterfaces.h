@@ -131,8 +131,14 @@ struct MemoryPlan {
 struct PlanContext {
   bool attributed = true;      ///< the bank's accesses were all attributed
   bool anyStoreEnable = false; ///< some write is a predicated store
-  /// Every access of the bank lies in one pipelined loop body.
+  /// Every access of the bank lies in one pipelined loop body, and nothing
+  /// else uses it (VITIS_NOTES N90 (c)).
   bool onePipelinedScope = false;
+  /// A read-only and a write-only port can serve the bank whatever the
+  /// schedule's slots: its one read per iteration lies in one pipelined loop
+  /// with at most II writes per iteration, every other loop only writes it,
+  /// at most once per cycle, and nothing else uses it (N90 (c)).
+  bool readWriteSplit = false;
 };
 
 class MemoryArchitecturePolicy : public PluginBase {

@@ -4,6 +4,7 @@
 // Vitis: RAM_AUTO_1R1W 512x32 = 1 BRAM_18K (a read-only and a write-only port, simple dual port, x36). hls-est: RAM_S2P 1 (tool.hls.memory_architecture.one_loop_read_write_sdp); off: RAM_2P x18, 2.
 // Kernel w9r11i_gd_h (~/hls-est-work/exp-src/w9r11i/gd_h.cpp); MLIR from cgeist 537d6614 (installed), --shim real flags.
 // Vitis 2025.1 td=off: II 1, 1 BRAM_18K.
+// CHECK: served by a register (N90a): memref.store (write)
 // CHECK: RAM_S2P
 // CHECK: Total BRAM: 1{{$}}
 // OFF: RAM_2P
