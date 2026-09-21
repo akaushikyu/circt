@@ -165,7 +165,9 @@
         "fptrans": 20,
         "mem": 1,
         "call": -1,
-        "kept_call": 1
+        "kept_call": 1,
+        "stream_read": 2,
+        "stream_write": 1
       }
     },
     "dependences": {

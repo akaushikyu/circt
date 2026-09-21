@@ -8694,7 +8694,7 @@ module {
 // CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
 // CHECK: memref.global @ loc("{{[^"]*}}":105:3){{$}}
-// CHECK-NEXT: kind=RAM_2P  bram=2{{$}}
+// CHECK-NEXT: kind=RAM_1P  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
 // CHECK: memref.global @ loc("{{[^"]*}}":106:3){{$}}
 // CHECK-NEXT: kind=RAM_2P  bram=2{{$}}

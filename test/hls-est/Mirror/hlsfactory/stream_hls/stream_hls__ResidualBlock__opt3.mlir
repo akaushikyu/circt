@@ -294,7 +294,7 @@ module {
 // CHECK-NEXT: kind=FIFO  bram=112{{$}}
 // CHECK-NOT: {{^memref\.}}
 // CHECK: memref.alloca @ loc("{{[^"]*}}":27:17){{$}}
-// CHECK-NEXT: kind=RAM_1P  bram=128{{$}}
+// CHECK-NEXT: kind=RAM_T2P  bram=128{{$}}
 // CHECK-NOT: {{^memref\.}}
 // CHECK: memref.alloca @ loc("{{[^"]*}}":28:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=256{{$}}
@@ -312,7 +312,7 @@ module {
 // CHECK-NEXT: kind=FIFO  bram=128{{$}}
 // CHECK-NOT: {{^memref\.}}
 // CHECK: memref.alloca @ loc("{{[^"]*}}":37:18){{$}}
-// CHECK-NEXT: kind=RAM_1P  bram=128{{$}}
+// CHECK-NEXT: kind=RAM_2P  bram=128{{$}}
 // CHECK-NOT: {{^memref\.}}
 // CHECK: memref.alloca @ loc("{{[^"]*}}":38:18){{$}}
 // CHECK-NEXT: kind=PIPO  bram=256{{$}}

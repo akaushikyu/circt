@@ -171,7 +171,7 @@ module {
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
 // CHECK: memref.alloca @ loc("{{[^"]*}}":40:18){{$}}
-// CHECK-NEXT: kind=RAM_1P  bram=256{{$}}
+// CHECK-NEXT: kind=RAM_S2P  bram=256{{$}}
 // CHECK-NOT: {{^memref\.}}
 // CHECK: memref.alloca @ loc("{{[^"]*}}":41:18){{$}}
 // CHECK-NEXT: kind=FIFO  bram=256{{$}}

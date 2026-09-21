@@ -340,8 +340,19 @@
       "variable_shift_ns": 4.42
     },
     "dependences": {
+      "_memory_recurrences": "bool: A load and a store of one memory linked by a read-modify-write chain and a carried distance d bound the II of the pipelined loop: d = 1 (one element, or a[i-1]) or an address that cannot be computed: the chain's recurrence latency; d >= 2: ceil((2 + chain) / d) (VITIS_NOTES N87; off: no memory recurrence reaches the scheduler, OPEN_ISSUES O1) [S-11]",
       "_model": "plugin name (a dependence_model): The DependenceModel (cached-o1 keeps OPEN_ISSUES O1) [S-11]",
-      "model": "cached-o1"
+      "_recurrence_latencies": "map of int, cycles: Cycles an operator class adds to a memory recurrence chain (<class>_f32 / <class>_f64 are looked up before <class>); a class not listed adds its operator latency (VITIS_NOTES N83: fadd 4, dadd 5, fmul 3, dmul 6; integer add / multiply 0 measured, the II is at least 1) [S-11]",
+      "memory_recurrences": true,
+      "model": "cached-o1",
+      "recurrence_latencies": {
+        "comb": 0,
+        "fpaddsub_f32": 4,
+        "fpaddsub_f64": 5,
+        "fpmul_f32": 3,
+        "fpmul_f64": 6,
+        "multicycle": 0
+      }
     },
     "emit_detail": false,
     "modulo": {
@@ -383,7 +394,9 @@
         "kept_call": 1,
         "mem": 1,
         "multicycle": 3,
-        "seq": 1
+        "seq": 1,
+        "stream_read": 2,
+        "stream_write": 1
       }
     }
   },
@@ -584,6 +597,8 @@
         "table": ""
       },
       "memory_architecture": {
+        "_one_loop_read_write_sdp": "bool: A bank whose every access lies in one pipelined loop, with one read and one write per cycle, is bound to a read-only and a write-only port (RAM_S2P, simple dual port: x36 allowed); a measured Vitis rule (VITIS_NOTES N90, kernels w9r11i_gd_f / gd_h: RAM_AUTO_1R1W 512x32 = 1; with another loop reading or writing the array it stays x18: gd_b = 2; off: RAM_2P, x18) [K-04, K-05]",
+        "_partitioned_argument_bank_ports": "bool: A function argument with an array_partition pragma (its own, or that of a kept callee's parameter) has one port pool per bank in the scheduler: accesses whose bank is a constant never share a port with another bank's accesses (VITIS_NOTES N88; off: one pool for the whole argument) [K-03]",
         "_plugin": "plugin name (a memory_architecture_policy): The MemoryArchitecturePolicy [K-04]",
         "_port_occupancy_cycles": "uint, cycles: Cycles one access holds its port [K-11]",
         "_port_set_rule": "enum (by_kind|by_demand): Where a bank's port set comes from: the selected kind (by_kind), or the per-cycle demand (by_demand, a designer knob) [K-04, K-05, P-15]",
@@ -593,6 +608,8 @@
         "_sequential_scope": "object: Ports of a non-pipelined scope that no sequential scheduler scheduled [K-12..K-14]",
         "_untracked_memory_ports": "uint, ports: Ports of a memref the scheduler does not track (a function argument, a memref.alloc, a global) [K-03, K-20]",
         "_wide_port_sets": "array of port sets: Port sets priced at priced_configs.wide (Vitis' SDP test: one port, a read and a write port, two read ports) [K-05, N-10]",
+        "one_loop_read_write_sdp": true,
+        "partitioned_argument_bank_ports": true,
         "plugin": "vitis-auto",
         "port_occupancy_cycles": 1,
         "port_set_rule": "by_kind",
@@ -633,6 +650,8 @@
       },
       "middle_end": {
         "_dead_memory": "object: Dead-memory elimination [E-02..E-04]",
+        "_dse_guarded_stores": "bool: GVN load PRE + DSE across an if: a store under an if of a pipelined loop body that a later store of the same address at the body's top level overwrites in the same iteration, with only loads of that address between (they take the guarded value through a select), uses no port; a measured Vitis rule (W9r11: stream_hls MultiHeadSelfAttention1 opt2 node2, init store + load + store of v17 at loop II 1) [L-02]",
+        "_forward_to_guarded_loads": "bool: GVN store-to-load forwarding into an if: a load under an if of a pipelined loop body that reads the address a store at the body's top level wrote earlier in the same iteration (only loads of that address between) takes the stored value and uses no port (W9r11: class_ece8893 barry_walker lab2 output_matrix_local, 1 BRAM per bank) [L-02]",
         "_gvn_conditional_loads": "bool: GVN load PRE: loads of one address in one block and in the ifs nested in it, with no write of the memref between them, are one load per iteration; a measured Vitis rule (W9 round 8 review, kernels w9r8f_pr1 / pr2 / pr3) [L-02]",
         "_gvn_loads": "bool: GVN: a repeated load of one address is one load [L-02]",
         "_licm_hoist_conditional": "bool: Invariant loads nested in an if of the body are hoisted too (speculated) [P-11]",
@@ -652,6 +671,8 @@
           "load_store_cycles": true,
           "overwritten_stores": true
         },
+        "dse_guarded_stores": true,
+        "forward_to_guarded_loads": true,
         "gvn_conditional_loads": true,
         "gvn_loads": true,
         "licm_hoist_conditional": true,
@@ -735,11 +756,13 @@
       "pipeline_decision": {
         "_flatten_across_calls": "bool: Flatten a loop into a pipelined loop of a callee (documented assumption: never); reserved: only false is implemented, true is refused [D-11]",
         "_float_loads_perfect": "bool: A read-only inner-invariant floating-point load keeps a nest perfect (flattened, not unrolled) [D-03]",
+        "_fold_unrolled_guards": "bool: After the unroll decisions, an if whose condition is false (or true) for every value once an unrolled copy's constant index is substituted loses its dead arm, so the accesses of that arm take no port and no schedule slot; a measured Vitis rule (VITIS_NOTES N89; off: the copy's guarded accesses stay)",
         "_policy": "plugin name (a pipeline_policy): The PipelinePolicy [D-02, D-07, D-08]",
         "_promote_pipelined": "bool: Promote the invariant accesses of the pipelined loop itself to registers after the unroll [D-06]",
         "_sink_parent_code": "bool: The straight-line code (with memory accesses, no loops) before the child loop in the body of a loop flattened into a pipeline runs in the pipeline under a first-iteration guard, so its accesses count in the pipeline's port demand and schedule; a measured Vitis rule (VITIS_NOTES N65)",
         "flatten_across_calls": false,
         "float_loads_perfect": true,
+        "fold_unrolled_guards": true,
         "policy": "vitis-pipeline-loops",
         "promote_pipelined": true,
         "sink_parent_code": true

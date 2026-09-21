@@ -1,11 +1,11 @@
 // RUN: hls-est %s --symbol-privatize=exclude=_Z6sc_topPKsS0_RN3hls6streamIsLi0EEEPKbPs --symbol-dce --lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --infer-vitis-split-array=td=off --narrow-ram-widths --memory-banking-bram --convert-affine-to-loopschedule '--bram-analysis=top=_Z6sc_topPKsS0_RN3hls6streamIsLi0EEEPKbPs math-costs=%S/../../../tools/hls-est-validate/math_costs.json' -o /dev/null | FileCheck %s
 // RUN: hls-est %s --symbol-privatize=exclude=_Z6sc_topPKsS0_RN3hls6streamIsLi0EEEPKbPs --symbol-dce --lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --infer-vitis-split-array=td=off --narrow-ram-widths --memory-banking-bram --convert-affine-to-loopschedule '--bram-analysis=top=_Z6sc_topPKsS0_RN3hls6streamIsLi0EEEPKbPs math-costs=%S/../../../tools/hls-est-validate/math_costs.json' --config-set scheduling.timing.operator_latencies.stream_read=2 --config-set scheduling.timing.operator_latencies.stream_write=1 -o /dev/null | FileCheck %s --check-prefix=STRM
 // W9r10 review fix D1 (2026-10-21): VITIS_NOTES N82: two reads of one hls::stream in the two exclusive arms of an if, 16 reads of K[j][*] per iteration.
-// Only one arm runs per iteration, so the stream's one port is used once: Vitis II 1, K RAM_1WNR 15. With the opt-in stream classes (STRM) the
-// accesses hoisted out of the arms (hls.if_arms) count as the larger arm, not the sum (before the fix: II 2, 7). Default (CHECK): loop sequential (O114).
+// Only one arm runs per iteration, so the stream's one port is used once: Vitis II 1, K RAM_1WNR 15. With the stream classes (STRM; in the default
+// profile since W9r11-impl, MEMOS #78, so CHECK = STRM; before: loop sequential, 1) the accesses hoisted out of the arms (hls.if_arms) count as the larger arm, not the sum (before the fix: II 2, 7).
 // Kernel w9r10rv_rv_sc_cond (~/hls-est-work/exp-src/w9r10rv/rv_sc_cond.cpp); MLIR from cgeist 537d6614 (installed), --shim real flags.
 // Vitis 2025.1 td=off: 15 BRAM_18K.
-// CHECK: Total BRAM: 1{{$}}
+// CHECK: Total BRAM: 15{{$}}
 // STRM: Total BRAM: 15{{$}}
 
 module {

@@ -17,11 +17,13 @@
 // function of the flattened IV, nothing is hoisted, 8 reads per iteration at
 // II 1 -> 7 copies x 8 = 56 BRAM (Vitis rep_inv_R08: 56 + 8 = 64).
 // acc[i] += ... inside lp2 of @tri is read AND written in lp2, so its load is
-// not hoisted. It stays unchanged across the loop, so it becomes a register;
-// the floating-point recurrence sets II 4 and one RAM_1P port serves its first
-// load and last store.
+// not hoisted; since W9r11-impl (VITIS_NOTES N87 R1) acc[i] does not change in
+// lp2, so it is a register for the loop: the fadd recurrence sets lp2's II to 4
+// and its first load / last store share one port (RAM_1P x36, 1 BRAM; before:
+// 1R+1W in the same cycle -> x18 -> 64x32 = 2 BRAM, total 82).
 // With hoist-invariant=false the @tri loads stay in lp2 (8 reads/iteration,
-// replicated like @rect): the total rises from 82 to 130.
+// replicated like @rect at II 1): the total rose from 82 to 130 before W9r11; with
+// lp2 at II 4 (the acc recurrence) the 8 reads fit two ports and the total is 81 too.
 
 #tri = affine_map<(d0) -> (d0 + 1)>
 module {

@@ -26,7 +26,9 @@
 // CHECK: func.func private @{{.*}}fill{{.*}}(%arg0: memref<330xi128> {hls.aggregate
 // CHECK: func.func private @{{.*}}prods{{.*}}(%arg0: memref<?xi16>, %arg1: memref<300x8xi16>)
 // CHECK: func.func private @{{.*}}cons{{.*}}(%arg0: memref<300x8xi16>, %arg1: i32, %arg2: memref<?xi16>)
-// BRAM: Total BRAM: 13
+// W9r11-impl: the stream write is timed (N82 in the default profile, MEMOS #78), so the loop is pipelined and
+// rows is RAM_1WNR with 15 copies, as in Vitis: hls-est 27 = Vitis (13 before).
+// BRAM: Total BRAM: 27
 // OFF-DAG: struct array not split into members: struct array passed to the kept call @{{.*}}fill
 // OFF-DAG: struct array not split into members: struct array passed to the kept call @{{.*}}prods
 

@@ -33,6 +33,12 @@
 // CHECK-NEXT: kind=RAM_2P bram=8
 // CHECK: Total BRAM: 8
 
+// W9r11-impl (OPEN_ISSUES O103 (1)): the configured dependence model
+// (scheduling.dependences.model, builtin cached-o1) reads none of these
+// dependences, so the analysis is not computed for it (ResidualBlock opt4:
+// 104 of 110 s); a DependenceModel plugin that reads them gets the restricted
+// analysis above (2 pairs, 2 tests, 1 dependence here). The memory
+// recurrences of N87 are found by --convert-affine-to-loopschedule itself.
 // STATS: AffineToLoopSchedule
 // STATS-NEXT: (S) 0 dependence-pairs
 // STATS-NEXT: (S) 0 dependence-tests

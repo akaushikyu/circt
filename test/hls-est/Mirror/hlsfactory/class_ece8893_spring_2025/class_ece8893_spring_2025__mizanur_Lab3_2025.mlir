@@ -3,1206 +3,10 @@
 // cgeist: /mnt/d/HLS/Polygeist/build/bin/cgeist (md5 a5056b2375dcc052ef1fdc3c5fefcb7f, Polygeist 537d6614), shim tools/hls-est-validate/shim/real (--xlx-prelude -I /mnt/a/Vitis/2025.1/Vitis/common/technology/autopilot -D__SYNTHESIS__ -D__VITIS_HLS__ -DAESL_SYN -D__HLS_SYN__ -D__DSP48E1__ -include /mnt/a/Vitis/2025.1/Vitis/common/technology/autopilot/etc/autopilot_ssdm_op.h -Xclang -fxlx-bitwidth -Xclang -fxlx-apint-promote -Xclang -fnative-half-type -Xclang -fnative-half-arguments-and-returns -Xclang -Wno-unknown-attributes -Xclang -fno-threadsafe-statics -Xclang -fno-use-cxa-atexit --scalar-wrapper-abi --xlx-headers)
 // design: class_ece8893_spring_2025/mizanur_Lab3_2025 (harness catalogue record; compiled as run_hlsest.py does)
 // top: _Z26sparse_matrix_multiply_HLSP8ap_fixedILi16ELi5EL9ap_q_mode5EL9ap_o_mode3ELi0EEPiS4_S3_S4_S4_PA64_S2_
-// Vitis 2025.1 td=off: vitis failed: ERROR: [HLS 207-3776] use of undeclared identifier 'time' (D:/HLS/Polygeist/tools/cgeist/Test/HLS/hlsfactory/Inputs/class_ece8893_spring_2025/mizanur_Lab3_2025/
+// Vitis 2025.1 td=off: BRAM_18K 260 (results/vitis.json, key 3dbb13050fbf2dea); a comment only, the CHECK lines pin hls-est's current output
 // RUN: hls-est %s --symbol-privatize=exclude=_Z26sparse_matrix_multiply_HLSP8ap_fixedILi16ELi5EL9ap_q_mode5EL9ap_o_mode3ELi0EEPiS4_S3_S4_S4_PA64_S2_ --symbol-dce --lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --infer-vitis-split-array=td=off --narrow-ram-widths --memory-banking-bram --convert-affine-to-loopschedule '--bram-analysis=top=_Z26sparse_matrix_multiply_HLSP8ap_fixedILi16ELi5EL9ap_q_mode5EL9ap_o_mode3ELi0EEPiS4_S3_S4_S4_PA64_S2_ math-costs=%hls_est_math_costs' -o /dev/null | FileCheck %s
 
 module {
-  llvm.mlir.global internal constant @str7("Resulting matrix C written to %s\0A\00") {addr_space = 0 : i32}
-  llvm.func @printf(!llvm.ptr, ...) -> i32
-  llvm.mlir.global internal constant @str6("Failed to open output file\00") {addr_space = 0 : i32}
-  llvm.mlir.global internal constant @str5("wb\00") {addr_space = 0 : i32}
-  llvm.mlir.global internal constant @str4("C_matrix_result_sparsity_%.2f.bin\00") {addr_space = 0 : i32}
-  llvm.mlir.global internal constant @str3("B_matrix_csc_sparsity_%.2f.bin\00") {addr_space = 0 : i32}
-  llvm.mlir.global internal constant @str2("A_matrix_csr_sparsity_%.2f.bin\00") {addr_space = 0 : i32}
-  llvm.func @snprintf(!llvm.ptr, i64, !llvm.ptr, ...) -> i32
-  llvm.mlir.global internal constant @str1("Failed to open file\00") {addr_space = 0 : i32}
-  llvm.mlir.global internal constant @str0("rb\00") {addr_space = 0 : i32}
-  func.func @_Z22read_sparse_matrix_csrPKcP8ap_fixedILi16ELi5EL9ap_q_mode5EL9ap_o_mode3ELi0EEPiS6_S6_(%arg0: memref<?xi8>, %arg1: memref<?xi16>, %arg2: memref<?xi32>, %arg3: memref<?xi32>, %arg4: memref<?xi32>) attributes {hls.orig_name = "read_sparse_matrix_csr", llvm.linkage = #llvm.linkage<external>} {
-    %true = arith.constant true
-    %c2_i64 = arith.constant 2 : i64
-    %c4_i64 = arith.constant 4 : i64
-    %c65_i64 = arith.constant 65 : i64
-    %c1_i64 = arith.constant 1 : i64
-    %c1_i32 = arith.constant 1 : i32
-    %0 = llvm.mlir.addressof @str0 : !llvm.ptr
-    %1 = "polygeist.pointer2memref"(%0) : (!llvm.ptr) -> memref<?xi8>
-    %2 = call @fopen(%arg0, %1) : (memref<?xi8>, memref<?xi8>) -> memref<?x!llvm.struct<(i32, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, i32, i32, i64, i16, i8, array<1 x i8>, ptr, i64, ptr, ptr, ptr, ptr, i64, i32, array<20 x i8>)>>
-    %3 = "polygeist.memref2pointer"(%2) : (memref<?x!llvm.struct<(i32, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, i32, i32, i64, i16, i8, array<1 x i8>, ptr, i64, ptr, ptr, ptr, ptr, i64, i32, array<20 x i8>)>>) -> !llvm.ptr
-    %4 = llvm.mlir.zero : !llvm.ptr
-    %5 = llvm.icmp "ne" %3, %4 : !llvm.ptr
-    %6 = arith.xori %5, %true : i1
-    scf.if %6 {
-      %24 = llvm.mlir.addressof @str1 : !llvm.ptr
-      %25 = "polygeist.pointer2memref"(%24) : (!llvm.ptr) -> memref<?xi8>
-      func.call @perror(%25) : (memref<?xi8>) -> ()
-      func.call @exit(%c1_i32) : (i32) -> ()
-    }
-    %7 = "polygeist.memref2pointer"(%arg4) : (memref<?xi32>) -> !llvm.ptr
-    %8 = "polygeist.pointer2memref"(%7) : (!llvm.ptr) -> memref<?xi8>
-    %9 = call @fread(%8, %c4_i64, %c1_i64, %2) : (memref<?xi8>, i64, i64, memref<?x!llvm.struct<(i32, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, i32, i32, i64, i16, i8, array<1 x i8>, ptr, i64, ptr, ptr, ptr, ptr, i64, i32, array<20 x i8>)>>) -> i64
-    %10 = "polygeist.memref2pointer"(%arg1) : (memref<?xi16>) -> !llvm.ptr
-    %11 = "polygeist.pointer2memref"(%10) : (!llvm.ptr) -> memref<?xi8>
-    %12 = affine.load %arg4[0] : memref<?xi32>
-    %13 = arith.extsi %12 : i32 to i64
-    %14 = call @fread(%11, %c2_i64, %13, %2) : (memref<?xi8>, i64, i64, memref<?x!llvm.struct<(i32, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, i32, i32, i64, i16, i8, array<1 x i8>, ptr, i64, ptr, ptr, ptr, ptr, i64, i32, array<20 x i8>)>>) -> i64
-    %15 = "polygeist.memref2pointer"(%arg2) : (memref<?xi32>) -> !llvm.ptr
-    %16 = "polygeist.pointer2memref"(%15) : (!llvm.ptr) -> memref<?xi8>
-    %17 = affine.load %arg4[0] : memref<?xi32>
-    %18 = arith.extsi %17 : i32 to i64
-    %19 = call @fread(%16, %c4_i64, %18, %2) : (memref<?xi8>, i64, i64, memref<?x!llvm.struct<(i32, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, i32, i32, i64, i16, i8, array<1 x i8>, ptr, i64, ptr, ptr, ptr, ptr, i64, i32, array<20 x i8>)>>) -> i64
-    %20 = "polygeist.memref2pointer"(%arg3) : (memref<?xi32>) -> !llvm.ptr
-    %21 = "polygeist.pointer2memref"(%20) : (!llvm.ptr) -> memref<?xi8>
-    %22 = call @fread(%21, %c4_i64, %c65_i64, %2) : (memref<?xi8>, i64, i64, memref<?x!llvm.struct<(i32, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, i32, i32, i64, i16, i8, array<1 x i8>, ptr, i64, ptr, ptr, ptr, ptr, i64, i32, array<20 x i8>)>>) -> i64
-    %23 = call @fclose(%2) : (memref<?x!llvm.struct<(i32, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, i32, i32, i64, i16, i8, array<1 x i8>, ptr, i64, ptr, ptr, ptr, ptr, i64, i32, array<20 x i8>)>>) -> i32
-    return
-  }
-  func.func private @fopen(memref<?xi8>, memref<?xi8>) -> memref<?x!llvm.struct<(i32, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, i32, i32, i64, i16, i8, array<1 x i8>, ptr, i64, ptr, ptr, ptr, ptr, i64, i32, array<20 x i8>)>> attributes {hls.orig_name = "fopen", llvm.linkage = #llvm.linkage<external>}
-  func.func private @perror(memref<?xi8>) attributes {hls.orig_name = "perror", llvm.linkage = #llvm.linkage<external>}
-  func.func private @exit(i32) attributes {hls.orig_name = "exit", llvm.linkage = #llvm.linkage<external>}
-  func.func private @fread(memref<?xi8>, i64, i64, memref<?x!llvm.struct<(i32, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, i32, i32, i64, i16, i8, array<1 x i8>, ptr, i64, ptr, ptr, ptr, ptr, i64, i32, array<20 x i8>)>>) -> i64 attributes {hls.orig_name = "fread", llvm.linkage = #llvm.linkage<external>}
-  func.func private @fclose(memref<?x!llvm.struct<(i32, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, i32, i32, i64, i16, i8, array<1 x i8>, ptr, i64, ptr, ptr, ptr, ptr, i64, i32, array<20 x i8>)>>) -> i32 attributes {hls.orig_name = "fclose", llvm.linkage = #llvm.linkage<external>}
-  func.func @_Z22read_sparse_matrix_cscPKcP8ap_fixedILi16ELi5EL9ap_q_mode5EL9ap_o_mode3ELi0EEPiS6_S6_(%arg0: memref<?xi8>, %arg1: memref<?xi16>, %arg2: memref<?xi32>, %arg3: memref<?xi32>, %arg4: memref<?xi32>) attributes {hls.orig_name = "read_sparse_matrix_csc", llvm.linkage = #llvm.linkage<external>} {
-    %true = arith.constant true
-    %c2_i64 = arith.constant 2 : i64
-    %c4_i64 = arith.constant 4 : i64
-    %c65_i64 = arith.constant 65 : i64
-    %c1_i64 = arith.constant 1 : i64
-    %c1_i32 = arith.constant 1 : i32
-    %0 = llvm.mlir.addressof @str0 : !llvm.ptr
-    %1 = "polygeist.pointer2memref"(%0) : (!llvm.ptr) -> memref<?xi8>
-    %2 = call @fopen(%arg0, %1) : (memref<?xi8>, memref<?xi8>) -> memref<?x!llvm.struct<(i32, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, i32, i32, i64, i16, i8, array<1 x i8>, ptr, i64, ptr, ptr, ptr, ptr, i64, i32, array<20 x i8>)>>
-    %3 = "polygeist.memref2pointer"(%2) : (memref<?x!llvm.struct<(i32, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, i32, i32, i64, i16, i8, array<1 x i8>, ptr, i64, ptr, ptr, ptr, ptr, i64, i32, array<20 x i8>)>>) -> !llvm.ptr
-    %4 = llvm.mlir.zero : !llvm.ptr
-    %5 = llvm.icmp "ne" %3, %4 : !llvm.ptr
-    %6 = arith.xori %5, %true : i1
-    scf.if %6 {
-      %24 = llvm.mlir.addressof @str1 : !llvm.ptr
-      %25 = "polygeist.pointer2memref"(%24) : (!llvm.ptr) -> memref<?xi8>
-      func.call @perror(%25) : (memref<?xi8>) -> ()
-      func.call @exit(%c1_i32) : (i32) -> ()
-    }
-    %7 = "polygeist.memref2pointer"(%arg4) : (memref<?xi32>) -> !llvm.ptr
-    %8 = "polygeist.pointer2memref"(%7) : (!llvm.ptr) -> memref<?xi8>
-    %9 = call @fread(%8, %c4_i64, %c1_i64, %2) : (memref<?xi8>, i64, i64, memref<?x!llvm.struct<(i32, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, i32, i32, i64, i16, i8, array<1 x i8>, ptr, i64, ptr, ptr, ptr, ptr, i64, i32, array<20 x i8>)>>) -> i64
-    %10 = "polygeist.memref2pointer"(%arg1) : (memref<?xi16>) -> !llvm.ptr
-    %11 = "polygeist.pointer2memref"(%10) : (!llvm.ptr) -> memref<?xi8>
-    %12 = affine.load %arg4[0] : memref<?xi32>
-    %13 = arith.extsi %12 : i32 to i64
-    %14 = call @fread(%11, %c2_i64, %13, %2) : (memref<?xi8>, i64, i64, memref<?x!llvm.struct<(i32, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, i32, i32, i64, i16, i8, array<1 x i8>, ptr, i64, ptr, ptr, ptr, ptr, i64, i32, array<20 x i8>)>>) -> i64
-    %15 = "polygeist.memref2pointer"(%arg2) : (memref<?xi32>) -> !llvm.ptr
-    %16 = "polygeist.pointer2memref"(%15) : (!llvm.ptr) -> memref<?xi8>
-    %17 = affine.load %arg4[0] : memref<?xi32>
-    %18 = arith.extsi %17 : i32 to i64
-    %19 = call @fread(%16, %c4_i64, %18, %2) : (memref<?xi8>, i64, i64, memref<?x!llvm.struct<(i32, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, i32, i32, i64, i16, i8, array<1 x i8>, ptr, i64, ptr, ptr, ptr, ptr, i64, i32, array<20 x i8>)>>) -> i64
-    %20 = "polygeist.memref2pointer"(%arg3) : (memref<?xi32>) -> !llvm.ptr
-    %21 = "polygeist.pointer2memref"(%20) : (!llvm.ptr) -> memref<?xi8>
-    %22 = call @fread(%21, %c4_i64, %c65_i64, %2) : (memref<?xi8>, i64, i64, memref<?x!llvm.struct<(i32, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, i32, i32, i64, i16, i8, array<1 x i8>, ptr, i64, ptr, ptr, ptr, ptr, i64, i32, array<20 x i8>)>>) -> i64
-    %23 = call @fclose(%2) : (memref<?x!llvm.struct<(i32, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, i32, i32, i64, i16, i8, array<1 x i8>, ptr, i64, ptr, ptr, ptr, ptr, i64, i32, array<20 x i8>)>>) -> i32
-    return
-  }
-  func.func @_Z22sparse_matrix_multiplyP8ap_fixedILi16ELi5EL9ap_q_mode5EL9ap_o_mode3ELi0EEPiS4_iS3_S4_S4_iPA64_f(%arg0: memref<?xi16>, %arg1: memref<?xi32>, %arg2: memref<?xi32>, %arg3: i32, %arg4: memref<?xi16>, %arg5: memref<?xi32>, %arg6: memref<?xi32>, %arg7: i32, %arg8: memref<64x64xf32>) attributes {hls.orig_name = "sparse_matrix_multiply", llvm.linkage = #llvm.linkage<external>} {
-    %c0_i16 = arith.constant 0 : i16
-    %cst = arith.constant 0.000000e+00 : f32
-    %false = arith.constant false
-    %c0_i32 = arith.constant 0 : i32
-    %c2_i32 = arith.constant 2 : i32
-    %c16_i16 = arith.constant 16 : i16
-    %c-1_i16 = arith.constant -1 : i16
-    %c21845_i16 = arith.constant 21845 : i16
-    %c1_i16 = arith.constant 1 : i16
-    %c13107_i16 = arith.constant 13107 : i16
-    %c2_i16 = arith.constant 2 : i16
-    %c3855_i16 = arith.constant 3855 : i16
-    %c4_i16 = arith.constant 4 : i16
-    %c255_i16 = arith.constant 255 : i16
-    %c8_i16 = arith.constant 8 : i16
-    %c1_i64 = arith.constant 1 : i64
-    %c24_i64 = arith.constant 24 : i64
-    %c23_i64 = arith.constant 23 : i64
-    %c255_i64 = arith.constant 255 : i64
-    %c-2139095041_i64 = arith.constant -2139095041 : i64
-    %c31_i64 = arith.constant 31 : i64
-    %c-2147483649_i64 = arith.constant -2147483649 : i64
-    %c-8_i32 = arith.constant -8 : i32
-    %c131_i32 = arith.constant 131 : i32
-    %c15_i16 = arith.constant 15 : i16
-    %c9_i32 = arith.constant 9 : i32
-    %c-9_i32 = arith.constant -9 : i32
-    %c132_i32 = arith.constant 132 : i32
-    %c-10_i32 = arith.constant -10 : i32
-    %c1_i32 = arith.constant 1 : i32
-    %0 = llvm.mlir.undef : f32
-    affine.for %arg9 = 0 to 64 {
-      %1 = affine.load %arg2[%arg9] : memref<?xi32>
-      %2 = scf.while (%arg10 = %1) : (i32) -> i32 {
-        %3 = affine.load %arg2[%arg9 + 1] : memref<?xi32>
-        %4 = arith.cmpi slt, %arg10, %3 : i32
-        scf.condition(%4) %arg10 : i32
-      } do {
-      ^bb0(%arg10: i32):
-        %3 = arith.index_cast %arg10 : i32 to index
-        %4 = memref.load %arg1[%3] : memref<?xi32>
-        %5 = memref.load %arg0[%3] : memref<?xi16>
-        %6 = arith.cmpi eq, %5, %c0_i16 : i16
-        %7 = arith.cmpi ne, %5, %c0_i16 : i16
-        %8 = scf.if %7 -> (f32) {
-          %15 = memref.load %arg0[%3] : memref<?xi16>
-          %16 = arith.shrui %15, %c15_i16 : i16
-          %17 = arith.trunci %16 : i16 to i1
-          %18 = scf.if %17 -> (i16) {
-            %51 = memref.load %arg0[%3] : memref<?xi16>
-            %52 = arith.extsi %51 : i16 to i32
-            %53 = arith.subi %c0_i32, %52 : i32
-            %54 = arith.trunci %53 : i32 to i16
-            scf.yield %54 : i16
-          } else {
-            %51 = memref.load %arg0[%3] : memref<?xi16>
-            scf.yield %51 : i16
-          }
-          %19 = math.ctlz %18 : i16
-          %20 = arith.extui %19 : i16 to i32
-          %21 = arith.subi %c131_i32, %20 : i32
-          %22 = arith.subi %c-8_i32, %20 : i32
-          %23 = arith.cmpi sge, %22, %c1_i32 : i32
-          %24 = arith.cmpi sge, %22, %c2_i32 : i32
-          %25 = scf.if %24 -> (i1) {
-            %51 = arith.subi %c-10_i32, %20 : i32
-            %52 = arith.cmpi ult, %51, %c0_i32 : i32
-            %53 = arith.select %52, %51, %c0_i32 : i32
-            %54 = arith.select %52, %c0_i32, %51 : i32
-            %55 = arith.subi %54, %53 : i32
-            %56 = arith.addi %55, %c1_i32 : i32
-            %57 = arith.trunci %53 : i32 to i16
-            %58 = arith.trunci %56 : i32 to i16
-            %59 = arith.subi %c16_i16, %58 : i16
-            %60 = arith.shrui %c-1_i16, %59 : i16
-            %61 = arith.shrui %18, %57 : i16
-            %62 = arith.andi %61, %60 : i16
-            %63 = arith.shrui %62, %c1_i16 : i16
-            %64 = arith.andi %63, %c21845_i16 : i16
-            %65 = arith.andi %62, %c21845_i16 : i16
-            %66 = arith.shli %65, %c1_i16 : i16
-            %67 = arith.ori %64, %66 : i16
-            %68 = arith.shrui %67, %c2_i16 : i16
-            %69 = arith.andi %68, %c13107_i16 : i16
-            %70 = arith.andi %67, %c13107_i16 : i16
-            %71 = arith.shli %70, %c2_i16 : i16
-            %72 = arith.ori %69, %71 : i16
-            %73 = arith.shrui %72, %c4_i16 : i16
-            %74 = arith.andi %73, %c3855_i16 : i16
-            %75 = arith.andi %72, %c3855_i16 : i16
-            %76 = arith.shli %75, %c4_i16 : i16
-            %77 = arith.ori %74, %76 : i16
-            %78 = arith.shrui %77, %c8_i16 : i16
-            %79 = arith.andi %78, %c255_i16 : i16
-            %80 = arith.andi %77, %c255_i16 : i16
-            %81 = arith.shli %80, %c8_i16 : i16
-            %82 = arith.ori %79, %81 : i16
-            %83 = arith.shrui %82, %59 : i16
-            %84 = arith.select %52, %83, %62 : i16
-            %85 = arith.extui %84 : i16 to i32
-            %86 = arith.cmpi ne, %85, %c0_i32 : i32
-            scf.yield %86 : i1
-          } else {
-            scf.yield %false : i1
-          }
-          %26 = arith.cmpi sge, %22, %c0_i32 : i32
-          %27 = scf.if %26 -> (i32) {
-            %51 = arith.trunci %22 : i32 to i16
-            %52 = arith.shrui %18, %51 : i16
-            %53 = arith.trunci %52 : i16 to i1
-            %54 = arith.extui %53 : i1 to i32
-            scf.yield %54 : i32
-          } else {
-            scf.yield %c0_i32 : i32
-          }
-          %28 = arith.extui %25 : i1 to i32
-          %29 = arith.ori %28, %27 : i32
-          %30 = arith.cmpi ne, %29, %c0_i32 : i32
-          %31 = arith.extui %18 : i16 to i64
-          %32 = scf.if %23 -> (i64) {
-            %51 = arith.subi %c-9_i32, %20 : i32
-            %52 = arith.extui %51 : i32 to i64
-            %53 = arith.shrui %31, %52 : i64
-            scf.yield %53 : i64
-          } else {
-            %51 = arith.addi %20, %c9_i32 : i32
-            %52 = arith.extui %51 : i32 to i64
-            %53 = arith.shli %31, %52 : i64
-            scf.yield %53 : i64
-          }
-          %33 = arith.extui %30 : i1 to i64
-          %34 = arith.addi %32, %33 : i64
-          %35 = arith.shrui %34, %c1_i64 : i64
-          %36 = arith.shrui %35, %c24_i64 : i64
-          %37 = arith.trunci %36 : i64 to i1
-          %38 = scf.if %37 -> (i32) {
-            %51 = arith.subi %c132_i32, %20 : i32
-            scf.yield %51 : i32
-          } else {
-            scf.yield %21 : i32
-          }
-          %39 = arith.extui %17 : i1 to i64
-          %40 = arith.andi %39, %c1_i64 : i64
-          %41 = arith.andi %35, %c-2147483649_i64 : i64
-          %42 = arith.shli %40, %c31_i64 : i64
-          %43 = arith.ori %41, %42 : i64
-          %44 = arith.extui %38 : i32 to i64
-          %45 = arith.andi %44, %c255_i64 : i64
-          %46 = arith.andi %43, %c-2139095041_i64 : i64
-          %47 = arith.shli %45, %c23_i64 : i64
-          %48 = arith.ori %46, %47 : i64
-          %49 = arith.trunci %48 : i64 to i32
-          %50 = arith.bitcast %49 : i32 to f32
-          scf.yield %50 : f32
-        } else {
-          %15 = arith.select %6, %cst, %0 : f32
-          scf.yield %15 : f32
-        }
-        %9 = arith.index_cast %4 : i32 to index
-        %10 = memref.load %arg6[%9] : memref<?xi32>
-        %11 = arith.addi %4, %c1_i32 : i32
-        %12 = arith.index_cast %11 : i32 to index
-        %13 = scf.while (%arg11 = %10) : (i32) -> i32 {
-          %15 = memref.load %arg6[%12] : memref<?xi32>
-          %16 = arith.cmpi slt, %arg11, %15 : i32
-          scf.condition(%16) %arg11 : i32
-        } do {
-        ^bb0(%arg11: i32):
-          %15 = arith.index_cast %arg11 : i32 to index
-          %16 = memref.load %arg5[%15] : memref<?xi32>
-          %17 = memref.load %arg4[%15] : memref<?xi16>
-          %18 = arith.cmpi eq, %17, %c0_i16 : i16
-          %19 = arith.cmpi ne, %17, %c0_i16 : i16
-          %20 = scf.if %19 -> (f32) {
-            %26 = memref.load %arg4[%15] : memref<?xi16>
-            %27 = arith.shrui %26, %c15_i16 : i16
-            %28 = arith.trunci %27 : i16 to i1
-            %29 = scf.if %28 -> (i16) {
-              %62 = memref.load %arg4[%15] : memref<?xi16>
-              %63 = arith.extsi %62 : i16 to i32
-              %64 = arith.subi %c0_i32, %63 : i32
-              %65 = arith.trunci %64 : i32 to i16
-              scf.yield %65 : i16
-            } else {
-              %62 = memref.load %arg4[%15] : memref<?xi16>
-              scf.yield %62 : i16
-            }
-            %30 = math.ctlz %29 : i16
-            %31 = arith.extui %30 : i16 to i32
-            %32 = arith.subi %c131_i32, %31 : i32
-            %33 = arith.subi %c-8_i32, %31 : i32
-            %34 = arith.cmpi sge, %33, %c1_i32 : i32
-            %35 = arith.cmpi sge, %33, %c2_i32 : i32
-            %36 = scf.if %35 -> (i1) {
-              %62 = arith.subi %c-10_i32, %31 : i32
-              %63 = arith.cmpi ult, %62, %c0_i32 : i32
-              %64 = arith.select %63, %62, %c0_i32 : i32
-              %65 = arith.select %63, %c0_i32, %62 : i32
-              %66 = arith.subi %65, %64 : i32
-              %67 = arith.addi %66, %c1_i32 : i32
-              %68 = arith.trunci %64 : i32 to i16
-              %69 = arith.trunci %67 : i32 to i16
-              %70 = arith.subi %c16_i16, %69 : i16
-              %71 = arith.shrui %c-1_i16, %70 : i16
-              %72 = arith.shrui %29, %68 : i16
-              %73 = arith.andi %72, %71 : i16
-              %74 = arith.shrui %73, %c1_i16 : i16
-              %75 = arith.andi %74, %c21845_i16 : i16
-              %76 = arith.andi %73, %c21845_i16 : i16
-              %77 = arith.shli %76, %c1_i16 : i16
-              %78 = arith.ori %75, %77 : i16
-              %79 = arith.shrui %78, %c2_i16 : i16
-              %80 = arith.andi %79, %c13107_i16 : i16
-              %81 = arith.andi %78, %c13107_i16 : i16
-              %82 = arith.shli %81, %c2_i16 : i16
-              %83 = arith.ori %80, %82 : i16
-              %84 = arith.shrui %83, %c4_i16 : i16
-              %85 = arith.andi %84, %c3855_i16 : i16
-              %86 = arith.andi %83, %c3855_i16 : i16
-              %87 = arith.shli %86, %c4_i16 : i16
-              %88 = arith.ori %85, %87 : i16
-              %89 = arith.shrui %88, %c8_i16 : i16
-              %90 = arith.andi %89, %c255_i16 : i16
-              %91 = arith.andi %88, %c255_i16 : i16
-              %92 = arith.shli %91, %c8_i16 : i16
-              %93 = arith.ori %90, %92 : i16
-              %94 = arith.shrui %93, %70 : i16
-              %95 = arith.select %63, %94, %73 : i16
-              %96 = arith.extui %95 : i16 to i32
-              %97 = arith.cmpi ne, %96, %c0_i32 : i32
-              scf.yield %97 : i1
-            } else {
-              scf.yield %false : i1
-            }
-            %37 = arith.cmpi sge, %33, %c0_i32 : i32
-            %38 = scf.if %37 -> (i32) {
-              %62 = arith.trunci %33 : i32 to i16
-              %63 = arith.shrui %29, %62 : i16
-              %64 = arith.trunci %63 : i16 to i1
-              %65 = arith.extui %64 : i1 to i32
-              scf.yield %65 : i32
-            } else {
-              scf.yield %c0_i32 : i32
-            }
-            %39 = arith.extui %36 : i1 to i32
-            %40 = arith.ori %39, %38 : i32
-            %41 = arith.cmpi ne, %40, %c0_i32 : i32
-            %42 = arith.extui %29 : i16 to i64
-            %43 = scf.if %34 -> (i64) {
-              %62 = arith.subi %c-9_i32, %31 : i32
-              %63 = arith.extui %62 : i32 to i64
-              %64 = arith.shrui %42, %63 : i64
-              scf.yield %64 : i64
-            } else {
-              %62 = arith.addi %31, %c9_i32 : i32
-              %63 = arith.extui %62 : i32 to i64
-              %64 = arith.shli %42, %63 : i64
-              scf.yield %64 : i64
-            }
-            %44 = arith.extui %41 : i1 to i64
-            %45 = arith.addi %43, %44 : i64
-            %46 = arith.shrui %45, %c1_i64 : i64
-            %47 = arith.shrui %46, %c24_i64 : i64
-            %48 = arith.trunci %47 : i64 to i1
-            %49 = scf.if %48 -> (i32) {
-              %62 = arith.subi %c132_i32, %31 : i32
-              scf.yield %62 : i32
-            } else {
-              scf.yield %32 : i32
-            }
-            %50 = arith.extui %28 : i1 to i64
-            %51 = arith.andi %50, %c1_i64 : i64
-            %52 = arith.andi %46, %c-2147483649_i64 : i64
-            %53 = arith.shli %51, %c31_i64 : i64
-            %54 = arith.ori %52, %53 : i64
-            %55 = arith.extui %49 : i32 to i64
-            %56 = arith.andi %55, %c255_i64 : i64
-            %57 = arith.andi %54, %c-2139095041_i64 : i64
-            %58 = arith.shli %56, %c23_i64 : i64
-            %59 = arith.ori %57, %58 : i64
-            %60 = arith.trunci %59 : i64 to i32
-            %61 = arith.bitcast %60 : i32 to f32
-            scf.yield %61 : f32
-          } else {
-            %26 = arith.select %18, %cst, %0 : f32
-            scf.yield %26 : f32
-          }
-          %21 = arith.index_cast %16 : i32 to index
-          %22 = arith.mulf %8, %20 : f32
-          %23 = memref.load %arg8[%arg9, %21] : memref<64x64xf32>
-          %24 = arith.addf %23, %22 : f32
-          memref.store %24, %arg8[%arg9, %21] : memref<64x64xf32>
-          %25 = arith.addi %arg11, %c1_i32 : i32
-          scf.yield %25 : i32
-        }
-        %14 = arith.addi %arg10, %c1_i32 : i32
-        scf.yield %14 : i32
-      }
-    }
-    return
-  }
-  func.func @main() -> i32 attributes {hls.orig_name = "main", llvm.linkage = #llvm.linkage<external>} {
-    %c-1023_i32 = arith.constant -1023 : i32
-    %true = arith.constant true
-    %c0_i55 = arith.constant 0 : i55
-    %c52_i32 = arith.constant 52 : i32
-    %c41_i32 = arith.constant 41 : i32
-    %c-41_i32 = arith.constant -41 : i32
-    %c4503599627370496_i54 = arith.constant 4503599627370496 : i54
-    %c2047_i64 = arith.constant 2047 : i64
-    %c52_i64 = arith.constant 52 : i64
-    %c4503599627370495_i64 = arith.constant 4503599627370495 : i64
-    %c-4503599627370497_i54 = arith.constant -4503599627370497 : i54
-    %c16_i32 = arith.constant 16 : i32
-    %c-1_i32 = arith.constant -1 : i32
-    %c11_i32 = arith.constant 11 : i32
-    %c54_i32 = arith.constant 54 : i32
-    %c9223372036854775807_i64 = arith.constant 9223372036854775807 : i64
-    %c0_i64 = arith.constant 0 : i64
-    %c63_i64 = arith.constant 63 : i64
-    %c-10_i32 = arith.constant -10 : i32
-    %c132_i32 = arith.constant 132 : i32
-    %c-9_i32 = arith.constant -9 : i32
-    %c9_i32 = arith.constant 9 : i32
-    %c15_i16 = arith.constant 15 : i16
-    %c131_i32 = arith.constant 131 : i32
-    %c-8_i32 = arith.constant -8 : i32
-    %c-2147483649_i64 = arith.constant -2147483649 : i64
-    %c31_i64 = arith.constant 31 : i64
-    %c-2139095041_i64 = arith.constant -2139095041 : i64
-    %c255_i64 = arith.constant 255 : i64
-    %c23_i64 = arith.constant 23 : i64
-    %c24_i64 = arith.constant 24 : i64
-    %c8_i16 = arith.constant 8 : i16
-    %c255_i16 = arith.constant 255 : i16
-    %c4_i16 = arith.constant 4 : i16
-    %c3855_i16 = arith.constant 3855 : i16
-    %c2_i16 = arith.constant 2 : i16
-    %c13107_i16 = arith.constant 13107 : i16
-    %c1_i16 = arith.constant 1 : i16
-    %c21845_i16 = arith.constant 21845 : i16
-    %c-1_i16 = arith.constant -1 : i16
-    %c16_i16 = arith.constant 16 : i16
-    %c2_i32 = arith.constant 2 : i32
-    %false = arith.constant false
-    %c0_i16 = arith.constant 0 : i16
-    %c1_i64 = arith.constant 1 : i64
-    %c65_i64 = arith.constant 65 : i64
-    %c4_i64 = arith.constant 4 : i64
-    %c1 = arith.constant 1 : index
-    %c50_i64 = arith.constant 50 : i64
-    %c2_i64 = arith.constant 2 : i64
-    %c4096_i64 = arith.constant 4096 : i64
-    %c1_i32 = arith.constant 1 : i32
-    %cst = arith.constant 0.000000e+00 : f32
-    %c0_i32 = arith.constant 0 : i32
-    %cst_0 = arith.constant 1.000000e-01 : f64
-    %0 = llvm.mlir.undef : i32
-    %alloca = memref.alloca() {hls.preserve, polygeist.varname = "C_converted"} : memref<64x64xi16>
-    %alloca_1 = memref.alloca() {hls.preserve, polygeist.varname = "output_filename"} : memref<50xi8>
-    %alloca_2 = memref.alloca() {hls.preserve, polygeist.varname = "C"} : memref<64x64xf32>
-    %alloca_3 = memref.alloca() {hls.preserve, polygeist.varname = "filename_B"} : memref<50xi8>
-    %alloca_4 = memref.alloca() {hls.preserve, polygeist.varname = "filename_A"} : memref<50xi8>
-    %alloca_5 = memref.alloca() {polygeist.varname = "nnz_B"} : memref<1xi32>
-    affine.store %0, %alloca_5[0] : memref<1xi32>
-    %alloca_6 = memref.alloca() {hls.preserve, polygeist.varname = "col_ptr_B"} : memref<65xi32>
-    %alloca_7 = memref.alloca() {hls.preserve, polygeist.varname = "row_indices_B"} : memref<4096xi32>
-    %alloca_8 = memref.alloca() {hls.preserve, polygeist.varname = "values_B"} : memref<4096xi16>
-    %alloca_9 = memref.alloca() {polygeist.varname = "nnz_A"} : memref<1xi32>
-    affine.store %0, %alloca_9[0] : memref<1xi32>
-    %alloca_10 = memref.alloca() {hls.preserve, polygeist.varname = "row_ptr_A"} : memref<65xi32>
-    %alloca_11 = memref.alloca() {hls.preserve, polygeist.varname = "column_indices_A"} : memref<4096xi32>
-    %alloca_12 = memref.alloca() {hls.preserve, polygeist.varname = "values_A"} : memref<4096xi16>
-    %1 = "polygeist.memref2pointer"(%alloca_4) : (memref<50xi8>) -> !llvm.ptr
-    %2 = llvm.mlir.addressof @str2 : !llvm.ptr
-    %3 = llvm.getelementptr %2[0, 0] : (!llvm.ptr) -> !llvm.ptr, !llvm.array<31 x i8>
-    %4 = llvm.call @snprintf(%1, %c50_i64, %3, %cst_0) vararg(!llvm.func<i32 (ptr, i64, ptr, ...)>) : (!llvm.ptr, i64, !llvm.ptr, f64) -> i32
-    %cast = memref.cast %alloca_4 : memref<50xi8> to memref<?xi8>
-    %5 = llvm.mlir.addressof @str0 : !llvm.ptr
-    %6 = "polygeist.pointer2memref"(%5) : (!llvm.ptr) -> memref<?xi8>
-    %7 = call @fopen(%cast, %6) : (memref<?xi8>, memref<?xi8>) -> memref<?x!llvm.struct<(i32, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, i32, i32, i64, i16, i8, array<1 x i8>, ptr, i64, ptr, ptr, ptr, ptr, i64, i32, array<20 x i8>)>>
-    %8 = "polygeist.memref2pointer"(%7) : (memref<?x!llvm.struct<(i32, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, i32, i32, i64, i16, i8, array<1 x i8>, ptr, i64, ptr, ptr, ptr, ptr, i64, i32, array<20 x i8>)>>) -> !llvm.ptr
-    %9 = llvm.mlir.zero : !llvm.ptr
-    %10 = llvm.icmp "ne" %8, %9 : !llvm.ptr
-    %11 = arith.xori %10, %true : i1
-    scf.if %11 {
-      %68 = llvm.mlir.addressof @str1 : !llvm.ptr
-      %69 = "polygeist.pointer2memref"(%68) : (!llvm.ptr) -> memref<?xi8>
-      func.call @perror(%69) : (memref<?xi8>) -> ()
-      func.call @exit(%c1_i32) : (i32) -> ()
-    }
-    %12 = "polygeist.memref2pointer"(%alloca_9) : (memref<1xi32>) -> !llvm.ptr
-    %13 = "polygeist.pointer2memref"(%12) : (!llvm.ptr) -> memref<?xi8>
-    %14 = call @fread(%13, %c4_i64, %c1_i64, %7) : (memref<?xi8>, i64, i64, memref<?x!llvm.struct<(i32, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, i32, i32, i64, i16, i8, array<1 x i8>, ptr, i64, ptr, ptr, ptr, ptr, i64, i32, array<20 x i8>)>>) -> i64
-    %15 = "polygeist.memref2pointer"(%alloca_12) : (memref<4096xi16>) -> !llvm.ptr
-    %16 = "polygeist.pointer2memref"(%15) : (!llvm.ptr) -> memref<?xi8>
-    %17 = affine.load %alloca_9[0] : memref<1xi32>
-    %18 = arith.extsi %17 : i32 to i64
-    %19 = call @fread(%16, %c2_i64, %18, %7) : (memref<?xi8>, i64, i64, memref<?x!llvm.struct<(i32, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, i32, i32, i64, i16, i8, array<1 x i8>, ptr, i64, ptr, ptr, ptr, ptr, i64, i32, array<20 x i8>)>>) -> i64
-    %20 = "polygeist.memref2pointer"(%alloca_11) : (memref<4096xi32>) -> !llvm.ptr
-    %21 = "polygeist.pointer2memref"(%20) : (!llvm.ptr) -> memref<?xi8>
-    %22 = call @fread(%21, %c4_i64, %18, %7) : (memref<?xi8>, i64, i64, memref<?x!llvm.struct<(i32, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, i32, i32, i64, i16, i8, array<1 x i8>, ptr, i64, ptr, ptr, ptr, ptr, i64, i32, array<20 x i8>)>>) -> i64
-    %23 = "polygeist.memref2pointer"(%alloca_10) : (memref<65xi32>) -> !llvm.ptr
-    %24 = "polygeist.pointer2memref"(%23) : (!llvm.ptr) -> memref<?xi8>
-    %25 = call @fread(%24, %c4_i64, %c65_i64, %7) : (memref<?xi8>, i64, i64, memref<?x!llvm.struct<(i32, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, i32, i32, i64, i16, i8, array<1 x i8>, ptr, i64, ptr, ptr, ptr, ptr, i64, i32, array<20 x i8>)>>) -> i64
-    %26 = call @fclose(%7) : (memref<?x!llvm.struct<(i32, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, i32, i32, i64, i16, i8, array<1 x i8>, ptr, i64, ptr, ptr, ptr, ptr, i64, i32, array<20 x i8>)>>) -> i32
-    %27 = "polygeist.memref2pointer"(%alloca_3) : (memref<50xi8>) -> !llvm.ptr
-    %28 = llvm.mlir.addressof @str3 : !llvm.ptr
-    %29 = llvm.getelementptr %28[0, 0] : (!llvm.ptr) -> !llvm.ptr, !llvm.array<31 x i8>
-    %30 = llvm.call @snprintf(%27, %c50_i64, %29, %cst_0) vararg(!llvm.func<i32 (ptr, i64, ptr, ...)>) : (!llvm.ptr, i64, !llvm.ptr, f64) -> i32
-    %cast_13 = memref.cast %alloca_3 : memref<50xi8> to memref<?xi8>
-    %31 = call @fopen(%cast_13, %6) : (memref<?xi8>, memref<?xi8>) -> memref<?x!llvm.struct<(i32, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, i32, i32, i64, i16, i8, array<1 x i8>, ptr, i64, ptr, ptr, ptr, ptr, i64, i32, array<20 x i8>)>>
-    %32 = "polygeist.memref2pointer"(%31) : (memref<?x!llvm.struct<(i32, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, i32, i32, i64, i16, i8, array<1 x i8>, ptr, i64, ptr, ptr, ptr, ptr, i64, i32, array<20 x i8>)>>) -> !llvm.ptr
-    %33 = llvm.icmp "ne" %32, %9 : !llvm.ptr
-    %34 = arith.xori %33, %true : i1
-    scf.if %34 {
-      %68 = llvm.mlir.addressof @str1 : !llvm.ptr
-      %69 = "polygeist.pointer2memref"(%68) : (!llvm.ptr) -> memref<?xi8>
-      func.call @perror(%69) : (memref<?xi8>) -> ()
-      func.call @exit(%c1_i32) : (i32) -> ()
-    }
-    %35 = "polygeist.memref2pointer"(%alloca_5) : (memref<1xi32>) -> !llvm.ptr
-    %36 = "polygeist.pointer2memref"(%35) : (!llvm.ptr) -> memref<?xi8>
-    %37 = call @fread(%36, %c4_i64, %c1_i64, %31) : (memref<?xi8>, i64, i64, memref<?x!llvm.struct<(i32, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, i32, i32, i64, i16, i8, array<1 x i8>, ptr, i64, ptr, ptr, ptr, ptr, i64, i32, array<20 x i8>)>>) -> i64
-    %38 = "polygeist.memref2pointer"(%alloca_8) : (memref<4096xi16>) -> !llvm.ptr
-    %39 = "polygeist.pointer2memref"(%38) : (!llvm.ptr) -> memref<?xi8>
-    %40 = affine.load %alloca_5[0] : memref<1xi32>
-    %41 = arith.extsi %40 : i32 to i64
-    %42 = call @fread(%39, %c2_i64, %41, %31) : (memref<?xi8>, i64, i64, memref<?x!llvm.struct<(i32, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, i32, i32, i64, i16, i8, array<1 x i8>, ptr, i64, ptr, ptr, ptr, ptr, i64, i32, array<20 x i8>)>>) -> i64
-    %43 = "polygeist.memref2pointer"(%alloca_7) : (memref<4096xi32>) -> !llvm.ptr
-    %44 = "polygeist.pointer2memref"(%43) : (!llvm.ptr) -> memref<?xi8>
-    %45 = call @fread(%44, %c4_i64, %41, %31) : (memref<?xi8>, i64, i64, memref<?x!llvm.struct<(i32, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, i32, i32, i64, i16, i8, array<1 x i8>, ptr, i64, ptr, ptr, ptr, ptr, i64, i32, array<20 x i8>)>>) -> i64
-    %46 = "polygeist.memref2pointer"(%alloca_6) : (memref<65xi32>) -> !llvm.ptr
-    %47 = "polygeist.pointer2memref"(%46) : (!llvm.ptr) -> memref<?xi8>
-    %48 = call @fread(%47, %c4_i64, %c65_i64, %31) : (memref<?xi8>, i64, i64, memref<?x!llvm.struct<(i32, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, i32, i32, i64, i16, i8, array<1 x i8>, ptr, i64, ptr, ptr, ptr, ptr, i64, i32, array<20 x i8>)>>) -> i64
-    %49 = call @fclose(%31) : (memref<?x!llvm.struct<(i32, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, i32, i32, i64, i16, i8, array<1 x i8>, ptr, i64, ptr, ptr, ptr, ptr, i64, i32, array<20 x i8>)>>) -> i32
-    affine.for %arg0 = 0 to 64 {
-      affine.for %arg1 = 0 to 64 {
-        affine.store %cst, %alloca_2[%arg0, %arg1] : memref<64x64xf32>
-      }
-    }
-    %50 = llvm.mlir.undef : f32
-    affine.for %arg0 = 0 to 64 {
-      %68 = affine.load %alloca_10[%arg0] : memref<65xi32>
-      %69 = affine.load %alloca_10[%arg0 + 1] : memref<65xi32>
-      %70 = arith.index_cast %69 : i32 to index
-      %71 = arith.index_cast %68 : i32 to index
-      scf.for %arg1 = %71 to %70 step %c1 {
-        %72 = memref.load %alloca_11[%arg1] : memref<4096xi32>
-        %73 = memref.load %alloca_12[%arg1] : memref<4096xi16>
-        %74 = arith.cmpi eq, %73, %c0_i16 : i16
-        %75 = arith.cmpi ne, %73, %c0_i16 : i16
-        %76 = scf.if %75 -> (f32) {
-          %84 = arith.shrui %73, %c15_i16 : i16
-          %85 = arith.trunci %84 : i16 to i1
-          %86 = scf.if %85 -> (i16) {
-            %119 = arith.extsi %73 : i16 to i32
-            %120 = arith.subi %c0_i32, %119 : i32
-            %121 = arith.trunci %120 : i32 to i16
-            scf.yield %121 : i16
-          } else {
-            scf.yield %73 : i16
-          }
-          %87 = math.ctlz %86 : i16
-          %88 = arith.extui %87 : i16 to i32
-          %89 = arith.subi %c131_i32, %88 : i32
-          %90 = arith.subi %c-8_i32, %88 : i32
-          %91 = arith.cmpi sge, %90, %c1_i32 : i32
-          %92 = arith.cmpi sge, %90, %c2_i32 : i32
-          %93 = scf.if %92 -> (i1) {
-            %119 = arith.subi %c-10_i32, %88 : i32
-            %120 = arith.cmpi ult, %119, %c0_i32 : i32
-            %121 = arith.select %120, %119, %c0_i32 : i32
-            %122 = arith.select %120, %c0_i32, %119 : i32
-            %123 = arith.subi %122, %121 : i32
-            %124 = arith.addi %123, %c1_i32 : i32
-            %125 = arith.trunci %121 : i32 to i16
-            %126 = arith.trunci %124 : i32 to i16
-            %127 = arith.subi %c16_i16, %126 : i16
-            %128 = arith.shrui %c-1_i16, %127 : i16
-            %129 = arith.shrui %86, %125 : i16
-            %130 = arith.andi %129, %128 : i16
-            %131 = arith.shrui %130, %c1_i16 : i16
-            %132 = arith.andi %131, %c21845_i16 : i16
-            %133 = arith.andi %130, %c21845_i16 : i16
-            %134 = arith.shli %133, %c1_i16 : i16
-            %135 = arith.ori %132, %134 : i16
-            %136 = arith.shrui %135, %c2_i16 : i16
-            %137 = arith.andi %136, %c13107_i16 : i16
-            %138 = arith.andi %135, %c13107_i16 : i16
-            %139 = arith.shli %138, %c2_i16 : i16
-            %140 = arith.ori %137, %139 : i16
-            %141 = arith.shrui %140, %c4_i16 : i16
-            %142 = arith.andi %141, %c3855_i16 : i16
-            %143 = arith.andi %140, %c3855_i16 : i16
-            %144 = arith.shli %143, %c4_i16 : i16
-            %145 = arith.ori %142, %144 : i16
-            %146 = arith.shrui %145, %c8_i16 : i16
-            %147 = arith.andi %146, %c255_i16 : i16
-            %148 = arith.andi %145, %c255_i16 : i16
-            %149 = arith.shli %148, %c8_i16 : i16
-            %150 = arith.ori %147, %149 : i16
-            %151 = arith.shrui %150, %127 : i16
-            %152 = arith.select %120, %151, %130 : i16
-            %153 = arith.extui %152 : i16 to i32
-            %154 = arith.cmpi ne, %153, %c0_i32 : i32
-            scf.yield %154 : i1
-          } else {
-            scf.yield %false : i1
-          }
-          %94 = arith.cmpi sge, %90, %c0_i32 : i32
-          %95 = scf.if %94 -> (i32) {
-            %119 = arith.trunci %90 : i32 to i16
-            %120 = arith.shrui %86, %119 : i16
-            %121 = arith.trunci %120 : i16 to i1
-            %122 = arith.extui %121 : i1 to i32
-            scf.yield %122 : i32
-          } else {
-            scf.yield %c0_i32 : i32
-          }
-          %96 = arith.extui %93 : i1 to i32
-          %97 = arith.ori %96, %95 : i32
-          %98 = arith.cmpi ne, %97, %c0_i32 : i32
-          %99 = arith.extui %86 : i16 to i64
-          %100 = scf.if %91 -> (i64) {
-            %119 = arith.subi %c-9_i32, %88 : i32
-            %120 = arith.extui %119 : i32 to i64
-            %121 = arith.shrui %99, %120 : i64
-            scf.yield %121 : i64
-          } else {
-            %119 = arith.addi %88, %c9_i32 : i32
-            %120 = arith.extui %119 : i32 to i64
-            %121 = arith.shli %99, %120 : i64
-            scf.yield %121 : i64
-          }
-          %101 = arith.extui %98 : i1 to i64
-          %102 = arith.addi %100, %101 : i64
-          %103 = arith.shrui %102, %c1_i64 : i64
-          %104 = arith.shrui %103, %c24_i64 : i64
-          %105 = arith.trunci %104 : i64 to i1
-          %106 = scf.if %105 -> (i32) {
-            %119 = arith.subi %c132_i32, %88 : i32
-            scf.yield %119 : i32
-          } else {
-            scf.yield %89 : i32
-          }
-          %107 = arith.extui %85 : i1 to i64
-          %108 = arith.andi %107, %c1_i64 : i64
-          %109 = arith.andi %103, %c-2147483649_i64 : i64
-          %110 = arith.shli %108, %c31_i64 : i64
-          %111 = arith.ori %109, %110 : i64
-          %112 = arith.extui %106 : i32 to i64
-          %113 = arith.andi %112, %c255_i64 : i64
-          %114 = arith.andi %111, %c-2139095041_i64 : i64
-          %115 = arith.shli %113, %c23_i64 : i64
-          %116 = arith.ori %114, %115 : i64
-          %117 = arith.trunci %116 : i64 to i32
-          %118 = arith.bitcast %117 : i32 to f32
-          scf.yield %118 : f32
-        } else {
-          %84 = arith.select %74, %cst, %50 : f32
-          scf.yield %84 : f32
-        }
-        %77 = arith.index_cast %72 : i32 to index
-        %78 = memref.load %alloca_6[%77] : memref<65xi32>
-        %79 = arith.addi %72, %c1_i32 : i32
-        %80 = arith.index_cast %79 : i32 to index
-        %81 = memref.load %alloca_6[%80] : memref<65xi32>
-        %82 = arith.index_cast %81 : i32 to index
-        %83 = arith.index_cast %78 : i32 to index
-        scf.for %arg2 = %83 to %82 step %c1 {
-          %84 = memref.load %alloca_7[%arg2] : memref<4096xi32>
-          %85 = memref.load %alloca_8[%arg2] : memref<4096xi16>
-          %86 = arith.cmpi eq, %85, %c0_i16 : i16
-          %87 = arith.cmpi ne, %85, %c0_i16 : i16
-          %88 = scf.if %87 -> (f32) {
-            %93 = arith.shrui %85, %c15_i16 : i16
-            %94 = arith.trunci %93 : i16 to i1
-            %95 = scf.if %94 -> (i16) {
-              %128 = arith.extsi %85 : i16 to i32
-              %129 = arith.subi %c0_i32, %128 : i32
-              %130 = arith.trunci %129 : i32 to i16
-              scf.yield %130 : i16
-            } else {
-              scf.yield %85 : i16
-            }
-            %96 = math.ctlz %95 : i16
-            %97 = arith.extui %96 : i16 to i32
-            %98 = arith.subi %c131_i32, %97 : i32
-            %99 = arith.subi %c-8_i32, %97 : i32
-            %100 = arith.cmpi sge, %99, %c1_i32 : i32
-            %101 = arith.cmpi sge, %99, %c2_i32 : i32
-            %102 = scf.if %101 -> (i1) {
-              %128 = arith.subi %c-10_i32, %97 : i32
-              %129 = arith.cmpi ult, %128, %c0_i32 : i32
-              %130 = arith.select %129, %128, %c0_i32 : i32
-              %131 = arith.select %129, %c0_i32, %128 : i32
-              %132 = arith.subi %131, %130 : i32
-              %133 = arith.addi %132, %c1_i32 : i32
-              %134 = arith.trunci %130 : i32 to i16
-              %135 = arith.trunci %133 : i32 to i16
-              %136 = arith.subi %c16_i16, %135 : i16
-              %137 = arith.shrui %c-1_i16, %136 : i16
-              %138 = arith.shrui %95, %134 : i16
-              %139 = arith.andi %138, %137 : i16
-              %140 = arith.shrui %139, %c1_i16 : i16
-              %141 = arith.andi %140, %c21845_i16 : i16
-              %142 = arith.andi %139, %c21845_i16 : i16
-              %143 = arith.shli %142, %c1_i16 : i16
-              %144 = arith.ori %141, %143 : i16
-              %145 = arith.shrui %144, %c2_i16 : i16
-              %146 = arith.andi %145, %c13107_i16 : i16
-              %147 = arith.andi %144, %c13107_i16 : i16
-              %148 = arith.shli %147, %c2_i16 : i16
-              %149 = arith.ori %146, %148 : i16
-              %150 = arith.shrui %149, %c4_i16 : i16
-              %151 = arith.andi %150, %c3855_i16 : i16
-              %152 = arith.andi %149, %c3855_i16 : i16
-              %153 = arith.shli %152, %c4_i16 : i16
-              %154 = arith.ori %151, %153 : i16
-              %155 = arith.shrui %154, %c8_i16 : i16
-              %156 = arith.andi %155, %c255_i16 : i16
-              %157 = arith.andi %154, %c255_i16 : i16
-              %158 = arith.shli %157, %c8_i16 : i16
-              %159 = arith.ori %156, %158 : i16
-              %160 = arith.shrui %159, %136 : i16
-              %161 = arith.select %129, %160, %139 : i16
-              %162 = arith.extui %161 : i16 to i32
-              %163 = arith.cmpi ne, %162, %c0_i32 : i32
-              scf.yield %163 : i1
-            } else {
-              scf.yield %false : i1
-            }
-            %103 = arith.cmpi sge, %99, %c0_i32 : i32
-            %104 = scf.if %103 -> (i32) {
-              %128 = arith.trunci %99 : i32 to i16
-              %129 = arith.shrui %95, %128 : i16
-              %130 = arith.trunci %129 : i16 to i1
-              %131 = arith.extui %130 : i1 to i32
-              scf.yield %131 : i32
-            } else {
-              scf.yield %c0_i32 : i32
-            }
-            %105 = arith.extui %102 : i1 to i32
-            %106 = arith.ori %105, %104 : i32
-            %107 = arith.cmpi ne, %106, %c0_i32 : i32
-            %108 = arith.extui %95 : i16 to i64
-            %109 = scf.if %100 -> (i64) {
-              %128 = arith.subi %c-9_i32, %97 : i32
-              %129 = arith.extui %128 : i32 to i64
-              %130 = arith.shrui %108, %129 : i64
-              scf.yield %130 : i64
-            } else {
-              %128 = arith.addi %97, %c9_i32 : i32
-              %129 = arith.extui %128 : i32 to i64
-              %130 = arith.shli %108, %129 : i64
-              scf.yield %130 : i64
-            }
-            %110 = arith.extui %107 : i1 to i64
-            %111 = arith.addi %109, %110 : i64
-            %112 = arith.shrui %111, %c1_i64 : i64
-            %113 = arith.shrui %112, %c24_i64 : i64
-            %114 = arith.trunci %113 : i64 to i1
-            %115 = scf.if %114 -> (i32) {
-              %128 = arith.subi %c132_i32, %97 : i32
-              scf.yield %128 : i32
-            } else {
-              scf.yield %98 : i32
-            }
-            %116 = arith.extui %94 : i1 to i64
-            %117 = arith.andi %116, %c1_i64 : i64
-            %118 = arith.andi %112, %c-2147483649_i64 : i64
-            %119 = arith.shli %117, %c31_i64 : i64
-            %120 = arith.ori %118, %119 : i64
-            %121 = arith.extui %115 : i32 to i64
-            %122 = arith.andi %121, %c255_i64 : i64
-            %123 = arith.andi %120, %c-2139095041_i64 : i64
-            %124 = arith.shli %122, %c23_i64 : i64
-            %125 = arith.ori %123, %124 : i64
-            %126 = arith.trunci %125 : i64 to i32
-            %127 = arith.bitcast %126 : i32 to f32
-            scf.yield %127 : f32
-          } else {
-            %93 = arith.select %86, %cst, %50 : f32
-            scf.yield %93 : f32
-          }
-          %89 = arith.index_cast %84 : i32 to index
-          %90 = arith.mulf %76, %88 : f32
-          %91 = memref.load %alloca_2[%arg0, %89] : memref<64x64xf32>
-          %92 = arith.addf %91, %90 : f32
-          memref.store %92, %alloca_2[%arg0, %89] : memref<64x64xf32>
-        }
-      }
-    }
-    %51 = "polygeist.memref2pointer"(%alloca_1) : (memref<50xi8>) -> !llvm.ptr
-    %52 = llvm.mlir.addressof @str4 : !llvm.ptr
-    %53 = llvm.getelementptr %52[0, 0] : (!llvm.ptr) -> !llvm.ptr, !llvm.array<34 x i8>
-    %54 = llvm.call @snprintf(%51, %c50_i64, %53, %cst_0) vararg(!llvm.func<i32 (ptr, i64, ptr, ...)>) : (!llvm.ptr, i64, !llvm.ptr, f64) -> i32
-    %cast_14 = memref.cast %alloca_1 : memref<50xi8> to memref<?xi8>
-    %55 = llvm.mlir.addressof @str5 : !llvm.ptr
-    %56 = "polygeist.pointer2memref"(%55) : (!llvm.ptr) -> memref<?xi8>
-    %57 = call @fopen(%cast_14, %56) : (memref<?xi8>, memref<?xi8>) -> memref<?x!llvm.struct<(i32, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, i32, i32, i64, i16, i8, array<1 x i8>, ptr, i64, ptr, ptr, ptr, ptr, i64, i32, array<20 x i8>)>>
-    %58 = "polygeist.memref2pointer"(%57) : (memref<?x!llvm.struct<(i32, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, i32, i32, i64, i16, i8, array<1 x i8>, ptr, i64, ptr, ptr, ptr, ptr, i64, i32, array<20 x i8>)>>) -> !llvm.ptr
-    %59 = llvm.icmp "ne" %58, %9 : !llvm.ptr
-    %60 = arith.xori %59, %true : i1
-    scf.if %60 {
-      %68 = llvm.mlir.addressof @str6 : !llvm.ptr
-      %69 = "polygeist.pointer2memref"(%68) : (!llvm.ptr) -> memref<?xi8>
-      func.call @perror(%69) : (memref<?xi8>) -> ()
-      func.call @exit(%c1_i32) : (i32) -> ()
-    }
-    affine.for %arg0 = 0 to 64 {
-      affine.for %arg1 = 0 to 64 {
-        %68 = affine.load %alloca_2[%arg0, %arg1] : memref<64x64xf32>
-        %69 = arith.extf %68 : f32 to f64
-        %70 = arith.bitcast %69 : f64 to i64
-        %71 = arith.shrui %70, %c63_i64 : i64
-        %72 = arith.trunci %71 : i64 to i1
-        %73 = arith.shrui %70, %c52_i64 : i64
-        %74 = arith.andi %73, %c2047_i64 : i64
-        %75 = arith.trunci %74 : i64 to i11
-        %76 = arith.extui %75 : i11 to i32
-        %77 = arith.addi %76, %c-1023_i32 : i32
-        %78 = arith.trunci %77 : i32 to i12
-        %79 = arith.andi %70, %c4503599627370495_i64 : i64
-        %80 = arith.trunci %79 : i64 to i54
-        %81 = arith.andi %80, %c-4503599627370497_i54 : i54
-        %82 = arith.ori %81, %c4503599627370496_i54 : i54
-        %83 = scf.if %72 -> (i54) {
-          %87 = arith.extsi %82 : i54 to i55
-          %88 = arith.subi %c0_i55, %87 : i55
-          %89 = arith.trunci %88 : i55 to i54
-          scf.yield %89 : i54
-        } else {
-          scf.yield %82 : i54
-        }
-        %84 = arith.andi %70, %c9223372036854775807_i64 : i64
-        %85 = arith.cmpi eq, %84, %c0_i64 : i64
-        %86 = scf.if %85 -> (i16) {
-          scf.yield %c0_i16 : i16
-        } else {
-          %87 = arith.extsi %78 : i12 to i32
-          %88 = arith.subi %c52_i32, %87 : i32
-          %89 = arith.cmpi sgt, %88, %c11_i32 : i32
-          %90 = scf.if %89 -> (i32) {
-            %93 = arith.subi %c41_i32, %87 : i32
-            scf.yield %93 : i32
-          } else {
-            %93 = arith.addi %87, %c-41_i32 : i32
-            scf.yield %93 : i32
-          }
-          %91 = arith.cmpi eq, %88, %c11_i32 : i32
-          %92 = scf.if %91 -> (i16) {
-            %93 = arith.trunci %83 : i54 to i16
-            scf.yield %93 : i16
-          } else {
-            %93 = scf.if %89 -> (i16) {
-              %94 = arith.cmpi ult, %90, %c54_i32 : i32
-              %95 = scf.if %94 -> (i16) {
-                %96 = arith.extui %90 : i32 to i54
-                %97 = arith.shrsi %83, %96 : i54
-                %98 = arith.trunci %97 : i54 to i16
-                scf.yield %98 : i16
-              } else {
-                %96 = arith.select %72, %c-1_i32, %c0_i32 : i32
-                %97 = arith.trunci %96 : i32 to i16
-                scf.yield %97 : i16
-              }
-              scf.yield %95 : i16
-            } else {
-              %94 = arith.trunci %83 : i54 to i16
-              %95 = arith.cmpi ult, %90, %c16_i32 : i32
-              %96 = scf.if %95 -> (i16) {
-                %97 = arith.extsi %94 : i16 to i32
-                %98 = arith.shli %97, %90 : i32
-                %99 = arith.trunci %98 : i32 to i16
-                scf.yield %99 : i16
-              } else {
-                scf.yield %c0_i16 : i16
-              }
-              scf.yield %96 : i16
-            }
-            scf.yield %93 : i16
-          }
-          scf.yield %92 : i16
-        }
-        affine.store %86, %alloca[%arg0, %arg1] : memref<64x64xi16>
-      }
-    }
-    %61 = "polygeist.memref2pointer"(%alloca) : (memref<64x64xi16>) -> !llvm.ptr
-    %62 = "polygeist.pointer2memref"(%61) : (!llvm.ptr) -> memref<?xi8>
-    %63 = call @fwrite(%62, %c2_i64, %c4096_i64, %57) : (memref<?xi8>, i64, i64, memref<?x!llvm.struct<(i32, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, i32, i32, i64, i16, i8, array<1 x i8>, ptr, i64, ptr, ptr, ptr, ptr, i64, i32, array<20 x i8>)>>) -> i64
-    %64 = call @fclose(%57) : (memref<?x!llvm.struct<(i32, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, i32, i32, i64, i16, i8, array<1 x i8>, ptr, i64, ptr, ptr, ptr, ptr, i64, i32, array<20 x i8>)>>) -> i32
-    %65 = llvm.mlir.addressof @str7 : !llvm.ptr
-    %66 = llvm.getelementptr %65[0, 0] : (!llvm.ptr) -> !llvm.ptr, !llvm.array<34 x i8>
-    %67 = llvm.call @printf(%66, %51) vararg(!llvm.func<i32 (ptr, ...)>) : (!llvm.ptr, !llvm.ptr) -> i32
-    return %c0_i32 : i32
-  }
-  func.func private @fwrite(memref<?xi8>, i64, i64, memref<?x!llvm.struct<(i32, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, i32, i32, i64, i16, i8, array<1 x i8>, ptr, i64, ptr, ptr, ptr, ptr, i64, i32, array<20 x i8>)>>) -> i64 attributes {hls.orig_name = "fwrite", llvm.linkage = #llvm.linkage<external>}
-  func.func @_Z26generate_sparse_matrix_csrP8ap_fixedILi16ELi5EL9ap_q_mode5EL9ap_o_mode3ELi0EEPiS4_S4_ii(%arg0: memref<?xi16>, %arg1: memref<?xi32>, %arg2: memref<?xi32>, %arg3: memref<?xi32>, %arg4: i32, %arg5: i32) attributes {hls.orig_name = "generate_sparse_matrix_csr", llvm.linkage = #llvm.linkage<external>} {
-    %c-1023_i32 = arith.constant -1023 : i32
-    %c63_i64 = arith.constant 63 : i64
-    %c0_i64 = arith.constant 0 : i64
-    %c9223372036854775807_i64 = arith.constant 9223372036854775807 : i64
-    %c0_i16 = arith.constant 0 : i16
-    %c54_i32 = arith.constant 54 : i32
-    %c11_i32 = arith.constant 11 : i32
-    %c-1_i32 = arith.constant -1 : i32
-    %c16_i32 = arith.constant 16 : i32
-    %c-4503599627370497_i54 = arith.constant -4503599627370497 : i54
-    %c4503599627370495_i64 = arith.constant 4503599627370495 : i64
-    %c52_i64 = arith.constant 52 : i64
-    %c2047_i64 = arith.constant 2047 : i64
-    %c4503599627370496_i54 = arith.constant 4503599627370496 : i54
-    %c-41_i32 = arith.constant -41 : i32
-    %c41_i32 = arith.constant 41 : i32
-    %c52_i32 = arith.constant 52 : i32
-    %c0_i55 = arith.constant 0 : i55
-    %c1_i32 = arith.constant 1 : i32
-    %cst = arith.constant 1.000000e+00 : f64
-    %cst_0 = arith.constant 0x41DFFFFFFFC00000 : f64
-    %cst_1 = arith.constant 2.000000e+00 : f64
-    %cst_2 = arith.constant 1.000000e-01 : f64
-    %cst_3 = arith.constant 2.14748365E+9 : f32
-    %c0_i32 = arith.constant 0 : i32
-    affine.store %c0_i32, %arg2[0] : memref<?xi32>
-    %0 = arith.index_cast %arg4 : i32 to index
-    %1 = arith.index_cast %arg5 : i32 to index
-    %2 = affine.for %arg6 = 0 to %0 iter_args(%arg7 = %c0_i32) -> (i32) {
-      %3 = affine.for %arg8 = 0 to %1 iter_args(%arg9 = %arg7) -> (i32) {
-        %4 = arith.index_cast %arg8 : index to i32
-        %5 = func.call @rand() : () -> i32
-        %6 = arith.sitofp %5 : i32 to f32
-        %7 = arith.divf %6, %cst_3 : f32
-        %8 = arith.extf %7 : f32 to f64
-        %9 = arith.cmpf olt, %8, %cst_2 : f64
-        %10 = scf.if %9 -> (i32) {
-          %11 = arith.index_cast %arg9 : i32 to index
-          %12 = func.call @rand() : () -> i32
-          %13 = arith.sitofp %12 : i32 to f32
-          %14 = arith.extf %13 : f32 to f64
-          %15 = arith.mulf %14, %cst_1 : f64
-          %16 = arith.divf %15, %cst_0 : f64
-          %17 = arith.subf %16, %cst : f64
-          %18 = arith.bitcast %17 : f64 to i64
-          %19 = arith.shrui %18, %c63_i64 : i64
-          %20 = arith.trunci %19 : i64 to i1
-          %21 = arith.shrui %18, %c52_i64 : i64
-          %22 = arith.andi %21, %c2047_i64 : i64
-          %23 = arith.trunci %22 : i64 to i11
-          %24 = arith.extui %23 : i11 to i32
-          %25 = arith.addi %24, %c-1023_i32 : i32
-          %26 = arith.trunci %25 : i32 to i12
-          %27 = arith.andi %18, %c4503599627370495_i64 : i64
-          %28 = arith.trunci %27 : i64 to i54
-          %29 = arith.andi %28, %c-4503599627370497_i54 : i54
-          %30 = arith.ori %29, %c4503599627370496_i54 : i54
-          %31 = scf.if %20 -> (i54) {
-            %36 = arith.extsi %30 : i54 to i55
-            %37 = arith.subi %c0_i55, %36 : i55
-            %38 = arith.trunci %37 : i55 to i54
-            scf.yield %38 : i54
-          } else {
-            scf.yield %30 : i54
-          }
-          %32 = arith.andi %18, %c9223372036854775807_i64 : i64
-          %33 = arith.cmpi eq, %32, %c0_i64 : i64
-          %34 = scf.if %33 -> (i16) {
-            scf.yield %c0_i16 : i16
-          } else {
-            %36 = arith.extsi %26 : i12 to i32
-            %37 = arith.subi %c52_i32, %36 : i32
-            %38 = arith.cmpi sgt, %37, %c11_i32 : i32
-            %39 = scf.if %38 -> (i32) {
-              %42 = arith.subi %c41_i32, %36 : i32
-              scf.yield %42 : i32
-            } else {
-              %42 = arith.addi %36, %c-41_i32 : i32
-              scf.yield %42 : i32
-            }
-            %40 = arith.cmpi eq, %37, %c11_i32 : i32
-            %41 = scf.if %40 -> (i16) {
-              %42 = arith.trunci %31 : i54 to i16
-              scf.yield %42 : i16
-            } else {
-              %42 = scf.if %38 -> (i16) {
-                %43 = arith.cmpi ult, %39, %c54_i32 : i32
-                %44 = scf.if %43 -> (i16) {
-                  %45 = arith.extui %39 : i32 to i54
-                  %46 = arith.shrsi %31, %45 : i54
-                  %47 = arith.trunci %46 : i54 to i16
-                  scf.yield %47 : i16
-                } else {
-                  %45 = arith.select %20, %c-1_i32, %c0_i32 : i32
-                  %46 = arith.trunci %45 : i32 to i16
-                  scf.yield %46 : i16
-                }
-                scf.yield %44 : i16
-              } else {
-                %43 = arith.trunci %31 : i54 to i16
-                %44 = arith.cmpi ult, %39, %c16_i32 : i32
-                %45 = scf.if %44 -> (i16) {
-                  %46 = arith.extsi %43 : i16 to i32
-                  %47 = arith.shli %46, %39 : i32
-                  %48 = arith.trunci %47 : i32 to i16
-                  scf.yield %48 : i16
-                } else {
-                  scf.yield %c0_i16 : i16
-                }
-                scf.yield %45 : i16
-              }
-              scf.yield %42 : i16
-            }
-            scf.yield %41 : i16
-          }
-          memref.store %34, %arg0[%11] : memref<?xi16>
-          memref.store %4, %arg1[%11] : memref<?xi32>
-          %35 = arith.addi %arg9, %c1_i32 : i32
-          scf.yield %35 : i32
-        } else {
-          scf.yield %arg9 : i32
-        }
-        affine.yield %10 : i32
-      }
-      affine.store %3, %arg2[%arg6 + 1] : memref<?xi32>
-      affine.yield %3 : i32
-    }
-    affine.store %2, %arg3[0] : memref<?xi32>
-    return
-  }
-  func.func private @rand() -> i32 attributes {hls.orig_name = "rand", llvm.linkage = #llvm.linkage<external>}
-  func.func @_Z26generate_sparse_matrix_cscP8ap_fixedILi16ELi5EL9ap_q_mode5EL9ap_o_mode3ELi0EEPiS4_S4_ii(%arg0: memref<?xi16>, %arg1: memref<?xi32>, %arg2: memref<?xi32>, %arg3: memref<?xi32>, %arg4: i32, %arg5: i32) attributes {hls.orig_name = "generate_sparse_matrix_csc", llvm.linkage = #llvm.linkage<external>} {
-    %c-1023_i32 = arith.constant -1023 : i32
-    %c63_i64 = arith.constant 63 : i64
-    %c0_i64 = arith.constant 0 : i64
-    %c9223372036854775807_i64 = arith.constant 9223372036854775807 : i64
-    %c0_i16 = arith.constant 0 : i16
-    %c54_i32 = arith.constant 54 : i32
-    %c11_i32 = arith.constant 11 : i32
-    %c-1_i32 = arith.constant -1 : i32
-    %c16_i32 = arith.constant 16 : i32
-    %c-4503599627370497_i54 = arith.constant -4503599627370497 : i54
-    %c4503599627370495_i64 = arith.constant 4503599627370495 : i64
-    %c52_i64 = arith.constant 52 : i64
-    %c2047_i64 = arith.constant 2047 : i64
-    %c4503599627370496_i54 = arith.constant 4503599627370496 : i54
-    %c-41_i32 = arith.constant -41 : i32
-    %c41_i32 = arith.constant 41 : i32
-    %c52_i32 = arith.constant 52 : i32
-    %c0_i55 = arith.constant 0 : i55
-    %c1_i32 = arith.constant 1 : i32
-    %cst = arith.constant 1.000000e+00 : f64
-    %cst_0 = arith.constant 0x41DFFFFFFFC00000 : f64
-    %cst_1 = arith.constant 2.000000e+00 : f64
-    %cst_2 = arith.constant 1.000000e-01 : f64
-    %cst_3 = arith.constant 2.14748365E+9 : f32
-    %c0_i32 = arith.constant 0 : i32
-    affine.store %c0_i32, %arg2[0] : memref<?xi32>
-    %0 = arith.index_cast %arg5 : i32 to index
-    %1 = arith.index_cast %arg4 : i32 to index
-    %2 = affine.for %arg6 = 0 to %0 iter_args(%arg7 = %c0_i32) -> (i32) {
-      %3 = affine.for %arg8 = 0 to %1 iter_args(%arg9 = %arg7) -> (i32) {
-        %4 = arith.index_cast %arg8 : index to i32
-        %5 = func.call @rand() : () -> i32
-        %6 = arith.sitofp %5 : i32 to f32
-        %7 = arith.divf %6, %cst_3 : f32
-        %8 = arith.extf %7 : f32 to f64
-        %9 = arith.cmpf olt, %8, %cst_2 : f64
-        %10 = scf.if %9 -> (i32) {
-          %11 = arith.index_cast %arg9 : i32 to index
-          %12 = func.call @rand() : () -> i32
-          %13 = arith.sitofp %12 : i32 to f32
-          %14 = arith.extf %13 : f32 to f64
-          %15 = arith.mulf %14, %cst_1 : f64
-          %16 = arith.divf %15, %cst_0 : f64
-          %17 = arith.subf %16, %cst : f64
-          %18 = arith.bitcast %17 : f64 to i64
-          %19 = arith.shrui %18, %c63_i64 : i64
-          %20 = arith.trunci %19 : i64 to i1
-          %21 = arith.shrui %18, %c52_i64 : i64
-          %22 = arith.andi %21, %c2047_i64 : i64
-          %23 = arith.trunci %22 : i64 to i11
-          %24 = arith.extui %23 : i11 to i32
-          %25 = arith.addi %24, %c-1023_i32 : i32
-          %26 = arith.trunci %25 : i32 to i12
-          %27 = arith.andi %18, %c4503599627370495_i64 : i64
-          %28 = arith.trunci %27 : i64 to i54
-          %29 = arith.andi %28, %c-4503599627370497_i54 : i54
-          %30 = arith.ori %29, %c4503599627370496_i54 : i54
-          %31 = scf.if %20 -> (i54) {
-            %36 = arith.extsi %30 : i54 to i55
-            %37 = arith.subi %c0_i55, %36 : i55
-            %38 = arith.trunci %37 : i55 to i54
-            scf.yield %38 : i54
-          } else {
-            scf.yield %30 : i54
-          }
-          %32 = arith.andi %18, %c9223372036854775807_i64 : i64
-          %33 = arith.cmpi eq, %32, %c0_i64 : i64
-          %34 = scf.if %33 -> (i16) {
-            scf.yield %c0_i16 : i16
-          } else {
-            %36 = arith.extsi %26 : i12 to i32
-            %37 = arith.subi %c52_i32, %36 : i32
-            %38 = arith.cmpi sgt, %37, %c11_i32 : i32
-            %39 = scf.if %38 -> (i32) {
-              %42 = arith.subi %c41_i32, %36 : i32
-              scf.yield %42 : i32
-            } else {
-              %42 = arith.addi %36, %c-41_i32 : i32
-              scf.yield %42 : i32
-            }
-            %40 = arith.cmpi eq, %37, %c11_i32 : i32
-            %41 = scf.if %40 -> (i16) {
-              %42 = arith.trunci %31 : i54 to i16
-              scf.yield %42 : i16
-            } else {
-              %42 = scf.if %38 -> (i16) {
-                %43 = arith.cmpi ult, %39, %c54_i32 : i32
-                %44 = scf.if %43 -> (i16) {
-                  %45 = arith.extui %39 : i32 to i54
-                  %46 = arith.shrsi %31, %45 : i54
-                  %47 = arith.trunci %46 : i54 to i16
-                  scf.yield %47 : i16
-                } else {
-                  %45 = arith.select %20, %c-1_i32, %c0_i32 : i32
-                  %46 = arith.trunci %45 : i32 to i16
-                  scf.yield %46 : i16
-                }
-                scf.yield %44 : i16
-              } else {
-                %43 = arith.trunci %31 : i54 to i16
-                %44 = arith.cmpi ult, %39, %c16_i32 : i32
-                %45 = scf.if %44 -> (i16) {
-                  %46 = arith.extsi %43 : i16 to i32
-                  %47 = arith.shli %46, %39 : i32
-                  %48 = arith.trunci %47 : i32 to i16
-                  scf.yield %48 : i16
-                } else {
-                  scf.yield %c0_i16 : i16
-                }
-                scf.yield %45 : i16
-              }
-              scf.yield %42 : i16
-            }
-            scf.yield %41 : i16
-          }
-          memref.store %34, %arg0[%11] : memref<?xi16>
-          memref.store %4, %arg1[%11] : memref<?xi32>
-          %35 = arith.addi %arg9, %c1_i32 : i32
-          scf.yield %35 : i32
-        } else {
-          scf.yield %arg9 : i32
-        }
-        affine.yield %10 : i32
-      }
-      affine.store %3, %arg2[%arg6 + 1] : memref<?xi32>
-      affine.yield %3 : i32
-    }
-    affine.store %2, %arg3[0] : memref<?xi32>
-    return
-  }
-  func.func @_Z18save_sparse_matrixPKcP8ap_fixedILi16ELi5EL9ap_q_mode5EL9ap_o_mode3ELi0EEPiS6_ii(%arg0: memref<?xi8>, %arg1: memref<?xi16>, %arg2: memref<?xi32>, %arg3: memref<?xi32>, %arg4: i32, %arg5: i32) attributes {hls.orig_name = "save_sparse_matrix", llvm.linkage = #llvm.linkage<external>} {
-    %true = arith.constant true
-    %c2_i64 = arith.constant 2 : i64
-    %c4_i64 = arith.constant 4 : i64
-    %c1_i64 = arith.constant 1 : i64
-    %c1_i32 = arith.constant 1 : i32
-    %alloca = memref.alloca() {polygeist.varname = "nnz"} : memref<1xi32>
-    affine.store %arg4, %alloca[0] : memref<1xi32>
-    %0 = llvm.mlir.addressof @str5 : !llvm.ptr
-    %1 = "polygeist.pointer2memref"(%0) : (!llvm.ptr) -> memref<?xi8>
-    %2 = call @fopen(%arg0, %1) : (memref<?xi8>, memref<?xi8>) -> memref<?x!llvm.struct<(i32, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, i32, i32, i64, i16, i8, array<1 x i8>, ptr, i64, ptr, ptr, ptr, ptr, i64, i32, array<20 x i8>)>>
-    %3 = "polygeist.memref2pointer"(%2) : (memref<?x!llvm.struct<(i32, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, i32, i32, i64, i16, i8, array<1 x i8>, ptr, i64, ptr, ptr, ptr, ptr, i64, i32, array<20 x i8>)>>) -> !llvm.ptr
-    %4 = llvm.mlir.zero : !llvm.ptr
-    %5 = llvm.icmp "ne" %3, %4 : !llvm.ptr
-    %6 = arith.xori %5, %true : i1
-    scf.if %6 {
-      %24 = llvm.mlir.addressof @str1 : !llvm.ptr
-      %25 = "polygeist.pointer2memref"(%24) : (!llvm.ptr) -> memref<?xi8>
-      func.call @perror(%25) : (memref<?xi8>) -> ()
-      func.call @exit(%c1_i32) : (i32) -> ()
-    }
-    %7 = "polygeist.memref2pointer"(%alloca) : (memref<1xi32>) -> !llvm.ptr
-    %8 = "polygeist.pointer2memref"(%7) : (!llvm.ptr) -> memref<?xi8>
-    %9 = call @fwrite(%8, %c4_i64, %c1_i64, %2) : (memref<?xi8>, i64, i64, memref<?x!llvm.struct<(i32, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, i32, i32, i64, i16, i8, array<1 x i8>, ptr, i64, ptr, ptr, ptr, ptr, i64, i32, array<20 x i8>)>>) -> i64
-    %10 = "polygeist.memref2pointer"(%arg1) : (memref<?xi16>) -> !llvm.ptr
-    %11 = "polygeist.pointer2memref"(%10) : (!llvm.ptr) -> memref<?xi8>
-    %12 = affine.load %alloca[0] : memref<1xi32>
-    %13 = arith.extsi %12 : i32 to i64
-    %14 = call @fwrite(%11, %c2_i64, %13, %2) : (memref<?xi8>, i64, i64, memref<?x!llvm.struct<(i32, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, i32, i32, i64, i16, i8, array<1 x i8>, ptr, i64, ptr, ptr, ptr, ptr, i64, i32, array<20 x i8>)>>) -> i64
-    %15 = "polygeist.memref2pointer"(%arg2) : (memref<?xi32>) -> !llvm.ptr
-    %16 = "polygeist.pointer2memref"(%15) : (!llvm.ptr) -> memref<?xi8>
-    %17 = call @fwrite(%16, %c4_i64, %13, %2) : (memref<?xi8>, i64, i64, memref<?x!llvm.struct<(i32, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, i32, i32, i64, i16, i8, array<1 x i8>, ptr, i64, ptr, ptr, ptr, ptr, i64, i32, array<20 x i8>)>>) -> i64
-    %18 = "polygeist.memref2pointer"(%arg3) : (memref<?xi32>) -> !llvm.ptr
-    %19 = "polygeist.pointer2memref"(%18) : (!llvm.ptr) -> memref<?xi8>
-    %20 = arith.addi %arg5, %c1_i32 : i32
-    %21 = arith.extsi %20 : i32 to i64
-    %22 = call @fwrite(%19, %c4_i64, %21, %2) : (memref<?xi8>, i64, i64, memref<?x!llvm.struct<(i32, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, i32, i32, i64, i16, i8, array<1 x i8>, ptr, i64, ptr, ptr, ptr, ptr, i64, i32, array<20 x i8>)>>) -> i64
-    %23 = call @fclose(%2) : (memref<?x!llvm.struct<(i32, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr, i32, i32, i64, i16, i8, array<1 x i8>, ptr, i64, ptr, ptr, ptr, ptr, i64, i32, array<20 x i8>)>>) -> i32
-    return
-  }
   func.func @_Z26sparse_matrix_multiply_HLSP8ap_fixedILi16ELi5EL9ap_q_mode5EL9ap_o_mode3ELi0EEPiS4_S3_S4_S4_PA64_S2_(%arg0: memref<4096xi16> {hls.interface = [{bundle = "mem1", mode = "m_axi", offset = "slave", port = "values_A"}]}, %arg1: memref<4096xi32> {hls.interface = [{bundle = "mem1", mode = "m_axi", offset = "slave", port = "column_indices_A"}]}, %arg2: memref<65xi32> {hls.interface = [{bundle = "mem1", mode = "m_axi", offset = "slave", port = "row_ptr_A"}]}, %arg3: memref<4096xi16> {hls.interface = [{bundle = "mem2", mode = "m_axi", offset = "slave", port = "values_B"}]}, %arg4: memref<4096xi32> {hls.interface = [{bundle = "mem2", mode = "m_axi", offset = "slave", port = "row_indices_B"}]}, %arg5: memref<65xi32> {hls.interface = [{bundle = "mem2", mode = "m_axi", offset = "slave", port = "col_ptr_B"}]}, %arg6: memref<64x64xi16> {hls.interface = [{bundle = "mem3", mode = "m_axi", offset = "slave", port = "C"}]}) attributes {hls.dataflow = [{disable_start_propagation = false}], hls.interface = [{mode = "s_axilite", port = "return"}], hls.orig_name = "sparse_matrix_multiply_HLS", llvm.linkage = #llvm.linkage<external>} {
     %c11_i33 = arith.constant 11 : i33
     %c0_i16 = arith.constant 0 : i16
@@ -1280,1354 +84,1354 @@ module {
 }
 
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1211:15){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":15:15){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1211:15){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":15:15){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1211:15){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":15:15){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1211:15){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":15:15){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1211:15){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":15:15){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1211:15){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":15:15){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1211:15){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":15:15){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1211:15){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":15:15){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1211:15){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":15:15){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1211:15){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":15:15){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1211:15){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":15:15){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1211:15){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":15:15){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1211:15){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":15:15){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1211:15){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":15:15){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1211:15){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":15:15){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1211:15){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":15:15){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1211:15){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":15:15){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1211:15){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":15:15){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1211:15){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":15:15){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1211:15){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":15:15){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1211:15){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":15:15){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1211:15){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":15:15){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1211:15){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":15:15){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1211:15){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":15:15){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1211:15){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":15:15){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1211:15){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":15:15){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1211:15){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":15:15){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1211:15){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":15:15){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1211:15){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":15:15){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1211:15){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":15:15){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1211:15){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":15:15){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1211:15){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":15:15){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1211:15){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":15:15){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1211:15){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":15:15){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1211:15){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":15:15){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1211:15){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":15:15){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1211:15){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":15:15){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1211:15){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":15:15){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1211:15){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":15:15){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1211:15){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":15:15){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1211:15){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":15:15){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1211:15){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":15:15){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1211:15){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":15:15){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1211:15){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":15:15){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1211:15){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":15:15){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1211:15){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":15:15){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1211:15){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":15:15){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1211:15){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":15:15){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1211:15){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":15:15){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1211:15){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":15:15){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1211:15){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":15:15){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1211:15){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":15:15){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1211:15){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":15:15){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1211:15){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":15:15){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1211:15){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":15:15){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1211:15){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":15:15){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1211:15){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":15:15){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1211:15){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":15:15){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1211:15){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":15:15){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1211:15){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":15:15){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1211:15){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":15:15){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1211:15){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":15:15){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1211:15){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":15:15){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1211:15){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":15:15){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1211:15){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":15:15){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1212:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":16:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1212:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":16:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1212:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":16:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1212:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":16:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1212:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":16:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1212:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":16:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1212:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":16:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1212:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":16:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1212:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":16:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1212:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":16:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1212:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":16:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1212:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":16:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1212:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":16:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1212:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":16:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1212:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":16:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1212:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":16:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1212:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":16:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1212:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":16:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1212:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":16:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1212:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":16:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1212:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":16:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1212:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":16:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1212:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":16:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1212:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":16:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1212:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":16:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1212:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":16:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1212:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":16:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1212:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":16:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1212:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":16:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1212:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":16:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1212:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":16:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1212:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":16:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1212:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":16:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1212:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":16:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1212:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":16:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1212:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":16:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1212:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":16:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1212:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":16:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1212:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":16:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1212:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":16:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1212:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":16:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1212:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":16:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1212:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":16:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1212:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":16:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1212:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":16:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1212:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":16:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1212:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":16:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1212:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":16:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1212:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":16:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1212:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":16:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1212:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":16:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1212:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":16:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1212:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":16:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1212:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":16:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1212:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":16:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1212:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":16:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1212:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":16:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1212:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":16:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1212:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":16:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1212:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":16:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1212:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":16:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1212:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":16:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1212:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":16:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1212:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":16:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1212:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":16:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=0{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1213:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":17:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1213:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":17:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1213:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":17:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1213:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":17:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1213:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":17:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1213:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":17:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1213:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":17:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1213:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":17:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1213:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":17:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1213:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":17:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1213:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":17:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1213:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":17:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1213:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":17:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1213:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":17:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1213:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":17:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1213:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":17:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1213:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":17:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1213:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":17:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1213:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":17:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1213:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":17:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1213:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":17:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1213:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":17:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1213:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":17:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1213:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":17:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1213:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":17:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1213:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":17:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1213:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":17:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1213:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":17:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1213:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":17:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1213:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":17:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1213:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":17:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1213:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":17:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1213:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":17:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1213:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":17:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1213:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":17:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1213:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":17:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1213:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":17:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1213:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":17:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1213:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":17:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1213:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":17:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1213:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":17:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1213:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":17:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1213:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":17:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1213:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":17:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1213:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":17:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1213:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":17:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1213:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":17:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1213:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":17:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1213:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":17:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1213:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":17:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1213:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":17:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1213:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":17:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1213:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":17:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1213:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":17:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1213:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":17:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1213:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":17:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1213:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":17:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1213:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":17:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1213:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":17:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1213:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":17:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1213:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":17:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1213:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":17:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1213:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":17:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1213:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":17:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1214:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":18:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1214:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":18:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1214:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":18:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1214:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":18:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1214:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":18:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1214:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":18:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1214:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":18:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1214:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":18:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1214:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":18:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1214:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":18:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1214:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":18:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1214:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":18:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1214:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":18:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1214:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":18:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1214:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":18:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1214:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":18:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1214:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":18:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1214:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":18:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1214:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":18:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1214:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":18:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1214:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":18:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1214:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":18:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1214:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":18:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1214:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":18:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1214:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":18:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1214:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":18:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1214:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":18:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1214:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":18:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1214:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":18:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1214:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":18:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1214:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":18:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1214:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":18:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1214:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":18:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1214:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":18:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1214:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":18:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1214:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":18:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1214:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":18:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1214:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":18:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1214:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":18:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1214:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":18:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1214:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":18:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1214:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":18:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1214:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":18:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1214:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":18:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1214:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":18:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1214:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":18:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1214:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":18:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1214:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":18:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1214:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":18:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1214:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":18:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1214:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":18:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1214:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":18:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1214:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":18:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1214:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":18:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1214:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":18:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1214:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":18:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1214:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":18:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1214:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":18:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1214:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":18:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1214:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":18:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1214:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":18:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1214:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":18:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1214:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":18:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1214:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":18:17){{$}}
 // CHECK-NEXT: kind=RAM_1P  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1215:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":19:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1215:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":19:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1215:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":19:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1215:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":19:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1215:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":19:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1215:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":19:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1215:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":19:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1215:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":19:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1215:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":19:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1215:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":19:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1215:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":19:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1215:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":19:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1215:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":19:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1215:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":19:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1215:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":19:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1215:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":19:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1215:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":19:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1215:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":19:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1215:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":19:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1215:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":19:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1215:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":19:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1215:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":19:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1215:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":19:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1215:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":19:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1215:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":19:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1215:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":19:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1215:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":19:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1215:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":19:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1215:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":19:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1215:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":19:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1215:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":19:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1215:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":19:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1215:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":19:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1215:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":19:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1215:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":19:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1215:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":19:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1215:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":19:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1215:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":19:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1215:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":19:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1215:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":19:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1215:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":19:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1215:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":19:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1215:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":19:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1215:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":19:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1215:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":19:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1215:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":19:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1215:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":19:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1215:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":19:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1215:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":19:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1215:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":19:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1215:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":19:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1215:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":19:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1215:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":19:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1215:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":19:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1215:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":19:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1215:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":19:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1215:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":19:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1215:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":19:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1215:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":19:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1215:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":19:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1215:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":19:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1215:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":19:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1215:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":19:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1215:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":19:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1216:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":20:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1216:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":20:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1216:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":20:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1216:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":20:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1216:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":20:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1216:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":20:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1216:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":20:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1216:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":20:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1216:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":20:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1216:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":20:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1216:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":20:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1216:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":20:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1216:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":20:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1216:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":20:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1216:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":20:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1216:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":20:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1216:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":20:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1216:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":20:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1216:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":20:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1216:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":20:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1216:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":20:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1216:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":20:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1216:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":20:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1216:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":20:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1216:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":20:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1216:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":20:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1216:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":20:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1216:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":20:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1216:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":20:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1216:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":20:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1216:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":20:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1216:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":20:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1216:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":20:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1216:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":20:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1216:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":20:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1216:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":20:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1216:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":20:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1216:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":20:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1216:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":20:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1216:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":20:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1216:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":20:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1216:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":20:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1216:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":20:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1216:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":20:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1216:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":20:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1216:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":20:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1216:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":20:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1216:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":20:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1216:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":20:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1216:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":20:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1216:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":20:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1216:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":20:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1216:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":20:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1216:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":20:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1216:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":20:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1216:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":20:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1216:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":20:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1216:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":20:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1216:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":20:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1216:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":20:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1216:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":20:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1216:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":20:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1216:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":20:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1216:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":20:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=1{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1217:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":21:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1217:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":21:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1217:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":21:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1217:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":21:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1217:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":21:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1217:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":21:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1217:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":21:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1217:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":21:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1217:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":21:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1217:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":21:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1217:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":21:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1217:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":21:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1217:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":21:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1217:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":21:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1217:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":21:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1217:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":21:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1217:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":21:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1217:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":21:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1217:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":21:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1217:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":21:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1217:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":21:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1217:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":21:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1217:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":21:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1217:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":21:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1217:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":21:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1217:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":21:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1217:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":21:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1217:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":21:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1217:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":21:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1217:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":21:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1217:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":21:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1217:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":21:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1217:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":21:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1217:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":21:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1217:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":21:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1217:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":21:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1217:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":21:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1217:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":21:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1217:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":21:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1217:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":21:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1217:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":21:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1217:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":21:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1217:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":21:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1217:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":21:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1217:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":21:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1217:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":21:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1217:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":21:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1217:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":21:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1217:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":21:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1217:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":21:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1217:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":21:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1217:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":21:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1217:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":21:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1217:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":21:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1217:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":21:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1217:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":21:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1217:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":21:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1217:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":21:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1217:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":21:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1217:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":21:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1217:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":21:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1217:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":21:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1217:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":21:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
-// CHECK: memref.alloca @ loc("{{[^"]*}}":1217:17){{$}}
+// CHECK: memref.alloca @ loc("{{[^"]*}}":21:17){{$}}
 // CHECK-NEXT: kind=PIPO  bram=2{{$}}
 // CHECK-NOT: {{^memref\.}}
 // CHECK: Total BRAM: 388{{$}}

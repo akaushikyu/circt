@@ -2,11 +2,11 @@
 // RUN: hls-est %s --symbol-privatize=exclude=_Z6sc_topRN3hls6streamI8ap_fixedILi16ELi5EL9ap_q_mode5EL9ap_o_mode3ELi0EELi0EEES6_S6_ --symbol-dce --lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --infer-vitis-split-array=td=off --narrow-ram-widths --memory-banking-bram --convert-affine-to-loopschedule '--bram-analysis=top=_Z6sc_topRN3hls6streamI8ap_fixedILi16ELi5EL9ap_q_mode5EL9ap_o_mode3ELi0EELi0EEES6_S6_ math-costs=%S/../../../tools/hls-est-validate/math_costs.json' --config-set scheduling.timing.operator_latencies.stream_read=2 --config-set scheduling.timing.operator_latencies.stream_write=1 -o /dev/null | FileCheck %s --check-prefix=STRM
 // W9r10-impl (2026-10-21): VITIS_NOTES N82 (OPEN_ISSUES O54 (c)): minjun lab2 compute_qk_product_stream shape: K_buffer cyclic 4, 4 x RAM_1WNR 3.
 // A blocking hls::stream read / write is an operation of class stream_read (2 cycles) / stream_write (1 cycle) on its stream's one port.
-// The classes are opt-in (prefix STRM, set by --config-set of both latencies); the default leaves such a loop sequential (CHECK), because adopting them
-// needs loop-carried memory recurrences (OPEN_ISSUES O1): run S1 of W9r10-impl lost 115 exact designs through x36 -> x18 accumulators.
+// Since W9r11-impl (2026-10-22, MEMOS #78) the classes are in the default profile (CHECK = STRM); before, the default left such a loop
+// sequential (4 BRAM). They waited for the loop-carried memory recurrences (VITIS_NOTES N87, OPEN_ISSUES O1 / O114), which W9r11-impl added.
 // Kernel w9r10p_sc_mj (~/hls-est-work/exp-src/w9r10p/sc_mj.cpp); MLIR from cgeist 537d6614 (installed) with the harness's --shim real flags.
 // Vitis 2025.1 td=off: 12 BRAM_18K.
-// CHECK: Total BRAM: 4{{$}}
+// CHECK: Total BRAM: 12{{$}}
 // STRM: Total BRAM: 12{{$}}
 
 module {

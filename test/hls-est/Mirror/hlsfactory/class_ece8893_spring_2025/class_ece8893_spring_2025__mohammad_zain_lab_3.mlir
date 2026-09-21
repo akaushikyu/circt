@@ -212,7 +212,7 @@ module {
 
 // CHECK-NOT: {{^memref\.}}
 // CHECK: memref.alloca @ loc("{{[^"]*}}":19:15){{$}}
-// CHECK-NEXT: kind=RAM_T2P  bram=57{{$}}
+// CHECK-NEXT: kind=RAM_2P  bram=57{{$}}
 // CHECK-NOT: {{^memref\.}}
 // CHECK: memref.alloca @ loc("{{[^"]*}}":20:17){{$}}
 // CHECK-NEXT: kind=RAM_2P  bram=1{{$}}

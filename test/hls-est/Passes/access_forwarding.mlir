@@ -151,6 +151,9 @@ module {
 // CHECK-NEXT:   ram type: RAM_S2P
 // CHECK:      Total BRAM: 4
 
+// b_disjoint is read and written once per iteration of the one pipelined loop
+// that accesses it: a read-only and a write-only port, x36 (VITIS_NOTES N90,
+// W9r11-impl; RAM_2P x18 = 2 before, total 5).
 // REPORT: Total BRAM: 4
 
 // Default (no forwarding): acc has 8R+9W per iteration, not replicable, II 9,
