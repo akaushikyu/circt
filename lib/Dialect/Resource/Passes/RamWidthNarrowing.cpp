@@ -229,9 +229,10 @@ struct MemClass {
 class Narrowing {
 public:
   Narrowing(ModuleOp module, bool useRanges, bool useDemand, bool remarks,
-            ArrayRef<std::string> fullAddressModes)
+            ArrayRef<std::string> fullAddressModes, bool completeReadSelector)
       : module(module), symbols(module), partitions(module, false),
         rangesOn(useRanges), demandOn(useDemand), remarksOn(remarks),
+        completeReadSelector(completeReadSelector),
         fullAddressModes(fullAddressModes.begin(), fullAddressModes.end()) {}
 
   void run();
@@ -271,7 +272,8 @@ private:
   unsigned resultDemand(Value resultValue) const {
     return demand.lookup(resultValue);
   }
-  std::optional<unsigned> subscriptBits(Value memref, unsigned dim) const;
+  std::optional<unsigned> subscriptBits(Value memref, unsigned dim,
+                                        bool isRead) const;
   std::optional<SmallVector<bool>> completeDims(Value memref) const;
   std::optional<std::pair<int64_t, int64_t>> subscriptRange(Operation *access,
                                                             unsigned dim);
@@ -288,6 +290,8 @@ private:
   SymbolTable symbols;
   PartitionRoots partitions;
   bool rangesOn, demandOn, remarksOn;
+
+  bool completeReadSelector;
 
   SmallVector<std::string> fullAddressModes;
 
@@ -1485,8 +1489,8 @@ bool Narrowing::feedsBackIntoSameBank(Value valueHandle, unsigned cls,
   return false;
 }
 
-std::optional<unsigned> Narrowing::subscriptBits(Value memref,
-                                                 unsigned dim) const {
+std::optional<unsigned> Narrowing::subscriptBits(Value memref, unsigned dim,
+                                                 bool isRead) const {
   MemClass *candidateValue = classOf(memref);
   auto type = dyn_cast<MemRefType>(memref.getType());
   if (!candidateValue || candidateValue->addressOpaque || !type ||
@@ -1496,8 +1500,12 @@ std::optional<unsigned> Narrowing::subscriptBits(Value memref,
   if (!completeOpt)
     return std::nullopt;
   SmallVector<bool> &complete = *completeOpt;
+
   if (complete[dim])
-    return std::nullopt;
+    return isRead && completeReadSelector
+               ? std::optional<unsigned>(llvm::Log2_64_Ceil(
+                     static_cast<uint64_t>(type.getDimSize(dim))))
+               : std::nullopt;
   uint64_t words = 1, stride = 1;
   for (unsigned dimensionIndex = 0; dimensionIndex < type.getRank();
        ++dimensionIndex) {
@@ -1541,13 +1549,15 @@ unsigned Narrowing::affineAccessDemand(Operation *op, OpOperand &use,
   if (no < begin || no >= begin + mapOps.size())
     return widthValue;
   unsigned innerIndex = no - begin;
+  bool isRead = isa<affine::AffineReadOpInterface>(op);
   unsigned need = 0;
   for (auto [dimensionIndex, entryValue] : llvm::enumerate(map.getResults())) {
     if (!usesOperand(entryValue, map, innerIndex))
       continue;
     if (hasDivOrMod(entryValue))
       return widthValue;
-    std::optional<unsigned> bits = subscriptBits(memref, dimensionIndex);
+    std::optional<unsigned> bits =
+        subscriptBits(memref, dimensionIndex, isRead);
     if (!bits)
       return widthValue;
     need = std::max(need, *bits);
@@ -1594,7 +1604,8 @@ unsigned Narrowing::useDemand(OpOperand &use) {
       return capped(candidateValue->demand);
     }
     if (std::optional<unsigned> pos = plainSubscriptPosition(user, no)) {
-      std::optional<unsigned> bits = subscriptBits(acc->memref, *pos);
+      std::optional<unsigned> bits =
+          subscriptBits(acc->memref, *pos, !acc->stored);
       return bits ? capped(*bits) : widthValue;
     }
     return affineAccessDemand(user, use, widthValue);
@@ -1864,6 +1875,12 @@ struct NarrowRamWidthsPass
       *this, "load-demand",
       llvm::cl::desc("Narrow to the low bits the loads' users demand"),
       llvm::cl::init(true)};
+  Option<bool> completeReadSelector{
+      *this, "complete-read-selector",
+      llvm::cl::desc("A read's subscript of a completely partitioned "
+                     "dimension of S elements demands ceil(log2 S) bits "
+                     "(VITIS_NOTES N91)"),
+      llvm::cl::init(true)};
   Option<bool> remarks{
       *this, "remarks",
       llvm::cl::desc("Emit one remark per array with its widths and why"),
@@ -1884,8 +1901,10 @@ struct NarrowRamWidthsPass
         circt::hlsest::Config::get().tool.hls.narrowing;
     circt::hlsest::applyConfigured(storedRanges, nc.storedRanges);
     circt::hlsest::applyConfigured(loadDemand, nc.loadDemand);
+    circt::hlsest::applyConfigured(completeReadSelector,
+                                   nc.completeReadSelector);
     Narrowing(getOperation(), storedRanges, loadDemand, remarks,
-              nc.fullAddressInterfaceModes)
+              nc.fullAddressInterfaceModes, completeReadSelector)
         .run();
   }
 };

@@ -128,7 +128,8 @@
         "load_demand": true,
         "full_address_interface_modes": [
           "m_axi"
-        ]
+        ],
+        "complete_read_selector": true
       },
       "globals": {
         "attribute_accesses": false

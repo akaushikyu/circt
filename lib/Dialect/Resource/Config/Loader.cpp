@@ -1012,6 +1012,8 @@ void fillTool(const json::Object &t, ToolProfile &tool) {
   h.narrowing.loadDemand = boolean(na, "load_demand");
   h.narrowing.fullAddressInterfaceModes =
       strings(na, "full_address_interface_modes");
+  h.narrowing.completeReadSelector =
+      boolean(na, "complete_read_selector", true);
   h.globalsAttributeAccesses =
       boolean(obj(hls, "globals"), "attribute_accesses");
   h.groupingPlugin = str(obj(hls, "grouping"), "plugin");

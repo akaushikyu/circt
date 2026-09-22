@@ -110,7 +110,7 @@
       },
       "inlining": { "honour_inline_off": true },
       "structs": { "aggregate": true, "globals": true, "scalar_registers": true, "through_calls": true, "element_copy_loops": true, "temporary_registers": true, "member_partitions": true },
-      "narrowing": { "stored_ranges": true, "load_demand": true, "full_address_interface_modes": ["m_axi"] },
+      "narrowing": { "stored_ranges": true, "load_demand": true, "full_address_interface_modes": ["m_axi"], "complete_read_selector": true },
       "globals": { "attribute_accesses": true },
       "grouping": { "plugin": "identity" },
       "math_library": { "table": "", "local_struct_tables_at_run_time": true }

@@ -444,6 +444,7 @@ struct NarrowingConfig {
   bool storedRanges = true;
   bool loadDemand = true;
   std::vector<std::string> fullAddressInterfaceModes;
+  bool completeReadSelector = true;
 };
 
 struct HlsToolConfig {

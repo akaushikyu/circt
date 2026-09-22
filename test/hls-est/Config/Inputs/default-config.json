@@ -682,9 +682,11 @@
         "store_forwarding": true
       },
       "narrowing": {
+        "_complete_read_selector": "bool: A read whose subscript of a completely partitioned dimension of S elements comes from an array's load demands ceil(log2 S) bits of it (the bank selector); a write's subscript demands every bit (VITIS_NOTES N91, kernels w9r12p_nw_*) [P-03]",
         "_full_address_interface_modes": "array of strings: Interface modes of a top-level array argument whose subscripts demand every bit (m_axi: 32 bits, VITIS_NOTES N41); an argument without a pragma or of another mode demands the bits of its own address like a local (ap_memory and s_axilite: confirmed, kernels w9p5_idx_mem256 and w9rv_n41_mc; the other modes unconfirmed) [P-03]",
         "_load_demand": "bool: Narrow to the low bits the loads' users demand [P-03]",
         "_stored_ranges": "bool: Narrow to the bits the stored values need [P-03]",
+        "complete_read_selector": true,
         "full_address_interface_modes": ["m_axi"],
         "load_demand": true,
         "stored_ranges": true
