@@ -507,8 +507,8 @@ static void rewriteMemrefLoad(memref::LoadOp loadOp, ArrayRef<Value> banks,
   loadOp.erase();
 }
 
-static std::pair<Value, int64_t> residueBase(Value valueHandle,
-                                             int64_t factor) {
+static std::pair<Value, int64_t> residueBase(Value valueHandle, int64_t factor,
+                                             unsigned depth = 0) {
   bool pow2 = llvm::isPowerOf2_64(static_cast<uint64_t>(factor));
   unsigned bits = llvm::Log2_64(static_cast<uint64_t>(factor));
   auto constOf = [](Value exprValue) -> std::optional<int64_t> {
@@ -547,6 +547,22 @@ static std::pair<Value, int64_t> residueBase(Value valueHandle,
         break;
       valueHandle = tr.getIn();
       continue;
+    }
+    if (isa<arith::RemSIOp, arith::RemUIOp>(def)) {
+      std::optional<int64_t> memoryOp = constOf(def->getOperand(1));
+      if (!memoryOp || *memoryOp <= 0 || *memoryOp % factor != 0)
+        break;
+      valueHandle = def->getOperand(0);
+      continue;
+    }
+    if (auto sel = dyn_cast<arith::SelectOp>(def)) {
+      if (depth >= 4)
+        break;
+      auto [bt, ct] = residueBase(sel.getTrueValue(), factor, depth + 1);
+      auto [bf, cf] = residueBase(sel.getFalseValue(), factor, depth + 1);
+      if (bt != bf || ((ct - cf) % factor) != 0)
+        break;
+      return {bt, candidateValue + cf};
     }
     if (isa<arith::AndIOp, arith::AddIOp>(def)) {
       Value lhs = def->getOperand(0), rhs = def->getOperand(1);

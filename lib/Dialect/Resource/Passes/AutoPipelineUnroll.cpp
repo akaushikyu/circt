@@ -16,6 +16,7 @@
 #include "mlir/Dialect/Affine/LoopUtils.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/Dialect/LLVMIR/LLVMTypes.h"
 #include "mlir/Dialect/Math/IR/Math.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
@@ -262,6 +263,28 @@ static bool provablyDisjoint(const Access &exprValue, const Access &rowValue) {
   return false;
 }
 
+/// Values that name (part of) `mem` other than `mem` itself: the results of
+/// the casts, views and pointer conversions taken of it, transitively (a
+/// `memref.cast` passed to a callee that reads the element, cgeist's
+/// `hls::stream::write(const T &)` argument).
+static SmallVector<Value> aliasesOf(Value mem) {
+  SmallVector<Value> aliases, work{mem};
+  while (!work.empty()) {
+    Value valueHandle = work.pop_back_val();
+    for (Operation *user : valueHandle.getUsers()) {
+      if (getAccess(user) || isa<CallOpInterface>(user))
+        continue;
+      for (Value resultValue : user->getResults())
+        if (isa<BaseMemRefType, LLVM::LLVMPointerType>(resultValue.getType()) &&
+            !llvm::is_contained(aliases, resultValue)) {
+          aliases.push_back(resultValue);
+          work.push_back(resultValue);
+        }
+    }
+  }
+  return aliases;
+}
+
 /// Vitis (LLVM LICM scalar promotion) keeps a location of `mem` in a
 /// register across `loop` when every use of `mem` inside the loop is a load
 /// or store at an address that does not change with the loop, and the
@@ -274,6 +297,11 @@ static bool provablyDisjoint(const Access &exprValue, const Access &rowValue) {
 static bool
 isPromotableIn(Value mem, AffineForOp loop,
                SmallVector<SmallVector<Access, 4>, 2> *groups = nullptr) {
+
+  for (Value alias : aliasesOf(mem))
+    for (Operation *user : alias.getUsers())
+      if (loop->isAncestor(user))
+        return false;
   bool ok = true, anyStore = false, allDirect = true;
   SmallVector<SmallVector<Access, 4>, 2> found;
 
