@@ -166,6 +166,10 @@ def parse_cgeist_tokens(toks: list[str], sources_first: bool) -> dict:
             i += 1
         elif t.startswith("-D"):
             defines.append(t[2:])
+        elif t == "-o" and i < len(toks) and toks[i] == "%t.mlir":
+            # The lit-only MLIR output (what %hlsfactory_mlir expands to); a test whose
+            # name has whitespace spells it out quoted (Polygeist 33982ef0, O129).
+            i += 1
         elif t == "-o":
             out = toks[i]
             i += 1

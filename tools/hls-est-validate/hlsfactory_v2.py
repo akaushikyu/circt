@@ -117,7 +117,7 @@ def apply_catalogue_overrides(records: list[dict]) -> None:
     """Replace top / sources / includes of the records CATALOGUE_OVERRIDES names (in place)."""
     for r in records:
         o = CATALOGUE_OVERRIDES.get(f"{r['dataset']}/{r['benchmark']}")
-        if not o:
+        if not o or (r.get("v2") or {}).get("override"):
             continue
         before = {k: r.get(k) for k in ("top", "sources", "includes")}
         for k in ("top", "sources", "includes"):
@@ -2130,6 +2130,11 @@ def load(root: str, polygeist_records: list[dict], test_hls_wsl: str, problems: 
                 matched_pg.add(id(pg))
                 r["dataset"], r["benchmark"], r["slug"] = pg["dataset"], pg["benchmark"], pg["slug"]
                 r["v2"]["polygeist_top"] = pg["top"]
+                # The override before the source comparison, so that it sees the authors' top, files and
+                # include directories: an overridden design whose files equal the copy's compiles the copy
+                # and keeps the cache keys its ground truth was synthesised under (W9r12-impl: the O110
+                # designs were 'sources differ' once the copy's lit tests named the same files).
+                apply_catalogue_overrides([r])
                 if r["top"] != pg["top"]:
                     status, diff = "top-differs", {}
                 else:
@@ -2174,7 +2179,7 @@ def load(root: str, polygeist_records: list[dict], test_hls_wsl: str, problems: 
                  "mode": d.get("mode")}
                 for d in polygeist_records if id(d) not in matched_pg]
     _drain_io_errors(problems)
-    apply_catalogue_overrides(out)
+    apply_catalogue_overrides(out)   # the records the first call could not name yet (renamed above)
     return out, {"skipped": skipped, "vanished": vanished, "root": root}
 
 
