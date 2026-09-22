@@ -13,3 +13,8 @@
 # Vitis' C++-only flags, passed to cc1 (accepted for C too, where they have no effect).
 -Xclang -fno-threadsafe-statics -Xclang -fno-use-cxa-atexit
 --scalar-wrapper-abi --xlx-headers
+# A pipeline pragma on a loop of trip count 1 unrolls every loop nested in it completely, as Vitis
+# does, before cgeist folds the trip-1 loop away (OPEN_ISSUES O57, VITIS_NOTES N40; cgeist option of
+# Polygeist W9r5-impl, adopted in W9r12-impl: only the three
+# MultiHeadSelfAttention1 opt5 designs change, 2304 -> 2880 against Vitis 2688, bit-exact).
+--hls-trip-one-pipeline-unroll
