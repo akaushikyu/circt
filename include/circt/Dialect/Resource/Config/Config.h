@@ -262,6 +262,9 @@ struct MemoryArchitectureConfig {
   /// per cycle, gets a read-only and a write-only port: RAM_S2P, simple dual
   /// port (x36) (W9r11, VITIS_NOTES N90).
   bool oneLoopReadWriteSdp = true;
+  /// A bank only one iteration of one loop writes and reads becomes
+  /// registers (W9r12, VITIS_NOTES N92).
+  bool iterationPrivateRegisters = true;
   int64_t portOccupancyCycles = 1;
   ReplicationConfig replication;
   RomConfig rom;

@@ -597,6 +597,7 @@
         "table": ""
       },
       "memory_architecture": {
+        "_iteration_private_registers": "bool: A bank of a partitioned local array whose every access lies in the body of one loop L at one address that is an injective affine function of L's index and of values defined outside L (the same in every access, invariant in every loop nested in L), and whose first access in L's body is an unconditional store, holds only values one iteration of L writes and reads: it becomes registers, no memory (LLVM LICM promotion, store forwarding and dead-alloca removal in reflow; VITIS_NOTES N92, kernels w9r12p_rp_base: Vitis no memory; rp_later / rp_nopart stay memories)",
         "_one_loop_read_write_sdp": "bool: A bank whose every access lies in one pipelined loop with one read and one write per cycle, or whose one read per iteration lies in one pipelined loop with at most II writes per iteration while every other loop only writes it, at most once per cycle, is bound to a read-only and a write-only port (RAM_S2P, simple dual port: x36 allowed); a measured Vitis rule (VITIS_NOTES N90 (c), kernels w9r11i_gd_f / gd_h, w9r11rev_sdp_w / gd_pre / gd_post: RAM_AUTO_1R1W 512x32 = 1; with another loop reading the array it stays x18: gd_a / gd_b / gd_g = 2; off: RAM_2P, x18) [K-04, K-05]",
         "_partitioned_argument_bank_ports": "bool: A function argument with an array_partition pragma (its own, or that of a kept callee's parameter) has one port pool per bank in the scheduler: accesses whose bank is a constant never share a port with another bank's accesses, and an access whose bank is not a constant takes a port of every bank (VITIS_NOTES N88; kernels w9r11p_sa_r8 / sa_2d28 / sa_cpt, w9r11rev_pa_var3; off: one pool for the whole argument) [K-03]",
         "_plugin": "plugin name (a memory_architecture_policy): The MemoryArchitecturePolicy [K-04]",
@@ -608,6 +609,7 @@
         "_sequential_scope": "object: Ports of a non-pipelined scope that no sequential scheduler scheduled [K-12..K-14]",
         "_untracked_memory_ports": "uint, ports: Ports of a memref the scheduler does not track (a function argument, a memref.alloc, a global) [K-03, K-20]",
         "_wide_port_sets": "array of port sets: Port sets priced at priced_configs.wide (Vitis' SDP test: one port, a read and a write port, two read ports) [K-05, N-10]",
+        "iteration_private_registers": true,
         "one_loop_read_write_sdp": true,
         "partitioned_argument_bank_ports": true,
         "plugin": "vitis-auto",

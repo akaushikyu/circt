@@ -24,6 +24,7 @@ add_mlir_library(HLSPasses
         AccessOrder.cpp
         FoldUnrolledGuards.cpp
         MemoryRecurrences.cpp
+        IterationPrivateBanks.cpp
         ../Plugins/Builtin/MAxiBuffers.cpp
         ../Plugins/Builtin/Mappers.cpp
         ../Plugins/Builtin/MemoryArchitecture.cpp

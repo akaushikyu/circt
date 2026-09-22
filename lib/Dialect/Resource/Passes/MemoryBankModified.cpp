@@ -7,6 +7,7 @@
 #include "circt/Dialect/Resource/Interfaces/MemoryDS.h"
 #include "circt/Dialect/Resource/Passes/CallInstances.h"
 #include "circt/Dialect/Resource/Passes/ConstantIndex.h"
+#include "circt/Dialect/Resource/Passes/IterationPrivateBanks.h"
 #include "circt/Dialect/Resource/Passes/MemrefBankClassification.h"
 #include "circt/Dialect/Resource/Passes/PartitionLayout.h"
 #include "circt/Support/LLVM.h"
@@ -1772,6 +1773,9 @@ struct MemoryBankingPass
         annotateCalleeStores,
         hc.memoryArchitecture.replication.calleeStoresPerLoop);
     BankingPlan(getOperation(), steerAffineLoads).run();
+
+    if (hc.memoryArchitecture.iterationPrivateRegisters)
+      hls_analysis::markIterationPrivateBanks(getOperation());
 
     if (annotateCalleeStores)
       hls_analysis::annotateCalleeStoresPerLoop(getOperation());

@@ -847,6 +847,8 @@ void fillTool(const json::Object &t, ToolProfile &tool) {
   m.partitionedArgumentBankPorts =
       boolean(ma, "partitioned_argument_bank_ports", true);
   m.oneLoopReadWriteSdp = boolean(ma, "one_loop_read_write_sdp", true);
+  m.iterationPrivateRegisters =
+      boolean(ma, "iteration_private_registers", true);
   m.portOccupancyCycles = integer(ma, "port_occupancy_cycles");
   const json::Object &rep = obj(ma, "replication");
   m.replication.maxCopies = integer(rep, "max_copies");
