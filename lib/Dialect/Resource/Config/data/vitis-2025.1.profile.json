@@ -26,7 +26,7 @@
           "port_bound_several_arrays": true,
           "port_bound_writable_globals": true
         },
-        "rom": { "sdp_max_reads": 2, "copies": "ceil_half" },
+        "rom": { "sdp_max_reads": 2, "copies": "ceil_half", "sequential_state_reads": true },
         "sequential_scope": { "model": "stretch-pair" },
         "port_set_rule": "by_kind",
         "wide_port_sets": [ ["rw"], ["r", "w"], ["r"], ["r", "r"] ],

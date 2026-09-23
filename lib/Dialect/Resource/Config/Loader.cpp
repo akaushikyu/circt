@@ -866,6 +866,7 @@ void fillTool(const json::Object &t, ToolProfile &tool) {
   const json::Object &rom = obj(ma, "rom");
   m.rom.sdpMaxReads = integer(rom, "sdp_max_reads");
   m.rom.copies = str(rom, "copies");
+  m.rom.sequentialStateReads = boolean(rom, "sequential_state_reads", true);
   m.sequentialScopeModel = str(obj(ma, "sequential_scope"), "model");
   m.portSetRule = str(ma, "port_set_rule");
   if (const json::Array *sets = ma.getArray("wide_port_sets"))

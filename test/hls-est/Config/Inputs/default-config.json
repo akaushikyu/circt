@@ -640,8 +640,10 @@
         "rom": {
           "_copies": "enum (ceil_half|n_minus_1): Copies of a ROM read more often (ROM_NP): ceil(n/2), or n-1 [K-08]",
           "_sdp_max_reads": "uint, reads/cycle: A ROM read at most this often per cycle is one simple-dual-port memory [K-08]",
+          "_sequential_state_reads": "bool: In a sequential (non-pipelined) scope a ROM's reads issue as soon as their addresses are ready: the reads of one straight-line stretch at one dependence depth (the longest chain of reads of the stretch their address is computed from) share a state, and the ROM needs that many read ports (rom.copies copies above sdp_max_reads); a measured Vitis rule (VITIS_NOTES N93, kernels w9r12p_rom_s2 / s3 / s4 / s8: 2 / 3 / 4 / 8 independent reads -> 1 / 2 / 2 / 4 ROM copies, rom_chain4: 1); off: two reads per state at most (N12) [K-08]",
           "copies": "ceil_half",
-          "sdp_max_reads": 2
+          "sdp_max_reads": 2,
+          "sequential_state_reads": true
         },
         "sequential_scope": {
           "_model": "enum (stretch-pair|one-port): stretch-pair: two independent accesses of one straight-line stretch share a state; one-port: one access per state [K-12]",

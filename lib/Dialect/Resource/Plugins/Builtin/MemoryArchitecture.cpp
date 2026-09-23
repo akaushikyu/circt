@@ -47,6 +47,7 @@
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/Support/raw_ostream.h"
 
+#include <functional>
 #include <map>
 
 using namespace mlir;
@@ -439,6 +440,70 @@ static PortDemand sequentialScopeDemand(ArrayRef<const AccessSummary *> group,
   return d;
 }
 
+// Independent reads of a ROM in one state of a sequential scope (VITIS_NOTES
+// N93, kernels w9r12p_rom_s2 / s3 / s4 / s8: 2 / 3 / 4 / 8 independent reads
+// of `T[256]` give Vitis 1 / 2 / 2 / 4 ROM copies; rom_chain4, `r = T[r]`
+// four times, 1). Vitis schedules a ROM read as soon as its address is ready
+// and binds a dual-port copy per two reads of one state, where it spreads
+// RAM accesses over more states (N12). Per stretch, a read issues at the
+// depth of its address: the longest chain of reads of the stretch its
+// operands are computed from (SSA def-use within the stretch); the result is
+// the largest number of reads at one depth.
+static unsigned sequentialRomReadsImpl(ArrayRef<const AccessSummary *> group,
+                                       SeqScopeIndex &index) {
+  Operation *scope = group.front()->scope;
+  if (!scope)
+    return 0;
+  const SeqScopeIndex::Scope &s = index.get(scope);
+  std::map<unsigned, SmallVector<Operation *>> byStretch;
+  for (const AccessSummary *a : group) {
+    if (a->isWrite)
+      return 0;
+    auto it = s.info.find(a->op);
+    if (it != s.info.end())
+      byStretch[it->second.stretch].push_back(a->op);
+  }
+  unsigned best = 0;
+  for (auto &[stretch, reads] : byStretch) {
+    DenseSet<Operation *> isRead(reads.begin(), reads.end());
+    // depth(op): reads of the stretch on the longest chain into op's value.
+    DenseMap<Operation *, unsigned> memo;
+    std::function<unsigned(Operation *, unsigned)> valueDepth =
+        [&](Operation *op, unsigned guard) -> unsigned {
+      auto it = s.info.find(op);
+      if (it == s.info.end() || it->second.stretch != stretch || guard > 256)
+        return 0; // defined before the stretch or elsewhere
+      if (auto m = memo.find(op); m != memo.end())
+        return m->second;
+      unsigned d = 0;
+      auto from = [&](Value v) {
+        if (Operation *def = v.getDefiningOp())
+          d = std::max(d, valueDepth(def, guard + 1));
+      };
+      for (Value v : op->getOperands())
+        from(v);
+      for (Region &region : op->getRegions())
+        for (Block &block : region)
+          if (!block.empty())
+            for (Value v : block.back().getOperands())
+              from(v);
+      if (isRead.contains(op))
+        ++d;
+      memo[op] = d;
+      return d;
+    };
+    std::map<unsigned, unsigned> perDepth;
+    for (Operation *r : reads) {
+      unsigned issue = 0;
+      for (Value v : r->getOperands())
+        if (Operation *def = v.getDefiningOp())
+          issue = std::max(issue, valueDepth(def, 0));
+      best = std::max(best, ++perDepth[issue]);
+    }
+  }
+  return best;
+}
+
 //===----------------------------------------------------------------------===//
 // Kind naming (declared early; used in notes).
 //===----------------------------------------------------------------------===//
@@ -814,6 +879,13 @@ public:
                                    SeqScopeIndex &index,
                                    std::string *note) const override {
     return ::sequentialScopeDemand(group, index, note);
+  }
+
+  unsigned sequentialRomReads(ArrayRef<const AccessSummary *> group,
+                              SeqScopeIndex &index) const override {
+    if (!config().tool.hls.memoryArchitecture.rom.sequentialStateReads)
+      return 0;
+    return ::sequentialRomReadsImpl(group, index);
   }
 
   circt::hlsest::MemoryPlan

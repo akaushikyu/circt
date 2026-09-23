@@ -435,6 +435,23 @@ PortDemand scopeDemand(ArrayRef<const AccessSummary *> group,
   return dimensionIndex;
 }
 
+static unsigned
+sequentialRomReads(ArrayRef<AccessSummary> accesses, SeqContext *seq,
+                   const circt::hlsest::MemoryArchitecturePolicy &policy) {
+  if (!seq)
+    return 0;
+  std::map<Operation *, SmallVector<const AccessSummary *>> byScope;
+  for (const AccessSummary &a : accesses)
+    if (!a.isWrite && a.ii == 0 && !a.op->hasAttr("hls.state"))
+      byScope[a.scope].push_back(&a);
+  unsigned elementCount = 0;
+  for (auto &[scope, group] : byScope)
+    if (group.size() > 2)
+      elementCount =
+          std::max(elementCount, policy.sequentialRomReads(group, seq->index));
+  return elementCount;
+}
+
 static PortDemand computePortDemand(ArrayRef<AccessSummary> accesses,
                                     SeqContext *seq) {
   std::map<Operation *, SmallVector<const AccessSummary *>> byScope;
@@ -1639,6 +1656,11 @@ static BRAMCost estimateBRAM(MemoryResourceOpInterface iface, MemrefRecord &rec,
     request.readOnly = true;
     request.needsInit = true;
     request.narrowed = false;
+
+    if (unsigned elementCount = sequentialRomReads(accesses, seq, policy);
+        elementCount > demand.total) {
+      demand.reads = demand.total = elementCount;
+    }
     circt::hlsest::PlanContext ctx;
     ctx.attributed = true;
     circt::hlsest::MemoryPlan plan = policy.plan(demand, rep, request, ctx);

@@ -160,6 +160,15 @@ public:
   virtual PortDemand
   sequentialScopeDemand(llvm::ArrayRef<const AccessSummary *> group,
                         SeqScopeIndex &index, std::string *note) const = 0;
+  /// The most reads of a read-only bank (a ROM) that one state of a
+  /// sequential scope holds; 0 when the policy does not model it (the
+  /// scope's demand stands). `group`: the reads of one bank in one
+  /// non-pipelined scope.
+  virtual unsigned
+  sequentialRomReads(llvm::ArrayRef<const AccessSummary *> group,
+                     SeqScopeIndex &index) const {
+    return 0;
+  }
   /// After scheduling: the kind, the copies and the priced configuration of
   /// a bank from its demand and replication. May rewrite the per-loop
   /// copies of `replication` for the debug report (a ROM's rule).

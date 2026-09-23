@@ -249,6 +249,9 @@ struct ReplicationConfig {
 struct RomConfig {
   int64_t sdpMaxReads = 2;
   std::string copies; ///< ceil_half | n_minus_1
+  /// A sequential scope reads a ROM in one state as often as it has
+  /// independent reads at one dependence depth (W9r12, VITIS_NOTES N93).
+  bool sequentialStateReads = true;
 };
 
 struct MemoryArchitectureConfig {
