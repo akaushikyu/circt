@@ -20,7 +20,8 @@
 //
 // The rule, per bank of a partitioned local array (after
 // --memory-banking-bram):
-//   - every user is a load or store of the bank (no call, cast or view);
+//   - every user is a load or store of the bank (no call, cast or view), and
+//     at least one reads it;
 //   - there is a loop L whose body holds every access, and every access has
 //     the same address on the dimensions longer than 1, an affine function
 //     of L's index and of values that do not change inside L (defined
@@ -222,7 +223,10 @@ std::optional<Operation *> privateLoop(Value bank) {
     accesses.push_back(user);
     addresses.push_back(*a);
   }
-  if (accesses.empty() || !llvm::any_of(accesses, isStore))
+  // A bank no access reads is not this rule's (the kernels read every bank
+  // they write; a write-only bank is left to the other rules, unconfirmed).
+  if (accesses.empty() || !llvm::any_of(accesses, isStore) ||
+      llvm::all_of(accesses, isStore))
     return std::nullopt;
   // Candidate loops: the enclosing loops of the first access, innermost
   // first.
