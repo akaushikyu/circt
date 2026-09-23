@@ -23,6 +23,7 @@
 #include <llvm/ADT/TypeSwitch.h>
 
 #include <limits>
+#include <map>
 
 #define DEBUG_TYPE "bram-classification"
 
@@ -214,33 +215,30 @@ static ArmPath armPathOf(Operation *op, Operation *scope) {
 }
 
 /// Stores under no if of level `depth` all run; each if of that level runs
-/// one arm, so it adds the most any one of its arms runs.
+/// one arm, so it adds the most any one of its arms runs. The paths are
+/// bucketed by their if and arm in one pass (the former repeated scan was
+/// quadratic in the number of ifs: hlsyn symm-opt-medium, 24 % of its run
+/// time).
 static unsigned maxConcurrent(ArrayRef<const ArmPath *> paths, unsigned depth) {
   unsigned total = 0;
-  SmallVector<const ArmPath *> rest;
+
+  std::map<std::pair<const void *, int64_t>,
+           std::map<int64_t, SmallVector<const ArmPath *>>>
+      byIf;
   for (const ArmPath *portValue : paths) {
-    if (portValue->size() <= depth)
+    if (portValue->size() <= depth) {
       ++total;
-    else
-      rest.push_back(portValue);
-  }
-  while (!rest.empty()) {
-    IfArm theIf = (*rest.front())[depth];
-    SmallVector<const ArmPath *> sameIf, other;
-    for (const ArmPath *portValue : rest)
-      ((*portValue)[depth].sameIf(theIf) ? sameIf : other).push_back(portValue);
-    unsigned best = 0;
-    while (!sameIf.empty()) {
-      int64_t arm = (*sameIf.front())[depth].arm;
-      SmallVector<const ArmPath *> inArm, otherArms;
-      for (const ArmPath *portValue : sameIf)
-        ((*portValue)[depth].arm == arm ? inArm : otherArms)
-            .push_back(portValue);
-      best = std::max(best, maxConcurrent(inArm, depth + 1));
-      sameIf = std::move(otherArms);
+      continue;
     }
+    const IfArm &arrayValue = (*portValue)[depth];
+    byIf[{arrayValue.ifOp, arrayValue.hoistedId}][arrayValue.arm].push_back(
+        portValue);
+  }
+  for (auto &[theIf, arms] : byIf) {
+    unsigned best = 0;
+    for (auto &[arm, inArm] : arms)
+      best = std::max(best, maxConcurrent(inArm, depth + 1));
     total += best;
-    rest = std::move(other);
   }
   return total;
 }
