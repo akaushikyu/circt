@@ -1,40 +1,40 @@
 dataset,designs,with_vitis_result,compared,exact,exact_pct_of_compared,total_abs_err,mean_abs_err,median_abs_err,hlsest_failed_or_not_run,vitis_failed,in_goal_band,over_le_15pct,over_gt_15pct,under,in_goal_band_pct_of_compared
-WIP,162,162,162,156,96.3,904,5.6,0.0,0,0,160,4,0,2,98.8
+WIP,162,162,162,162,100.0,0,0,0.0,0,0,162,0,0,0,100.0
 accelerators,7,6,6,2,33.3,23,3.8,1.0,0,1,3,1,0,3,50.0
 auto_ntt,17,13,13,13,100.0,0,0,0,0,4,13,0,0,0,100.0
 basic,4,0,0,0,,0,,,0,4,0,0,0,0,
-chstone,2,2,2,1,50.0,1,0.5,0.5,0,0,1,0,0,1,50.0
-class_ece8893_2022_fall,17,7,7,4,57.1,152,21.7,0,0,10,5,1,0,2,71.4
+chstone,2,2,2,2,100.0,0,0,0.0,0,0,2,0,0,0,100.0
+class_ece8893_2022_fall,17,7,7,4,57.1,146,20.9,0,0,10,5,1,0,2,71.4
 class_ece8893_2023_spring,32,30,30,24,80.0,237,7.9,0.0,0,2,27,3,0,3,90.0
-class_ece8893_spring_2025,94,82,82,49,59.8,1300,15.9,0.0,0,12,62,13,6,14,75.6
+class_ece8893_spring_2025,94,82,82,52,63.4,1150,14.0,0.0,0,12,64,12,4,14,78.0
 flowgnn,5,2,2,0,0.0,11,5.5,5.5,0,3,1,1,0,1,50.0
 forgebench,45,44,44,36,81.8,19,0.4,0.0,0,1,41,5,2,1,93.2
 gnnbuilder,4,4,4,0,0.0,694,173.5,166.5,0,0,4,4,0,0,100.0
-hlsyn-vitis,42,17,17,12,70.6,75,4.4,0,0,25,13,1,0,4,76.5
+hlsyn-vitis,42,17,17,12,70.6,72,4.2,0,0,25,13,1,1,3,76.5
 hp_fft_hls,16,16,16,16,100.0,0,0,0.0,0,0,16,0,0,0,100.0
-machsuite,18,18,18,16,88.9,11,0.6,0.0,0,0,16,0,1,1,88.9
+machsuite,18,18,18,17,94.4,4,0.2,0.0,0,0,17,0,1,0,94.4
 polybench,9,9,9,9,100.0,0,0,0,0,0,9,0,0,0,100.0
 polybench__reproducible,196,196,196,196,100.0,0,0,0.0,0,0,196,0,0,0,100.0
 polybench_pragmas,7,7,7,7,100.0,0,0,0,0,0,7,0,0,0,100.0
 pp4fpgas,5,5,5,4,80.0,5,1,0,0,0,4,0,1,0,80.0
-rosetta,8,5,5,1,20.0,65,13,10,0,3,2,1,0,3,40.0
+rosetta,8,5,5,3,60.0,45,9,0,0,3,4,1,0,1,80.0
 soda,11,11,11,11,100.0,0,0,0,0,0,11,0,0,0,100.0
 spector_hls,10,10,10,10,100.0,0,0,0.0,0,0,10,0,0,0,100.0
-stream_hls,77,77,77,74,96.1,452,5.9,0,0,0,76,2,0,1,98.7
+stream_hls,77,77,77,77,100.0,0,0,0,0,0,77,0,0,0,100.0
 vitis_examples,23,22,22,22,100.0,0,0,0.0,0,1,22,0,0,0,100.0
 whetstone,1,1,1,0,0.0,16,16,16,0,0,0,0,1,0,0.0
-ALL,812,746,746,663,88.9,3965,5.3,0.0,0,66,699,36,11,36,93.7
+ALL,812,746,746,679,91.0,2422,3.2,0.0,0,66,708,29,10,28,94.9
 
 run_setting,value
-generated,2026-10-22 04:59
+generated,2026-10-22 07:45
 generator,tools/hls-est-validate/make_compare_csv.py
-hls-est run json,/home/peter/hls-est-work/coord/scratch/w9r11fx/HM.json
-hls-est git,W9r11fx
-hls-est binary,/home/peter/hls-est-work/coord/scratch/w9r11fx/bin/hls-est.H
+hls-est run json,/home/peter/hls-est-work/coord/scratch/w9r12i/F.json
+hls-est git,unknown (HLS_EST_BIN=/home/peter/hls-est-work/coord/scratch/w9r12i/bin/hls-est.final)
+hls-est binary,/home/peter/hls-est-work/coord/scratch/w9r12i/bin/hls-est.final
 pipeline,--lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --infer-vitis-split-array=td=off --narrow-ram-widths --memory-banking-bram --convert-affine-to-loopschedule --bram-analysis
 shim,/home/peter/circt/tools/hls-est-validate/shim/real
 cgeist,/mnt/d/HLS/Polygeist/build/bin/cgeist
 cgeist md5,a5056b2375dcc052ef1fdc3c5fefcb7f
-mlir reused from,/home/peter/hls-est-work/coord/scratch/w9r11i/F.json
+mlir reused from,
 vitis,"2025.1 csynth, xc7z020clg400-1, 10ns, syn.array_partition.throughput_driven=off"
 note,"designs absent from the run are listed with comparison_status 'hls-est missing'; designs without a Vitis result are 'vitis missing' (excluded, see hls-est-results.xlsx 'excluded designs')"
