@@ -263,26 +263,23 @@ static bool provablyDisjoint(const Access &exprValue, const Access &rowValue) {
   return false;
 }
 
-/// Values that name (part of) `mem` other than `mem` itself: the results of
-/// the casts, views and pointer conversions taken of it, transitively (a
-/// `memref.cast` passed to a callee that reads the element, cgeist's
-/// `hls::stream::write(const T &)` argument).
-static SmallVector<Value> aliasesOf(Value mem) {
-  SmallVector<Value> aliases, work{mem};
-  while (!work.empty()) {
-    Value valueHandle = work.pop_back_val();
-    for (Operation *user : valueHandle.getUsers()) {
-      if (getAccess(user) || isa<CallOpInterface>(user))
-        continue;
-      for (Value resultValue : user->getResults())
-        if (isa<BaseMemRefType, LLVM::LLVMPointerType>(resultValue.getType()) &&
-            !llvm::is_contained(aliases, resultValue)) {
-          aliases.push_back(resultValue);
-          work.push_back(resultValue);
-        }
-    }
+/// Whether `v` names (part of) `mem` through casts, views and pointer
+/// conversions of it (a `memref.cast` passed to a callee that reads the
+/// element: cgeist's `hls::stream::write(const T &)` argument), without being
+/// `mem` itself.
+static bool isAliasOf(Value valueHandle, Value mem) {
+  for (unsigned depth = 0; depth < 8 && valueHandle != mem; ++depth) {
+    if (!isa<BaseMemRefType, LLVM::LLVMPointerType>(valueHandle.getType()))
+      return false;
+    Operation *def = valueHandle.getDefiningOp();
+    if (!def || def->getNumOperands() == 0 || getAccess(def) ||
+        isa<CallOpInterface>(def))
+      return false;
+    valueHandle = def->getOperand(0);
+    if (valueHandle == mem)
+      return true;
   }
-  return aliases;
+  return false;
 }
 
 /// Vitis (LLVM LICM scalar promotion) keeps a location of `mem` in a
@@ -297,11 +294,6 @@ static SmallVector<Value> aliasesOf(Value mem) {
 static bool
 isPromotableIn(Value mem, AffineForOp loop,
                SmallVector<SmallVector<Access, 4>, 2> *groups = nullptr) {
-
-  for (Value alias : aliasesOf(mem))
-    for (Operation *user : alias.getUsers())
-      if (loop->isAncestor(user))
-        return false;
   bool ok = true, anyStore = false, allDirect = true;
   SmallVector<SmallVector<Access, 4>, 2> found;
 
@@ -316,6 +308,12 @@ isPromotableIn(Value mem, AffineForOp loop,
     return parts;
   };
   loop.getBody()->walk([&](Operation *op) {
+    if (llvm::any_of(op->getOperands(), [&](Value valueHandle) {
+          return valueHandle != mem && isAliasOf(valueHandle, mem);
+        })) {
+      ok = false;
+      return WalkResult::interrupt();
+    }
     if (!llvm::is_contained(op->getOperands(), mem))
       return WalkResult::advance();
     std::optional<Access> arrayValue = getAccess(op);
