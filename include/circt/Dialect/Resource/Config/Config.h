@@ -361,6 +361,9 @@ struct PipelineDecisionConfig {
   /// universal) once an unrolled copy's constant index is substituted loses
   /// its dead arm (VITIS_NOTES N89).
   bool foldUnrolledGuards = true;
+  /// A `pipeline off` innermost loop stays sequential in the scheduler
+  /// instead of being scheduled as a pipeline (W9 round 12 review).
+  bool pipelineOffSequential = true;
 };
 
 struct PartitionInferenceConfig {

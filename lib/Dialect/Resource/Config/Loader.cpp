@@ -942,6 +942,8 @@ void fillTool(const json::Object &t, ToolProfile &tool) {
       boolean(pd, "sink_parent_code", true);
   h.pipelineDecision.foldUnrolledGuards =
       boolean(pd, "fold_unrolled_guards", true);
+  h.pipelineDecision.pipelineOffSequential =
+      boolean(pd, "pipeline_off_sequential", true);
 
   const json::Object &pa = obj(hls, "partitioning");
   h.partitioning.policy = str(pa, "policy");

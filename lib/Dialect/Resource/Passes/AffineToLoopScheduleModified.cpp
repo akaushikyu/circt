@@ -2818,6 +2818,16 @@ void AffineToLoopSchedule::runOnOperation() {
   getOperation().walk([&](AffineForOp forOp) {
     if (forOp->hasAttr(circt::hls_analysis::kLoopCallBoundaryAttr))
       return;
+    // A `pipeline off` loop stays a sequential affine.for, as the
+    // runtime-trip loops already did (isScheduledRuntimeFor): Vitis
+    // schedules its body as a state machine, and the sequential port model
+    // (N12) and the ROM copies of one state (N93) apply to it (W9 round 12
+    // review, kernel w9r12rv_n93_loop: four independent ROM reads per
+    // iteration under `#pragma HLS pipeline off`, Vitis 2 ROM copies).
+    if (forOp->hasAttr(circt::hls_analysis::kLoopPipelineOffAttr) &&
+        circt::hlsest::Config::get()
+            .tool.hls.pipelineDecision.pipelineOffSequential)
+      return;
     if (isInnermostAffineFor(forOp))
       innermostLoops.push_back(forOp);
   });

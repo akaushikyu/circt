@@ -72,7 +72,8 @@
         "promote_pipelined": true,
         "flatten_across_calls": false,
         "sink_parent_code": true,
-        "fold_unrolled_guards": true
+        "fold_unrolled_guards": true,
+        "pipeline_off_sequential": true
       },
       "partitioning": {
         "policy": "vitis-td",
