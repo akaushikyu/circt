@@ -1,6 +1,6 @@
 {
  "_doc": "Inputs of make_thesis_tables.py (chapter 6). Paths only, never numbers: every number in the thesis tables is computed from these files. '$SCRATCH' is ~/hls-est-work/coord/scratch, '$RESULTS' is tools/hls-est-validate/results. 'changelog' names the CHANGELOG.md entry (or round report) that documents the run; 'notes' names the VITIS_NOTES / OPEN_ISSUES entries a rule implements. A run is a run_hlsest.py result file; it is re-scored against the current results/vitis.json, so all rows share one ground truth.",
- "newest_run": "$SCRATCH/w9r10fx/X2.json",
+ "newest_run": "$SCRATCH/w9r12i/F.json",
  "newest_run_label": "final evaluation run",
  "outofband_classes": {
   "per_design": "$SCRATCH/w9r10p/final.json",
@@ -227,6 +227,20 @@
    "run": "$SCRATCH/w9r10fx/X2.json",
    "shim": "real",
    "changelog": "2026-10-21 W9 round 10 review fixes (N86)"
+  },
+  {
+   "label": "round 11 review",
+   "date": "2026-10-22",
+   "run": "$SCRATCH/w9r12i/HMk.json",
+   "shim": "real",
+   "changelog": "2026-10-22 W9 round 11 review fixes"
+  },
+  {
+   "label": "round 12 (final)",
+   "date": "2026-10-22",
+   "run": "$SCRATCH/w9r12i/F.json",
+   "shim": "real",
+   "changelog": "2026-10-22 W9r12-impl"
   }
  ],
  "rule_pairs": [
@@ -502,6 +516,46 @@
    "off": "$SCRATCH/w9r10i/R10.json",
    "on": "$SCRATCH/w9r10fx/X2.json",
    "method": "consecutive"
+  },
+  {
+   "rule": "cgeist trip-1 pipeline unroll in the default shim",
+   "notes": "N40",
+   "round": "12",
+   "off": "$SCRATCH/w9r12i/HMk.json",
+   "on": "$SCRATCH/w9r12i/T1k.json",
+   "method": "consecutive"
+  },
+  {
+   "rule": "bank-selector width of a completely partitioned read",
+   "notes": "N91",
+   "round": "12",
+   "off": "$SCRATCH/w9r12i/T1k.json",
+   "on": "$SCRATCH/w9r12i/R1.json",
+   "method": "consecutive"
+  },
+  {
+   "rule": "signed-remainder bank residue and promotion through a stream-write alias",
+   "notes": "O121",
+   "round": "12",
+   "off": "$SCRATCH/w9r12i/R1.json",
+   "on": "$SCRATCH/w9r12i/R2.json",
+   "method": "consecutive"
+  },
+  {
+   "rule": "iteration-private banks as registers",
+   "notes": "N92",
+   "round": "12",
+   "off": "$SCRATCH/w9r12i/R2.json",
+   "on": "$SCRATCH/w9r12i/R3.json",
+   "method": "consecutive"
+  },
+  {
+   "rule": "independent ROM reads of one sequential state",
+   "notes": "N93",
+   "round": "12",
+   "off": "$SCRATCH/w9r12i/R3.json",
+   "on": "$SCRATCH/w9r12i/R4.json",
+   "method": "consecutive"
   }
  ],
  "ablation": {
@@ -527,10 +581,10 @@
  },
  "timing_csv": "hls-doc/hls-est-vs-vitis.csv",
  "snapshot": {
-  "_doc": "Frozen inputs that would otherwise change between renders: the commit counts and source sizes of chapter 5 are read at these commits (git), and the ad-hoc kernel cache of chapter 3 counts only result files written up to experiments_cutoff (local time). circt_commit is the commit that records the final evaluation run in the CHANGELOG; polygeist_commit is the Polygeist commit of the cgeist binary that produced the run's MLIR (CHANGELOG 2026-10-21 'W9 round 8 review fixes' names cgeist.g = Polygeist 537d6614, md5 a5056b23; the run file itself records polygeist_head 'unknown').",
-  "circt_commit": "a2c9b8d72",
+  "_doc": "Frozen inputs that would otherwise change between renders: the commit counts and source sizes of chapter 5 are read at these commits (git), and the ad-hoc kernel cache of chapter 3 counts only result files written up to experiments_cutoff (local time). circt_commit is the commit that records the final evaluation run in the CHANGELOG; polygeist_commit is the Polygeist commit of the cgeist binary that produced the run's MLIR (CHANGELOG 2026-10-21 'W9 round 8 review fixes' names cgeist.g = Polygeist 537d6614, md5 a5056b23; round 12's final run adds the harness flag --hls-trip-one-pipeline-unroll, CHANGELOG 2026-10-22 W9r12-impl; the run file itself records polygeist_head 'unknown').",
+  "circt_commit": "b2aa22b84",
   "polygeist_commit": "537d6614",
   "cgeist_md5": "a5056b23",
-  "experiments_cutoff": "2026-10-21T23:59:59"
+  "experiments_cutoff": "2026-10-22T23:59:59"
  }
 }

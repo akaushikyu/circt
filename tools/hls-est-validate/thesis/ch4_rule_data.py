@@ -564,7 +564,7 @@ RULES = [
                  ("w9p5_t1_l74", "control: the pragma one level up", {"loops": ["l72"]})],
         evidence=["log [HLS 214-291]/[HLS 214-376] (Target II = NA)", "loop table", "memory table"],
         status="confirmed",
-        hlsest="frontend, opt-in: cgeist --hls-trip-one-pipeline-unroll (off by default, OPEN_ISSUES O57)",
+        hlsest="frontend: cgeist --hls-trip-one-pipeline-unroll, passed by the harness's default shim since W9r12-impl (MEMOS #79)",
         mechanism=["cgeist HLSPragmaSema"], keys=[],
         effect=("W9r5-impl 4/4", None)),
     dict(
