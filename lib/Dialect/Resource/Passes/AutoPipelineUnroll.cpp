@@ -827,6 +827,8 @@ static unsigned hoistInvariantOps(AffineForOp loop) {
 /// (a new op, with the same attributes, when something was promoted).
 static AffineForOp promoteInvariantAccesses(AffineForOp loop,
                                             unsigned &promoted) {
+  std::optional<uint64_t> trips = getConstantTripCount(loop);
+  bool runsAtLeastOnce = trips && *trips >= 1;
 
   SmallVector<Value, 4> mems;
   for (Operation &op : loop.getBody()->without_terminator()) {
@@ -856,7 +858,8 @@ static AffineForOp promoteInvariantAccesses(AffineForOp loop,
       });
       OpBuilder buildPoint(loop);
       Value init;
-      if (!first.isWrite) {
+      if (!first.isWrite || !runsAtLeastOnce) {
+
         init = AffineLoadOp::create(buildPoint, first.op->getLoc(), mem,
                                     first.map, first.operands);
       } else {

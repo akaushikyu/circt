@@ -46,7 +46,7 @@
 // IR-NOT: hls.array_partition
 // IR: return
 
-// REPORT: Total BRAM: 6
+// REPORT: Total BRAM: 18
 
 // CHECK:      [single_trip#{{[0-9]+}}] A[bank 0/8] (alloca)
 // CHECK-COUNT-8: partition: complete factor=8 dim=2 source=constant-index (bank {{[0-7]}} of 8)
@@ -57,10 +57,10 @@
 // CHECK-NEXT:   status: counted
 // CHECK-NEXT:   partition: none
 // CHECK:        bram: 2
-// CHECK:      Total BRAM: 6
+// CHECK:      Total BRAM: 18
 
 // RAM-NOT: RAM_T2P
-// RAM-COUNT-4: ram type: RAM_1P
+// RAM-COUNT-16: ram type: RAM_1P
 // RAM-NOT: RAM_T2P
 // RAM: [memref_only
 // RAM: ram type: RAM_T2P

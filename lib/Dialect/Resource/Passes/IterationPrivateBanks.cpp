@@ -18,8 +18,9 @@
 // after the i loop (rp_later) or an address that changes inside the i body
 // (rp_nopart, no partition: the bank is the whole array) keeps the memory.
 //
-// The rule, per bank of a partitioned local array (after
-// --memory-banking-bram):
+// The rule, per local array, or per bank of a partitioned one (after
+// --memory-banking-bram; an unpartitioned `int X[64]` accessed at X[i] alone
+// is promoted the same way, kernel w9r12rv_n92_flat):
 //   - every user is a load or store of the bank (no call, cast or view), and
 //     at least one reads it;
 //   - there is a loop L whose body holds every access, and every access has
@@ -42,10 +43,13 @@
 
 #include "mlir/Dialect/Affine/Analysis/AffineAnalysis.h"
 #include "mlir/Dialect/Affine/Analysis/AffineStructures.h"
+#include "mlir/Dialect/Affine/Analysis/LoopAnalysis.h"
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
 #include "mlir/Dialect/Affine/IR/AffineValueMap.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
+#include "mlir/Dialect/SCF/IR/SCF.h"
+#include "mlir/Dialect/Utils/StaticValueUtils.h"
 #include "mlir/IR/AffineExprVisitor.h"
 #include "mlir/Interfaces/LoopLikeInterface.h"
 
@@ -58,9 +62,6 @@ using namespace mlir;
 using namespace circt::hls_analysis;
 
 namespace {
-
-/// Attribute that names the original array of a bank (set by the banking).
-constexpr llvm::StringLiteral kBankOfAttr = "hls.bank_of";
 
 /// `map` over `operands` composed with the affine.apply ops it reads,
 /// restricted to the dimensions of `bank` longer than 1 (a dimension a
@@ -144,6 +145,25 @@ bool invariantInNestedLoops(Value v, Operation *loop) {
   return !isa<LoopLikeOpInterface>(def);
 }
 
+/// The constant trip count of `loop`, or nullopt when it is not known.
+std::optional<int64_t> constantTripCount(Operation *loop) {
+  if (auto forOp = dyn_cast<affine::AffineForOp>(loop)) {
+    std::optional<uint64_t> n = affine::getConstantTripCount(forOp);
+    if (!n)
+      return std::nullopt;
+    return static_cast<int64_t>(*n);
+  }
+  if (auto forOp = dyn_cast<scf::ForOp>(loop)) {
+    std::optional<int64_t> lb = getConstantIntValue(forOp.getLowerBound());
+    std::optional<int64_t> ub = getConstantIntValue(forOp.getUpperBound());
+    std::optional<int64_t> step = getConstantIntValue(forOp.getStep());
+    if (!lb || !ub || !step || *step <= 0)
+      return std::nullopt;
+    return *ub <= *lb ? 0 : (*ub - *lb + *step - 1) / *step;
+  }
+  return std::nullopt;
+}
+
 /// Why `bank` is not private to one iteration of `loop` (empty: it is).
 std::string checkLoop(Value bank, Operation *loop, Value iv,
                       ArrayRef<Operation *> accesses,
@@ -195,9 +215,19 @@ std::string checkLoop(Value bank, Operation *loop, Value iv,
   if (!firstAccess || !isUnconditionalStoreOp(firstAccess))
     return "the first access of an iteration is no unconditional store";
   for (Operation *p = firstAccess->getParentOp(); p != loop;
-       p = p->getParentOp())
+       p = p->getParentOp()) {
     if (!isa<LoopLikeOpInterface>(p))
       return "the first store is under a condition";
+    // A loop between L and the first store must run: one that may run zero
+    // times leaves the reads with the value from before the iteration, so
+    // the store does not dominate them and Vitis keeps the memory (W9 round
+    // 12 review, kernel w9r12rv_n92_varinit: `for (t = 0; t < n; t++)
+    // X[i][j] = t;` as the init, Vitis 64; w9r12rv_n92_const2, `t < 2`,
+    // Vitis 0).
+    std::optional<int64_t> trips = constantTripCount(p);
+    if (!trips || *trips < 1)
+      return "the first store is in a loop that may run zero times";
+  }
   return "";
 }
 
@@ -251,7 +281,10 @@ std::optional<Operation *> privateLoop(Value bank) {
 unsigned circt::hls_analysis::markIterationPrivateBanks(ModuleOp module) {
   unsigned marked = 0;
   module.walk([&](memref::AllocaOp alloca) {
-    if (!alloca->hasAttr(kBankOfAttr) || alloca->hasAttr(kRegistersAttrName))
+    // A bank of a partitioned array, or a whole array: the rule is the same
+    // (W9 round 12 review, kernel w9r12rv_n92_flat: `int X[64]`, `X[i] = 0;
+    // for a: X[i] += v[a]; C[i] = X[i] * 3;`, Vitis no memory).
+    if (alloca->hasAttr(kRegistersAttrName))
       return;
     auto type = alloca.getType();
     if (!type.hasStaticShape() || type.getNumElements() <= 1)
