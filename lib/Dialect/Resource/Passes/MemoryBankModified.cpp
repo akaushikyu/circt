@@ -508,6 +508,35 @@ static void rewriteMemrefLoad(memref::LoadOp loadOp, ArrayRef<Value> banks,
   loadOp.erase();
 }
 
+template <typename ConstOf>
+static bool isMultipleOf(Value valueHandle, int64_t factor, ConstOf constOf,
+                         unsigned depth = 0) {
+  if (factor <= 1)
+    return true;
+  if (auto candidateValue = constOf(valueHandle))
+    return *candidateValue % factor == 0;
+  Operation *def = valueHandle.getDefiningOp();
+  if (!def || depth > 4)
+    return false;
+  if (isa<arith::IndexCastOp, arith::IndexCastUIOp, arith::ExtSIOp,
+          arith::ExtUIOp>(def))
+    return isMultipleOf(def->getOperand(0), factor, constOf, depth + 1);
+  if (isa<arith::MulIOp>(def))
+    return isMultipleOf(def->getOperand(0), factor, constOf, depth + 1) ||
+           isMultipleOf(def->getOperand(1), factor, constOf, depth + 1);
+  if (auto shl = dyn_cast<arith::ShLIOp>(def)) {
+    std::optional<int64_t> keyValue = constOf(shl.getRhs());
+    if (keyValue && *keyValue >= 0 && *keyValue < 62 &&
+        ((int64_t(1) << *keyValue) % factor) == 0)
+      return true;
+    return isMultipleOf(shl.getLhs(), factor, constOf, depth + 1);
+  }
+  if (isa<arith::AddIOp, arith::SubIOp>(def))
+    return isMultipleOf(def->getOperand(0), factor, constOf, depth + 1) &&
+           isMultipleOf(def->getOperand(1), factor, constOf, depth + 1);
+  return false;
+}
+
 static std::pair<Value, int64_t> residueBase(Value valueHandle, int64_t factor,
                                              unsigned depth = 0) {
   bool pow2 = llvm::isPowerOf2_64(static_cast<uint64_t>(factor));
@@ -564,6 +593,28 @@ static std::pair<Value, int64_t> residueBase(Value valueHandle, int64_t factor,
       if (bt != bf || ((ct - cf) % factor) != 0)
         break;
       return {bt, candidateValue + cf};
+    }
+    if (isa<arith::AddIOp, arith::SubIOp>(def) &&
+        !constOf(def->getOperand(0)) && !constOf(def->getOperand(1))) {
+
+      Value lhs = def->getOperand(0), rhs = def->getOperand(1);
+      if (isMultipleOf(rhs, factor, constOf)) {
+        valueHandle = lhs;
+        continue;
+      }
+      if (isa<arith::AddIOp>(def) && isMultipleOf(lhs, factor, constOf)) {
+        valueHandle = rhs;
+        continue;
+      }
+      break;
+    }
+    if (auto sub = dyn_cast<arith::SubIOp>(def)) {
+      std::optional<int64_t> keyValue = constOf(sub.getRhs());
+      if (!keyValue)
+        break;
+      candidateValue -= *keyValue;
+      valueHandle = sub.getLhs();
+      continue;
     }
     if (isa<arith::AndIOp, arith::AddIOp>(def)) {
       Value lhs = def->getOperand(0), rhs = def->getOperand(1);
