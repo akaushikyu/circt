@@ -37,7 +37,11 @@ VITIS_REJECT = re.compile(r"ERROR: \[HLS (207-\d+|200-70|214-139|214-157)\][^\n]
 # in the order they are tried: (class, regex).
 NATIVE_DEFECT = [
     ("reads uninitialised memory", re.compile(r"reads uninitialised memory")),
-    ("divides by zero (AddressSanitizer FPE)", re.compile(r"AddressSanitizer: FPE")),
+    # The driver's random inputs make the source divide by zero (polybench fixed cholesky divides by a
+    # pivot the inputs make 0): an input-domain limit of check_semantics, not a defect of the reference
+    # (W9 round 12 review, defect 5).
+    ("divides by zero on the driver's random inputs (AddressSanitizer FPE; input domain)",
+     re.compile(r"AddressSanitizer: FPE")),
     ("AddressSanitizer memory error", re.compile(r"AddressSanitizer: (heap|stack|global)-buffer-overflow|AddressSanitizer: SEGV")),
     ("native build fails", re.compile(r"native build (of .* fails|does not link)")),
     ("native reference aborts", re.compile(r"reference exit -\d+")),

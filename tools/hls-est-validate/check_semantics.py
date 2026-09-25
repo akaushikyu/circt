@@ -159,6 +159,7 @@ DYN_LEADING = 1 << 16       # elements of a leading '?' dimension (rank 1): a to
                             # too small for feature maps (GradCAM conv_ds read past it: an ASan report, no run)
 DYN_LEADING_ND = 256        # ... of a leading '?' dimension of a rank > 1 memref
 DYN_INNER = 64              # ... of any other '?' dimension
+DYN_RETRY_SCALE = 16        # the leading '?' sizes of the one retry after a heap-buffer-overflow
 MAX_BUFFER_BYTES = 1 << 30
 
 
@@ -1182,9 +1183,10 @@ def top_stream_args(top_fn, methods):
     return out
 
 
-def plan_args(arg_types, res_types, streams=None):
+def plan_args(arg_types, res_types, streams=None, dyn_scale=1):
     """The driver's view of the top: one entry per wrapper argument.  streams: {argument index: token
-    MLIR type} of the top's hls::stream arguments (top_stream_args)."""
+    MLIR type} of the top's hls::stream arguments (top_stream_args).  dyn_scale multiplies the leading
+    '?' dimension sizes (the retry of a heap-buffer-overflow, Checker._check)."""
     streams = streams or {}
     plan = []
     for k, s in enumerate(arg_types):
@@ -1202,7 +1204,8 @@ def plan_args(arg_types, res_types, streams=None):
             dims = []
             for i, d in enumerate(t.dims):
                 if d is None:
-                    d = (DYN_LEADING if len(t.dims) == 1 else DYN_LEADING_ND) if i == 0 else DYN_INNER
+                    d = ((DYN_LEADING if len(t.dims) == 1 else DYN_LEADING_ND) * dyn_scale if i == 0
+                         else DYN_INNER)
                 dims.append(d)
             esize, _ = size_align(t.elem)
             runs = leaf_runs(t.elem)
@@ -1767,10 +1770,33 @@ class Checker:
         sig = top_signature(text, top_fn)
         if not sig:
             return self._na(out, f"top {top_fn} not in the MLIR")
-        try:
-            plan = plan_args(*sig, top_stream_args(top_fn, stream_methods(text)))
-        except ValueError as e:
-            return self._na(out, f"driver cannot fill the top: {e}"[:300])
+        # A top whose pointer argument ('?' leading dimension) is read past the driver's default size
+        # (spector matrix_multiplication reads `dtype *A` M*M = 1,048,576 times; GradCAM linear_fc
+        # reads weights[][512] up to row 1024) gets a heap-buffer-overflow from the driver's buffer, not
+        # from the design (W9 round 12 review, defect 5): such a check is re-run once with the leading
+        # '?' dimensions DYN_RETRY_SCALE times larger, within MAX_BUFFER_BYTES.
+        for scale in (1, DYN_RETRY_SCALE):
+            try:
+                plan = plan_args(*sig, top_stream_args(top_fn, stream_methods(text)), dyn_scale=scale)
+            except ValueError as e:
+                return self._na(out, f"driver cannot fill the top: {e}"[:300])
+            dyn = any(p["kind"] == "memref" and None in p["ty"].dims for p in plan)
+            if scale > 1:
+                if sum(p["elems"] * p["esize"] for p in plan) > MAX_BUFFER_BYTES:
+                    break
+                out.clear()
+                out.update(base)
+                out["dyn_scale"] = scale
+            else:
+                base = dict(out)
+            self._check_plan(key, rec, out, text, top_fn, plan)
+            refs = out.get("refs") or {}
+            overflow = any("heap-buffer-overflow" in r.get("reason", "") for r in refs.values())
+            if not (dyn and overflow and out.get("status") == "n/a"):
+                break
+        return out
+
+    def _check_plan(self, key, rec, out, text, top_fn, plan):
         out["args"] = [p["type"] for p in plan]
         if any(p["kind"] == "stream" for p in plan):
             out["stream_args"] = [a for a, p in enumerate(plan) if p["kind"] == "stream"]
