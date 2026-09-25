@@ -466,19 +466,20 @@ static unsigned sequentialRomReadsImpl(ArrayRef<const AccessSummary *> group,
   unsigned best = 0;
   for (auto &[stretch, reads] : byStretch) {
     DenseSet<Operation *> isRead(reads.begin(), reads.end());
-    // depth(op): reads of the stretch on the longest chain into op's value.
+    // depth(op): reads of the stretch on the longest chain into op's value,
+    // computed bottom-up with an explicit stack (no recursion limit, so no
+    // truncated depth is memoised; W9 round 12 review). SSA def-use is
+    // acyclic; an operand still open on the stack counts 0.
     DenseMap<Operation *, unsigned> memo;
-    std::function<unsigned(Operation *, unsigned)> valueDepth =
-        [&](Operation *op, unsigned guard) -> unsigned {
+    auto inStretch = [&](Operation *op) {
       auto it = s.info.find(op);
-      if (it == s.info.end() || it->second.stretch != stretch || guard > 256)
-        return 0; // defined before the stretch or elsewhere
-      if (auto m = memo.find(op); m != memo.end())
-        return m->second;
-      unsigned d = 0;
+      return it != s.info.end() && it->second.stretch == stretch;
+    };
+    auto operandDefs = [&](Operation *op) {
+      SmallVector<Operation *> defs;
       auto from = [&](Value v) {
         if (Operation *def = v.getDefiningOp())
-          d = std::max(d, valueDepth(def, guard + 1));
+          defs.push_back(def);
       };
       for (Value v : op->getOperands())
         from(v);
@@ -487,17 +488,44 @@ static unsigned sequentialRomReadsImpl(ArrayRef<const AccessSummary *> group,
           if (!block.empty())
             for (Value v : block.back().getOperands())
               from(v);
-      if (isRead.contains(op))
-        ++d;
-      memo[op] = d;
-      return d;
+      return defs;
+    };
+    auto valueDepth = [&](Operation *root) -> unsigned {
+      DenseSet<Operation *> open;
+      SmallVector<std::pair<Operation *, bool>> stack{{root, false}};
+      while (!stack.empty()) {
+        auto [op, expanded] = stack.pop_back_val();
+        if (memo.contains(op))
+          continue;
+        if (!inStretch(op)) {
+          memo[op] = 0; // defined before the stretch or elsewhere
+          continue;
+        }
+        SmallVector<Operation *> defs = operandDefs(op);
+        if (!expanded) {
+          if (!open.insert(op).second)
+            continue;
+          stack.push_back({op, true});
+          for (Operation *def : defs)
+            if (!memo.contains(def) && !open.contains(def))
+              stack.push_back({def, false});
+          continue;
+        }
+        unsigned d = 0;
+        for (Operation *def : defs)
+          d = std::max(d, memo.lookup(def));
+        if (isRead.contains(op))
+          ++d;
+        memo[op] = d;
+      }
+      return memo.lookup(root);
     };
     std::map<unsigned, unsigned> perDepth;
     for (Operation *r : reads) {
       unsigned issue = 0;
       for (Value v : r->getOperands())
         if (Operation *def = v.getDefiningOp())
-          issue = std::max(issue, valueDepth(def, 0));
+          issue = std::max(issue, valueDepth(def));
       best = std::max(best, ++perDepth[issue]);
     }
   }
