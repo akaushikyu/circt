@@ -161,8 +161,8 @@ WIP,stream_hls__mvt__opt2,518,518,0,0,True,exact,compared,ok,ok,v46: hls-est 512
 WIP,stream_hls__mvt__opt3,1054,1054,0,0,True,exact,compared,ok,ok,v55: hls-est 20 vs Vitis None
 WIP,stream_hls__mvt__opt4,512,512,0,0,True,exact,compared,ok,ok,v54: hls-est 512 vs Vitis None
 WIP,stream_hls__mvt__opt5,512,512,0,0,True,exact,compared,ok,ok,v54: hls-est 512 vs Vitis None
-accelerators,DGNN_Booster_EvolveGCN,1723,1715,-8,8,False,under,compared,ok,ok,emb_buffer_1: hls-est 128 vs Vitis 134; emb_buffer_2: hls-est 128 vs Vitis 134; rnn_output_vector: hls-est 3 vs Vitis None
-accelerators,DGNN_Booster_convLSTM,1543,1530,-13,13,False,under,compared,ok,ok,edge_embedding_table: hls-est 256 vs Vitis 268; node_embedding_table: hls-est 128 vs Vitis 134; node_emb_output: hls-est 4 vs Vitis None
+accelerators,DGNN_Booster_EvolveGCN,1723,1712,-11,11,False,under,compared,ok,ok,emb_buffer_1: hls-est 128 vs Vitis 134; emb_buffer_2: hls-est 128 vs Vitis 134; INPUT_m_axi: hls-est 2 vs Vitis None
+accelerators,DGNN_Booster_convLSTM,1543,1526,-17,17,False,under,compared,ok,ok,edge_embedding_table: hls-est 256 vs Vitis 268; node_embedding_table: hls-est 128 vs Vitis 134; INPUT_m_axi: hls-est 2 vs Vitis None
 accelerators,GP_selection_kernel_fixed_dataset,67,66,-1,1,False,under,compared,ok,ok,I_minus_BZ_A_inverse: hls-est 1 vs Vitis 2; sort_client_list_0: hls-est 1 vs Vitis None; sort_client_list_number: hls-est None vs Vitis 1
 accelerators,GP_selection_kernel_float_dataset,73,73,0,0,True,exact,compared,ok,ok,sort_client_list_0: hls-est 1 vs Vitis None; sort_client_list_number: hls-est None vs Vitis 1
 accelerators,Mask-Net_dataset,421,421,0,0,True,exact,compared,ok,ok,INPUT_m_axi: hls-est 29 vs Vitis None; INPUT_r_m_axi: hls-est None vs Vitis 29
