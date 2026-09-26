@@ -130,6 +130,8 @@ private:
                InnermostLoopDependenceAnalysis &dependenceAnalysis);
 
   void coalescePerfectNests();
+
+  void uniqueGlobalRefs();
   void sinkFlattenedParentCode();
 
   void hoistInvariantLoads();
@@ -206,6 +208,17 @@ private:
                      "it as one store of the value the if yields (Vitis "
                      "SimplifyCFG / InstCombine): the pair counts as one "
                      "access per iteration for ports and replication."),
+      llvm::cl::init(true)};
+  Option<bool> trackGlobals{
+      *this, "track-globals",
+      llvm::cl::desc("The redundant-access cleanup, the invariant-load "
+                     "hoist and the store forwarding treat a global array "
+                     "like a local one (its one memref.get_global per "
+                     "function is the root memref; every call is a barrier "
+                     "for it): Vitis' LLVM GVN / LICM make no difference "
+                     "between them (ECG_Classifier baseline conv1d_2b: the "
+                     "read-modify-writes of a global accumulator merge, "
+                     "II 1)."),
       llvm::cl::init(true)};
   Option<bool> gvnConditionalLoads{
       *this, "gvn-conditional-loads",
@@ -356,6 +369,9 @@ static bool isPlainMemrefUse(Operation *user) {
 
 static MemrefAliasInfo collectMemrefAliases(Value mem) {
   MemrefAliasInfo info;
+
+  if (isa_and_present<memref::GetGlobalOp>(mem.getDefiningOp()))
+    info.passedToCall = true;
   SmallVector<Value> worklist{mem};
   info.members.insert(mem);
   while (!worklist.empty()) {
@@ -613,12 +629,20 @@ static void addCounterAttr(Operation *op, StringRef name, int64_t by) {
                                      counterAttr(op, name) + by));
 }
 
-/// Memrefs whose SSA value identifies the storage: a local array or a
-/// function argument. Two memref.get_global of one symbol are two values for
-/// one memory, and a view or an iter_arg aliases its source: not tracked.
+/// The pass's track-globals option for the function being processed (set by
+/// runOnOperation on the thread that processes it).
+static thread_local bool tlsTrackGlobals = true;
+
+/// Memrefs whose SSA value identifies the storage: a local array, a
+/// function argument, or (track-globals) a global, whose one
+/// memref.get_global per function uniqueGlobalRefs leaves. A view or an
+/// iter_arg aliases its source: not tracked.
 static bool isRootMemref(Value mem) {
   if (auto arg = dyn_cast<BlockArgument>(mem))
     return isa<func::FuncOp>(arg.getOwner()->getParentOp());
+  if (tlsTrackGlobals &&
+      isa_and_present<memref::GetGlobalOp>(mem.getDefiningOp()))
+    return true;
   return isa_and_present<memref::AllocaOp, memref::AllocOp>(
       mem.getDefiningOp());
 }
@@ -2051,6 +2075,28 @@ void AffineToLoopSchedule::sinkFlattenedParentCode() {
   }
 }
 
+void AffineToLoopSchedule::uniqueGlobalRefs() {
+  func::FuncOp func = getOperation();
+  if (func.isExternal())
+    return;
+  llvm::MapVector<Attribute, SmallVector<memref::GetGlobalOp, 2>> refs;
+  func.walk([&](memref::GetGlobalOp g) { refs[g.getNameAttr()].push_back(g); });
+  Block &entry = func.front();
+  for (auto &[name, ops] : llvm::reverse(refs)) {
+    memref::GetGlobalOp first = ops.front();
+    first->moveBefore(&entry, entry.begin());
+    for (memref::GetGlobalOp other : ArrayRef(ops).drop_front()) {
+      if (other.getType() != first.getType())
+        continue;
+      for (NamedAttribute attr : other->getAttrs())
+        if (!first->hasAttr(attr.getName()))
+          first->setAttr(attr.getName(), attr.getValue());
+      other.replaceAllUsesWith(first.getResult());
+      other.erase();
+    }
+  }
+}
+
 void AffineToLoopSchedule::coalescePerfectNests() {
 
   SmallVector<SmallVector<AffineForOp>> bands;
@@ -2744,6 +2790,7 @@ void AffineToLoopSchedule::runOnOperation() {
     applyConfigured(hoistConditional, me.licmHoistConditional);
     applyConfigured(mergeIfElse, me.mergeIfElseAccesses);
     applyConfigured(gvnConditionalLoads, me.gvnConditionalLoads);
+    applyConfigured(trackGlobals, me.trackGlobals);
     applyConfigured(sinkParentCode,
                     cfg.tool.hls.pipelineDecision.sinkParentCode);
     const circt::hlsest::SchedulingConfig &sc = cfg.scheduling;
@@ -2755,6 +2802,9 @@ void AffineToLoopSchedule::runOnOperation() {
   if (!timingModel && failed(createPlugins()))
     return signalPassFailure();
 
+  tlsTrackGlobals = trackGlobals;
+  if (trackGlobals)
+    uniqueGlobalRefs();
   if (sinkParentCode)
     sinkFlattenedParentCode();
   coalescePerfectNests();

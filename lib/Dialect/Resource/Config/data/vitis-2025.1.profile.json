@@ -101,6 +101,7 @@
         "merge_if_else_accesses": true,
         "gvn_loads": true,
         "gvn_conditional_loads": true,
+        "globals": true,
         "dse_guarded_stores": true,
         "forward_to_guarded_loads": true,
         "store_forwarding": true,

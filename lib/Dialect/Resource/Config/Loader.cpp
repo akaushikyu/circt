@@ -995,6 +995,7 @@ void fillTool(const json::Object &t, ToolProfile &tool) {
   mid.mergeIfElseAccesses = boolean(me, "merge_if_else_accesses");
   mid.gvnLoads = boolean(me, "gvn_loads");
   mid.gvnConditionalLoads = boolean(me, "gvn_conditional_loads", true);
+  mid.trackGlobals = boolean(me, "globals", true);
   mid.dseGuardedStores = boolean(me, "dse_guarded_stores", true);
   mid.forwardToGuardedLoads = boolean(me, "forward_to_guarded_loads", true);
   mid.storeForwarding = boolean(me, "store_forwarding");

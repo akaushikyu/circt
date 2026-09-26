@@ -434,6 +434,8 @@ struct MiddleEndConfig {
   bool mergeIfElseAccesses = true;
   bool gvnLoads = true;
   bool gvnConditionalLoads = true;
+  /// The clean-ups treat a global array like a local one.
+  bool trackGlobals = true;
   bool storeForwarding = true;
   /// A store under an if of a pipelined body that a later store of the same
   /// address at the body's top level overwrites in the same iteration (only
