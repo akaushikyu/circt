@@ -4397,6 +4397,7 @@ public:
     maxIIBumps = static_cast<unsigned>(cfg.scheduling.maxIIBumps);
     recurrenceRepairRounds =
         static_cast<unsigned>(cfg.scheduling.recurrenceRepairRounds);
+    lowerIIOfBoth = cfg.scheduling.lowerIIOfBoth;
   }
 
   circt::hlsest::ScheduleOutcome
@@ -4443,6 +4444,14 @@ public:
         if (scheduled)
           label = "greedy (simplex failed)";
       }
+      // The simplex heuristic can fix a late operation (the last store of
+      // an unrolled reduction) before the ops that share a port with each
+      // other, and then bumps the II one step per conflict: keep the greedy
+      // schedule when its II is lower (scheduling.modulo.lower_ii_of_both;
+      // w9r13p_mx_r8 II 14 -> 8 = Vitis).
+      if (scheduled && lowerIIOfBoth && label.starts_with("simplex"))
+        if (keepLowerGreedySchedule(problem))
+          label = "greedy (lower II than simplex)";
       out.success = scheduled;
       out.label = label.str();
     }
@@ -4457,9 +4466,30 @@ public:
   }
 
 private:
+  /// Schedules `problem` (already scheduled) with the greedy scheduler too;
+  /// keeps that schedule when its II is lower, else restores the first one.
+  bool keepLowerGreedySchedule(ModuloProblem &problem) const {
+    std::optional<unsigned> firstII = problem.getInitiationInterval();
+    if (!firstII || *firstII <= 1)
+      return false;
+    SmallVector<std::pair<Operation *, unsigned>> firstStart;
+    for (Operation *op : problem.getOperations())
+      if (std::optional<unsigned> t = problem.getStartTime(op))
+        firstStart.push_back({op, *t});
+    FastModuloScheduler fast(problem, recurrenceRepairRounds);
+    if (succeeded(fast.schedule(maxIIBumps)) &&
+        *problem.getInitiationInterval() < *firstII)
+      return true;
+    problem.setInitiationInterval(*firstII);
+    for (auto [op, t] : firstStart)
+      problem.setStartTime(op, t);
+    return false;
+  }
+
   Kind kind;
   unsigned fastThreshold = 150, fastOpsThreshold = 4096, maxIIBumps = 4096;
   unsigned recurrenceRepairRounds = 0;
+  bool lowerIIOfBoth = true;
 };
 
 /// none: no state schedule; the BRAM port model applies its stretch-pair rule

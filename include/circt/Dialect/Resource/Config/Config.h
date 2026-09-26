@@ -599,6 +599,11 @@ struct SchedulingConfig {
   int64_t fastThreshold = 150;
   int64_t fastOpsThreshold = 4096;
   int64_t maxIIBumps = 4096;
+  /// greedy-simplex: a loop the simplex scheduled is also scheduled by the
+  /// greedy scheduler, and the lower II wins (W9r13-impl: the simplex fixes
+  /// the store of an unrolled reduction before its loads and then bumps
+  /// the II; Vitis reaches the resource bound).
+  bool lowerIIOfBoth = true;
   /// A pipelined loop whose body (after the implied unroll) has more ops
   /// than this is left sequential with a warning: a guard against bodies the
   /// pipeline construction cannot hold in memory (OPEN_ISSUES O76:

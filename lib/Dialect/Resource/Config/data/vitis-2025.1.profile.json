@@ -186,6 +186,7 @@
       "fast_threshold": 150,
       "fast_ops_threshold": 4096,
       "max_ii_bumps": 4096,
+      "lower_ii_of_both": true,
       "max_pipeline_body_ops": 250000,
       "recurrence_repair_rounds": 64,
       "user_ii_target": true
