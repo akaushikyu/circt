@@ -910,6 +910,9 @@ void fillTool(const json::Object &t, ToolProfile &tool) {
     ib.writeBufferPortWidthBits = integer(wb, "port_width_bits", 18);
     ib.writeBufferConfirmedMinBurst = integer(wb, "confirmed_min_burst", 32);
     ib.unresolvedCall = str(b, "unresolved_call", "rw");
+    const json::Object &br = obj(b, "bus_requests");
+    ib.readRequestsPerCycle = integer(br, "read_per_cycle", 1);
+    ib.writeRequestsPerCycle = integer(br, "write_per_cycle", 1);
     h.implicitBuffers.push_back(std::move(ib));
   });
 

@@ -184,6 +184,9 @@ const KeySpec kSchema[] = {
   {"tool.hls.implicit_buffers[].write_buffer.port_width_bits", KeyKind::UInt, "bits", "Longer bursts cost ceil(bus width / this)", "A-07", BA, "", 1, kNoLimit, false},
   {"tool.hls.implicit_buffers[].write_buffer.confirmed_min_burst", KeyKind::UInt, "beats", "Shorter priced bursts are marked unconfirmed (never changes a number)", "A-07", BA, "", 0, kNoLimit, false},
   {"tool.hls.implicit_buffers[].unresolved_call", KeyKind::Enum, "", "What a port passed to a call without a body is assumed to do", "A-08", BA, "rw|none", kNoLimit, kNoLimit, true},
+  {"tool.hls.implicit_buffers[].bus_requests", KeyKind::Section, "", "The requests one bundle accepts per cycle from a pipelined loop (a modulo-scheduler resource per bundle and direction)", "", A2L, "", kNoLimit, kNoLimit, true},
+  {"tool.hls.implicit_buffers[].bus_requests.read_per_cycle", KeyKind::UInt, "", "Read requests per cycle and bundle: a pipelined loop with n reads of the bundle's ports per iteration has II >= n / this; a measured Vitis rule (VITIS_NOTES N95; kernels w9r13p_mx_r8: 8 reads, II 8; 0: unlimited)", "", A2L, "", 0, kNoLimit, false},
+  {"tool.hls.implicit_buffers[].bus_requests.write_per_cycle", KeyKind::UInt, "", "Write requests per cycle and bundle (VITIS_NOTES N95; kernels w9r13p_mx_w8 / mx_w4x2: 8 writes to one bundle, II 8; 4 to each of two, II 4; 0: unlimited)", "", A2L, "", 0, kNoLimit, false},
 
   {"tool.hls.streams", KeyKind::Section, "", "hls::stream objects: one FIFO each (VITIS_NOTES N31)", "P-06", BA, "", kNoLimit, kNoLimit, false},
   {"tool.hls.streams.enabled", KeyKind::Bool, "", "Price the stream objects as FIFOs (--bram-stream-fifos overrides); off prices the handle storage as a RAM", "P-06", BA, "", kNoLimit, kNoLimit, false},

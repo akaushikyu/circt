@@ -3472,6 +3472,45 @@ static void recordStorageTier(Value memRef,
                buildPoint.getI64IntegerAttr(pools.readLatency));
 }
 
+/// The m_axi bundle whose port `mem` is (a function argument with an
+/// `hls.interface` entry of the m_axi buffer's mode, seen through views),
+/// with the request limit of its direction; nullopt for any other memref or
+/// an unlimited direction.
+static std::optional<std::pair<std::string, int64_t>>
+maxiBundleRequests(Value mem, bool isLoad) {
+  while (auto view = mem.getDefiningOp<ViewLikeOpInterface>())
+    mem = view.getViewSource();
+  auto arg = dyn_cast<BlockArgument>(mem);
+  if (!arg)
+    return std::nullopt;
+  auto fn = dyn_cast<func::FuncOp>(arg.getOwner()->getParentOp());
+  if (!fn)
+    return std::nullopt;
+  const circt::hlsest::ImplicitBufferConfig *mc =
+      circt::hlsest::Config::get().tool.hls.implicitBuffer("axi4-mm");
+  if (!mc)
+    return std::nullopt;
+  int64_t limit = isLoad ? mc->readRequestsPerCycle : mc->writeRequestsPerCycle;
+  if (limit <= 0)
+    return std::nullopt;
+  auto ifaces =
+      fn.getArgAttrOfType<ArrayAttr>(arg.getArgNumber(), "hls.interface");
+  if (!ifaces)
+    return std::nullopt;
+  for (Attribute attr : ifaces) {
+    auto dimensionIndex = dyn_cast<DictionaryAttr>(attr);
+    auto mode = dimensionIndex ? dimensionIndex.getAs<StringAttr>("mode")
+                               : StringAttr();
+    if (!mode || mode.getValue() != mc->mode)
+      continue;
+    std::string bundle = mc->defaultBundle;
+    if (auto buildPoint = dimensionIndex.getAs<StringAttr>("bundle"))
+      bundle = buildPoint.getValue().str();
+    return std::make_pair(bundle, limit);
+  }
+  return std::nullopt;
+}
+
 static void
 linkMemoryResource(Operation *memOp, Value memRef, bool isLoad,
                    unsigned latency, ModuloProblem &problem,
@@ -3523,6 +3562,13 @@ linkMemoryResource(Operation *memOp, Value memRef, bool isLoad,
       problem.setLimit(r, *pool.limit);
       rsrcs.push_back(r);
     }
+  }
+
+  if (auto bus = maxiBundleRequests(memRef, isLoad)) {
+    Problem::ResourceType r = problem.getOrInsertResourceType(
+        "maxi_" + bus->first + (isLoad ? "_rd" : "_wr"));
+    problem.setLimit(r, static_cast<unsigned>(bus->second));
+    rsrcs.push_back(r);
   }
 
   if (!rsrcs.empty() && !hls_analysis::isPromotedAccess(memOp))

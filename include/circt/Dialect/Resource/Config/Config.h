@@ -316,6 +316,11 @@ struct ImplicitBufferConfig {
   int64_t writeBufferPortWidthBits = 18;
   int64_t writeBufferConfirmedMinBurst = 32;
   std::string unresolvedCall; ///< rw | none
+  /// Read / write requests one bundle accepts per cycle from a pipelined
+  /// loop: a modulo-scheduler resource per bundle and direction (VITIS_NOTES
+  /// N95); 0: unlimited.
+  int64_t readRequestsPerCycle = 1;
+  int64_t writeRequestsPerCycle = 1;
 };
 
 /// hls::stream FIFOs.
