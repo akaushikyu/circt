@@ -840,12 +840,36 @@ static bool isStaticInitStore(Operation *store, Value stored) {
   return false;
 }
 
-static ConstantIndexInfo analyzeConstantIndices(Value mem, unsigned rank) {
-  ConstantIndexInfo info;
-  info.constantDim.assign(rank, true);
+/// The uses of `mem` (an array, or a callee parameter it reaches) into
+/// `info`. With `throughCalls`, a call passing the array is followed into
+/// the callee's parameter, whose accesses count as the array's (VITIS_NOTES
+/// N94: Vitis decides rule (b) over the accesses in the inline-off callees
+/// and dataflow processes the array is passed to); otherwise, or for a
+/// callee without a body, the call stops the analysis.
+static void analyzeConstantIndexUses(Value mem, unsigned rank,
+                                     bool throughCalls,
+                                     ConstantIndexInfo &info,
+                                     SmallPtrSetImpl<Value> &visited) {
+  if (!visited.insert(mem).second)
+    return;
   for (OpOperand &use : mem.getUses()) {
     Operation *user = use.getOwner();
     SmallVector<bool> dims;
+    if (auto call = dyn_cast<func::CallOp>(user); call && throughCalls) {
+      auto callee = dyn_cast_or_null<func::FuncOp>(call.resolveCallable());
+      unsigned index = use.getOperandNumber();
+      if (!callee || callee.isExternal() ||
+          index >= callee.getNumArguments() ||
+          callee.getArgument(index).getType() != mem.getType()) {
+        info.complete = false;
+        return;
+      }
+      analyzeConstantIndexUses(callee.getArgument(index), rank, throughCalls,
+                               info, visited);
+      if (!info.complete)
+        return;
+      continue;
+    }
     if (auto store = dyn_cast<AffineStoreOp>(user);
         store && store.getMemRef() == mem &&
         isStaticInitStore(store, store.getValueToStore()))
@@ -871,16 +895,24 @@ static ConstantIndexInfo analyzeConstantIndices(Value mem, unsigned rank) {
       dims = constantDimsOfIndices(store.getIndices());
     } else {
       info.complete = false;
-      return info;
+      return;
     }
     if (dims.size() != rank) {
       info.complete = false;
-      return info;
+      return;
     }
     ++info.accesses;
     for (unsigned d = 0; d < rank; ++d)
       info.constantDim[d] = info.constantDim[d] && dims[d];
   }
+}
+
+static ConstantIndexInfo analyzeConstantIndices(Value mem, unsigned rank,
+                                                bool throughCalls) {
+  ConstantIndexInfo info;
+  info.constantDim.assign(rank, true);
+  SmallPtrSet<Value, 4> visited;
+  analyzeConstantIndexUses(mem, rank, throughCalls, info, visited);
   return info;
 }
 
@@ -911,6 +943,8 @@ struct AutomaticRules {
   /// (b) also on memref.globals (function statics, file-scope arrays),
   /// over the accesses of every function (N77, w9r9p_o79_static*).
   bool globals = true;
+  /// (b) over the accesses in the callees the array is passed to (N94).
+  bool throughCalls = true;
 };
 
 /// Whether the only user storage pragma on `def` is `stream type=pipo`: Vitis
@@ -1123,8 +1157,8 @@ static AutomaticPartition decideAutomaticPartition(memref::AllocaOp alloca,
       return decision;
   }
 
-  ConstantIndexInfo info =
-      analyzeConstantIndices(alloca.getResult(), ty.getRank());
+  ConstantIndexInfo info = analyzeConstantIndices(
+      alloca.getResult(), ty.getRank(), rules.throughCalls);
   return decideFromConstantIndices(def, ty, info, rules, afterUser, pipo);
 }
 
@@ -1266,6 +1300,7 @@ struct InferVitisSplitArray
     rules.nonAffineArrays = cfgPartitioning->constantIndexNonAffineArrays;
     rules.pipoStreams = cfgPartitioning->constantIndexPipoStreams;
     rules.globals = cfgPartitioning->constantIndexGlobals;
+    rules.throughCalls = cfgPartitioning->constantIndexThroughCalls;
     DenseSet<Value> decided;
     Builder builder(func.getContext());
     func.walk([&](memref::AllocaOp alloca) {
@@ -1387,7 +1422,8 @@ struct InferVitisSplitArray
         auto gg = dyn_cast<memref::GetGlobalOp>(use.getUser());
         if (!gg)
           return; // another kind of use: nothing is concluded
-        ConstantIndexInfo gi = analyzeConstantIndices(gg.getResult(), rank);
+        ConstantIndexInfo gi =
+            analyzeConstantIndices(gg.getResult(), rank, rules.throughCalls);
         if (!gi.complete)
           return;
         info.accesses += gi.accesses;

@@ -963,6 +963,8 @@ void fillTool(const json::Object &t, ToolProfile &tool) {
       boolean(obj(pa, "constant_index"), "pipo_streams", true);
   h.partitioning.constantIndexGlobals =
       boolean(obj(pa, "constant_index"), "globals", true);
+  h.partitioning.constantIndexThroughCalls =
+      boolean(obj(pa, "constant_index"), "through_calls", true);
   h.partitioning.compoundAssignTwoStores =
       boolean(pa, "compound_assign_two_stores", true);
   h.partitioning.blockBankFromLoopRange =

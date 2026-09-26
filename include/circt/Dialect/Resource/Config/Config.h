@@ -398,6 +398,9 @@ struct PartitioningConfig {
   bool constantIndexPipoStreams = true;
   /// Rule (b) also for memref.globals, over every function's accesses (N77).
   bool constantIndexGlobals = true;
+  /// Rule (b) follows an array into the callees it is passed to: their
+  /// accesses count as the array's (VITIS_NOTES N94).
+  bool constantIndexThroughCalls = true;
   /// An ap_fixed compound assignment (cgeist's hls.ap_compound_assign) to a
   /// bank chosen at run time writes that bank twice (VITIS_NOTES N38 R-cmpd).
   bool compoundAssignTwoStores = true;
