@@ -6,6 +6,7 @@
 #include "../Plugins/Builtin/Builtins.h"
 #include "circt/Dialect/Resource/Config/ConfigUtils.h"
 #include "circt/Dialect/Resource/Passes/CallInstances.h"
+#include "circt/Dialect/Resource/Passes/DoWhileFlatten.h"
 #include "circt/Dialect/Resource/Passes/FloatOps.h"
 #include "circt/Dialect/Resource/Passes/FoldUnrolledGuards.h"
 #include "circt/Dialect/Resource/Passes/LoopPragmas.h"
@@ -54,6 +55,7 @@ using circt::hls_analysis::kCallOccupancyAttr;
 using circt::hls_analysis::kLoopAutoUnrolledAttr;
 using circt::hls_analysis::kLoopCallBoundaryAttr;
 using circt::hls_analysis::kLoopFlattenedParentsAttr;
+using circt::hls_analysis::kLoopFlattenRefusedAttr;
 using circt::hls_analysis::kLoopPipelineAttr;
 using circt::hls_analysis::kLoopPipelineAutoSource;
 using circt::hls_analysis::kLoopPipelineOffAttr;
@@ -127,6 +129,10 @@ static void tagAutoPipeline(Operation *loop) {
 /// (raise-counted-loops) before this pass.
 static bool isRuntimeLoop(Operation *op) {
   return isa<scf::ForOp, scf::WhileOp>(op);
+}
+
+static void markFlattenRefused(AffineForOp loop) {
+  loop->setAttr(kLoopFlattenRefusedAttr, UnitAttr::get(loop.getContext()));
 }
 
 static void addFlattenedParents(AffineForOp loop, unsigned count) {
@@ -472,6 +478,13 @@ struct Node {
   /// The pipelined loop that absorbs this node: the node's own innermost
   /// loop when it is pipelined, or the child's when it is flattened into it.
   AffineForOp tagged;
+  /// The loops around `tagged` Vitis does not flatten into it (N96,
+  /// doWhileParents): an automatic pipeline's unroll makes their next index
+  /// a subscript.
+  llvm::SmallPtrSet<Operation *, 4> doWhileParents;
+  /// Some loop of the node was not flattened into `tagged` for that reason:
+  /// no loop around the node is flattened into it either.
+  bool flattenRefused = false;
 };
 
 /// A read-only load of a floating-point element directly in `outer`'s body
@@ -1276,6 +1289,25 @@ struct AutoPipelineUnrollPass
   unsigned pipelineLoopsValue = 64;
   bool promotePipelinedValue = true;
   bool floatLoadsPerfectValue = true;
+  /// tool.hls.pipeline_decision.do_while_flatten_refusal (N96).
+  bool doWhileRefusalValue = true;
+  /// tool.hls.pipeline_decision.do_while_min_subloop_trip (N96).
+  uint64_t doWhileMinSubLoopTrip = 3;
+
+  /// How many of `loops` (outermost first, the innermost directly around
+  /// the pipeline's absorbed loops) flatten into the pipeline: those inside
+  /// the innermost loop of `refused` (N96).
+  static unsigned
+  flattenableParents(ArrayRef<AffineForOp> loops,
+                     const llvm::SmallPtrSetImpl<Operation *> &refused) {
+    unsigned count = 0;
+    for (AffineForOp loop : llvm::reverse(loops)) {
+      if (refused.contains(loop.getOperation()))
+        break;
+      ++count;
+    }
+    return count;
+  }
 
   /// The cycle budget of the call-depth model: the clock period less the
   /// clock uncertainty.
@@ -1558,11 +1590,30 @@ struct AutoPipelineUnrollPass
       AffineForOp portValue = n.chain.back();
       n.tagged = portValue;
       tagAutoPipeline(portValue);
-      addFlattenedParents(portValue, n.chain.size() - 1);
+
+      if (doWhileRefusalValue)
+        n.doWhileParents = circt::hls_analysis::doWhileParents(
+            portValue, doWhileMinSubLoopTrip);
+      unsigned parents =
+          flattenableParents(ArrayRef(n.chain).drop_back(), n.doWhileParents);
+      if (parents + 1 < n.chain.size()) {
+        n.flattenRefused = true;
+        markFlattenRefused(n.chain[n.chain.size() - 2 - parents]);
+        remark(n.chain[n.chain.size() - 2 - parents].getLoc(),
+               "not flattened into the pipelined loop at " +
+                   locString(portValue.getLoc()) +
+                   ": its unrolled sub-loop subscripts the next index of "
+                   "this loop (Vitis 200-960, do-while loop)");
+      }
+      addFlattenedParents(portValue, parents);
+
+      uint64_t trip = 1;
+      for (AffineForOp member : ArrayRef(n.chain).take_back(parents + 1))
+        trip = saturatingMul(trip, getConstantTripCount(member).value_or(1));
       remark(portValue.getLoc(),
              "automatically set the pipeline for the loop (trip " +
-                 (n.dynamic ? Twine("?") : Twine(n.trip)) + ", " +
-                 Twine(n.chain.size() - 1) + " perfect parent(s) flattened, " +
+                 (n.dynamic ? Twine("?") : Twine(trip)) + ", " +
+                 Twine(parents) + " perfect parent(s) flattened, " +
                  Twine(n.children.size()) + " inner loop(s) to unroll)");
       unrollInside(portValue, symbolTable);
       n.tagged =
@@ -1584,8 +1635,25 @@ struct AutoPipelineUnrollPass
       return;
     if (candidateValue.chain.front()->getBlock() != n.chain.back().getBody())
       return;
+    if (candidateValue.flattenRefused)
+      return;
+    unsigned parents =
+        flattenableParents(n.chain, candidateValue.doWhileParents);
+    if (parents < n.chain.size()) {
+      markFlattenRefused(n.chain[n.chain.size() - 1 - parents]);
+      remark(n.chain[n.chain.size() - 1 - parents].getLoc(),
+             "not flattened into the pipelined loop at " +
+                 locString(candidateValue.tagged.getLoc()) +
+                 ": its unrolled sub-loop subscripts the next index of this "
+                 "loop (Vitis 200-960, do-while loop)");
+
+      addFlattenedParents(candidateValue.tagged, parents);
+      n.flattenRefused = true;
+      return;
+    }
     addFlattenedParents(candidateValue.tagged, n.chain.size());
     n.tagged = candidateValue.tagged;
+    n.doWhileParents = candidateValue.doWhileParents;
     remark(n.chain.front().getLoc(),
            "flattening the loop (and " + Twine(n.chain.size() - 1) +
                " perfect inner loop(s)) into the pipelined loop at " +
@@ -1865,6 +1933,11 @@ struct AutoPipelineUnrollPass
     pipelineLoopsValue = o.pipelineLoops;
     promotePipelinedValue = o.promotePipelined;
     floatLoadsPerfectValue = o.floatLoadsPerfect;
+    doWhileRefusalValue = circt::hlsest::Config::get()
+                              .tool.hls.pipelineDecision.doWhileFlattenRefusal;
+    doWhileMinSubLoopTrip = static_cast<uint64_t>(
+        circt::hlsest::Config::get()
+            .tool.hls.pipelineDecision.doWhileMinSubLoopTrip);
     remarkFn = o.remark;
 
     module.walk([&](Operation *op) {
@@ -1878,6 +1951,7 @@ struct AutoPipelineUnrollPass
       if (isAutoPipelineTag(loop->getAttr(kLoopPipelineAttr)))
         loop->removeAttr(kLoopPipelineAttr);
       loop->removeAttr(kLoopFlattenedParentsAttr);
+      loop->removeAttr(kLoopFlattenRefusedAttr);
       loop->removeAttr(kLoopAutoUnrolledAttr);
       loop->removeAttr(kLoopCallBoundaryAttr);
     });

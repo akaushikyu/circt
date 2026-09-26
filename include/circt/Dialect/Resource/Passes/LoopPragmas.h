@@ -56,6 +56,12 @@ constexpr llvm::StringLiteral kUnrollRemainderAttr = "hls.unroll_remainder";
 /// directly enclosing affine.for ancestors into the pipeline, so their
 /// induction variables are loop-variant for that pipeline.
 constexpr llvm::StringLiteral kLoopFlattenedParentsAttr = "hls.flattened_parents";
+/// `hls.flatten_refused` (unit) on a loop Vitis does not flatten into the
+/// pipelined loop inside it (VITIS_NOTES N96, do-while loop): it stays a
+/// sequential loop around the pipeline even when the nest is perfect, so
+/// --convert-affine-to-loopschedule does not coalesce it with the loops
+/// inside.
+constexpr llvm::StringLiteral kLoopFlattenRefusedAttr = "hls.flatten_refused";
 /// `hls.auto_unrolled = [{factor = F : i64, loc = loc(...)}, ...]` on a
 /// pipelined loop (written by --auto-pipeline-unroll): the loops it unrolled
 /// completely for that pipeline, in unroll order (innermost first), with

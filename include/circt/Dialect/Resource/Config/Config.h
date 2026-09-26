@@ -364,6 +364,12 @@ struct PipelineDecisionConfig {
   /// A `pipeline off` innermost loop stays sequential in the scheduler
   /// instead of being scheduled as a pipeline (W9 round 12 review).
   bool pipelineOffSequential = true;
+  /// A parent is not flattened into an automatically pipelined child whose
+  /// sub-loop unroll makes the parent's next index a subscript of a
+  /// multi-dimensional array (VITIS_NOTES N96).
+  bool doWhileFlattenRefusal = true;
+  /// ... only for a subscript made by a sub-loop of at least this trip count.
+  int64_t doWhileMinSubLoopTrip = 3;
 };
 
 struct PartitionInferenceConfig {

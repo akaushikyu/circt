@@ -73,7 +73,9 @@
         "flatten_across_calls": false,
         "sink_parent_code": true,
         "fold_unrolled_guards": true,
-        "pipeline_off_sequential": true
+        "pipeline_off_sequential": true,
+        "do_while_flatten_refusal": true,
+        "do_while_min_subloop_trip": 3
       },
       "partitioning": {
         "policy": "vitis-td",
