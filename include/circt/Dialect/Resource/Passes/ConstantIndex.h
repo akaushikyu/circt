@@ -22,6 +22,7 @@
 #ifndef CIRCT_DIALECT_RESOURCE_PASSES_CONSTANTINDEX_H
 #define CIRCT_DIALECT_RESOURCE_PASSES_CONSTANTINDEX_H
 
+#include "circt/Dialect/Resource/Config/Config.h"
 #include "mlir/Dialect/Affine/Analysis/LoopAnalysis.h"
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
@@ -81,6 +82,46 @@ inline std::optional<int64_t> getConstantIndexValue(mlir::Value v) {
           r |= ~mask;
       }
       return static_cast<int64_t>(r);
+    }
+  // Division, remainder, shifts and bit operations on constants fold the
+  // same way (an ap_fixed index scaled and unscaled, `(k * 2) / 2` with k an
+  // unrolled loop's constant, siddharth lab2 `softmax_row`, VITIS_NOTES
+  // N97): C's truncating signed division, the unsigned forms only for
+  // non-negative values.
+  if (mlir::Operation *def = v.getDefiningOp())
+    if (circt::hlsest::Config::get()
+            .tool.hls.partitioning.constantIndexFoldDivision &&
+        mlir::isa<mlir::arith::DivSIOp, mlir::arith::RemSIOp,
+                  mlir::arith::DivUIOp, mlir::arith::RemUIOp,
+                  mlir::arith::ShLIOp, mlir::arith::ShRSIOp,
+                  mlir::arith::ShRUIOp, mlir::arith::AndIOp, mlir::arith::OrIOp,
+                  mlir::arith::XOrIOp>(def)) {
+      std::optional<int64_t> a = getConstantIndexValue(def->getOperand(0));
+      std::optional<int64_t> b =
+          a ? getConstantIndexValue(def->getOperand(1)) : std::nullopt;
+      if (!a || !b)
+        return std::nullopt;
+      bool isUnsigned = mlir::isa<mlir::arith::DivUIOp, mlir::arith::RemUIOp,
+                                  mlir::arith::ShRUIOp>(def);
+      if (isUnsigned && (*a < 0 || *b < 0))
+        return std::nullopt;
+      if (mlir::isa<mlir::arith::DivSIOp, mlir::arith::RemSIOp,
+                    mlir::arith::DivUIOp, mlir::arith::RemUIOp>(def)) {
+        if (*b == 0)
+          return std::nullopt;
+        return mlir::isa<mlir::arith::DivSIOp, mlir::arith::DivUIOp>(def)
+                   ? *a / *b
+                   : *a % *b;
+      }
+      if (mlir::isa<mlir::arith::AndIOp>(def))
+        return *a & *b;
+      if (mlir::isa<mlir::arith::OrIOp>(def))
+        return *a | *b;
+      if (mlir::isa<mlir::arith::XOrIOp>(def))
+        return *a ^ *b;
+      if (*b < 0 || *b >= 63 || *a < 0)
+        return std::nullopt;
+      return mlir::isa<mlir::arith::ShLIOp>(def) ? (*a << *b) : (*a >> *b);
     }
   // An affine.apply whose operands all fold to constants (unrolling leaves
   // `affine.apply (d0 + 1)(%c0)` as the index of a memref.load).
