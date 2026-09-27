@@ -1049,6 +1049,7 @@ void fillTool(const json::Object &t, ToolProfile &tool) {
   sel.inclusive = boolean(ss, "inclusive");
   sel.block = str(ss, "block");
   sel.below = str(ss, "below");
+  sel.forcingImpl = str(ss, "forcing_impl", "bram");
   const json::Object &mm = obj(be, "memory_mapper");
   MemoryMapperConfig &map = tool.backend.memoryMapper;
   map.plugin = str(mm, "plugin");

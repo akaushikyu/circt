@@ -11,6 +11,8 @@
 // and anything smaller in distributed RAM, which costs no block RAM: 64x16 =
 // 1024 bits -> 1 BRAM, 93x11 = 1023 -> LUTRAM, 64x15 = 960 -> LUTRAM
 // (VITIS_NOTES N5, 23 kernels). It reads no access count and no schedule.
+// A bind_storage impl equal to `forcing_impl` (bram) puts a bank of any size
+// in block RAM (N98: a 16 x 16-bit array bound impl=bram is 1 BRAM).
 //
 //===----------------------------------------------------------------------===//
 
@@ -44,7 +46,9 @@ public:
                     const SelectionContext &) const override {
     TierChoice c;
     int64_t bits = request.bits();
-    if (rule.belowBlock(bits)) {
+    bool forced = !rule.forcingImpl.empty() && request.pragmaImpl &&
+                  *request.pragmaImpl == rule.forcingImpl;
+    if (rule.belowBlock(bits) && !forced) {
       c.tier = rule.below;
       c.note = "size " + std::to_string(bits) + " bits" +
                (request.narrowed ? " (narrowed element width)" : "") + " " +

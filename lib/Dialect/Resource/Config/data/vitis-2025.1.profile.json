@@ -129,7 +129,8 @@
         "min_block_bits": 1024,
         "inclusive": true,
         "block": "ramb18",
-        "below": "distributed"
+        "below": "distributed",
+        "forcing_impl": "bram"
       },
       "memory_mapper": {
         "plugin": "vitis-band7",

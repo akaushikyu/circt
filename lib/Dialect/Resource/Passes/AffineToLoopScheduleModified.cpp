@@ -19,6 +19,7 @@
 #include "circt/Dialect/Resource/Passes/PartitionLayout.h"
 #include "circt/Dialect/Resource/Passes/StreamFifos.h"
 #include "circt/Dialect/Resource/Plugins/MemoryInterfaces.h"
+#include "circt/Dialect/Resource/Passes/StoragePragmas.h"
 #include "circt/Dialect/Resource/Plugins/Registry.h"
 #include "circt/Dialect/Resource/Plugins/Scheduling.h"
 #include "circt/Scheduling/Algorithms.h"
@@ -3462,6 +3463,7 @@ static void recordStorageTier(Value memRef,
       request.narrowed = true;
     }
   request.readWidths.push_back(request.writeWidth);
+  request.pragmaImpl = circt::hls_analysis::bindStorageImpl(def);
   circt::hlsest::SelectionContext ctx;
   ctx.profile = profile;
   circt::hlsest::TierChoice choice =

@@ -17,6 +17,7 @@
 #include "circt/Dialect/Resource/Passes/ReadOnlyMemory.h"
 #include "circt/Dialect/Resource/Passes/StreamFifos.h"
 #include "circt/Dialect/Resource/Plugins/MemoryInterfaces.h"
+#include "circt/Dialect/Resource/Passes/StoragePragmas.h"
 #include "circt/Dialect/Resource/Plugins/PassPolicies.h"
 #include "circt/Dialect/Resource/Plugins/Registry.h"
 #include "circt/Dialect/Resource/Plugins/Scheduling.h"
@@ -1453,6 +1454,8 @@ static BRAMCost estimateBRAM(MemoryResourceOpInterface iface, MemrefRecord &rec,
     declared.words = rec.words.value_or(0);
     declared.writeWidth = rec.elemBits;
     declared.readWidths.push_back(rec.elemBits);
+    declared.pragmaImpl =
+        circt::hls_analysis::bindStorageImpl(iface.getOperation());
     choice = models.selector->select(declared, device, selection);
     if (!choice.memory.empty() && rec.narrow && rec.words) {
       circt::hlsest::MemoryRequest narrowed = declared;
@@ -1619,6 +1622,8 @@ static BRAMCost estimateBRAM(MemoryResourceOpInterface iface, MemrefRecord &rec,
       romRequest.readWidths.push_back(widthValue);
       romRequest.readOnly = true;
       romRequest.needsInit = true;
+      romRequest.pragmaImpl =
+          circt::hls_analysis::bindStorageImpl(iface.getOperation());
       circt::hlsest::TierChoice romChoice =
           models.selector->select(romRequest, device, selection);
       if (romChoice.memory.empty()) {

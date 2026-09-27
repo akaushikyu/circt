@@ -511,6 +511,9 @@ struct StorageSelectorConfig {
   bool inclusive = true;
   std::string block; ///< memory id of the block tier
   std::string below; ///< tier name for what stays below the threshold
+  /// The bind_storage impl that puts a bank in the block tier at any size
+  /// (Vitis: bram, VITIS_NOTES N98); empty: none.
+  std::string forcingImpl = "bram";
 
   /// Whether `bits` (words x exact element bits) stays below the block tier.
   bool belowBlock(int64_t bits) const {

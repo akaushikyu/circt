@@ -296,6 +296,7 @@ const KeySpec kSchema[] = {
   {"tool.backend.storage_selector.inclusive", KeyKind::Bool, "", "A bank of exactly min_block_bits is a block RAM", "B-08", BA, "", kNoLimit, kNoLimit, false},
   {"tool.backend.storage_selector.block", KeyKind::String, "", "Memory id of the block tier", "B-08", BA, "", kNoLimit, kNoLimit, false},
   {"tool.backend.storage_selector.below", KeyKind::Enum, "", "Tier of a bank below the threshold (priced at 0 of the primary class)", "B-08", BA, "registers|distributed|hard-small|block|large", kNoLimit, kNoLimit, false},
+  {"tool.backend.storage_selector.forcing_impl", KeyKind::String, "", "The bind_storage impl (lower case) that puts a bank in the block tier whatever its size, below min_block_bits included (the legacy RESOURCE core=..._BRAM pragma is the same attribute); a measured Vitis rule (VITIS_NOTES N98; kernels w9r13p_rs_bind / rs_res: a 16 x 16-bit array is RAM_2P_BRAM_1R1W, 1 BRAM); empty: no impl forces it", "B-08", BA, "", kNoLimit, kNoLimit, true},
   {"tool.backend.memory_mapper", KeyKind::Section, "", "The rule that turns a bank into primitives", "B-04..B-07", BA, "", kNoLimit, kNoLimit, false},
   {"tool.backend.memory_mapper.plugin", KeyKind::PluginName, "", "The MemoryMapper: vitis-band7, vitis-aspect-min or geometry-min (bram-formula=band|n6 overrides)", "B-07", BA, "memory_mapper", kNoLimit, kNoLimit, false},
   {"tool.backend.memory_mapper.primitive", KeyKind::String, "", "Memory id it maps to", "B-01", BA, "", kNoLimit, kNoLimit, false},
