@@ -236,6 +236,10 @@ struct ReplicationConfig {
   bool sharedWritePortReadsWhenIdle = true;
   bool exclusiveArmStoresOnce = true;
   bool calleeStoresPerLoop = true;
+  /// A callee parameter is replicable only when the arrays its call sites
+  /// pass are: their stores per loop body in the callers (and the callers'
+  /// other callees) count (VITIS_NOTES N99).
+  bool callerStoresPerLoop = true;
   /// A callee parameter that its call sites bind to two or more different
   /// arrays is port-bound even when the callee has one instance
   /// (VITIS_NOTES N75).

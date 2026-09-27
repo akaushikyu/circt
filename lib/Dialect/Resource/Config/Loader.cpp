@@ -859,6 +859,8 @@ void fillTool(const json::Object &t, ToolProfile &tool) {
   m.replication.exclusiveArmStoresOnce =
       boolean(rep, "exclusive_arm_stores_once");
   m.replication.calleeStoresPerLoop = boolean(rep, "callee_stores_per_loop");
+  m.replication.callerStoresPerLoop =
+      boolean(rep, "caller_stores_per_loop", true);
   m.replication.portBoundSeveralArrays =
       boolean(rep, "port_bound_several_arrays", true);
   m.replication.portBoundWritableGlobals =

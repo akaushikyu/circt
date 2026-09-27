@@ -348,6 +348,82 @@ void annotateCalleeStoresPerLoop(ModuleOp module) {
   });
 }
 
+namespace {
+/// The stores per loop body of the arrays a callee parameter is bound to
+/// (N99): over every call site of the callee, the passed value's stores in
+/// its own function's loops and in the loops of the callees it is passed to,
+/// and, for a value that is itself a parameter, recursively those of its
+/// call sites.
+class CallerStores {
+public:
+  explicit CallerStores(ModuleOp module) {
+    module.walk([&](CallOpInterface call) {
+      if (func::FuncOp callee = resolveDefinedCallee(call))
+        callers[callee.getOperation()].push_back(call);
+    });
+  }
+
+  unsigned ofParameter(func::FuncOp fn, unsigned idx) {
+    auto key = std::make_pair(fn.getOperation(), idx);
+    if (auto it = memo.find(key); it != memo.end())
+      return it->second;
+    memo[key] = 0; // a recursive call contributes nothing
+    unsigned best = 0;
+    for (CallOpInterface call : callers.lookup(fn.getOperation())) {
+      if (idx >= call.getArgOperands().size())
+        continue;
+      best = std::max(best, ofValue(call.getArgOperands()[idx]));
+    }
+    memo[key] = best;
+    return best;
+  }
+
+private:
+  unsigned ofValue(Value v) {
+    if (!isa<MemRefType>(v.getType()))
+      return 0;
+    unsigned n = std::max(localStoresPerLoop(v), callees.throughCalls(v));
+    if (auto arg = dyn_cast<BlockArgument>(v))
+      if (auto fn = dyn_cast<func::FuncOp>(arg.getOwner()->getParentOp()))
+        n = std::max(n, ofParameter(fn, arg.getArgNumber()));
+    return n;
+  }
+
+  CalleeStores callees;
+  DenseMap<Operation *, SmallVector<CallOpInterface, 2>> callers;
+  DenseMap<std::pair<Operation *, unsigned>, unsigned> memo;
+};
+} // namespace
+
+void annotateCallerStoresPerLoop(ModuleOp module) {
+  CallerStores stores(module);
+  OpBuilder b(module.getContext());
+  module.walk([&](func::FuncOp fn) {
+    if (fn.isExternal())
+      return;
+    for (BlockArgument arg : fn.getArguments()) {
+      if (!isa<MemRefType>(arg.getType()))
+        continue;
+      unsigned n = stores.ofParameter(fn, arg.getArgNumber());
+      if (n > 1)
+        fn.setArgAttr(arg.getArgNumber(), kCallerStoresPerLoopAttr,
+                      b.getI64IntegerAttr(n));
+    }
+  });
+}
+
+unsigned callerStoresPerLoop(Value bank) {
+  auto arg = dyn_cast<BlockArgument>(bank);
+  if (!arg)
+    return 0;
+  auto fn = dyn_cast<func::FuncOp>(arg.getOwner()->getParentOp());
+  if (!fn)
+    return 0;
+  auto a = fn.getArgAttrOfType<IntegerAttr>(arg.getArgNumber(),
+                                            kCallerStoresPerLoopAttr);
+  return a ? static_cast<unsigned>(a.getInt()) : 0u;
+}
+
 unsigned calleeStoresPerLoop(Value bank) {
   IntegerAttr arrayValue;
   if (auto arg = dyn_cast<BlockArgument>(bank)) {
@@ -479,6 +555,9 @@ void BRAMClassification::profileAccesses(Operation *root) {
     }
 
     maxStoresPerLoop = std::max(maxStoresPerLoop, calleeStoresPerLoop(bank));
+    // A parameter: the arrays its call sites pass, stored by the callers
+    // (annotateCallerStoresPerLoop, VITIS_NOTES N99).
+    maxStoresPerLoop = std::max(maxStoresPerLoop, callerStoresPerLoop(bank));
     prof.replicable = maxStoresPerLoop <= 1;
     prof.mode = prof.registers ? StorageMode::Registers
                                : classifyMode(maxStoresPerLoop);

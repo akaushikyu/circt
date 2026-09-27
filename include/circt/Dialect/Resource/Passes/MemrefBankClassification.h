@@ -76,6 +76,22 @@ void annotateCalleeStoresPerLoop(mlir::ModuleOp module);
 /// The annotation of `bank` (0 when absent).
 unsigned calleeStoresPerLoop(mlir::Value bank);
 
+/// Set as an argument attribute on a memref parameter of a defined callee:
+/// the most stores one loop body makes, in any function, to the arrays the
+/// call sites pass as that parameter (only when > 1; VITIS_NOTES N99).
+/// Written by annotateCallerStoresPerLoop, read by BRAMClassification.
+constexpr llvm::StringLiteral kCallerStoresPerLoopAttr =
+    "hls.caller_stores_per_loop";
+
+/// Annotates every memref parameter whose call sites pass an array some loop
+/// body stores more than once per iteration (in the caller, in another
+/// callee of that array, or further up the call chain).
+void annotateCallerStoresPerLoop(mlir::ModuleOp module);
+
+/// The annotation of the parameter `bank` (0 when absent or not a
+/// parameter).
+unsigned callerStoresPerLoop(mlir::Value bank);
+
 /// The most of `stores` (accesses of one memref inside one loop body) that
 /// can run in one iteration: the stores in the two arms of one if never run
 /// together, so they count once, whatever their addresses (Vitis builds

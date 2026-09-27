@@ -23,6 +23,7 @@
           "shared_write_port_reads_when_idle": true,
           "exclusive_arm_stores_once": true,
           "callee_stores_per_loop": true,
+          "caller_stores_per_loop": true,
           "port_bound_several_arrays": true,
           "port_bound_writable_globals": true
         },

@@ -1830,6 +1830,11 @@ struct MemoryBankingPass
 
     if (annotateCalleeStores)
       hls_analysis::annotateCalleeStoresPerLoop(getOperation());
+    // And on the callees' parameters the stores of the arrays their call
+    // sites pass (VITIS_NOTES N99, tool.hls.memory_architecture.replication.
+    // caller_stores_per_loop).
+    if (hc.memoryArchitecture.replication.callerStoresPerLoop)
+      hls_analysis::annotateCallerStoresPerLoop(getOperation());
   }
 };
 
