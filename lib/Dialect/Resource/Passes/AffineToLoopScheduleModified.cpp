@@ -17,9 +17,9 @@
 #include "circt/Dialect/Resource/Passes/MemoryRecurrences.h"
 #include "circt/Dialect/Resource/Passes/MemrefBankClassification.h"
 #include "circt/Dialect/Resource/Passes/PartitionLayout.h"
+#include "circt/Dialect/Resource/Passes/StoragePragmas.h"
 #include "circt/Dialect/Resource/Passes/StreamFifos.h"
 #include "circt/Dialect/Resource/Plugins/MemoryInterfaces.h"
-#include "circt/Dialect/Resource/Passes/StoragePragmas.h"
 #include "circt/Dialect/Resource/Plugins/Registry.h"
 #include "circt/Dialect/Resource/Plugins/Scheduling.h"
 #include "circt/Scheduling/Algorithms.h"
@@ -2935,7 +2935,8 @@ FailureOr<bool> AffineToLoopSchedule::pipelineLoop(
     int64_t ops = 0;
     loop->walk([&](Operation *) { ++ops; });
     if (ops > cap) {
-      loop->emitWarning("not pipelined (left as a sequential loop): the body "
+      mlir::emitWarning(loop->getLoc(),
+                        "not pipelined (left as a sequential loop): the body "
                         "has ")
           << ops << " operations, more than "
           << "scheduling.modulo.max_pipeline_body_ops = " << cap;
@@ -2950,7 +2951,8 @@ FailureOr<bool> AffineToLoopSchedule::pipelineLoop(
     populated.emplace(dependenceModel->populate(forOp, inputs));
   } else {
     if (dependenceModel->name() != "cached-o1") {
-      loop->emitWarning("not pipelined (left as a sequential loop): the "
+      mlir::emitWarning(loop->getLoc(),
+                        "not pipelined (left as a sequential loop): the "
                         "dependence model ")
           << dependenceModel->name() << " takes affine.for loops only";
       return false;
@@ -3728,7 +3730,8 @@ LogicalResult AffineToLoopSchedule::populateOperatorTypes(
     return failure();
   }
   if (result.wasInterrupted()) {
-    loop->emitWarning("not pipelined (left as a sequential loop): "
+    mlir::emitWarning(loop->getLoc(),
+                      "not pipelined (left as a sequential loop): "
                       "unsupported operation ")
         << *unsupported;
     return failure();
@@ -3847,7 +3850,7 @@ AffineToLoopSchedule::solveSchedulingProblem(Operation *loop,
       if (reused->ii != *problem.getInitiationInterval() ||
           reused->startTimes != startTimes) {
         ++numReuseMismatches;
-        loop->emitWarning()
+        mlir::emitWarning(loop->getLoc())
             << "schedule reuse mismatch: the identical loop at " << reused->loc
             << " has II " << reused->ii << ", this one solves to II "
             << *problem.getInitiationInterval();
@@ -4446,11 +4449,7 @@ public:
         if (scheduled)
           label = "greedy (simplex failed)";
       }
-      // The simplex heuristic can fix a late operation (the last store of
-      // an unrolled reduction) before the ops that share a port with each
-      // other, and then bumps the II one step per conflict: keep the greedy
-      // schedule when its II is lower (scheduling.modulo.lower_ii_of_both;
-      // w9r13p_mx_r8 II 14 -> 8 = Vitis).
+
       if (scheduled && lowerIIOfBoth && label.starts_with("simplex"))
         if (keepLowerGreedySchedule(problem))
           label = "greedy (lower II than simplex)";

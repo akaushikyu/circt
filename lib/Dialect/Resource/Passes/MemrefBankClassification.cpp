@@ -357,36 +357,38 @@ namespace {
 class CallerStores {
 public:
   explicit CallerStores(ModuleOp module) {
-    module.walk([&](CallOpInterface call) {
-      if (func::FuncOp callee = resolveDefinedCallee(call))
-        callers[callee.getOperation()].push_back(call);
+    module.walk([&](CallOpInterface callSite) {
+      if (func::FuncOp callee = resolveDefinedCallee(callSite))
+        callers[callee.getOperation()].push_back(callSite);
     });
   }
 
-  unsigned ofParameter(func::FuncOp fn, unsigned idx) {
-    auto key = std::make_pair(fn.getOperation(), idx);
+  unsigned ofParameter(func::FuncOp fn, unsigned indexValue) {
+    auto key = std::make_pair(fn.getOperation(), indexValue);
     if (auto it = memo.find(key); it != memo.end())
       return it->second;
-    memo[key] = 0; // a recursive call contributes nothing
+    memo[key] = 0;
     unsigned best = 0;
-    for (CallOpInterface call : callers.lookup(fn.getOperation())) {
-      if (idx >= call.getArgOperands().size())
+    for (CallOpInterface callSite : callers.lookup(fn.getOperation())) {
+      if (indexValue >= callSite.getArgOperands().size())
         continue;
-      best = std::max(best, ofValue(call.getArgOperands()[idx]));
+      best = std::max(best, ofValue(callSite.getArgOperands()[indexValue]));
     }
     memo[key] = best;
     return best;
   }
 
 private:
-  unsigned ofValue(Value v) {
-    if (!isa<MemRefType>(v.getType()))
+  unsigned ofValue(Value valueHandle) {
+    if (!isa<MemRefType>(valueHandle.getType()))
       return 0;
-    unsigned n = std::max(localStoresPerLoop(v), callees.throughCalls(v));
-    if (auto arg = dyn_cast<BlockArgument>(v))
+    unsigned elementCount = std::max(localStoresPerLoop(valueHandle),
+                                     callees.throughCalls(valueHandle));
+    if (auto arg = dyn_cast<BlockArgument>(valueHandle))
       if (auto fn = dyn_cast<func::FuncOp>(arg.getOwner()->getParentOp()))
-        n = std::max(n, ofParameter(fn, arg.getArgNumber()));
-    return n;
+        elementCount =
+            std::max(elementCount, ofParameter(fn, arg.getArgNumber()));
+    return elementCount;
   }
 
   CalleeStores callees;
@@ -397,17 +399,17 @@ private:
 
 void annotateCallerStoresPerLoop(ModuleOp module) {
   CallerStores stores(module);
-  OpBuilder b(module.getContext());
+  OpBuilder buildPoint(module.getContext());
   module.walk([&](func::FuncOp fn) {
     if (fn.isExternal())
       return;
     for (BlockArgument arg : fn.getArguments()) {
       if (!isa<MemRefType>(arg.getType()))
         continue;
-      unsigned n = stores.ofParameter(fn, arg.getArgNumber());
-      if (n > 1)
+      unsigned elementCount = stores.ofParameter(fn, arg.getArgNumber());
+      if (elementCount > 1)
         fn.setArgAttr(arg.getArgNumber(), kCallerStoresPerLoopAttr,
-                      b.getI64IntegerAttr(n));
+                      buildPoint.getI64IntegerAttr(elementCount));
     }
   });
 }
@@ -419,9 +421,9 @@ unsigned callerStoresPerLoop(Value bank) {
   auto fn = dyn_cast<func::FuncOp>(arg.getOwner()->getParentOp());
   if (!fn)
     return 0;
-  auto a = fn.getArgAttrOfType<IntegerAttr>(arg.getArgNumber(),
-                                            kCallerStoresPerLoopAttr);
-  return a ? static_cast<unsigned>(a.getInt()) : 0u;
+  auto arrayValue = fn.getArgAttrOfType<IntegerAttr>(arg.getArgNumber(),
+                                                     kCallerStoresPerLoopAttr);
+  return arrayValue ? static_cast<unsigned>(arrayValue.getInt()) : 0u;
 }
 
 unsigned calleeStoresPerLoop(Value bank) {
@@ -555,8 +557,7 @@ void BRAMClassification::profileAccesses(Operation *root) {
     }
 
     maxStoresPerLoop = std::max(maxStoresPerLoop, calleeStoresPerLoop(bank));
-    // A parameter: the arrays its call sites pass, stored by the callers
-    // (annotateCallerStoresPerLoop, VITIS_NOTES N99).
+
     maxStoresPerLoop = std::max(maxStoresPerLoop, callerStoresPerLoop(bank));
     prof.replicable = maxStoresPerLoop <= 1;
     prof.mode = prof.registers ? StorageMode::Registers

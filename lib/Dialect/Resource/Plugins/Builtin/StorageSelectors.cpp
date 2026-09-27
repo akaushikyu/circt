@@ -47,7 +47,8 @@ public:
     TierChoice c;
     int64_t bits = request.bits();
     bool forced = !rule.forcingImpl.empty() && request.pragmaImpl &&
-                  *request.pragmaImpl == rule.forcingImpl;
+                  *request.pragmaImpl == rule.forcingImpl &&
+                  request.words != 1;
     if (rule.belowBlock(bits) && !forced) {
       c.tier = rule.below;
       c.note = "size " + std::to_string(bits) + " bits" +
