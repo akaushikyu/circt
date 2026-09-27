@@ -2380,7 +2380,10 @@ public:
   /// Returns the number of operations linked to a resource with a limit.
   static unsigned countLimitedOps(ModuloProblem &prob);
 
-  LogicalResult schedule(unsigned maxIIBumps, unsigned minII = 1);
+  /// The first II from max(ResMinII, minII, RecMinII) up that places every
+  /// op, at most `maxIIBumps` steps up and below `belowII` (0: no bound).
+  LogicalResult schedule(unsigned maxIIBumps, unsigned minII = 1,
+                         unsigned belowII = 0);
 
 private:
   struct Edge {
@@ -2662,8 +2665,8 @@ bool FastModuloScheduler::placeAll(unsigned ii, ArrayRef<int64_t> asap,
   return true;
 }
 
-LogicalResult FastModuloScheduler::schedule(unsigned maxIIBumps,
-                                            unsigned minII) {
+LogicalResult FastModuloScheduler::schedule(unsigned maxIIBumps, unsigned minII,
+                                            unsigned belowII) {
   if (failed(build()))
     return failure();
   unsigned resII = std::max(resMinII(), minII);
@@ -2675,6 +2678,8 @@ LogicalResult FastModuloScheduler::schedule(unsigned maxIIBumps,
   SmallVector<unsigned> start;
 
   for (unsigned bumps = 0; bumps <= maxIIBumps; ++bumps, ++ii) {
+    if (belowII && ii >= belowII)
+      return failure();
     if (!tryII(ii, start))
       continue;
     prob.setInitiationInterval(ii);
@@ -4477,8 +4482,9 @@ private:
     for (Operation *op : problem.getOperations())
       if (std::optional<unsigned> t = problem.getStartTime(op))
         firstStart.push_back({op, *t});
+
     FastModuloScheduler fast(problem, recurrenceRepairRounds);
-    if (succeeded(fast.schedule(maxIIBumps)) &&
+    if (succeeded(fast.schedule(maxIIBumps, 1, *firstII)) &&
         *problem.getInitiationInterval() < *firstII)
       return true;
     problem.setInitiationInterval(*firstII);
