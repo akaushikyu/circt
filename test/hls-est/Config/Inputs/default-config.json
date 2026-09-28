@@ -358,6 +358,7 @@
     "modulo": {
       "_fast_ops_threshold": "uint, ops: greedy-simplex: more operations than this go to the greedy scheduler (0: no rule) [S-08]",
       "_fast_threshold": "uint, ops: greedy-simplex: more resource-limited operations than this go to the greedy scheduler (0: always) [S-08]",
+      "_lower_ii_of_both": "bool: greedy-simplex: a loop the simplex scheduler scheduled is also scheduled by the greedy scheduler, and the schedule with the lower II is kept (the simplex heuristic fixes the last store of an unrolled reduction before its loads, so a port- or bus-bound loop gets bumped far above its resource bound); a measured Vitis rule (kernels w9r13p_mx_r8: 8 reads on one m_axi bundle, Vitis II 8, simplex 14; w9r13p_nr_w16 / nr_w2 / nr_call: 16 reads on 2 ports, Vitis II 8, simplex 14; siddharth lab2 A x V loop, Vitis II 6, simplex 9; off: the simplex schedule stays) [S-08]",
       "_max_ii_bumps": "uint: II increments the greedy scheduler tries [S-08, R-06]",
       "_max_pipeline_body_ops": "uint, ops: A pipelined loop whose body has more operations is left sequential with a warning (a memory guard, designer knob; 0: none) [S-08]",
       "_model": "plugin name (a modulo_scheduler): The ModuloScheduler [S-10]",
@@ -365,6 +366,7 @@
       "_user_ii_target": "bool: A loop with a user pipeline II=N > 1 is scheduled at N when it could start more often [P-14]",
       "fast_ops_threshold": 4096,
       "fast_threshold": 150,
+      "lower_ii_of_both": true,
       "max_ii_bumps": 4096,
       "max_pipeline_body_ops": 250000,
       "model": "greedy-simplex",
@@ -476,11 +478,13 @@
       "storage_selector": {
         "_below": "enum (registers|distributed|hard-small|block|large): Tier of a bank below the threshold (priced at 0 of the primary class) [B-08]",
         "_block": "string: Memory id of the block tier [B-08]",
+        "_forcing_impl": "string: The bind_storage impl (lower case) that puts a bank in the block tier whatever its size, below min_block_bits included (the legacy RESOURCE core=..._BRAM pragma is the same attribute); a measured Vitis rule (VITIS_NOTES N98; kernels w9r13p_rs_bind / rs_res: a 16 x 16-bit array is RAM_2P_BRAM_1R1W, 1 BRAM); empty: no impl forces it [B-08]",
         "_inclusive": "bool: A bank of exactly min_block_bits is a block RAM [B-08]",
         "_min_block_bits": "uint, bits: Words x exact element bits from which a bank is a block RAM [B-08]",
         "_plugin": "plugin name (a storage_selector): The StorageSelector [B-08]",
         "below": "distributed",
         "block": "ramb18",
+        "forcing_impl": "bram",
         "inclusive": true,
         "min_block_bits": 1024,
         "plugin": "vitis-bits-threshold"
@@ -529,6 +533,7 @@
       },
       "implicit_buffers": [
         {
+          "_bus_requests": "object: The requests one bundle accepts per cycle from a pipelined loop (a modulo-scheduler resource per bundle and direction)",
           "_default_bundle": "string: Bundle of a port without bundle= [A-03]",
           "_defaults": "object: Interface pragma defaults [A-05]",
           "_enabled": "bool: Price these buffers (--bram-maxi-adapters overrides) [A-01]",
@@ -541,6 +546,12 @@
           "_source": "enum (interface|cluster_fifo|lsu_cache|dataflow_pipo): What creates the buffer [N-12]",
           "_unresolved_call": "enum (rw|none): What a port passed to a call without a body is assumed to do [A-08]",
           "_write_buffer": "object: The write buffer [A-07]",
+          "bus_requests": {
+            "_read_per_cycle": "uint: Read requests per cycle and bundle: a pipelined loop with n reads of the bundle's ports per iteration has II >= n / this; a measured Vitis rule (VITIS_NOTES N95; kernels w9r13p_mx_r8: 8 reads, II 8; 0: unlimited)",
+            "_write_per_cycle": "uint: Write requests per cycle and bundle (VITIS_NOTES N95; kernels w9r13p_mx_w8 / mx_w4x2: 8 writes to one bundle, II 8; 4 to each of two, II 4; 0: unlimited)",
+            "read_per_cycle": 1,
+            "write_per_cycle": 1
+          },
           "default_bundle": "gmem",
           "defaults": {
             "_max_read_burst_length": "uint, beats: Default max_read_burst_length [A-05]",
@@ -623,6 +634,7 @@
         },
         "replication": {
           "_callee_stores_per_loop": "bool: A bank passed to a callee whose loop body stores it twice is not replicable in the caller either [P-10]",
+          "_caller_stores_per_loop": "bool: A callee's memref parameter is replicable for the callee's loops only when the arrays its call sites pass are: a caller loop (or another callee of that array) storing them more than once per iteration makes the parameter a 2-port memory for the scheduler too; a measured Vitis rule (VITIS_NOTES N99; kernels w9r13p_nr_call / nr_call1: 16 caller stores per iteration, the callee's reader II 8; off: a callee parameter's replicability comes from the callee alone) [P-10]",
           "_exclusive_arm_stores_once": "bool: The stores the two arms of one if make count once per iteration, whatever their addresses (off: only a same-address pair) [P-10]",
           "_max_copies": "uint, copies: At most this many copies of a replicated bank (1: no replication); the scheduler's pool is max_copies * (ports - 1) + 1 slots [K-02]",
           "_max_stores_per_iteration": "uint, stores: A bank some loop body stores to more often than this is never replicated [K-06]",
@@ -630,6 +642,7 @@
           "_port_bound_writable_globals": "bool: A written global or function-static array is never replicated: its accesses, also those of a callee reading it through a parameter, go through its two ports and the loop II rises (VITIS_NOTES N85; off: such an array is replicated like a local) [K-02]",
           "_shared_write_port_reads_when_idle": "bool: The shared write port of the copies reads in a cycle without a write (the +1 slot) [K-02]",
           "callee_stores_per_loop": true,
+          "caller_stores_per_loop": true,
           "exclusive_arm_stores_once": true,
           "max_copies": 16,
           "max_stores_per_iteration": 1,
@@ -656,6 +669,7 @@
         "_dead_memory": "object: Dead-memory elimination [E-02..E-04]",
         "_dse_guarded_stores": "bool: GVN load PRE + DSE across an if: a store under an if of a pipelined loop body that a later store of the same address at the body's top level overwrites in the same iteration, with only loads of that address between (they take the guarded value through a select), uses no port; a measured Vitis rule (W9r11: stream_hls MultiHeadSelfAttention1 opt2 node2, init store + load + store of v17 at loop II 1) [L-02]",
         "_forward_to_guarded_loads": "bool: GVN store-to-load forwarding into an if: a load under an if of a pipelined loop body that reads the address a store at the body's top level wrote earlier in the same iteration (only loads of that address between) takes the stored value and uses no port (W9r11: class_ece8893 barry_walker lab2 output_matrix_local, 1 BRAM per bank) [L-02]",
+        "_globals": "bool: The clean-ups of --convert-affine-to-loopschedule (invariant-load hoist, GVN of loads, store forwarding, DSE) treat a global array like a local one: its memref.get_global (one per function) is the root memref, and every call is a barrier for it; a measured Vitis rule (ECG_Classifier baseline conv1d_2b: the guarded read-modify-writes of a global accumulator merge to one per iteration, II 1; kernel ie_acc with the accumulator global; off: no access of a global is merged or forwarded) [L-02]",
         "_gvn_conditional_loads": "bool: GVN load PRE: loads of one address in one block and in the ifs nested in it, with no write of the memref between them, are one load per iteration; a measured Vitis rule (W9 round 8 review, kernels w9r8f_pr1 / pr2 / pr3) [L-02]",
         "_gvn_loads": "bool: GVN: a repeated load of one address is one load [L-02]",
         "_licm_hoist_conditional": "bool: Invariant loads nested in an if of the body are hoisted too (speculated) [P-11]",
@@ -677,6 +691,7 @@
         },
         "dse_guarded_stores": true,
         "forward_to_guarded_loads": true,
+        "globals": true,
         "gvn_conditional_loads": true,
         "gvn_loads": true,
         "licm_hoist_conditional": true,
@@ -722,17 +737,21 @@
         "compound_assign_two_stores": true,
         "constant_index": {
           "_after_user_partition": "bool: Rule (b) also applies to an array with a user cyclic / block array_partition, on every part (VITIS_NOTES N57) [Q-03]",
+          "_fold_division": "bool: An index computed by division, remainder, shifts or bit operations on constants (an unrolled copy's `(k * 2) / 2`) is a constant for rules (b) / (c) and for memory banking, as LLVM's constant folding makes it before Vitis partitions; a measured Vitis rule (VITIS_NOTES N97 (a); kernel w9r13p_st_row, siddharth lab2 `softmax_row`: a struct taken whole from a stream and read at the unrolled indices has no memory; off: only add / sub / mul fold) [Q-03]",
           "_globals": "bool: Rule (b) also applies to globals and function statics, over the accesses of every function (VITIS_NOTES N77) [Q-03]",
           "_max_extent": "uint, elements: Largest extent of such a dimension that is partitioned; a larger one stays whole (VITIS_NOTES N61; 0 or absent: no limit) [Q-03]",
           "_min_extent": "uint, elements: Smallest extent of such a dimension that is partitioned [Q-03]",
           "_non_affine_arrays": "bool: Rule (b) also applies to an array none of whose accesses is affine (VITIS_NOTES N57) [Q-03]",
           "_pipo_streams": "bool: Rule (b) also applies to an array whose only storage pragma is stream type=pipo (VITIS_NOTES N77) [Q-03]",
+          "_through_calls": "bool: Rule (b) follows an array through the calls it is passed to (inline off callees, dataflow processes, recursively): the callee's accesses of the parameter count as the array's, so an array every function indexes with a constant in a dimension is partitioned there, and banking splits the callee's parameter the same way; a measured Vitis rule (VITIS_NOTES N94; kernels w9r13p_ci_io / ci_wr / ci_df / ci_cyc, control ci_var; off: a call stops rule (b)) [Q-03]",
           "after_user_partition": true,
+          "fold_division": true,
           "globals": true,
           "max_extent": 64,
           "min_extent": 2,
           "non_affine_arrays": true,
-          "pipo_streams": true
+          "pipo_streams": true,
+          "through_calls": true
         },
         "inference": {
           "_max_dims": "uint: Dimensions partitioned per array [Q-08]",
@@ -760,6 +779,8 @@
         "steer_window_groups": true
       },
       "pipeline_decision": {
+        "_do_while_flatten_refusal": "bool: A parent loop p is not flattened into its automatically pipelined child (no user pipeline) when the pipeline's complete unroll of a sub-loop of the child makes p + step a subscript of a multi-dimensional array that every iteration computes (no guard on the child's index, none false for that copy): Vitis' front end hoists the address, p becomes a do-while loop and Vitis refuses the flatten (200-960); the loops around p stay sequential too; a measured Vitis rule (VITIS_NOTES N96; kernels w9r13p_dv_p1 / dv_p2 / dv_expl / dv_lin / dv_val, N76's n64_* kernels; off: flattened as any perfect parent)",
+        "_do_while_min_subloop_trip": "uint: do_while_flatten_refusal applies only to a subscript made by a sub-loop of at least this many iterations; a measured Vitis rule (kernels w9r13i_yp_d: a 2 x 2 window, flattened, against w9r13i_yp_c: 3 x 3, refused; Yolo-v3-tiny max_pool_2D_stride1, kernels w9r13i_yp_a / yp_b / yp_e / yp_f, flattened; the mechanism is unconfirmed)",
         "_flatten_across_calls": "bool: Flatten a loop into a pipelined loop of a callee (documented assumption: never); reserved: only false is implemented, true is refused [D-11]",
         "_float_loads_perfect": "bool: A read-only inner-invariant floating-point load keeps a nest perfect (flattened, not unrolled) [D-03]",
         "_fold_unrolled_guards": "bool: After the unroll decisions, an if whose condition is false (or true) for every value once an unrolled copy's constant index is substituted loses its dead arm, so the accesses of that arm take no port and no schedule slot: an affine.if, or an scf.if whose condition is an affine comparison of loop variables (arith add / sub / constant multiply / rem / div, C's normalised %, and / or); in the then arm of an affine.if left, an operand an equality of its set fixes is that constant (an address it computes becomes invariant); a measured Vitis rule (VITIS_NOTES N89; kernels w9r11p_sa_cnd2, w9r11rev_fg_mod / fg_unr; off: the copy's guarded accesses stay)",
@@ -767,6 +788,8 @@
         "_policy": "plugin name (a pipeline_policy): The PipelinePolicy [D-02, D-07, D-08]",
         "_promote_pipelined": "bool: Promote the invariant accesses of the pipelined loop itself to registers after the unroll [D-06]",
         "_sink_parent_code": "bool: The straight-line code (with memory accesses, no loops) before the child loop in the body of a loop flattened into a pipeline runs in the pipeline under a first-iteration guard, so its accesses count in the pipeline's port demand and schedule; a measured Vitis rule (VITIS_NOTES N65)",
+        "do_while_flatten_refusal": true,
+        "do_while_min_subloop_trip": 3,
         "flatten_across_calls": false,
         "float_loads_perfect": true,
         "fold_unrolled_guards": true,
