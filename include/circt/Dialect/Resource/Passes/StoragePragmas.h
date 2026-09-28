@@ -28,8 +28,9 @@ namespace circt::hls_analysis {
 constexpr llvm::StringLiteral kBindStorageAttr = "hls.bind_storage";
 
 /// The `impl` of the first `hls.bind_storage` dictionary on the storage op
-/// (lower case); nullopt without one. A memref.get_global is resolved to its
-/// memref.global.
+/// (lower case) that binds memory (`type` absent or not `fifo`: a FIFO's
+/// binding is --bram-stream-fifos' business); nullopt without one. A
+/// memref.get_global is resolved to its memref.global.
 inline std::optional<std::string> bindStorageImpl(mlir::Operation *op) {
   if (!op)
     return std::nullopt;
@@ -41,9 +42,13 @@ inline std::optional<std::string> bindStorageImpl(mlir::Operation *op) {
   if (!arr)
     return std::nullopt;
   for (mlir::Attribute a : arr)
-    if (auto d = llvm::dyn_cast<mlir::DictionaryAttr>(a))
+    if (auto d = llvm::dyn_cast<mlir::DictionaryAttr>(a)) {
+      if (auto type = d.getAs<mlir::StringAttr>("type"))
+        if (type.getValue().equals_insensitive("fifo"))
+          continue;
       if (auto impl = d.getAs<mlir::StringAttr>("impl"))
         return impl.getValue().lower();
+    }
   return std::nullopt;
 }
 
