@@ -29,6 +29,7 @@
 #include "mlir/Support/LLVM.h"
 #include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/StringSet.h"
 #include "llvm/Support/FormatVariadic.h"
 #include "llvm/Support/MathExtras.h"
 
@@ -1249,6 +1250,8 @@ public:
     partitions.emplace(module, true);
     assignCalleeForms();
     bank();
+    if (clonesMade)
+      refreshFormPortBound();
   }
 
 private:
@@ -1267,11 +1270,14 @@ private:
       paramLayouts;
   unsigned clonesMade = 0;
 
+  llvm::StringSet<> multiFormCallees;
+
   DenseMap<Value, SmallVector<Value>> banksOf;
 
   std::optional<BankLayout> layoutOfValue(Value valueHandle, func::FuncOp fn);
   void assignCalleeForms();
   void bank();
+  void refreshFormPortBound();
 
   DictionaryAttr partitionAttr(OpBuilder &buildPoint,
                                const BankLayout &lowerIndex);
@@ -1357,6 +1363,8 @@ void BankingPlan::assignCalleeForms() {
           inst.setPrivate();
           symbols.insert(inst, std::next(Block::iterator(orig.getOperation())));
           originOf[inst.getOperation()] = orig.getOperation();
+          multiFormCallees.insert(orig.getName());
+          multiFormCallees.insert(inst.getName());
         }
         forms.push_back({key, inst});
         paramLayouts[inst.getOperation()] = layouts;
@@ -1371,6 +1379,25 @@ void BankingPlan::assignCalleeForms() {
     auto orig = cast<func::FuncOp>(origOp);
     if (orig.isPrivate() && symbols.symbolKnownUseEmpty(orig, module))
       paramLayouts.erase(origOp), symbols.erase(orig);
+  }
+}
+
+void BankingPlan::refreshFormPortBound() {
+  InstanceModel model = computeInstances(module);
+  OpBuilder buildPoint(module.getContext());
+  for (const auto &entry : multiFormCallees) {
+    auto fn = symbols.lookup<func::FuncOp>(entry.getKey());
+    if (!fn || fn.isExternal())
+      continue;
+    SmallVector<int64_t> bound;
+    for (BlockArgument arg : fn.getArguments())
+      if (isa<BaseMemRefType>(arg.getType()) &&
+          model.argReachesSharedModule(fn, arg.getArgNumber()))
+        bound.push_back(arg.getArgNumber());
+    if (bound.empty())
+      fn->removeAttr(kPortBoundArgsAttr);
+    else
+      fn->setAttr(kPortBoundArgsAttr, buildPoint.getI64ArrayAttr(bound));
   }
 }
 
@@ -1833,6 +1860,14 @@ struct MemoryBankingPass
 
     if (hc.memoryArchitecture.replication.callerStoresPerLoop)
       hls_analysis::annotateCallerStoresPerLoop(getOperation());
+
+    if (const circt::hlsest::ImplicitBufferConfig *mc =
+            hc.implicitBuffer("axi4-mm"))
+      if (mc->busRequestsThroughCalls)
+        hls_analysis::annotateMaxiBundlesThroughCalls(getOperation(), mc->mode,
+                                                      mc->defaultBundle);
+    if (circt::hlsest::Config::get().scheduling.calleeGlobalRecurrence)
+      hls_analysis::annotateCalleeGlobalRecurrences(getOperation());
   }
 };
 

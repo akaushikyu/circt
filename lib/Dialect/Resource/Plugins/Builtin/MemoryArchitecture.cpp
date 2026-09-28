@@ -41,6 +41,11 @@
 #include "circt/Dialect/Resource/Plugins/MemoryInterfaces.h"
 #include "circt/Dialect/Resource/Plugins/Registry.h"
 
+#include "mlir/Dialect/Arith/IR/Arith.h"
+#include "mlir/Dialect/Affine/IR/AffineOps.h"
+#include "mlir/Dialect/MemRef/IR/MemRef.h"
+#include "mlir/IR/Matchers.h"
+#include "mlir/Interfaces/CallInterfaces.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/Interfaces/LoopLikeInterface.h"
 #include "llvm/ADT/BitVector.h"
@@ -48,6 +53,7 @@
 #include "llvm/Support/raw_ostream.h"
 
 #include <functional>
+#include <limits>
 #include <map>
 
 using namespace mlir;
@@ -194,6 +200,89 @@ private:
   }
 };
 
+// Read placement in a sequential scope (VITIS_NOTES N101): Vitis issues a
+// read in the state before its first consumer starts, not as soon as its
+// address is ready, so two independent reads share a state only when their
+// first consumers start in the same cycle (w9r13fix_sq_mul: `buf[3] * b +
+// buf[15]`, the second read waits for the multiplier: 1 port, 1 BRAM;
+// sq_add `buf[3] + buf[15] + b` and sq_mul2 `buf[3] * b + buf[15] * c`: one
+// state of two, 2; sq_chain, sq_fadd (float): 1; the corpus kernel
+// w9r13rev_rs_c32 too). The schedule is a cycle count per op of the
+// stretch: an op starts when its operands from the stretch are ready, and an
+// op of a multi-cycle class takes a cycle before its result is (the exact
+// latencies do not matter, only which consumers start together).
+static bool isMultiCycleOp(Operation *op) {
+  if (isa<CallOpInterface>(op) || isa<memref::LoadOp, affine::AffineLoadOp>(op))
+    return true;
+  if (op->getNumResults() != 1 || op->getNumRegions() != 0)
+    return false;
+  if (isa<arith::ConstantOp, arith::SelectOp, arith::BitcastOp>(op))
+    return false;
+  StringRef dialect = op->getName().getDialectNamespace();
+  if (dialect == "math")
+    return true;
+  if (dialect != "arith")
+    return false;
+  // Floating-point arithmetic is pipelined over several cycles.
+  if (llvm::any_of(op->getOperandTypes(),
+                   [](Type t) { return isa<FloatType>(t); }))
+    return true;
+  // A multiplier of two variables (a constant factor is shifts and adds).
+  if (isa<arith::MulIOp>(op))
+    return !matchPattern(op->getOperand(0), m_Constant()) &&
+           !matchPattern(op->getOperand(1), m_Constant());
+  return isa<arith::DivSIOp, arith::DivUIOp, arith::RemSIOp, arith::RemUIOp,
+             arith::CeilDivSIOp, arith::CeilDivUIOp, arith::FloorDivSIOp>(op);
+}
+
+static const std::vector<int64_t> &
+stretchStartCycles(const SeqScopeIndex::Scope &s, unsigned stretch) {
+  if (s.startCycles.size() <= stretch)
+    s.startCycles.resize(s.stretches.size());
+  std::vector<int64_t> &start = s.startCycles[stretch];
+  const std::vector<Operation *> &ops = s.stretches[stretch];
+  if (start.size() == ops.size())
+    return start;
+  start.assign(ops.size(), 0);
+  for (unsigned p = 0; p < ops.size(); ++p) {
+    int64_t t = 0;
+    auto addValue = [&](Value v) {
+      Operation *def = v.getDefiningOp();
+      if (!def)
+        return;
+      auto it = s.info.find(def);
+      if (it == s.info.end() || it->second.stretch != stretch ||
+          it->second.ordinal >= p)
+        return;
+      t = std::max(t, start[it->second.ordinal] + (isMultiCycleOp(def) ? 1 : 0));
+    };
+    for (Value v : ops[p]->getOperands())
+      addValue(v);
+    for (Region &region : ops[p]->getRegions()) // an if: its arms' results
+      for (Block &block : region)
+        if (!block.empty())
+          for (Value v : block.back().getOperands())
+            addValue(v);
+    start[p] = t;
+  }
+  return start;
+}
+
+/// The cycle the first consumer of the read `op` starts in (the latest cycle
+/// of the stretch when nothing in the stretch consumes it: the reads that
+/// feed a later loop all wait for it, polybench atax's hoisted buff_x).
+static int64_t firstConsumerCycle(const SeqScopeIndex::Scope &s,
+                                  unsigned stretch, Operation *op) {
+  const std::vector<int64_t> &start = stretchStartCycles(s, stretch);
+  int64_t first = std::numeric_limits<int64_t>::max();
+  for (Operation *user : op->getUsers()) {
+    auto it = s.info.find(user);
+    if (it != s.info.end() && it->second.stretch == stretch)
+      first = std::min(first, start[it->second.ordinal]);
+  }
+  return first;
+}
+
 // Two accesses of `accs` (one bank, one stretch of a sequential scope, in
 // program order) that Vitis issues in the same state, or none.
 static std::optional<std::pair<const AccessSummary *, const AccessSummary *>>
@@ -226,6 +315,14 @@ findSameStatePair(ArrayRef<const AccessSummary *> accs,
     hoistedArms[j] = hoistedArmsOf(accs[j]->op);
   auto exclusive = [&](unsigned i, unsigned j) {
     return inExclusiveArms(*info[i], hoistedArms[i], *info[j], hoistedArms[j]);
+  };
+  const bool readsBeforeConsumer =
+      config().tool.hls.memoryArchitecture.sequentialLoadsBeforeConsumer;
+  SmallVector<std::optional<int64_t>> consumerCycles(k);
+  auto consumerCycle = [&](unsigned i) {
+    if (!consumerCycles[i])
+      consumerCycles[i] = firstConsumerCycle(s, stretch, accs[i]->op);
+    return *consumerCycles[i];
   };
   // The ops of [lo, p) with memory effects whose order can carry an access of
   // `accs`: the accesses themselves and the ops that depend on one. A later op
@@ -382,6 +479,9 @@ findSameStatePair(ArrayRef<const AccessSummary *> accs,
       if (!accs[i]->isWrite && !accs[j]->isWrite &&
           compareAddresses(accs[i]->op, op) == AddrRelation::Same)
         continue; // one load after GVN
+      if (readsBeforeConsumer && !accs[i]->isWrite && !accs[j]->isWrite &&
+          consumerCycle(i) != consumerCycle(j))
+        continue; // issued in the states before their consumers (N101)
       return std::make_pair(accs[i], accs[j]);
     }
   }

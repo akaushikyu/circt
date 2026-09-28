@@ -37,14 +37,17 @@ VITIS_REJECT = re.compile(r"ERROR: \[HLS (207-\d+|200-70|214-139|214-157)\][^\n]
 # in the order they are tried: (class, regex).
 NATIVE_DEFECT = [
     ("reads uninitialised memory", re.compile(r"reads uninitialised memory")),
-    # The driver's random inputs make the source divide by zero (polybench fixed cholesky divides by a
-    # pivot the inputs make 0): an input-domain limit of check_semantics, not a defect of the reference
-    # (W9 round 12 review, defect 5).
-    ("divides by zero on the driver's random inputs (AddressSanitizer FPE; input domain)",
-     re.compile(r"AddressSanitizer: FPE")),
     ("AddressSanitizer memory error", re.compile(r"AddressSanitizer: (heap|stack|global)-buffer-overflow|AddressSanitizer: SEGV")),
     ("native build fails", re.compile(r"native build (of .* fails|does not link)")),
     ("native reference aborts", re.compile(r"reference exit -\d+")),
+]
+
+# check_semantics.py "n/a" reasons that are limits of the driver's inputs, not defects of the reference:
+# the source divides by zero on every input the driver makes (polybench fixed cholesky divides by a pivot
+# that is 0 unless the matrix is positive definite; forgebench attention divides by a sum of exps). Not
+# excluded: open DoD-1 work (W9 round 12 review defect 5; W9 round 13 review finding 9).
+INPUT_DOMAIN = [
+    ("divides by zero on the driver's inputs (AddressSanitizer FPE)", re.compile(r"AddressSanitizer: FPE")),
 ]
 
 
@@ -198,15 +201,16 @@ def main():
             rejects.append(row)
 
     # (2) Defective native reference.
-    defects = []
+    defects, input_limits = [], []
     for k in sorted(run):
         s = sem.get(k)
         if not s or s.get("status") != "n/a":
             continue
         reason = str(s.get("reason") or "")
-        for cls, rx in NATIVE_DEFECT:
-            if rx.search(reason):
-                defects.append((k, cls, reason, run[k].get("cgeist_status")))
+        for out, classes in ((defects, NATIVE_DEFECT), (input_limits, INPUT_DOMAIN)):
+            hit = next((cls for cls, rx in classes if rx.search(reason)), None)
+            if hit:
+                out.append((k, hit, reason, run[k].get("cgeist_status")))
                 break
 
     # (3) DoD 5.
@@ -282,6 +286,17 @@ def main():
         for k, _, reason, cg in ds:
             L.append("| %s | %s | %s |" % (md_escape(k), md_escape(reason[:200]), md_escape(cg or "-")))
         L.append("")
+    L.append("### Not excluded: the driver's inputs, not the reference (%d, open)" % len(input_limits))
+    L.append("")
+    L.append("The source divides by zero on every input check_semantics makes; the reference is not defective."
+             " An input in the source's domain (a positive-definite matrix for cholesky, nonzero denominators"
+             " for attention) would make these checkable.")
+    L.append("")
+    L.append("| design | check_semantics reason | cgeist |")
+    L.append("|---|---|---|")
+    for k, _, reason, cg in input_limits:
+        L.append("| %s | %s | %s |" % (md_escape(k), md_escape(reason[:200]), md_escape(cg or "-")))
+    L.append("")
     L.append("## (3) DoD 5: designs that may stay out of band (%d listed)" % len(dod5))
     L.append("")
     L.append("Band: hls-est equals Vitis or over-counts by at most 15 %% (under-counts are out of band). Of %d"
@@ -310,8 +325,9 @@ def main():
                                             r["hlsest_bram"] - r["vitis_bram"]))
     L.append("")
     Path(args.out).write_text("\n".join(L) + "\n")
-    print("wrote %s: %d rejects, %d not rejections, %d defective references, %d listed, %d open" % (
-        args.out, len(rejects), len(not_rejects), len(defects), len(dod5), len(open_work)))
+    print("wrote %s: %d rejects, %d not rejections, %d defective references, %d input-domain limits,"
+          " %d listed, %d open" % (args.out, len(rejects), len(not_rejects), len(defects), len(input_limits),
+                                   len(dod5), len(open_work)))
 
 
 if __name__ == "__main__":

@@ -28,7 +28,7 @@
           "port_bound_writable_globals": true
         },
         "rom": { "sdp_max_reads": 2, "copies": "ceil_half", "sequential_state_reads": true },
-        "sequential_scope": { "model": "stretch-pair" },
+        "sequential_scope": { "model": "stretch-pair", "loads_before_consumer": true },
         "port_set_rule": "by_kind",
         "wide_port_sets": [ ["rw"], ["r", "w"], ["r"], ["r", "r"] ],
         "priced_configs": { "wide": "sdp", "narrow": "tdp" }
@@ -52,7 +52,7 @@
           "read_fifo": { "srl_max_depth": 32, "mapper": "vitis-band7", "priced_config": "tdp", "confirmed_max_depth": 4096, "per_channel": true, "cast_load_width": true, "power_of_two_width": true },
           "write_buffer": { "free_max_burst": 16, "port_width_bits": 18, "confirmed_min_burst": 32 },
           "unresolved_call": "rw",
-          "bus_requests": { "read_per_cycle": 1, "write_per_cycle": 1 }
+          "bus_requests": { "read_per_cycle": 1, "write_per_cycle": 1, "through_calls": true }
         }
       ],
       "streams": {
@@ -189,6 +189,7 @@
       "fast_ops_threshold": 4096,
       "max_ii_bumps": 4096,
       "lower_ii_of_both": true,
+      "callee_global_recurrence": true,
       "max_pipeline_body_ops": 250000,
       "recurrence_repair_rounds": 64,
       "user_ii_target": true

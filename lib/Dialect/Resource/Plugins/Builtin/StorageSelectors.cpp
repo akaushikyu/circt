@@ -12,7 +12,8 @@
 // 1024 bits -> 1 BRAM, 93x11 = 1023 -> LUTRAM, 64x15 = 960 -> LUTRAM
 // (VITIS_NOTES N5, 23 kernels). It reads no access count and no schedule.
 // A bind_storage impl equal to `forcing_impl` (bram) puts a bank of any size
-// in block RAM (N98: a 16 x 16-bit array bound impl=bram is 1 BRAM).
+// in block RAM (N98: a 16 x 16-bit array bound impl=bram is 1 BRAM), except
+// a bank of one word: a completely partitioned array is registers.
 //
 //===----------------------------------------------------------------------===//
 
@@ -46,6 +47,9 @@ public:
                     const SelectionContext &) const override {
     TierChoice c;
     int64_t bits = request.bits();
+    // A bank of one word (an element of a completely partitioned array) is
+    // a register in Vitis whatever the binding (w9r13rev_rs_cpl: a[16]
+    // complete + impl=bram, 0 BRAM).
     bool forced = !rule.forcingImpl.empty() && request.pragmaImpl &&
                   *request.pragmaImpl == rule.forcingImpl &&
                   request.words != 1;

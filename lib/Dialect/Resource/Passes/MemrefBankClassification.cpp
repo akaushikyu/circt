@@ -16,6 +16,7 @@
 #include "mlir/IR/SymbolTable.h"
 #include "mlir/Interfaces/CallInterfaces.h"
 #include "mlir/Interfaces/LoopLikeInterface.h"
+#include "mlir/Interfaces/ViewLikeInterface.h"
 #include "llvm/ADT/MapVector.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Debug.h"
@@ -411,6 +412,175 @@ void annotateCallerStoresPerLoop(ModuleOp module) {
         fn.setArgAttr(arg.getArgNumber(), kCallerStoresPerLoopAttr,
                       buildPoint.getI64IntegerAttr(elementCount));
     }
+  });
+}
+
+namespace {
+/// The m_axi bundle a memref value is a port of: a parameter with an
+/// `hls.interface` of the mode, or one every call site binds to such a port.
+class MaxiBundles {
+public:
+  MaxiBundles(ModuleOp module, StringRef mode, StringRef defaultBundle)
+      : mode(mode), defaultBundle(defaultBundle) {
+    module.walk([&](CallOpInterface callSite) {
+      if (func::FuncOp callee = resolveDefinedCallee(callSite))
+        callers[callee.getOperation()].push_back(callSite);
+    });
+  }
+
+  /// The bundle of parameter `idx` of `fn` from its own interface; nullopt
+  /// when it has none of the mode.
+  std::optional<std::string> declared(func::FuncOp fn,
+                                      unsigned indexValue) const {
+    auto ifaces = fn.getArgAttrOfType<ArrayAttr>(indexValue, "hls.interface");
+    if (!ifaces)
+      return std::nullopt;
+    for (Attribute attr : ifaces) {
+      auto dimensionIndex = dyn_cast<DictionaryAttr>(attr);
+      auto memoryOp = dimensionIndex ? dimensionIndex.getAs<StringAttr>("mode")
+                                     : StringAttr();
+      if (!memoryOp || memoryOp.getValue() != mode)
+        continue;
+      if (auto buildPoint = dimensionIndex.getAs<StringAttr>("bundle"))
+        return buildPoint.getValue().str();
+      return defaultBundle;
+    }
+    return std::nullopt;
+  }
+
+  /// The bundle every call site of `fn` binds parameter `idx` to; nullopt
+  /// when one binds something else, they disagree, or nothing calls it.
+  std::optional<std::string> throughCalls(func::FuncOp fn,
+                                          unsigned indexValue) {
+    auto key = std::make_pair(fn.getOperation(), indexValue);
+    if (auto it = memo.find(key); it != memo.end())
+      return it->second;
+    memo[key] = std::nullopt;
+    std::optional<std::string> bundle;
+    bool any = false, agree = true;
+    for (CallOpInterface callSite : callers.lookup(fn.getOperation())) {
+      if (indexValue >= callSite.getArgOperands().size()) {
+        agree = false;
+        break;
+      }
+      std::optional<std::string> buildPoint =
+          ofValue(callSite.getArgOperands()[indexValue]);
+      if (!buildPoint || (any && *buildPoint != *bundle)) {
+        agree = false;
+        break;
+      }
+      bundle = buildPoint;
+      any = true;
+    }
+    std::optional<std::string> result =
+        any && agree ? bundle : std::optional<std::string>();
+    memo[key] = result;
+    return result;
+  }
+
+private:
+  std::optional<std::string> ofValue(Value valueHandle) {
+    while (auto view = valueHandle.getDefiningOp<ViewLikeOpInterface>())
+      valueHandle = view.getViewSource();
+    auto arg = dyn_cast<BlockArgument>(valueHandle);
+    if (!arg)
+      return std::nullopt;
+    auto fn = dyn_cast<func::FuncOp>(arg.getOwner()->getParentOp());
+    if (!fn || !isa<BaseMemRefType>(arg.getType()))
+      return std::nullopt;
+    if (std::optional<std::string> buildPoint =
+            declared(fn, arg.getArgNumber()))
+      return buildPoint;
+    return throughCalls(fn, arg.getArgNumber());
+  }
+
+  std::string mode, defaultBundle;
+  DenseMap<Operation *, SmallVector<CallOpInterface, 2>> callers;
+  DenseMap<std::pair<Operation *, unsigned>, std::optional<std::string>> memo;
+};
+} // namespace
+
+void annotateMaxiBundlesThroughCalls(ModuleOp module, StringRef mode,
+                                     StringRef defaultBundle) {
+  MaxiBundles bundles(module, mode, defaultBundle);
+  OpBuilder buildPoint(module.getContext());
+  module.walk([&](func::FuncOp fn) {
+    if (fn.isExternal())
+      return;
+    for (BlockArgument arg : fn.getArguments()) {
+      unsigned indexValue = arg.getArgNumber();
+      if (!isa<BaseMemRefType>(arg.getType()) ||
+          bundles.declared(fn, indexValue))
+        continue;
+      if (std::optional<std::string> bundle =
+              bundles.throughCalls(fn, indexValue))
+        fn.setArgAttr(indexValue, kMaxiBundleAttr,
+                      buildPoint.getStringAttr(*bundle));
+    }
+  });
+}
+
+namespace {
+/// The globals a function reads and writes, its callees' included.
+class GlobalEffects {
+public:
+  struct Sets {
+    llvm::SmallDenseSet<StringRef, 4> reads, writes;
+  };
+
+  const Sets &of(func::FuncOp fn) {
+    auto [it, inserted] = memo.try_emplace(fn.getOperation());
+    if (!inserted)
+      return it->second;
+    Sets sets;
+    fn.walk([&](Operation *op) {
+      if (auto callSite = dyn_cast<CallOpInterface>(op)) {
+        if (func::FuncOp callee = resolveDefinedCallee(callSite)) {
+          const Sets &inner = of(callee);
+          sets.reads.insert(inner.reads.begin(), inner.reads.end());
+          sets.writes.insert(inner.writes.begin(), inner.writes.end());
+        }
+        return;
+      }
+      Value mem;
+      bool write = false;
+      if (auto lowerIndex = dyn_cast<affine::AffineReadOpInterface>(op))
+        mem = lowerIndex.getMemRef();
+      else if (auto stringValue = dyn_cast<affine::AffineWriteOpInterface>(op))
+        mem = stringValue.getMemRef(), write = true;
+      else if (auto lowerIndex = dyn_cast<memref::LoadOp>(op))
+        mem = lowerIndex.getMemRef();
+      else if (auto stringValue = dyn_cast<memref::StoreOp>(op))
+        mem = stringValue.getMemRef(), write = true;
+      if (!mem)
+        return;
+      while (auto view = mem.getDefiningOp<ViewLikeOpInterface>())
+        mem = view.getViewSource();
+      if (auto get = mem.getDefiningOp<memref::GetGlobalOp>())
+        (write ? sets.writes : sets.reads).insert(get.getName());
+    });
+    Sets &slot = memo[fn.getOperation()];
+    slot = std::move(sets);
+    return slot;
+  }
+
+private:
+  DenseMap<Operation *, Sets> memo;
+};
+} // namespace
+
+void annotateCalleeGlobalRecurrences(ModuleOp module) {
+  GlobalEffects effects;
+  UnitAttr unit = UnitAttr::get(module.getContext());
+  module.walk([&](CallOpInterface callSite) {
+    func::FuncOp callee = resolveDefinedCallee(callSite);
+    if (!callee || !isKeptCallee(callee))
+      return;
+    const GlobalEffects::Sets &sets = effects.of(callee);
+    if (llvm::any_of(sets.writes, [&](StringRef globalOp) {
+          return sets.reads.contains(globalOp);
+        }))
+      callSite->setAttr(kCalleeGlobalRecurrenceAttr, unit);
   });
 }
 

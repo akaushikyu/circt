@@ -1,6 +1,16 @@
-// RUN: hls-est %s --bram-analysis --bram-seq-dual-port | FileCheck %s
+// The pairing rules of N12 alone: the read placement of N101 (reads issue in
+// the state before their first consumer) is off here; with it on,
+// a_through_other_disjoint's x (consumed by the store to b one cycle after
+// the read) and z (behind the read of b) are one port (RAM_1P 1), see
+// w9r13fix_n101_reads_before_consumer.mlir.
+// RUN: hls-est %s --bram-analysis --bram-seq-dual-port --config-set tool.hls.memory_architecture.sequential_scope.loads_before_consumer=false | FileCheck %s
 // RUN: hls-est %s --bram-analysis --bram-seq-dual-port=false | FileCheck %s --check-prefix=OFF
-// RUN: hls-est %s --bram-analysis | FileCheck %s
+// RUN: hls-est %s --bram-analysis --config-set tool.hls.memory_architecture.sequential_scope.loads_before_consumer=false | FileCheck %s
+// RUN: hls-est %s --bram-analysis | FileCheck %s --check-prefix=N101
+// N101: memref.alloca @ loc("a_through_other_disjoint")
+// N101-NEXT: kind=RAM_1P  bram=1
+// N101: memref.alloca @ loc("b_through_other_disjoint")
+// N101-NEXT: kind=RAM_2P  bram=2
 
 // --bram-seq-dual-port (VITIS_NOTES.md N12) on hand-written lowered IR, to pin
 // the parts of the rule that the --convert-affine-to-loopschedule output does

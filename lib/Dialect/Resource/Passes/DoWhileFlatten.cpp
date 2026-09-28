@@ -329,12 +329,45 @@ circt::hls_analysis::doWhileParents(AffineForOp pipelined,
       ancestors.push_back(forOp);
   if (ancestors.empty())
     return result;
+  // A dim per ancestor index p, with p + step its next index. Behind
+  // --affine-loop-normalize, p of a loop with a step or lower bound is
+  // `affine.apply (d0 * step + lb)(normalized index)`: that value is p and
+  // gets a dim of its own whose next index is p + step (w9r13rev_dv_s2k:
+  // `i += 2`, rows i + 2k: refused like dv_p1).
   llvm::DenseMap<Value, unsigned> ancestorDim;
-  SmallVector<AffineExpr> nextIndex; // p + step, per ancestor
-  for (auto [i, forOp] : llvm::enumerate(ancestors)) {
-    ancestorDim[forOp.getInductionVar()] = i;
-    nextIndex.push_back(getAffineDimExpr(i, ctx) + forOp.getStepAsInt());
-  }
+  SmallVector<AffineExpr> nextIndex; // p + step, per dim
+  SmallVector<unsigned> ancestorOfDim;
+  auto addDim = [&](Value index, unsigned ancestor, int64_t step) {
+    unsigned d = nextIndex.size();
+    ancestorDim[index] = d;
+    ancestorOfDim.push_back(ancestor);
+    nextIndex.push_back(getAffineDimExpr(d, ctx) + step);
+  };
+  for (auto [i, forOp] : llvm::enumerate(ancestors))
+    addDim(forOp.getInductionVar(), i, forOp.getStepAsInt());
+  for (auto [i, forOp] : llvm::enumerate(ancestors))
+    for (Operation *user : forOp.getInductionVar().getUsers()) {
+      auto apply = dyn_cast<AffineApplyOp>(user);
+      if (!apply || apply.getMapOperands().size() != 1 ||
+          apply.getAffineMap().getNumDims() != 1 ||
+          ancestorDim.count(apply.getResult()))
+        continue;
+      AffineExpr e = apply.getAffineMap().getResult(0);
+      // e = d0 * step + lb with constants step >= 1 and lb.
+      AffineExpr d0 = getAffineDimExpr(0, ctx);
+      auto valueAt = [&](int64_t x) {
+        return dyn_cast<AffineConstantExpr>(simplifyAffineExpr(
+            e.replace(d0, getAffineConstantExpr(x, ctx)), 1, 0));
+      };
+      AffineConstantExpr lbC = valueAt(0), at1C = valueAt(1);
+      if (!lbC || !at1C)
+        continue;
+      int64_t step = at1C.getValue() - lbC.getValue();
+      if (step < 1 || simplifyAffineExpr(e, 1, 0) !=
+                          simplifyAffineExpr(d0 * step + lbC.getValue(), 1, 0))
+        continue;
+      addDim(apply.getResult(), i, step * forOp.getStepAsInt());
+    }
 
   pipelined.getBody()->walk([&](Operation *op) {
     Value memref;
@@ -411,13 +444,14 @@ circt::hls_analysis::doWhileParents(AffineForOp pipelined,
       }
       for (AffineExpr r : map.getResults()) {
         AffineExpr s = simplifyAffineExpr(r.replaceDimsAndSymbols(dims, syms),
-                                          ancestors.size(), opaque);
+                                          nextIndex.size(), opaque);
         auto match = llvm::find(nextIndex, s);
         if (match == nextIndex.end() ||
             !usesLongSubLoop(r, map.getNumDims(), operands, subLoops,
                              minSubLoopTrip))
           continue;
-        result.insert(ancestors[match - nextIndex.begin()].getOperation());
+        result.insert(
+            ancestors[ancestorOfDim[match - nextIndex.begin()]].getOperation());
       }
     }
   });

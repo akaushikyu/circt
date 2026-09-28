@@ -276,6 +276,10 @@ struct MemoryArchitectureConfig {
   ReplicationConfig replication;
   RomConfig rom;
   std::string sequentialScopeModel; ///< stretch-pair | one-port
+  /// stretch-pair: two independent reads share a state only when their
+  /// first consumers start in the same cycle (Vitis issues a read in the
+  /// state before its first consumer; VITIS_NOTES N101).
+  bool sequentialLoadsBeforeConsumer = true;
   std::string portSetRule;          ///< by_kind | by_demand
   std::vector<std::vector<std::string>> widePortSets;
   std::string pricedWide, pricedNarrow; ///< port_configs names
@@ -325,6 +329,10 @@ struct ImplicitBufferConfig {
   /// N95); 0: unlimited.
   int64_t readRequestsPerCycle = 1;
   int64_t writeRequestsPerCycle = 1;
+  /// The limits also hold for the parameter of a callee that every call
+  /// site binds to a port of one bundle (W9r13 review: w9r13rev_mx_callee,
+  /// 8 reads in an inline-off load function, II 8).
+  bool busRequestsThroughCalls = true;
 };
 
 /// hls::stream FIFOs.
@@ -614,6 +622,11 @@ struct SchedulingConfig {
   /// the store of an unrolled reduction before its loads and then bumps
   /// the II; Vitis reaches the resource bound).
   bool lowerIIOfBoth = true;
+  /// A call in a pipelined loop to a kept callee that reads and writes one
+  /// global array is a loop-carried recurrence of the call: the II is at
+  /// least the call's depth (W9r13 review: w9r13rev_gl_call, II 2;
+  /// gl_callw, stores only, II 1).
+  bool calleeGlobalRecurrence = true;
   /// A pipelined loop whose body (after the implied unroll) has more ops
   /// than this is left sequential with a warning: a guard against bodies the
   /// pipeline construction cannot hold in memory (OPEN_ISSUES O76:

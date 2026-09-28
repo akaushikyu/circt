@@ -89,6 +89,9 @@ public:
   struct Scope {
     llvm::DenseMap<mlir::Operation *, OpInfo> info;
     std::vector<std::vector<mlir::Operation *>> stretches;
+    /// Per stretch, the cycle each op starts in (filled on first use by the
+    /// port model's read placement; empty until then).
+    mutable std::vector<std::vector<int64_t>> startCycles;
   };
 
   const Scope &get(mlir::Operation *scope) {

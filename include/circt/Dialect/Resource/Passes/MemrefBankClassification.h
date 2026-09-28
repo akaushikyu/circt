@@ -92,6 +92,31 @@ void annotateCallerStoresPerLoop(mlir::ModuleOp module);
 /// parameter).
 unsigned callerStoresPerLoop(mlir::Value bank);
 
+/// Set as an argument attribute on a memref parameter of a defined function
+/// without an interface of its own: the m_axi bundle (string) every call
+/// site binds it to, through the callers' parameters up to the top
+/// function's `hls.interface` (W9r13 review finding 1; VITIS_NOTES N95).
+/// Written by annotateMaxiBundlesThroughCalls, read by the scheduler's
+/// bundle request limit.
+constexpr llvm::StringLiteral kMaxiBundleAttr = "hls.maxi_bundle";
+
+/// Annotates every such parameter. `mode` is the interface mode of the
+/// implicit buffer (m_axi), `defaultBundle` the bundle of a port without a
+/// `bundle=` (gmem).
+void annotateMaxiBundlesThroughCalls(mlir::ModuleOp module,
+                                     llvm::StringRef mode,
+                                     llvm::StringRef defaultBundle);
+
+/// Set (unit) on a call to a defined callee that reads and writes one
+/// global array, in its own body or in its callees' (VITIS_NOTES N102):
+/// in a pipelined loop the next iteration's call waits for this one.
+/// Written by annotateCalleeGlobalRecurrences in a module pass, so that the
+/// per-function scheduler need not look into the callee.
+constexpr llvm::StringLiteral kCalleeGlobalRecurrenceAttr =
+    "hls.callee_global_recurrence";
+
+void annotateCalleeGlobalRecurrences(mlir::ModuleOp module);
+
 /// The most of `stores` (accesses of one memref inside one loop body) that
 /// can run in one iteration: the stores in the two arms of one if never run
 /// together, so they count once, whatever their addresses (Vitis builds

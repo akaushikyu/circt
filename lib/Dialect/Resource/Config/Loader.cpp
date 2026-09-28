@@ -870,6 +870,8 @@ void fillTool(const json::Object &t, ToolProfile &tool) {
   m.rom.copies = str(rom, "copies");
   m.rom.sequentialStateReads = boolean(rom, "sequential_state_reads", true);
   m.sequentialScopeModel = str(obj(ma, "sequential_scope"), "model");
+  m.sequentialLoadsBeforeConsumer =
+      boolean(obj(ma, "sequential_scope"), "loads_before_consumer", true);
   m.portSetRule = str(ma, "port_set_rule");
   if (const json::Array *sets = ma.getArray("wide_port_sets"))
     for (const json::Value &s : *sets) {
@@ -915,6 +917,7 @@ void fillTool(const json::Object &t, ToolProfile &tool) {
     const json::Object &br = obj(b, "bus_requests");
     ib.readRequestsPerCycle = integer(br, "read_per_cycle", 1);
     ib.writeRequestsPerCycle = integer(br, "write_per_cycle", 1);
+    ib.busRequestsThroughCalls = boolean(br, "through_calls", true);
     h.implicitBuffers.push_back(std::move(ib));
   });
 
@@ -1098,6 +1101,8 @@ void fillScheduling(const json::Object &s, SchedulingConfig &sc) {
   sc.maxPipelineBodyOps = integer(mo, "max_pipeline_body_ops", 250000);
   sc.maxIIBumps = integer(mo, "max_ii_bumps");
   sc.lowerIIOfBoth = boolean(mo, "lower_ii_of_both", true);
+  sc.calleeGlobalRecurrence =
+      boolean(mo, "callee_global_recurrence", true);
   sc.recurrenceRepairRounds = integer(mo, "recurrence_repair_rounds");
   sc.userIITarget = boolean(mo, "user_ii_target");
   sc.sequentialModel = str(obj(s, "sequential"), "model");

@@ -61,6 +61,7 @@
 #include <mlir/IR/IntegerSet.h>
 #include <queue>
 #include <set>
+#include <thread>
 #include <unordered_map>
 
 #define DEBUG_TYPE "affine-to-loopschedule"
@@ -2186,7 +2187,8 @@ static void anchorUntrackedSideEffects(Operation *loop,
   for (Operation *op : ops)
     for (auto dep : problem.getDependences(op))
       if (Operation *src = dep.getSource())
-        hasSuccessor.insert(src);
+        if (problem.getDistance(dep).value_or(0) == 0)
+          hasSuccessor.insert(src);
 
   for (Operation *op : ops) {
     if (op == anchor || hasSuccessor.contains(op))
@@ -2236,9 +2238,20 @@ static void chainSharedCalleeInstances(Operation *loop,
     problem.setLatency(held, depth);
     problem.setLinkedOperatorType(call, held);
   };
+
+  auto recurrentAlone = [&](Operation *call) {
+    if (!call->hasAttr(circt::hls_analysis::kCalleeGlobalRecurrenceAttr))
+      return false;
+    holdForDepth(call);
+    Problem::Dependence self(call, call);
+    if (succeeded(problem.insertDependence(self)))
+      problem.setDistance(self, 1);
+    return true;
+  };
   for (auto &[calleeOp, sites] : byCallee) {
     if (sites.size() < 2) {
-      boundBySelf(sites.front());
+      if (!recurrentAlone(sites.front()))
+        boundBySelf(sites.front());
       continue;
     }
     auto callee = cast<func::FuncOp>(calleeOp);
@@ -2249,7 +2262,8 @@ static void chainSharedCalleeInstances(Operation *loop,
       chains[group[loopIndex]].push_back(sites[loopIndex]);
     for (auto &[g, chain] : chains) {
       if (chain.size() < 2) {
-        boundBySelf(chain.front());
+        if (!recurrentAlone(chain.front()))
+          boundBySelf(chain.front());
         continue;
       }
       for (Operation *call : chain)
@@ -3502,6 +3516,10 @@ maxiBundleRequests(Value mem, bool isLoad) {
   int64_t limit = isLoad ? mc->readRequestsPerCycle : mc->writeRequestsPerCycle;
   if (limit <= 0)
     return std::nullopt;
+
+  if (auto bundle = fn.getArgAttrOfType<StringAttr>(
+          arg.getArgNumber(), circt::hls_analysis::kMaxiBundleAttr))
+    return std::make_pair(bundle.getValue().str(), limit);
   auto ifaces =
       fn.getArgAttrOfType<ArrayAttr>(arg.getArgNumber(), "hls.interface");
   if (!ifaces)
@@ -4472,6 +4490,18 @@ public:
   }
 
 private:
+  /// Problem::verify() without its error diagnostics: a failed check here
+  /// only means the other schedule is kept. Diagnostics of other threads
+  /// (function passes run in parallel) pass through.
+  static bool verifiesQuietly(ModuloProblem &problem) {
+    MLIRContext *ctx = problem.getContainingOp()->getContext();
+    std::thread::id self = std::this_thread::get_id();
+    ScopedDiagnosticHandler quiet(ctx, [self](Diagnostic &) {
+      return success(std::this_thread::get_id() == self);
+    });
+    return succeeded(problem.verify());
+  }
+
   /// Schedules `problem` (already scheduled) with the greedy scheduler too;
   /// keeps that schedule when its II is lower, else restores the first one.
   bool keepLowerGreedySchedule(ModuloProblem &problem) const {
@@ -4485,7 +4515,7 @@ private:
 
     FastModuloScheduler fast(problem, recurrenceRepairRounds);
     if (succeeded(fast.schedule(maxIIBumps, 1, *firstII)) &&
-        *problem.getInitiationInterval() < *firstII)
+        *problem.getInitiationInterval() < *firstII && verifiesQuietly(problem))
       return true;
     problem.setInitiationInterval(*firstII);
     for (auto [op, t] : firstStart)
