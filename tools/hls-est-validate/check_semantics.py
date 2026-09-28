@@ -1042,6 +1042,71 @@ template <class CsT, int CsD> struct CsConv<hls::stream<CsT, CsD> &> {
   }
 };
 #endif
+#ifdef TAPA_XILINX_HLS_STREAM_H_
+// TAPA (auto_ntt, OPEN_ISSUES O109): a tapa::istream<T> / ostream<T> holds hls::stream<
+// tapa::internal::elem_t<T>> members (`_`, and `_peek` for an istream).  The driver's tokens for such
+// an argument are keyed by the object's address (`_`'s in the MLIR) and laid out as the MLIR elem_t
+// {iN val; i8 eot} (runs 0 and 1; plan_args fills eot with 0 / 1).
+template <class CsT> inline uint64_t cs_tapa_bits(const CsT &cs_v, std::true_type) {
+  return (uint64_t)cs_v.to_uint64();
+}
+template <class CsT> inline uint64_t cs_tapa_bits(const CsT &cs_v, std::false_type) {
+  return (uint64_t)cs_v;
+}
+template <class CsT> inline void cs_tapa_check(int cs_a) {
+  const CsArg &cs_arg = cs_args[cs_a];
+  if (cs_arg.nruns != 2 || cs_arg.runs[0].kind != 0 || cs_arg.runs[0].bits > 64 ||
+      (CsAp<CsT>::cs_w && CsAp<CsT>::cs_w != cs_arg.runs[0].bits))
+    cs_layout_fail(cs_a, "a TAPA token that is not {iN val, i8 eot} of the element's width");
+}
+template <class CsT> inline void cs_tapa_in(int cs_a, tapa::internal::elem_t<CsT> *cs_d,
+                                            const unsigned char *cs_s) {
+  cs_tapa_check<CsT>(cs_a);
+  const CsArg &cs_arg = cs_args[cs_a];
+  uint64_t cs_limb = 0;
+  std::memcpy(&cs_limb, cs_s, (cs_arg.runs[0].bits + 7) / 8);
+  cs_d->val = (CsT)cs_limb;
+  cs_d->eot = (cs_s[cs_arg.runs[1].off] & 1) != 0;
+}
+template <class CsT> inline void cs_tapa_out(int cs_a, unsigned char *cs_d,
+                                             const tapa::internal::elem_t<CsT> *cs_s) {
+  cs_tapa_check<CsT>(cs_a);
+  const CsArg &cs_arg = cs_args[cs_a];
+  uint64_t cs_limb =
+      cs_tapa_bits(cs_s->val, std::integral_constant<bool, (CsAp<CsT>::cs_w > 0)>());
+  std::memset(cs_d, 0, cs_arg.esize);
+  std::memcpy(cs_d, &cs_limb, (cs_arg.runs[0].bits + 7) / 8);
+  cs_d[cs_arg.runs[1].off] = cs_s->eot ? 1 : 0;
+}
+template <class CsS, class CsT> struct CsTapaConv {
+  int cs_a;
+  CsS cs_s;
+  explicit CsTapaConv(int a) : cs_a(a) {}
+  CsS &cs_get(void *cs_p) {
+    std::vector<unsigned char> cs_raw(cs_args[cs_a].esize + 64, 0);
+    while (cs_fifo_try_pop(cs_p, cs_raw.data(), cs_args[cs_a].esize)) {
+      tapa::internal::elem_t<CsT> cs_v;
+      cs_tapa_in<CsT>(cs_a, &cs_v, cs_raw.data());
+      cs_s._.write(cs_v);
+    }
+    return cs_s;
+  }
+  void cs_back(void *cs_p) {
+    std::vector<unsigned char> cs_raw(cs_args[cs_a].esize + 64, 0);
+    while (!cs_s._.empty()) {
+      tapa::internal::elem_t<CsT> cs_v = cs_s._.read();
+      cs_tapa_out<CsT>(cs_a, cs_raw.data(), &cs_v);
+      cs_fifo_push(cs_p, cs_raw.data(), cs_args[cs_a].esize);
+    }
+  }
+};
+template <class CsT> struct CsConv<tapa::istream<CsT> &> : CsTapaConv<tapa::istream<CsT>, CsT> {
+  explicit CsConv(int a) : CsTapaConv<tapa::istream<CsT>, CsT>(a) {}
+};
+template <class CsT> struct CsConv<tapa::ostream<CsT> &> : CsTapaConv<tapa::ostream<CsT>, CsT> {
+  explicit CsConv(int a) : CsTapaConv<tapa::ostream<CsT>, CsT>(a) {}
+};
+#endif
 template <std::size_t... CsI> struct CsSeq {};
 template <std::size_t CsN, std::size_t... CsI> struct CsGen : CsGen<CsN - 1, CsN - 1, CsI...> {};
 template <std::size_t... CsI> struct CsGen<0, CsI...> { typedef CsSeq<CsI...> cs_type; };
@@ -1162,17 +1227,35 @@ def stream_token_types(methods):
     return tok
 
 
+TAPA_TOKEN = "tapa:"   # prefix of a TAPA stream's token type in top_stream_args' result
+
+
 def top_stream_args(top_fn, methods):
     """{argument index: token MLIR type} for the top's hls::stream parameters; ValueError when a stream
-    parameter's token type is unknown (no declared method moves its tokens) or is an array of streams."""
+    parameter's token type is unknown (no declared method moves its tokens) or is an array of streams.
+    A TAPA `tapa::istream<T>&` / `tapa::ostream<T>&` (auto_ntt, OPEN_ISSUES O109) is a stream whose
+    tokens are the `hls::stream<tapa::internal::elem_t<T>>` member's {T val; bool eot}: its type
+    carries the TAPA_TOKEN prefix (plan_args fills eot with 0 / 1)."""
     if not top_fn.startswith("_Z"):
         return {}
     params = cxx_params(demangle(top_fn))
     tok = stream_token_types(methods)
+    nospace = {re.sub(r"\s+", "", c): t for c, t in tok.items()}
     out = {}
     for k, prm in enumerate(params):
         base = re.sub(r"\s*(&|\*|const)\s*$", "", prm).strip()
         base = re.sub(r"^const\s+", "", base)
+        if base.startswith("tapa::istreams<") or base.startswith("tapa::ostreams<"):
+            raise ValueError(f"argument {k}: an array of TAPA streams ({prm})")
+        m = re.fullmatch(r"tapa::[io]stream<(.*)>", base)
+        if m:
+            if prm.rstrip().endswith("*") or re.search(r"\[\d*\]|\(\*\)", prm):
+                raise ValueError(f"argument {k}: an array of TAPA streams ({prm})")
+            cls = re.sub(r"\s+", "", f"hls::stream<tapa::internal::elem_t<{m.group(1)}>,0>")
+            if cls not in nospace:
+                raise ValueError(f"argument {k}: {base} with no token-moving method declared")
+            out[k] = TAPA_TOKEN + nospace[cls]
+            continue
         if not base.startswith("hls::stream<"):
             continue
         if prm.rstrip().endswith("*") or re.search(r"\[\d*\]|\(\*\)", prm):
@@ -1183,7 +1266,15 @@ def top_stream_args(top_fn, methods):
     return out
 
 
-def plan_args(arg_types, res_types, streams=None, dyn_scale=1):
+def bool_params(top_fn):
+    """The indices of the top's `bool` parameters (its mangled name; none for a C name)."""
+    if not top_fn.startswith("_Z"):
+        return set()
+    return {k for k, p in enumerate(cxx_params(demangle(top_fn)))
+            if re.sub(r"^const\s+", "", p.strip()) == "bool"}
+
+
+def plan_args(arg_types, res_types, streams=None, dyn_scale=1, bools=()):
     """The driver's view of the top: one entry per wrapper argument.  streams: {argument index: token
     MLIR type} of the top's hls::stream arguments (top_stream_args).  dyn_scale multiplies the leading
     '?' dimension sizes (the retry of a heap-buffer-overflow, Checker._check)."""
@@ -1194,10 +1285,17 @@ def plan_args(arg_types, res_types, streams=None, dyn_scale=1):
         if k in streams:
             if t.k != "memref":
                 raise ValueError(f"argument {k}: hls::stream as {s}")
-            tt = parse_type(streams[k])
+            tapa = streams[k].startswith(TAPA_TOKEN)
+            tt = parse_type(streams[k][len(TAPA_TOKEN):] if tapa else streams[k])
             esize, _ = size_align(tt)
+            runs = leaf_runs(tt)
+            if tapa:
+                # {T val; bool eot}: the eot byte holds 0 or 1 (C++'s bool, the i1 a load truncates to)
+                if len(runs) != 2 or runs[0][2] != 0 or runs[0][1] > 64 or runs[1][2] != 0 or runs[1][1] != 8:
+                    raise ValueError(f"argument {k}: TAPA token {tt} is not {{iN, i8}}")
+                runs[1][1] = 1
             plan.append(dict(kind="stream", type=s, ty=tt, dims=[1] * len(t.dims), esize=esize,
-                             runs=leaf_runs(tt), elems=STREAM_TOKENS, guard=0, scalar=False, ret=False))
+                             runs=runs, elems=STREAM_TOKENS, guard=0, scalar=False, ret=False))
         elif t.k == "memref":
             if t.layout and not re.fullmatch(r"strided<\[(\?, )*1\](, offset: \?)?>|strided<\[1\]>", t.layout):
                 raise ValueError(f"argument {k}: memref layout {t.layout}")
@@ -1219,7 +1317,11 @@ def plan_args(arg_types, res_types, streams=None, dyn_scale=1):
                              guard=guard, scalar=False, ret=False))
         elif t.k in ("int", "float", "struct", "array"):
             esize, _ = size_align(t)
-            plan.append(dict(kind="scalar", type=s, ty=t, dims=[1], esize=esize, runs=leaf_runs(t), elems=1,
+            runs = leaf_runs(t)
+            if k in bools and t.k == "int":
+                # a C++ bool passed as i8 holds 0 or 1 (any other byte is not a bool value)
+                runs[0][1] = 1
+            plan.append(dict(kind="scalar", type=s, ty=t, dims=[1], esize=esize, runs=runs, elems=1,
                              guard=0, scalar=True, ret=False))
         else:
             raise ValueError(f"argument {k}: type {s}")
@@ -1777,7 +1879,8 @@ class Checker:
         # '?' dimensions DYN_RETRY_SCALE times larger, within MAX_BUFFER_BYTES.
         for scale in (1, DYN_RETRY_SCALE):
             try:
-                plan = plan_args(*sig, top_stream_args(top_fn, stream_methods(text)), dyn_scale=scale)
+                plan = plan_args(*sig, top_stream_args(top_fn, stream_methods(text)), dyn_scale=scale,
+                                 bools=bool_params(top_fn))
             except ValueError as e:
                 return self._na(out, f"driver cannot fill the top: {e}"[:300])
             dyn = any(p["kind"] == "memref" and None in p["ty"].dims for p in plan)
