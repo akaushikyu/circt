@@ -1,6 +1,6 @@
 {
  "_doc": "Inputs of make_thesis_tables.py (chapter 6). Paths only, never numbers: every number in the thesis tables is computed from these files. '$SCRATCH' is ~/hls-est-work/coord/scratch, '$RESULTS' is tools/hls-est-validate/results. 'changelog' names the CHANGELOG.md entry (or round report) that documents the run; 'notes' names the VITIS_NOTES / OPEN_ISSUES entries a rule implements. A run is a run_hlsest.py result file; it is re-scored against the current results/vitis.json, so all rows share one ground truth.",
- "newest_run": "$SCRATCH/w9r12f/A.json",
+ "newest_run": "$SCRATCH/w9r13i/F.json",
  "newest_run_label": "final evaluation run",
  "outofband_classes": {
   "per_design": "$SCRATCH/w9r10p/final.json",
@@ -243,11 +243,18 @@
    "changelog": "2026-10-22 W9r12-impl"
   },
   {
-   "label": "round 12 review (final)",
+   "label": "round 12 review",
    "date": "2026-10-22",
    "run": "$SCRATCH/w9r12f/A.json",
    "shim": "real",
    "changelog": "2026-10-22 W9 round 12 review fixes"
+  },
+  {
+   "label": "round 13 (final)",
+   "date": "2026-10-22",
+   "run": "$SCRATCH/w9r13i/F.json",
+   "shim": "real",
+   "changelog": "2026-10-22 W9r13-impl"
   }
  ],
  "rule_pairs": [
@@ -588,10 +595,10 @@
  },
  "timing_csv": "hls-doc/hls-est-vs-vitis.csv",
  "snapshot": {
-  "_doc": "Frozen inputs that would otherwise change between renders: the commit counts and source sizes of chapter 5 are read at these commits (git), and the ad-hoc kernel cache of chapter 3 counts only result files written up to experiments_cutoff (local time). circt_commit is the commit that records the final evaluation run in the CHANGELOG; polygeist_commit is the Polygeist commit of the cgeist binary that produced the run's MLIR (CHANGELOG 2026-10-21 'W9 round 8 review fixes' names cgeist.g = Polygeist 537d6614, md5 a5056b23; round 12's final run adds the harness flag --hls-trip-one-pipeline-unroll, CHANGELOG 2026-10-22 W9r12-impl; the run file itself records polygeist_head 'unknown').",
-  "circt_commit": "fa912dc6f",
-  "polygeist_commit": "537d6614",
-  "cgeist_md5": "a5056b23",
+  "_doc": "Frozen inputs that would otherwise change between renders: the commit counts and source sizes of chapter 5 are read at these commits (git), and the ad-hoc kernel cache of chapter 3 counts only result files written up to experiments_cutoff (local time). circt_commit is the commit that records the final evaluation run in the CHANGELOG; polygeist_commit is the Polygeist commit of the cgeist binary that produced the run's MLIR (CHANGELOG 2026-10-21 'W9 round 8 review fixes' names cgeist.g = Polygeist 537d6614, md5 a5056b23; round 12's final run adds the harness flag --hls-trip-one-pipeline-unroll, CHANGELOG 2026-10-22 W9r12-impl; the run file itself records polygeist_head 'unknown'; round 13's final run uses the private cgeist of Polygeist w9r13-cgeist 34767431, md5 5b74209f, CHANGELOG 2026-10-22 W9r13-impl).",
+  "circt_commit": "af8818fcd",
+  "polygeist_commit": "34767431",
+  "cgeist_md5": "5b74209f",
   "experiments_cutoff": "2026-10-22T23:59:59"
  }
 }
