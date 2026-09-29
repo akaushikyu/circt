@@ -1373,16 +1373,15 @@ struct AutoPipelineUnrollPass
       return;
     SmallVector<scf::ForOp> runtimeLoops;
     func.walk<WalkOrder::PostOrder>([&](scf::ForOp loop) {
-      std::optional<uint64_t> f = userUnrollFactor(loop);
-      if (!f || *f <= 1)
+      std::optional<uint64_t> fieldValue = userUnrollFactor(loop);
+      if (!fieldValue || *fieldValue <= 1)
         return;
-      // Inside a user-pipelined loop the pipeline's complete unroll wins and
-      // fails on the run-time trip count ([HLS 214-187] "Cannot unroll loop
-      // ... as it has a variable trip count": class_ece8893 Shengxi_Liang
-      // LAB3 B_loop, shibao_su lab3): the loop stays rolled.
-      for (Operation *p = loop->getParentOp(); p && !isa<func::FuncOp>(p);
-           p = p->getParentOp())
-        if ((isa<AffineForOp>(p) || isRuntimeLoop(p)) && isUserPipelined(p)) {
+
+      for (Operation *portValue = loop->getParentOp();
+           portValue && !isa<func::FuncOp>(portValue);
+           portValue = portValue->getParentOp())
+        if ((isa<AffineForOp>(portValue) || isRuntimeLoop(portValue)) &&
+            isUserPipelined(portValue)) {
           remark(loop.getLoc(), "user unroll: run-time trip count inside a "
                                 "pipelined loop, left rolled");
           return;
@@ -1406,17 +1405,18 @@ struct AutoPipelineUnrollPass
   /// Loop-carried values flow through the copies (an skipped copy passes
   /// them on unchanged). The new loop carries `hls.unroll_partial`.
   void applyRuntimePartialUnroll(scf::ForOp loop, uint64_t factor) {
-    OpBuilder b(loop);
+    OpBuilder buildPoint(loop);
     Location loc = loop.getLoc();
     Value step = loop.getStep();
     Type ivType = step.getType();
-    auto constant = [&](OpBuilder &ob, int64_t v) -> Value {
+    auto constant = [&](OpBuilder &ob, int64_t valueHandle) -> Value {
       if (ivType.isIndex())
-        return ob.create<arith::ConstantIndexOp>(loc, v);
-      return ob.create<arith::ConstantOp>(loc, ob.getIntegerAttr(ivType, v));
+        return ob.create<arith::ConstantIndexOp>(loc, valueHandle);
+      return ob.create<arith::ConstantOp>(
+          loc, ob.getIntegerAttr(ivType, valueHandle));
     };
-    Value newStep = b.createOrFold<arith::MulIOp>(
-        loc, step, constant(b, static_cast<int64_t>(factor)));
+    Value newStep = buildPoint.createOrFold<arith::MulIOp>(
+        loc, step, constant(buildPoint, static_cast<int64_t>(factor)));
     Block *oldBody = loop.getBody();
     auto cloneBody = [&](OpBuilder &ob, Value iv, ValueRange carried) {
       IRMapping map;
@@ -1426,40 +1426,42 @@ struct AutoPipelineUnrollPass
         ob.clone(op, map);
       auto yield = cast<scf::YieldOp>(oldBody->getTerminator());
       SmallVector<Value> out;
-      for (Value v : yield.getOperands())
-        out.push_back(map.lookupOrDefault(v));
+      for (Value valueHandle : yield.getOperands())
+        out.push_back(map.lookupOrDefault(valueHandle));
       return out;
     };
-    auto newLoop = b.create<scf::ForOp>(
+    auto newLoop = buildPoint.create<scf::ForOp>(
         loc, loop.getLowerBound(), loop.getUpperBound(), newStep,
         loop.getInitArgs(),
-        [&](OpBuilder &ob, Location l, Value iv, ValueRange args) {
+        [&](OpBuilder &ob, Location lowerIndex, Value iv, ValueRange args) {
           SmallVector<Value> carried = cloneBody(ob, iv, args);
-          for (uint64_t u = 1; u < factor; ++u) {
+          for (uint64_t useValue = 1; useValue < factor; ++useValue) {
             Value offset = ob.createOrFold<arith::MulIOp>(
-                l, step, constant(ob, static_cast<int64_t>(u)));
-            Value ivU = ob.create<arith::AddIOp>(l, iv, offset);
-            // scf.for compares its bounds signed.
-            Value inRange = ob.create<arith::CmpIOp>(
-                l, arith::CmpIPredicate::slt, ivU, loop.getUpperBound());
+                lowerIndex, step, constant(ob, static_cast<int64_t>(useValue)));
+            Value ivU = ob.create<arith::AddIOp>(lowerIndex, iv, offset);
+
+            Value inRange =
+                ob.create<arith::CmpIOp>(lowerIndex, arith::CmpIPredicate::slt,
+                                         ivU, loop.getUpperBound());
             auto guard = ob.create<scf::IfOp>(
-                l, inRange,
+                lowerIndex, inRange,
                 [&](OpBuilder &tb, Location) {
-                  tb.create<scf::YieldOp>(l, cloneBody(tb, ivU, carried));
+                  tb.create<scf::YieldOp>(lowerIndex,
+                                          cloneBody(tb, ivU, carried));
                 },
                 [&](OpBuilder &eb, Location) {
-                  eb.create<scf::YieldOp>(l, carried);
+                  eb.create<scf::YieldOp>(lowerIndex, carried);
                 });
             carried.assign(guard.getResults().begin(),
                            guard.getResults().end());
           }
-          ob.create<scf::YieldOp>(l, carried);
+          ob.create<scf::YieldOp>(lowerIndex, carried);
         });
     for (NamedAttribute attr : loop->getDiscardableAttrs())
       if (attr.getName() != kLoopUnrollAttr)
         newLoop->setAttr(attr.getName(), attr.getValue());
-    newLoop->setAttr(kLoopUnrollPartialAttr,
-                     b.getI64IntegerAttr(static_cast<int64_t>(factor)));
+    newLoop->setAttr(kLoopUnrollPartialAttr, buildPoint.getI64IntegerAttr(
+                                                 static_cast<int64_t>(factor)));
     loop.replaceAllUsesWith(newLoop.getResults());
     loop.erase();
   }
@@ -2034,9 +2036,9 @@ struct AutoPipelineUnrollPass
     doWhileMinSubLoopTrip = static_cast<uint64_t>(
         circt::hlsest::Config::get()
             .tool.hls.pipelineDecision.doWhileMinSubLoopTrip);
-    partialUnrollRuntimeValue = circt::hlsest::Config::get()
-                                    .tool.hls.pipelineDecision
-                                    .partialUnrollRuntimeLoops;
+    partialUnrollRuntimeValue =
+        circt::hlsest::Config::get()
+            .tool.hls.pipelineDecision.partialUnrollRuntimeLoops;
     remarkFn = o.remark;
 
     module.walk([&](Operation *op) {

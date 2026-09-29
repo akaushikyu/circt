@@ -242,16 +242,22 @@ static const llvm::StringSet<> &pureLibmHelpers() {
 
 static StringRef mathOpFunction(Operation *op) {
   static const llvm::StringMap<StringRef> memoryOp = {
-      {"math.exp", "exp"},     {"math.exp2", "exp2"},   {"math.expm1", "expm1"},
-      {"math.log", "log"},     {"math.log2", "log2"},   {"math.log10", "log10"},
-      {"math.log1p", "log1p"}, {"math.sqrt", "sqrt"},   {"math.rsqrt", "rsqrt"},
-      {"math.cbrt", "cbrt"},   {"math.sin", "sin"},     {"math.cos", "cos"},
-      {"math.tan", "tan"},     {"math.tanh", "tanh"},   {"math.sinh", "sinh"},
-      {"math.cosh", "cosh"},   {"math.asin", "asin"},   {"math.acos", "acos"},
-      {"math.atan", "atan"},   {"math.atan2", "atan2"}, {"math.asinh", "asinh"},
-      {"math.acosh", "acosh"}, {"math.atanh", "atanh"}, {"math.erf", "erf"},
-      {"math.erfc", "erfc"},   {"math.powf", "pow"},    {"math.fpowi", "pow"},
-      {"math.absf", "abs"}};
+      {"math.exp", "exp"},      {"math.exp2", "exp2"},
+      {"math.expm1", "expm1"},  {"math.log", "log"},
+      {"math.log2", "log2"},    {"math.log10", "log10"},
+      {"math.log1p", "log1p"},  {"math.sqrt", "sqrt"},
+      {"math.rsqrt", "rsqrt"},  {"math.cbrt", "cbrt"},
+      {"math.sin", "sin"},      {"math.cos", "cos"},
+      {"math.tan", "tan"},      {"math.tanh", "tanh"},
+      {"math.sinh", "sinh"},    {"math.cosh", "cosh"},
+      {"math.asin", "asin"},    {"math.acos", "acos"},
+      {"math.atan", "atan"},    {"math.atan2", "atan2"},
+      {"math.asinh", "asinh"},  {"math.acosh", "acosh"},
+      {"math.atanh", "atanh"},  {"math.erf", "erf"},
+      {"math.erfc", "erfc"},    {"math.powf", "pow"},
+      {"math.fpowi", "pow"},    {"math.absf", "abs"},
+
+      {"llvm.intr.powi", "pow"}};
   auto it = memoryOp.find(op->getName().getStringRef());
   return it == memoryOp.end() ? StringRef() : it->second;
 }
