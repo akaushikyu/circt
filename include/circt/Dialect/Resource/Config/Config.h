@@ -480,6 +480,10 @@ struct StructConfig {
   bool elementCopyLoops = true;
   bool temporaryRegisters = true;
   bool memberPartitions = true;
+  /// After the split, a static array passed to a callee's dynamic-shape
+  /// parameter specialises the callee to the static type (OPEN_ISSUES O84
+  /// (c)).
+  bool specializeSplitCasts = true;
 };
 
 struct NarrowingConfig {

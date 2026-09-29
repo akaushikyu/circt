@@ -834,6 +834,7 @@
         "_globals": "bool: Struct-typed globals are split like locals [P-02]",
         "_member_partitions": "bool: An array_partition on a member path (variable=row.data) applies to the member's memory of a struct with one array member, its dim after the variable's dimensions (OPEN_ISSUES O78) [P-02]",
         "_scalar_registers": "bool: A member of a single struct variable accessed only at constant positions is registers [P-02]",
+        "_specialize_split_casts": "bool: After the split, a static array of scalars passed through a memref.cast to a dynamic-shape parameter of a kept callee (a split hls::vector / struct array: memref<512x8xi16> to memref<?x8xi16>) specialises the callee to the static type, as --lower-polygeist-subindex does before the split, so the array's partition pragma reaches the callee's accesses; Vitis applies such pragmas (class_ece8893 hyungseok_bae lab3 local_B / local_row_idx_B: [HLS 214-248] cyclic 8, VITIS_NOTES N47 / N51, OPEN_ISSUES O84 (c); off: the pragma is dropped, used by memref.cast) [P-02]",
         "_temporary_registers": "bool: A one-element struct temporary cgeist materializes (a by-value operand, a returned struct) is split into registers, never a memory (VITIS_NOTES N51) [P-02]",
         "_through_calls": "bool: A variable passed whole to kept calls is split together with the callees' parameters [P-02]",
         "aggregate": true,
@@ -841,6 +842,7 @@
         "globals": true,
         "member_partitions": true,
         "scalar_registers": true,
+        "specialize_split_casts": true,
         "temporary_registers": true,
         "through_calls": true
       },

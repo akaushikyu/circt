@@ -679,6 +679,28 @@ specializeCastArguments(ModuleOp module,
   return redirected;
 }
 
+/// specializeCastArguments, then the private originals (and clones) no call
+/// reaches any more are erased (a dead private function would otherwise be
+/// costed as a root without top=). Used again after --split-struct-memrefs.
+unsigned circt::hls_analysis::specializeStaticCastArguments(ModuleOp module) {
+  SmallVector<func::FuncOp> origins;
+  unsigned redirected = specializeCastArguments(module, origins);
+  if (!redirected)
+    return 0;
+  SymbolTable symbols(module);
+  for (bool erased = true; erased;) {
+    erased = false;
+    for (func::FuncOp &fn : origins) {
+      if (!fn || !fn.isPrivate() || !symbols.symbolKnownUseEmpty(fn, module))
+        continue;
+      symbols.erase(fn);
+      fn = nullptr;
+      erased = true;
+    }
+  }
+  return redirected;
+}
+
 namespace {
 
 static DictionaryAttr shiftPartitionDims(DictionaryAttr argAttrs,

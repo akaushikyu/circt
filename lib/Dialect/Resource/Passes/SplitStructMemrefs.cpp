@@ -3363,6 +3363,12 @@ struct SplitStructMemrefsPass
     }
     if (honorAggregate)
       ArrayStructPacker(module).run();
+    // A split array passed to a callee through a cast to the dynamic-shape
+    // parameter (memref<512x8xi16> to memref<?x8xi16>) is a storage node the
+    // banking can follow only once the callee takes the static type
+    // (OPEN_ISSUES O84 (c)).
+    if (circt::hlsest::Config::get().tool.hls.structs.specializeSplitCasts)
+      circt::hls_analysis::specializeStaticCastArguments(module);
   }
 
   /// Creates the new memories of every storage of one variable and

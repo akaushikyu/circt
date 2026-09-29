@@ -194,6 +194,12 @@ std::optional<int64_t> llvmStorageBits(mlir::Type type);
 /// --split-struct-memrefs (SplitStructMemrefs.cpp): one memref per member of
 /// a struct-typed variable, as Vitis disaggregates it, or one memref of
 /// packed words when an AGGREGATE pragma reaches it.
+/// A static array passed through a memref.cast to a dynamic-shape parameter
+/// of a defined callee: the callee is specialised per static argument form
+/// (a clone with the static parameter type) and the call redirected to it.
+/// Returns the number of calls redirected.
+unsigned specializeStaticCastArguments(mlir::ModuleOp module);
+
 std::unique_ptr<mlir::Pass> createSplitStructMemrefsPass();
 void registerSplitStructMemrefsPass();
 
