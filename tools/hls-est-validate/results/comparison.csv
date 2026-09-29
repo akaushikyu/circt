@@ -197,7 +197,7 @@ class_ece8893_2022_fall,Dehazing-denoising__source_code__src__script,,,,,False,,
 class_ece8893_2022_fall,Explainable-ML__source_code,39,39,0,0,True,exact,compared,ok,ok,
 class_ece8893_2022_fall,FLAT-acceleration__source_code__HLS,262,280,18,18,False,over<=15%,compared,ok,ok,local_out: hls-est 48 vs Vitis 32; max_ping: hls-est 1 vs Vitis None; max_pong: hls-est 1 vs Vitis None
 class_ece8893_2022_fall,FLAT-acceleration__source_code__HLS__test_systolic_array,,167,,,False,,vitis missing,vitis timeout,ok,local_out: hls-est 159 vs Vitis None; logit: hls-est 8 vs Vitis None
-class_ece8893_2022_fall,GNN-virtual-node__source_code__gin_vn_base_hls,,1351,,,False,,vitis missing,vitis failed,ok,mlp_1_weights: hls-est 200 vs Vitis None; mlp_2_weights: hls-est 200 vs Vitis None; node_embedding: hls-est 200 vs Vitis None
+class_ece8893_2022_fall,GNN-virtual-node__source_code__gin_vn_base_hls,,1251,,,False,,vitis missing,vitis failed,ok,mlp_1_weights: hls-est 200 vs Vitis None; mlp_2_weights: hls-est 200 vs Vitis None; node_embedding: hls-est 200 vs Vitis None
 class_ece8893_2022_fall,GNN-virtual-node__source_code__gin_vn_bitstream,,,,,False,,vitis missing,vitis failed,cgeist error: ./dcl.hpp:6:10: fatal error: '/tools/software/xilinx/Vitis_HLS/2021.1/include/gmp.h' file not found,
 class_ece8893_2022_fall,GNN-virtual-node__source_code__gin_vn_pipelined_hls,,,,,False,,vitis missing,vitis failed,cgeist error: ./dcl.hpp:6:10: fatal error: '/tools/software/xilinx/Vitis_HLS/2021.1/include/gmp.h' file not found,
 class_ece8893_2022_fall,Ray-tracing__source_code__HLS,440,440,0,0,True,exact,compared,ok,ok,
@@ -402,7 +402,7 @@ hlsyn-vitis,vivado-target__sources__covariance,68,68,0,0,True,exact,compared,ok,
 hlsyn-vitis,vivado-target__sources__doitgen,72,72,0,0,True,exact,compared,ok,ok,
 hlsyn-vitis,vivado-target__sources__doitgen-red,,72,,,False,,vitis missing,vitis timeout,ok,A_buf: hls-est 64 vs Vitis None; C4_buf: hls-est 4 vs Vitis None; sum_buf: hls-est 4 vs Vitis None
 hlsyn-vitis,vivado-target__sources__fdtd-2d,,100,,,False,,vitis missing,vitis failed,ok,ex_buf: hls-est 32 vs Vitis None; ey_buf: hls-est 32 vs Vitis None; hz_buf: hls-est 32 vs Vitis None
-hlsyn-vitis,vivado-target__sources__fdtd-2d-large,,772,,,False,,vitis missing,vitis failed,ok,ex_buf: hls-est 256 vs Vitis None; ey_buf: hls-est 256 vs Vitis None; hz_buf: hls-est 256 vs Vitis None
+hlsyn-vitis,vivado-target__sources__fdtd-2d-large,,770,,,False,,vitis missing,vitis failed,ok,ex_buf: hls-est 256 vs Vitis None; ey_buf: hls-est 256 vs Vitis None; hz_buf: hls-est 256 vs Vitis None
 hlsyn-vitis,vivado-target__sources__gemm-blocked,,48,,,False,,vitis missing,vitis failed,ok,m1_buf: hls-est 16 vs Vitis None; m2_buf: hls-est 16 vs Vitis None; prod_buf: hls-est 16 vs Vitis None
 hlsyn-vitis,vivado-target__sources__gemm-ncubed,,48,,,False,,vitis missing,vitis timeout,ok,m1_buf: hls-est 16 vs Vitis None; m2_buf: hls-est 16 vs Vitis None; prod_buf: hls-est 16 vs Vitis None
 hlsyn-vitis,vivado-target__sources__gemm-p,,96,,,False,,vitis missing,vitis timeout,ok,A_buf: hls-est 32 vs Vitis None; B_buf: hls-est 32 vs Vitis None; C_buf: hls-est 32 vs Vitis None

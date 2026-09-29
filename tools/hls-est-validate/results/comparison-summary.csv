@@ -26,15 +26,15 @@ whetstone,1,1,1,0,0.0,16,16,16,0,0,0,0,1,0,0.0
 ALL,812,746,746,687,92.1,2454,3.3,0.0,0,66,713,26,9,24,95.6
 
 run_setting,value
-generated,2026-10-22 13:43
+generated,2026-10-22 16:39
 generator,tools/hls-est-validate/make_compare_csv.py
-hls-est run json,/home/peter/hls-est-work/coord/scratch/w9r13i/F.json
-hls-est git,unknown (HLS_EST_BIN=/home/peter/hls-est-work/coord/scratch/w9r13i/bin/hls-est.final)
-hls-est binary,/home/peter/hls-est-work/coord/scratch/w9r13i/bin/hls-est.final
+hls-est run json,/home/peter/hls-est-work/coord/scratch/w9r13fix/G2.json
+hls-est git,unknown (HLS_EST_BIN=/home/peter/hls-est-work/coord/scratch/w9r13fix/hls-est.v2)
+hls-est binary,/home/peter/hls-est-work/coord/scratch/w9r13fix/hls-est.v2
 pipeline,--lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --infer-vitis-split-array=td=off --narrow-ram-widths --memory-banking-bram --convert-affine-to-loopschedule --bram-analysis
 shim,/home/peter/circt/tools/hls-est-validate/shim/real
 cgeist,/home/peter/hls-est-work/coord/scratch/w9r13i/bin/cgeist.r13a
 cgeist md5,5b74209f35c17aed7a1281b61779f5b8
-mlir reused from,
+mlir reused from,/home/peter/hls-est-work/coord/scratch/w9r13i/F.json
 vitis,"2025.1 csynth, xc7z020clg400-1, 10ns, syn.array_partition.throughput_driven=off"
 note,"designs absent from the run are listed with comparison_status 'hls-est missing'; designs without a Vitis result are 'vitis missing' (excluded, see hls-est-results.xlsx 'excluded designs')"
