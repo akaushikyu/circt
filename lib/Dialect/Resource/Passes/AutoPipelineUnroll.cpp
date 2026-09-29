@@ -24,6 +24,7 @@
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/Diagnostics.h"
+#include "mlir/IR/IRMapping.h"
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/IR/SymbolTable.h"
 #include "mlir/Interfaces/CallInterfaces.h"
@@ -93,7 +94,7 @@ static bool isUserPipelined(Operation *loop) {
 }
 
 /// User unroll factor of `loop`; 0 = complete; nullopt = no pragma.
-static std::optional<uint64_t> userUnrollFactor(AffineForOp loop) {
+static std::optional<uint64_t> userUnrollFactor(Operation *loop) {
   if (loop->hasAttr(kLoopUnrollOffAttr))
     return std::nullopt;
   Attribute attr = loop->getAttr(kLoopUnrollAttr);
@@ -1293,6 +1294,8 @@ struct AutoPipelineUnrollPass
   bool doWhileRefusalValue = true;
   /// tool.hls.pipeline_decision.do_while_min_subloop_trip (N96).
   uint64_t doWhileMinSubLoopTrip = 3;
+  /// tool.hls.pipeline_decision.partial_unroll_runtime_loops (N103).
+  bool partialUnrollRuntimeValue = true;
 
   /// How many of `loops` (outermost first, the innermost directly around
   /// the pipeline's absorbed loops) flatten into the pipeline: those inside
@@ -1366,6 +1369,99 @@ struct AutoPipelineUnrollPass
                                 "parent pipeline)");
       applyPartialUnroll(loop, factor);
     }
+    if (!partialUnrollRuntimeValue)
+      return;
+    SmallVector<scf::ForOp> runtimeLoops;
+    func.walk<WalkOrder::PostOrder>([&](scf::ForOp loop) {
+      std::optional<uint64_t> f = userUnrollFactor(loop);
+      if (!f || *f <= 1)
+        return;
+      // Inside a user-pipelined loop the pipeline's complete unroll wins and
+      // fails on the run-time trip count ([HLS 214-187] "Cannot unroll loop
+      // ... as it has a variable trip count": class_ece8893 Shengxi_Liang
+      // LAB3 B_loop, shibao_su lab3): the loop stays rolled.
+      for (Operation *p = loop->getParentOp(); p && !isa<func::FuncOp>(p);
+           p = p->getParentOp())
+        if ((isa<AffineForOp>(p) || isRuntimeLoop(p)) && isUserPipelined(p)) {
+          remark(loop.getLoc(), "user unroll: run-time trip count inside a "
+                                "pipelined loop, left rolled");
+          return;
+        }
+      runtimeLoops.push_back(loop);
+    });
+    for (scf::ForOp loop : runtimeLoops) {
+      uint64_t factor = *userUnrollFactor(loop);
+      remark(loop.getLoc(), "user unroll: run-time trip count, by factor " +
+                                Twine(factor) +
+                                " with guarded copies (VITIS_NOTES N103)");
+      applyRuntimePartialUnroll(loop, factor);
+    }
+  }
+
+  /// `#pragma HLS unroll factor=F` on an scf.for whose trip count is only
+  /// known at run time (VITIS_NOTES N103: Vitis applies it, [HLS 214-188],
+  /// and keeps the loop's II). The loop becomes one of step F * step whose
+  /// body holds F copies; copy u > 0 runs under `iv + u * step < ub` (Vitis
+  /// keeps the exit test in the unrolled body, there is no epilogue loop).
+  /// Loop-carried values flow through the copies (an skipped copy passes
+  /// them on unchanged). The new loop carries `hls.unroll_partial`.
+  void applyRuntimePartialUnroll(scf::ForOp loop, uint64_t factor) {
+    OpBuilder b(loop);
+    Location loc = loop.getLoc();
+    Value step = loop.getStep();
+    Type ivType = step.getType();
+    auto constant = [&](OpBuilder &ob, int64_t v) -> Value {
+      if (ivType.isIndex())
+        return ob.create<arith::ConstantIndexOp>(loc, v);
+      return ob.create<arith::ConstantOp>(loc, ob.getIntegerAttr(ivType, v));
+    };
+    Value newStep = b.createOrFold<arith::MulIOp>(
+        loc, step, constant(b, static_cast<int64_t>(factor)));
+    Block *oldBody = loop.getBody();
+    auto cloneBody = [&](OpBuilder &ob, Value iv, ValueRange carried) {
+      IRMapping map;
+      map.map(loop.getInductionVar(), iv);
+      map.map(loop.getRegionIterArgs(), carried);
+      for (Operation &op : oldBody->without_terminator())
+        ob.clone(op, map);
+      auto yield = cast<scf::YieldOp>(oldBody->getTerminator());
+      SmallVector<Value> out;
+      for (Value v : yield.getOperands())
+        out.push_back(map.lookupOrDefault(v));
+      return out;
+    };
+    auto newLoop = b.create<scf::ForOp>(
+        loc, loop.getLowerBound(), loop.getUpperBound(), newStep,
+        loop.getInitArgs(),
+        [&](OpBuilder &ob, Location l, Value iv, ValueRange args) {
+          SmallVector<Value> carried = cloneBody(ob, iv, args);
+          for (uint64_t u = 1; u < factor; ++u) {
+            Value offset = ob.createOrFold<arith::MulIOp>(
+                l, step, constant(ob, static_cast<int64_t>(u)));
+            Value ivU = ob.create<arith::AddIOp>(l, iv, offset);
+            // scf.for compares its bounds signed.
+            Value inRange = ob.create<arith::CmpIOp>(
+                l, arith::CmpIPredicate::slt, ivU, loop.getUpperBound());
+            auto guard = ob.create<scf::IfOp>(
+                l, inRange,
+                [&](OpBuilder &tb, Location) {
+                  tb.create<scf::YieldOp>(l, cloneBody(tb, ivU, carried));
+                },
+                [&](OpBuilder &eb, Location) {
+                  eb.create<scf::YieldOp>(l, carried);
+                });
+            carried.assign(guard.getResults().begin(),
+                           guard.getResults().end());
+          }
+          ob.create<scf::YieldOp>(l, carried);
+        });
+    for (NamedAttribute attr : loop->getDiscardableAttrs())
+      if (attr.getName() != kLoopUnrollAttr)
+        newLoop->setAttr(attr.getName(), attr.getValue());
+    newLoop->setAttr(kLoopUnrollPartialAttr,
+                     b.getI64IntegerAttr(static_cast<int64_t>(factor)));
+    loop.replaceAllUsesWith(newLoop.getResults());
+    loop.erase();
   }
 
   /// `#pragma HLS unroll factor=F` with 1 < F < trip count (or a dynamic
@@ -1938,6 +2034,9 @@ struct AutoPipelineUnrollPass
     doWhileMinSubLoopTrip = static_cast<uint64_t>(
         circt::hlsest::Config::get()
             .tool.hls.pipelineDecision.doWhileMinSubLoopTrip);
+    partialUnrollRuntimeValue = circt::hlsest::Config::get()
+                                    .tool.hls.pipelineDecision
+                                    .partialUnrollRuntimeLoops;
     remarkFn = o.remark;
 
     module.walk([&](Operation *op) {

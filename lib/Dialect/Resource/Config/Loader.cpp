@@ -956,6 +956,8 @@ void fillTool(const json::Object &t, ToolProfile &tool) {
       boolean(pd, "do_while_flatten_refusal", true);
   h.pipelineDecision.doWhileMinSubLoopTrip =
       integer(pd, "do_while_min_subloop_trip", 3);
+  h.pipelineDecision.partialUnrollRuntimeLoops =
+      boolean(pd, "partial_unroll_runtime_loops", true);
 
   const json::Object &pa = obj(hls, "partitioning");
   h.partitioning.policy = str(pa, "policy");

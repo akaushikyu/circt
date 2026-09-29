@@ -387,6 +387,8 @@ struct PipelineDecisionConfig {
   bool doWhileFlattenRefusal = true;
   /// ... only for a subscript made by a sub-loop of at least this trip count.
   int64_t doWhileMinSubLoopTrip = 3;
+  /// A user `unroll factor=F` (1 < F) on an scf.for with a run-time trip count is applied as F guarded copies of the body in a loop of step F*step (copy u runs under iv + u*step < ub, Vitis keeps the exit test in the unrolled body); a copy's index into a cyclic partition is then not a constant bank, so e
+  bool partialUnrollRuntimeLoops = true;
 };
 
 struct PartitionInferenceConfig {
