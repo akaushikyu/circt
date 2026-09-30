@@ -113,7 +113,8 @@
           "dead_calls": true,
           "honour_preserve": false,
           "global_shared_by_functions_escapes": true,
-          "load_store_cycles": true
+          "load_store_cycles": true,
+          "overwritten_call_outputs": true
         }
       },
       "inlining": { "honour_inline_off": true },

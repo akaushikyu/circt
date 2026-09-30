@@ -450,6 +450,9 @@ struct DeadMemoryConfig {
   bool honourPreserve = false;
   bool globalSharedByFunctionsEscapes = true;
   bool keepLoadStoreCycles = true;
+  /// A kept call's one-element output that is overwritten (or never touched)
+  /// after the call before any read does not keep the call (N107).
+  bool overwrittenCallOutputs = true;
 };
 
 struct MiddleEndConfig {

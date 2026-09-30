@@ -688,11 +688,13 @@
           "_global_shared_by_functions_escapes": "bool: A global used by more than one function escapes [E-02]",
           "_honour_preserve": "bool: hls.preserve keeps a dead array (Vitis: no) [E-04]",
           "_load_store_cycles": "bool: An array whose loads feed (as value, address or condition) stores into itself, directly or through other arrays, is kept: no cyclic dead-store elimination; a measured Vitis rule (VITIS_NOTES N66)",
+          "_overwritten_call_outputs": "bool: dead_calls also deletes a call whose written one-element locals (scalar reference outputs) are, after the call, stored again in the same block before any other access or never accessed again up to the function's return, even when the variable is read elsewhere; a measured Vitis rule (VITIS_NOTES N107; kernels w9r14p_dc_dead 0 against dc_live 16; whetstone mod7; off: such a call is live) [P-12]",
           "_overwritten_stores": "bool: A store a later store of the same access overwrites before any read is deleted [E-03]",
           "dead_calls": true,
           "global_shared_by_functions_escapes": true,
           "honour_preserve": false,
           "load_store_cycles": true,
+          "overwritten_call_outputs": true,
           "overwritten_stores": true
         },
         "dse_guarded_stores": true,

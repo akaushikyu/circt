@@ -607,9 +607,53 @@ private:
   }
 };
 
+/// VITIS_NOTES N107: the value a call leaves in a one-element local of its
+/// own function (a scalar passed by reference) is never read when, after the
+/// call, the next op of the call's block that touches the local is a store
+/// that overwrites it, or no op touches it up to the function's return (the
+/// call is in the function's body block, not in a loop or an if). Kernel
+/// w9r14p_dc_dead (`f(n, x, y); x = y = 1.0;`): Vitis deletes the call and
+/// its sin / cos cores; whetstone mod7.
+static bool overwrittenAfterCall(func::CallOp call, const MemObject &o) {
+  auto alloca = dyn_cast<memref::AllocaOp>(o.def);
+  if (!alloca || alloca->getParentOfType<func::FuncOp>() !=
+                     call->getParentOfType<func::FuncOp>())
+    return false;
+  MemRefType memRefType = alloca.getType();
+  if (!memRefType.hasStaticShape() || memRefType.getNumElements() != 1)
+    return false;
+  DenseSet<Value> aliases(o.aliases.begin(), o.aliases.end());
+  auto touches = [&](Operation *op) {
+    WalkResult resultValue = op->walk([&](Operation *inner) {
+      for (Value valueHandle : inner->getOperands())
+        if (aliases.contains(valueHandle))
+          return WalkResult::interrupt();
+      return WalkResult::advance();
+    });
+    return resultValue.wasInterrupted();
+  };
+  for (Operation *op = call->getNextNode(); op; op = op->getNextNode()) {
+    Value mem, stored;
+    if (auto st = dyn_cast<affine::AffineStoreOp>(op)) {
+      mem = st.getMemRef();
+      stored = st.getValueToStore();
+    } else if (auto st = dyn_cast<memref::StoreOp>(op)) {
+      mem = st.getMemRef();
+      stored = st.getValueToStore();
+    }
+    if (mem && aliases.contains(mem) && !aliases.contains(stored))
+      return true;
+    if (touches(op))
+      return false;
+    if (op->hasTrait<OpTrait::IsTerminator>())
+      return isa<func::ReturnOp>(op);
+  }
+  return false;
+}
+
 /// Deletes the dead calls; marks the arrays of dead calls that must stay.
-static unsigned eraseDeadCalls(ModuleOp module, bool remarks,
-                               DeathNotes &notes) {
+static unsigned eraseDeadCalls(ModuleOp module, bool remarks, DeathNotes &notes,
+                               bool overwrittenOutputs) {
   ObjectTable objects;
   objects.build(module);
   CalleeEffectTable effects;
@@ -694,6 +738,9 @@ static unsigned eraseDeadCalls(ModuleOp module, bool remarks,
       if (!obj)
         nonRoots += "P" + std::to_string(loopIndex);
       if (loopIndex < ce.written.size() && ce.written.test(loopIndex)) {
+        if (obj && objRead[*obj] && overwrittenOutputs &&
+            overwrittenAfterCall(call, objects.objs[*obj]))
+          continue;
         if (!obj || objRead[*obj])
           dead = false;
         else
@@ -1598,7 +1645,8 @@ void DeadMemoryEliminationPass::runOnOperation() {
       changed |= killOverwrittenStores(module, remarks, notes) > 0;
     changed |= dropUnusedMemrefParams(module, remarks) > 0;
     if (eraseCalls)
-      changed |= eraseDeadCalls(module, remarks, notes) > 0;
+      changed |=
+          eraseDeadCalls(module, remarks, notes, dm.overwrittenCallOutputs) > 0;
     changed |= eliminateOnce(module, records);
     if (!changed)
       break;
