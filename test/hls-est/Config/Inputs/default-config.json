@@ -747,6 +747,7 @@
         "compound_assign_two_stores": true,
         "constant_index": {
           "_after_user_partition": "bool: Rule (b) also applies to an array with a user cyclic / block array_partition, on every part (VITIS_NOTES N57) [Q-03]",
+          "_block_offset": "bool: On a dimension with a user block partition (block size B = ceil(extent / factor)), rule (b) looks at the offset inside the block: an affine index whose value modulo B is a constant (every variable term a multiple of B, as j = 8 * jj + u with u unrolled and B = 4) counts as a constant index, so each block is partitioned completely; a cyclic partition still needs a constant index; a measured Vitis rule (VITIS_NOTES N104; kernels w9r14p_cb_blk 64 banks, cb_cyc 16; class_ece8893 adithi lab3; off: a constant index only) [Q-03]",
           "_fold_division": "bool: An index computed by division, remainder, shifts or bit operations on constants (an unrolled copy's `(k * 2) / 2`) is a constant for rules (b) / (c) and for memory banking, as LLVM's constant folding makes it before Vitis partitions; a measured Vitis rule (VITIS_NOTES N97 (a); kernel w9r13p_st_row, siddharth lab2 `softmax_row`: a struct taken whole from a stream and read at the unrolled indices has no memory; off: only add / sub / mul fold) [Q-03]",
           "_globals": "bool: Rule (b) also applies to globals and function statics, over the accesses of every function (VITIS_NOTES N77) [Q-03]",
           "_max_extent": "uint, elements: Largest extent of such a dimension that is partitioned; a larger one stays whole (VITIS_NOTES N61; 0 or absent: no limit) [Q-03]",
@@ -755,6 +756,7 @@
           "_pipo_streams": "bool: Rule (b) also applies to an array whose only storage pragma is stream type=pipo (VITIS_NOTES N77) [Q-03]",
           "_through_calls": "bool: Rule (b) follows an array through the calls it is passed to (inline off callees, dataflow processes, recursively): the callee's accesses of the parameter count as the array's, so an array every function indexes with a constant in a dimension is partitioned there, and banking splits the callee's parameter the same way; a measured Vitis rule (VITIS_NOTES N94; kernels w9r13p_ci_io / ci_wr / ci_df / ci_cyc, control ci_var; off: a call stops rule (b)) [Q-03]",
           "after_user_partition": true,
+          "block_offset": true,
           "fold_division": true,
           "globals": true,
           "max_extent": 64,

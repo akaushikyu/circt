@@ -779,17 +779,63 @@ static ArrayAttr buildPressureAttr(Builder &b,
 // constant bank: a dimension split here because only constants index it is
 // then read one bank at a time.
 
-/// Per memref dimension: whether the access's index is a constant.
-static SmallVector<bool> constantDimsOfAffine(AffineMap map,
-                                              ValueRange mapOperands) {
+/// Per memref dimension: whether the access's index is a constant. On a
+/// dimension d with blockSizes[d] = B > 1 (a user block partition), the
+/// offset inside the block counts instead: the index modulo B is a constant
+/// (VITIS_NOTES N104: `j = 8 * jj + u` with B = 4).
+static SmallVector<bool>
+constantDimsOfAffine(AffineMap map, ValueRange mapOperands,
+                     ArrayRef<int64_t> blockSizes = {}) {
   SmallVector<Value, 8> operands(mapOperands.begin(), mapOperands.end());
   // Through affine.apply producers (unrolling leaves `apply (d0 + 1)(%c0)`).
   fullyComposeAffineMapAndOperands(&map, &operands);
   AffineMap folded = foldConstantIndexOperands(map, operands);
   SmallVector<bool> dims;
-  for (AffineExpr expr : folded.getResults())
-    dims.push_back(isa<AffineConstantExpr>(expr));
+  // A partially unrolled loop keeps its step (`for j = 0 to 64 step 8`,
+  // copies at j + u): its counter is lb + step * k, which the modulo below
+  // must see.
+  SmallVector<AffineExpr> counters;
+  for (unsigned i = 0; i < folded.getNumDims(); ++i) {
+    AffineExpr dim = getAffineDimExpr(i, map.getContext());
+    if (i < operands.size())
+      if (AffineForOp loop = getForInductionVarOwner(operands[i]))
+        if (loop.hasConstantLowerBound() && loop.getStepAsInt() > 1)
+          dim = dim * loop.getStepAsInt() + loop.getConstantLowerBound();
+    counters.push_back(dim);
+  }
+  for (auto [d, expr] : llvm::enumerate(folded.getResults())) {
+    bool constant = isa<AffineConstantExpr>(expr);
+    if (!constant && d < blockSizes.size() && blockSizes[d] > 1)
+      constant = isa<AffineConstantExpr>(simplifyAffineExpr(
+          expr.replaceDims(counters) % blockSizes[d], folded.getNumDims(),
+          folded.getNumSymbols()));
+    dims.push_back(constant);
+  }
   return dims;
+}
+
+/// Per dimension of `def` (type `ty`): the block size of a user block
+/// array_partition on it, 0 without one (N104).
+static SmallVector<int64_t> userBlockSizes(Operation *def, MemRefType ty) {
+  SmallVector<int64_t> sizes(ty.getRank(), 0);
+  auto entries = def->getAttrOfType<ArrayAttr>(kPartitionAttr);
+  if (!entries || !ty.hasStaticShape())
+    return sizes;
+  for (Attribute a : entries) {
+    auto entry = dyn_cast<DictionaryAttr>(a);
+    auto dim = entry ? entry.getAs<IntegerAttr>("dim") : IntegerAttr();
+    auto kind = entry ? entry.getAs<StringAttr>("kind") : StringAttr();
+    auto factor = entry ? entry.getAs<IntegerAttr>("factor") : IntegerAttr();
+    if (!dim || !kind || !factor || factor.getInt() <= 1 ||
+        kind.getValue() != "block")
+      continue;
+    for (int64_t d = 0; d < ty.getRank(); ++d)
+      if (dim.getInt() == d + 1 || dim.getInt() == 0) {
+        int64_t extent = ty.getDimSize(d);
+        sizes[d] = (extent + factor.getInt() - 1) / factor.getInt();
+      }
+  }
+  return sizes;
 }
 
 static SmallVector<bool> constantDimsOfIndices(ValueRange indices) {
@@ -849,7 +895,8 @@ static bool isStaticInitStore(Operation *store, Value stored) {
 static void analyzeConstantIndexUses(Value mem, unsigned rank,
                                      bool throughCalls,
                                      ConstantIndexInfo &info,
-                                     SmallPtrSetImpl<Value> &visited) {
+                                     SmallPtrSetImpl<Value> &visited,
+                                     ArrayRef<int64_t> blockSizes) {
   if (!visited.insert(mem).second)
     return;
   for (OpOperand &use : mem.getUses()) {
@@ -865,7 +912,7 @@ static void analyzeConstantIndexUses(Value mem, unsigned rank,
         return;
       }
       analyzeConstantIndexUses(callee.getArgument(index), rank, throughCalls,
-                               info, visited);
+                               info, visited, blockSizes);
       if (!info.complete)
         return;
       continue;
@@ -879,13 +926,14 @@ static void analyzeConstantIndexUses(Value mem, unsigned rank,
         isStaticInitStore(store, store.getValueToStore()))
       continue;
     if (auto load = dyn_cast<AffineLoadOp>(user)) {
-      dims = constantDimsOfAffine(load.getAffineMap(), load.getMapOperands());
+      dims = constantDimsOfAffine(load.getAffineMap(), load.getMapOperands(),
+                                  blockSizes);
       ++info.affineAccesses;
     } else if (auto store = dyn_cast<AffineStoreOp>(user);
                store && store.getMemRef() == mem &&
                store.getValueToStore() != mem) {
       dims = constantDimsOfAffine(store.getAffineMap(),
-                                  store.getMapOperands());
+                                  store.getMapOperands(), blockSizes);
       ++info.affineAccesses;
     } else if (auto load = dyn_cast<memref::LoadOp>(user)) {
       dims = constantDimsOfIndices(load.getIndices());
@@ -907,12 +955,13 @@ static void analyzeConstantIndexUses(Value mem, unsigned rank,
   }
 }
 
-static ConstantIndexInfo analyzeConstantIndices(Value mem, unsigned rank,
-                                                bool throughCalls) {
+static ConstantIndexInfo
+analyzeConstantIndices(Value mem, unsigned rank, bool throughCalls,
+                       ArrayRef<int64_t> blockSizes = {}) {
   ConstantIndexInfo info;
   info.constantDim.assign(rank, true);
   SmallPtrSet<Value, 4> visited;
-  analyzeConstantIndexUses(mem, rank, throughCalls, info, visited);
+  analyzeConstantIndexUses(mem, rank, throughCalls, info, visited, blockSizes);
   return info;
 }
 
@@ -945,6 +994,8 @@ struct AutomaticRules {
   bool globals = true;
   /// (b) over the accesses in the callees the array is passed to (N94).
   bool throughCalls = true;
+  /// (b) after a user block partition: a constant offset in the block (N104).
+  bool blockOffset = true;
 };
 
 /// Whether the only user storage pragma on `def` is `stream type=pipo`: Vitis
@@ -1157,8 +1208,11 @@ static AutomaticPartition decideAutomaticPartition(memref::AllocaOp alloca,
       return decision;
   }
 
+  SmallVector<int64_t> blockSizes;
+  if (afterUser && rules.blockOffset)
+    blockSizes = userBlockSizes(def, ty);
   ConstantIndexInfo info = analyzeConstantIndices(
-      alloca.getResult(), ty.getRank(), rules.throughCalls);
+      alloca.getResult(), ty.getRank(), rules.throughCalls, blockSizes);
   return decideFromConstantIndices(def, ty, info, rules, afterUser, pipo);
 }
 
@@ -1301,6 +1355,7 @@ struct InferVitisSplitArray
     rules.pipoStreams = cfgPartitioning->constantIndexPipoStreams;
     rules.globals = cfgPartitioning->constantIndexGlobals;
     rules.throughCalls = cfgPartitioning->constantIndexThroughCalls;
+    rules.blockOffset = cfgPartitioning->constantIndexBlockOffset;
     DenseSet<Value> decided;
     Builder builder(func.getContext());
     func.walk([&](memref::AllocaOp alloca) {
@@ -1422,8 +1477,10 @@ struct InferVitisSplitArray
         auto gg = dyn_cast<memref::GetGlobalOp>(use.getUser());
         if (!gg)
           return; // another kind of use: nothing is concluded
-        ConstantIndexInfo gi =
-            analyzeConstantIndices(gg.getResult(), rank, rules.throughCalls);
+        ConstantIndexInfo gi = analyzeConstantIndices(
+            gg.getResult(), rank, rules.throughCalls,
+            afterUser && rules.blockOffset ? userBlockSizes(def, ty)
+                                           : SmallVector<int64_t>());
         if (!gi.complete)
           return;
         info.accesses += gi.accesses;

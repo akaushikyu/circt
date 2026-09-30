@@ -423,6 +423,9 @@ struct PartitioningConfig {
   /// An index computed by division, remainder, shifts or bit operations on
   /// constants is a constant (VITIS_NOTES N97 (a)).
   bool constantIndexFoldDivision = true;
+  /// After a user block partition, rule (b) asks for a constant offset
+  /// inside the block, not a constant index (VITIS_NOTES N104).
+  bool constantIndexBlockOffset = true;
   /// An ap_fixed compound assignment (cgeist's hls.ap_compound_assign) to a
   /// bank chosen at run time writes that bank twice (VITIS_NOTES N38 R-cmpd).
   bool compoundAssignTwoStores = true;

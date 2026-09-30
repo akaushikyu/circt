@@ -82,7 +82,7 @@
       },
       "partitioning": {
         "policy": "vitis-td",
-        "constant_index": { "min_extent": 2, "max_extent": 64, "after_user_partition": true, "non_affine_arrays": true, "pipo_streams": true, "globals": true, "through_calls": true, "fold_division": true },
+        "constant_index": { "min_extent": 2, "max_extent": 64, "after_user_partition": true, "non_affine_arrays": true, "pipo_streams": true, "globals": true, "through_calls": true, "fold_division": true, "block_offset": true },
         "inference": {
           "target_ii": 1,
           "ports": { "any": 2, "read": 1, "write": 1 },

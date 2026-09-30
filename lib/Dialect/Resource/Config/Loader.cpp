@@ -977,6 +977,8 @@ void fillTool(const json::Object &t, ToolProfile &tool) {
       boolean(obj(pa, "constant_index"), "through_calls", true);
   h.partitioning.constantIndexFoldDivision =
       boolean(obj(pa, "constant_index"), "fold_division", true);
+  h.partitioning.constantIndexBlockOffset =
+      boolean(obj(pa, "constant_index"), "block_offset", true);
   h.partitioning.compoundAssignTwoStores =
       boolean(pa, "compound_assign_two_stores", true);
   h.partitioning.blockBankFromLoopRange =
