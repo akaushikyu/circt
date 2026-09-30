@@ -123,13 +123,17 @@ struct MathCoreRecord {
 /// with `config`; the cores of a function are built once per instance of it
 /// (`instancesOf`). Unlisted (function, type) pairs get a record with status
 /// "unknown_cost" and BRAM 0; `warn` is called once per such pair that has a
-/// live, non-constant call.
+/// live, non-constant call. `romBlocks` prices a one-read ROM of (words,
+/// bits); with it, an unlisted ap_fixed exp whose function records its
+/// tables (hls.core_tables) is priced as those tables (VITIS_NOTES N106).
 std::vector<MathCoreRecord>
 analyzeMathCores(mlir::ModuleOp module, const MathCostConfig &config,
                  llvm::function_ref<bool(mlir::Operation *)> covers,
                  llvm::function_ref<unsigned(mlir::Operation *)> instancesOf,
                  llvm::function_ref<void(mlir::Location, const std::string &)>
-                     warn);
+                     warn,
+                 llvm::function_ref<int64_t(int64_t, unsigned)> romBlocks =
+                     nullptr);
 
 /// The "math" object of a math_core debug record (JSON v2, additive).
 llvm::json::Object mathCoreJson(const MathCoreRecord &r);

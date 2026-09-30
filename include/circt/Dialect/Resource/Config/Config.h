@@ -517,6 +517,9 @@ struct HlsToolConfig {
   /// computed at run time (a core); a plain local or a global is a ROM
   /// (VITIS_NOTES N60).
   bool localStructTablesAtRunTime = true;
+  /// An ap_fixed hls::exp without a cost table entry is priced as the ROM
+  /// tables of its body (VITIS_NOTES N106).
+  bool fixedExpTablesWhenUnlisted = true;
 
   /// The implicit buffer of `protocol` (e.g. "axi4-mm"), or null.
   const ImplicitBufferConfig *implicitBuffer(llvm::StringRef protocol) const;

@@ -606,8 +606,10 @@
         "honour_inline_off": true
       },
       "math_library": {
+        "_fixed_exp_tables_when_unlisted": "bool: An hls::exp of ap_fixed / ap_ufixed whose (function, type) the cost table does not list is priced as the ROM tables its body reads (recorded by --lower-polygeist-subindex as hls.core_tables: the branch the template parameters select in hls_exp_apfixed.h), each a one-read ROM at the band formula, below the block threshold 0; one set per instance (per_concurrent_call); a measured Vitis rule (VITIS_NOTES N106; kernels w9r14p_ex_21_9 / ex_24_12 5, ex_32_8 7; off: unknown cost, 0) [N-15]",
         "_local_struct_tables_at_run_time": "bool: A table filled from math calls of the loop index is evaluated at compile time when it is a plain local or a global (also through one-element register temporaries and per-bank stores), but computed at run time (a core) when it is a member memory of a local struct array (VITIS_NOTES N60); off: the stores are judged as before W9r7 [N-15]",
         "_table": "string: Path of the math-core cost table (math_costs.json format; relative to the file that sets it); empty: math calls cost nothing (--bram-analysis=math-costs= overrides) [S-04, N-15]",
+        "fixed_exp_tables_when_unlisted": true,
         "local_struct_tables_at_run_time": true,
         "table": ""
       },

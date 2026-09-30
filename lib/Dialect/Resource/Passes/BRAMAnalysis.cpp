@@ -3626,6 +3626,27 @@ struct BRAMAnalysisLoopSchedule
                [&](Location loc, const std::string &msg) {
                  mlir::emitWarning(loc)
                      << "--bram-analysis: math-costs: " << msg;
+               },
+
+               [&](int64_t words, unsigned bits) -> int64_t {
+                 circt::hlsest::MemoryRequest rom;
+                 rom.words = words;
+                 rom.writeWidth = bits;
+                 rom.readWidths.push_back(bits);
+                 rom.readOnly = true;
+                 rom.needsInit = true;
+                 circt::hlsest::TierChoice candidateValue =
+                     models.selector->select(rom, config().device, {});
+                 const circt::hlsest::DeviceMemory *mem =
+                     candidateValue.memory.empty()
+                         ? nullptr
+                         : config().device.memory(candidateValue.memory);
+                 if (!mem)
+                   return 0;
+                 return mapBlocks(
+                     *models.mapper, *mem,
+                     config().tool.hls.memoryArchitecture.pricedWide, words,
+                     bits);
                })) {
         printMathCoreLine(memoryOp, llvm::outs());
         total += memoryOp.bram;

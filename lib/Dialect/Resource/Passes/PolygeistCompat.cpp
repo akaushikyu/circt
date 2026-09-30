@@ -21,6 +21,7 @@
 #include "mlir/Interfaces/SideEffectInterfaces.h"
 #include "mlir/Transforms/InliningUtils.h"
 #include "llvm/ADT/MapVector.h"
+#include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/SmallVector.h"
 #include <array>
 
@@ -381,6 +382,59 @@ static unsigned sinkAccessesIntoViewConditionals(ModuleOp module) {
 /// it is dropped here, before any analysis, together with the private
 /// symbols nothing else references (the tables, the library's helpers).
 /// A module without the attribute (every other shim) is unchanged.
+///
+/// Before a body goes, the ROM tables it reads are recorded on the function
+/// (`hls.core_tables`, [[words, bits], ...]): the initialised globals the
+/// body and the defined functions it calls reference and never write. cgeist
+/// has already folded the template's branch (`if (I_s_ == 5)` in
+/// hls_exp_apfixed.h), so these are the tables of the branch the type
+/// selects; --bram-analysis prices them for an ap_fixed exp that has no cost
+/// table entry (VITIS_NOTES N106).
+static void recordCoreTables(func::FuncOp core, SymbolTable &symbols) {
+  SmallVector<Attribute> tables;
+  SmallPtrSet<Operation *, 8> seenFns, seenGlobals, written;
+  SmallVector<memref::GlobalOp> referenced;
+  SmallVector<func::FuncOp> work{core};
+  seenFns.insert(core);
+  while (!work.empty()) {
+    func::FuncOp fn = work.pop_back_val();
+    fn.walk([&](Operation *op) {
+      if (auto call = dyn_cast<func::CallOp>(op)) {
+        auto callee = symbols.lookup<func::FuncOp>(call.getCallee());
+        if (callee && !callee.isExternal() &&
+            seenFns.insert(callee.getOperation()).second)
+          work.push_back(callee);
+        return;
+      }
+      auto globalUse = dyn_cast<memref::GetGlobalOp>(op);
+      if (!globalUse)
+        return;
+      auto global = symbols.lookup<memref::GlobalOp>(globalUse.getName());
+      if (!global)
+        return;
+      if (seenGlobals.insert(global.getOperation()).second)
+        referenced.push_back(global);
+      for (Operation *user : globalUse->getUsers())
+        if (isa<memref::StoreOp, affine::AffineStoreOp>(user))
+          written.insert(global.getOperation());
+    });
+  }
+  Builder b(core.getContext());
+  for (memref::GlobalOp globalOp : referenced) {
+    MemRefType memRefType = globalOp.getType();
+    if (written.contains(globalOp.getOperation()) ||
+        !globalOp.getInitialValue() || !memRefType.hasStaticShape() ||
+        !memRefType.getElementType().isIntOrFloat())
+      continue;
+    tables.push_back(b.getArrayAttr(
+        {b.getI64IntegerAttr(memRefType.getNumElements()),
+         b.getI64IntegerAttr(memRefType.getElementTypeBitWidth()),
+         b.getStringAttr(globalOp.getSymName())}));
+  }
+  if (!tables.empty())
+    core->setAttr("hls.core_tables", b.getArrayAttr(tables));
+}
+
 static void dropMathCoreBodies(ModuleOp module) {
   SmallVector<func::FuncOp> cores;
   for (func::FuncOp fieldValue : module.getOps<func::FuncOp>())
@@ -388,6 +442,11 @@ static void dropMathCoreBodies(ModuleOp module) {
       cores.push_back(fieldValue);
   if (cores.empty())
     return;
+  {
+    SymbolTable symbols(module);
+    for (func::FuncOp fieldValue : cores)
+      recordCoreTables(fieldValue, symbols);
+  }
 
   SmallVector<StringAttr> candidates;
   auto collect = [&](Region &body) {

@@ -8,6 +8,8 @@
 #include "circt/Dialect/Resource/Interfaces/MemoryDS.h"
 #include "circt/Dialect/Resource/Passes/CallInstances.h"
 #include "circt/Dialect/Resource/Passes/LoopPragmas.h"
+#include <algorithm>
+#include <deque>
 
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
@@ -953,7 +955,8 @@ std::vector<MathCoreRecord>
 analyzeMathCores(ModuleOp module, const MathCostConfig &config,
                  llvm::function_ref<bool(Operation *)> covers,
                  llvm::function_ref<unsigned(Operation *)> instancesOf,
-                 llvm::function_ref<void(Location, const std::string &)> warn) {
+                 llvm::function_ref<void(Location, const std::string &)> warn,
+                 llvm::function_ref<int64_t(int64_t, unsigned)> romBlocks) {
   std::vector<Site> sites;
   module.walk([&](Operation *op) {
     if (!covers(op) || !op->getParentOfType<func::FuncOp>())
@@ -973,6 +976,55 @@ analyzeMathCores(ModuleOp module, const MathCostConfig &config,
     }
   });
 
+  std::deque<MathCostEntry> synthesised;
+  llvm::StringMap<const MathCostEntry *> synthesisedFor;
+  auto tableEntry = [&](const Site &s) -> const MathCostEntry * {
+    if (!romBlocks ||
+        !circt::hlsest::Config::get().tool.hls.fixedExpTablesWhenUnlisted ||
+        s.function != "exp" ||
+        !(StringRef(s.type).starts_with("ap_fixed<") ||
+          StringRef(s.type).starts_with("ap_ufixed<")))
+      return nullptr;
+    auto call = dyn_cast<func::CallOp>(s.op);
+    func::FuncOp callee = call ? externalCallee(call) : func::FuncOp();
+    auto tables =
+        callee ? callee->getAttrOfType<ArrayAttr>("hls.core_tables") : nullptr;
+    if (!tables)
+      return nullptr;
+    auto [it, inserted] = synthesisedFor.try_emplace(callee.getName(), nullptr);
+    if (!inserted)
+      return it->second;
+    MathCostEntry entryValue;
+    entryValue.index =
+        static_cast<unsigned>(config.entries.size() + synthesised.size());
+    entryValue.function = s.function;
+    entryValue.type = s.type;
+    entryValue.coreKind = "library_module";
+    entryValue.instancing = "per_concurrent_call";
+
+    std::string wi = s.type.substr(s.type.find('<') + 1);
+    wi = wi.substr(0, wi.find('>'));
+    std::replace(wi.begin(), wi.end(), ',', '_');
+    entryValue.cores.push_back("exp_" + wi + "_s");
+    for (Attribute typeValue : tables) {
+      auto arrayValue = dyn_cast<ArrayAttr>(typeValue);
+      if (!arrayValue || arrayValue.size() < 2)
+        continue;
+      auto words = dyn_cast<IntegerAttr>(arrayValue[0]);
+      auto bits = dyn_cast<IntegerAttr>(arrayValue[1]);
+      if (!words || !bits)
+        continue;
+      int64_t blocks =
+          romBlocks(words.getInt(), static_cast<unsigned>(bits.getInt()));
+      entryValue.bram += blocks;
+      if (blocks && entryValue.tableName.empty() && arrayValue.size() > 2)
+        if (auto elementCount = dyn_cast<StringAttr>(arrayValue[2]))
+          entryValue.tableName = elementCount.getValue().str();
+    }
+    synthesised.push_back(std::move(entryValue));
+    return it->second = &synthesised.back();
+  };
+
   LiveValues lv;
   IndexOnlyValues indexValue;
   llvm::DenseMap<Block *, llvm::DenseMap<Operation *, unsigned>> stretchOf;
@@ -988,6 +1040,8 @@ analyzeMathCores(ModuleOp module, const MathCostConfig &config,
         s.argForm = "constant exponent";
     }
     s.entry = config.lookup(s.function, s.type, s.argForm);
+    if (!s.entry)
+      s.entry = tableEntry(s);
     if (!s.folded &&
         llvm::all_of(
             s.args,
@@ -1041,6 +1095,7 @@ analyzeMathCores(ModuleOp module, const MathCostConfig &config,
   std::vector<MathCoreRecord> records;
   std::map<std::string, size_t> recordOf;
   std::vector<std::vector<size_t>> members;
+  std::vector<const MathCostEntry *> recordEntries;
   auto keyOf = [](const Site &s) {
     std::string keyValue = s.func + "|";
     if (s.entry)
@@ -1062,8 +1117,10 @@ analyzeMathCores(ModuleOp module, const MathCostConfig &config,
       resultValue.typeSource = owner.typeSource;
       resultValue.loc = locText(owner.op->getLoc());
       resultValue.configPath = config.path;
+      recordEntries.push_back(owner.entry);
       if (const MathCostEntry *entryValue = owner.entry) {
-        resultValue.entry = entryValue->index;
+        if (entryValue->index < config.entries.size())
+          resultValue.entry = entryValue->index;
         resultValue.entryInfo = *entryValue;
         resultValue.arguments = entryValue->arguments;
         resultValue.coreKind = entryValue->coreKind;
@@ -1086,8 +1143,7 @@ analyzeMathCores(ModuleOp module, const MathCostConfig &config,
   std::set<std::string> warnedPairs;
   for (size_t ri = 0; ri < records.size(); ++ri) {
     MathCoreRecord &resultValue = records[ri];
-    const MathCostEntry *entryValue =
-        resultValue.entry ? &config.entries[*resultValue.entry] : nullptr;
+    const MathCostEntry *entryValue = recordEntries[ri];
 
     std::vector<Operation *> pipeOrder;
     llvm::DenseMap<Operation *, SmallVector<const Site *>> perPipe;

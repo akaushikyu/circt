@@ -1048,6 +1048,8 @@ void fillTool(const json::Object &t, ToolProfile &tool) {
   h.mathLibraryTable = str(obj(hls, "math_library"), "table");
   h.localStructTablesAtRunTime =
       boolean(obj(hls, "math_library"), "local_struct_tables_at_run_time", true);
+  h.fixedExpTablesWhenUnlisted = boolean(
+      obj(hls, "math_library"), "fixed_exp_tables_when_unlisted", true);
 
   const json::Object &be = obj(t, "backend");
   tool.backend.id = str(be, "id");
