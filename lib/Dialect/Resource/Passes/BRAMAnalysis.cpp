@@ -922,6 +922,70 @@ static bool onExclusivePaths(Operation *a, Operation *buildPoint,
                          hoistedArmsOf(buildPoint));
 }
 
+static bool bankAccessIndices(Operation *op, Value &mem,
+                              SmallVectorImpl<Value> &indices) {
+  if (auto ld = dyn_cast<memref::LoadOp>(op)) {
+    mem = ld.getMemRef();
+    indices.assign(ld.getIndices().begin(), ld.getIndices().end());
+    return true;
+  }
+  if (auto st = dyn_cast<memref::StoreOp>(op)) {
+    mem = st.getMemRef();
+    indices.assign(st.getIndices().begin(), st.getIndices().end());
+    return true;
+  }
+  if (auto se = dyn_cast<circt::hls_analysis::StoreEnableOp>(op)) {
+    mem = se.getMemref();
+    indices.assign(se.getIndices().begin(), se.getIndices().end());
+    return true;
+  }
+  return false;
+}
+
+static bool invariantInPipeline(ArrayRef<const AccessSummary *> group,
+                                Operation *scope) {
+  SmallVector<Value> first;
+  bool haveFirst = false;
+  for (const AccessSummary *a : group) {
+    Value mem;
+    SmallVector<Value> indexValue;
+    if (a->via || !bankAccessIndices(a->op, mem, indexValue))
+      return false;
+    auto memRefType = dyn_cast<MemRefType>(mem.getType());
+    if (!memRefType || !memRefType.hasStaticShape() ||
+        indexValue.size() != static_cast<size_t>(memRefType.getRank()))
+      return false;
+    for (auto [dimensionIndex, valueHandle] : llvm::enumerate(indexValue)) {
+      if (memRefType.getDimSize(dimensionIndex) == 1)
+        continue;
+      Region *resultValue = valueHandle.getParentRegion();
+      if (resultValue && scope->isAncestor(resultValue->getParentOp()))
+        return false;
+      if (haveFirst && first[dimensionIndex] != valueHandle)
+        return false;
+    }
+    if (!haveFirst) {
+      first = indexValue;
+      haveFirst = true;
+    }
+  }
+  return haveFirst;
+}
+
+static bool loopBetween(Operation *a, Operation *buildPoint) {
+  for (Operation *op = a->getNextNode(); op && op != buildPoint;
+       op = op->getNextNode()) {
+    WalkResult resultValue = op->walk([](Operation *inner) {
+      return isa<LoopLikeOpInterface, LoopSchedulePipelineOp>(inner)
+                 ? WalkResult::interrupt()
+                 : WalkResult::advance();
+    });
+    if (resultValue.wasInterrupted())
+      return true;
+  }
+  return false;
+}
+
 static std::string sameCycleAccesses(ArrayRef<AccessSummary> accesses,
                                      SeqContext *seq) {
   using ProcessScope = std::pair<Operation *, Operation *>;
@@ -929,11 +993,19 @@ static std::string sameCycleAccesses(ArrayRef<AccessSummary> accesses,
   for (const AccessSummary &a : accesses)
     if (!llvm::is_contained(scopes, ProcessScope{a.via, a.scope}))
       scopes.push_back({a.via, a.scope});
+  const bool promote =
+      config().tool.hls.dataflowChannels.promotedInvariantAccesses;
+  SmallVector<Operation *> promoted;
   for (auto [via, scope] : scopes) {
     SmallVector<const AccessSummary *> group;
     for (const AccessSummary &a : accesses)
       if (a.scope == scope && a.via == via)
         group.push_back(&a);
+    if (promote && !via && group.front()->ii != 0 && scope &&
+        invariantInPipeline(group, scope)) {
+      promoted.push_back(scope);
+      continue;
+    }
     if (group.size() < 2)
       continue;
     unsigned ii = group.front()->ii;
@@ -962,6 +1034,16 @@ static std::string sameCycleAccesses(ArrayRef<AccessSummary> accesses,
                accessText(a) + " + " + accessText(buildPoint);
       }
   }
+
+  for (Operation *p1 : promoted)
+    for (Operation *p2 : promoted)
+      if (p1 != p2 && p1->getBlock() == p2->getBlock() &&
+          p1->isBeforeInBlock(p2) && !loopBetween(p1, p2))
+        return "the register store-back after the pipelined loop at " +
+               locString(p1->getLoc()) + " and the preload before the one at " +
+               locString(p2->getLoc()) +
+               " share a state (VITIS_NOTES N105: loop-invariant accesses "
+               "promoted to registers)";
   return {};
 }
 

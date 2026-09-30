@@ -940,6 +940,8 @@ void fillTool(const json::Object &t, ToolProfile &tool) {
   h.dataflowChannels.defaultBlocks = integer(dc, "default_blocks");
   h.dataflowChannels.throughNestedRegions =
       boolean(dc, "through_nested_regions", true);
+  h.dataflowChannels.promotedInvariantAccesses =
+      boolean(dc, "promoted_invariant_accesses", true);
 
   const json::Object &pd = obj(hls, "pipeline_decision");
   h.pipelineDecision.policy = str(pd, "policy");

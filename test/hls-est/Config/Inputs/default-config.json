@@ -512,9 +512,11 @@
       "dataflow_channels": {
         "_default_blocks": "uint, blocks: Blocks of a channel without a stream type=pipo depth [P-08]",
         "_enabled": "bool: Price an array one process writes and a later one reads as a PIPO (--bram-dataflow-channels overrides) [P-08]",
+        "_promoted_invariant_accesses": "bool: The accesses a pipelined loop makes to a channel bank at one address that does not change in the loop (a read-modify-write of a completely partitioned dimension whose other index is the enclosing row: X[i][col[a]] += v) are promoted to a register: loaded before the loop, stored after it, so they give no second port inside the loop; two such loops that follow each other in one block without a loop between them do give one (the store-back of the first and the preload of the second share a state); a measured Vitis rule (VITIS_NOTES N105; kernels w9r14p_pp_unr4 / pp_nomask separate, pp_mid single; class_ece8893 mizanur Lab3; off: any two accesses of one pipelined iteration)",
         "_through_nested_regions": "bool: An array exchanged by the processes of a dataflow region stays a channel of that region when a process accesses it from inside its own nested dataflow region (VITIS_NOTES N84; off: no channel) [P-08]",
         "default_blocks": 2,
         "enabled": true,
+        "promoted_invariant_accesses": true,
         "through_nested_regions": true
       },
       "folding": {

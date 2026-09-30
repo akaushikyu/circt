@@ -364,6 +364,11 @@ struct DataflowChannelConfig {
   /// that region when one process accesses it from inside its own nested
   /// dataflow region (VITIS_NOTES N84); off: such an array is no channel.
   bool throughNestedRegions = true;
+  /// A pipelined loop's accesses of a channel bank at one loop-invariant
+  /// address are registers (load before, store after the loop): they give
+  /// no second port inside the loop, and two such loops that follow each
+  /// other without a loop boundary do (VITIS_NOTES N105).
+  bool promotedInvariantAccesses = true;
 };
 
 struct PipelineDecisionConfig {
