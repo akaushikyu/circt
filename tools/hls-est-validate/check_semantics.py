@@ -878,6 +878,7 @@ REF_THUNK_REAL = r'''
 #include <cstring>
 #include <tuple>
 #include <type_traits>
+#include <memory>
 #include <vector>
 #include "cs_spec.h"
 // --- cs: the design's sources go here ---
@@ -955,11 +956,15 @@ template <class CsE> struct CsElem<CsE, 0> {   // any other element: the same by
   }
 };
 template <class CsB> struct CsBuf {   // the native copy of one memref argument, guard zones included
-  std::vector<CsB> cs_v;
+  // An array new[], not a std::vector: an element type that cannot be moved (TAPA's istream / ostream,
+  // auto_ntt) needs only a default constructor this way (W9r14-impl).
+  std::unique_ptr<CsB[]> cs_v;
+  uint64_t cs_size = 0;
   void cs_fill(int cs_a, void *cs_p) {
     const CsArg &cs_arg = cs_args[cs_a];
     uint64_t cs_n = cs_arg.elems + 2 * (uint64_t)cs_arg.guard;
-    cs_v.resize(cs_n);
+    cs_v.reset(new CsB[cs_n]());
+    cs_size = cs_n;
     const unsigned char *cs_base = (const unsigned char *)cs_p - (uint64_t)cs_arg.guard * cs_arg.esize;
     for (uint64_t cs_e = 0; cs_e < cs_n; ++cs_e)
       CsElem<CsB>::cs_in(cs_a, &cs_v[cs_e], cs_base + cs_e * cs_arg.esize, cs_arg.esize);
@@ -967,10 +972,10 @@ template <class CsB> struct CsBuf {   // the native copy of one memref argument,
   void cs_back(int cs_a, void *cs_p) {
     const CsArg &cs_arg = cs_args[cs_a];
     unsigned char *cs_base = (unsigned char *)cs_p - (uint64_t)cs_arg.guard * cs_arg.esize;
-    for (uint64_t cs_e = 0; cs_e < cs_v.size(); ++cs_e)
+    for (uint64_t cs_e = 0; cs_e < cs_size; ++cs_e)
       CsElem<CsB>::cs_out(cs_a, cs_base + cs_e * cs_arg.esize, &cs_v[cs_e], cs_arg.esize);
   }
-  CsB *cs_first(int cs_a) { return cs_v.data() + cs_args[cs_a].guard; }
+  CsB *cs_first(int cs_a) { return cs_v.get() + cs_args[cs_a].guard; }
 };
 template <class CsT> struct CsBase {
   typedef typename std::remove_cv<typename std::remove_all_extents<CsT>::type>::type cs_type;
@@ -1714,6 +1719,53 @@ MATH_MARKER_BUILTIN = {"rsqrt": "sqrt", "sinpi": "sin", "cospi": "cos"}
 LL_MATH_MARKER = re.compile(r"^declare\s+double\s+@__hlsest_math_(\w+)\(([^)]*)\)", re.M)
 
 
+def undefined_symbol_stubs(names, ll_text):
+    """(LLVM IR defining the undefined data globals zero-initialised, C defining the undefined functions as
+    stubs that abort) for the link of the candidate; None when a name is neither."""
+    types = "\n".join(l for l in ll_text.splitlines() if re.match(r"%[\w.\"]+ = type ", l))
+    globs, funcs = [], []
+    for n in names:
+        m = re.search(r"(?m)^@" + re.escape(n) + r" = external (?:dso_local )?global (.+?)(?:, align \d+)?$",
+                      ll_text)
+        if m:
+            globs.append(f"@{n} = weak global {m.group(1)} zeroinitializer")
+        elif re.search(r"(?m)^declare [^@]*@" + re.escape(n) + r"\(", ll_text) and re.fullmatch(r"\w+", n):
+            funcs.append(n)
+        else:
+            return None
+    ll = (types + "\n" + "\n".join(globs) + "\n") if globs else ""
+    c = ("#include <stdlib.h>\n" + "".join(f"__attribute__((weak)) void {f}(void) {{ abort(); }}\n"
+                                           for f in funcs)) if funcs else ""
+    return ll, c
+
+
+def design_sources_defining(ddir, srcs, names):
+    """Sources under the design directory, other than `srcs` and without a main(), that define one of the
+    functions `names` (plain or qualified names: a definition `name(...) {`)."""
+    have = {os.path.normpath(str(Path(ddir) / s)) for s in srcs}
+    names_have = {Path(s).name for s in srcs}
+    roots = [Path(ddir)]
+    # The cgeist lit inputs (Polygeist tools/cgeist/Test/HLS/hlsfactory/Inputs/<dataset>/...) hold only the
+    # files the cgeist command reads; the rest of the design is in the catalogue.
+    parts = Path(ddir).parts
+    if "hlsfactory" in parts and "Inputs" in parts:
+        i = parts.index("Inputs")
+        roots.append(Path(C.DEFAULT_HLSFACTORY_ROOT, "hlsfactory", "hls_dataset_sources", *parts[i + 1:]))
+    out = []
+    for f in sorted(p for r in roots if r.is_dir() for p in r.rglob("*")):
+        if f.suffix not in (".c", ".cc", ".cpp") or os.path.normpath(str(f)) in have or has_main(f) or \
+                (f.parent != Path(ddir) and f.name in names_have):
+            continue
+        try:
+            text = f.read_text(errors="replace")
+        except OSError:
+            continue
+        if any(re.search(r"\b" + re.escape(n.split("::")[-1]) + r"\s*\([^;{]*\)\s*(const\s*)?\{", text)
+               for n in names):
+            out.append(os.path.relpath(str(f), str(ddir)) if Path(ddir) in f.parents else str(f))
+    return out
+
+
 def math_marker_stubs(ll_text):
     """C definitions of the math-core markers the lowered candidate declares (empty when none)."""
     out = []
@@ -2024,8 +2076,36 @@ class Checker:
             rc, so, se, _ = run(common + [str(wd / src), "-o", str(wd / obj)])
             if rc != 0:
                 return f"driver {src} does not compile: " + first_err(se)
-        rc, so, se, _ = run([GXX, str(wd / "cs_main.o"), str(wd / "cand_thunk.o"), str(wd / "cand.o"),
-                             *extra_objs, "-lm", "-o", str(wd / "cand.exe")])
+        link = [GXX, str(wd / "cs_main.o"), str(wd / "cand_thunk.o"), str(wd / "cand.o"), *extra_objs, "-lm",
+                "-o", str(wd / "cand.exe")]
+        rc, so, se, _ = run(link)
+        if rc != 0:
+            # Symbols the MLIR declares but no file cgeist compiled defines (W9r14-impl, DoD 1): a design
+            # global defined in another source of the design without an initialiser (flowgnn gcn / gin
+            # `edge_attrs` in globals.cc) is zero-initialised there, so a zero-initialised definition is the
+            # same object; a function only an uncalled function of the module references (a testbench
+            # helper, gin_vn_base's fetch_one_graph / load_weights) gets a stub that aborts, so a run that
+            # does call it fails instead of passing.
+            _, _, se_raw, _ = run(link[:-3] + ["-Wl,--no-demangle"] + link[-3:])
+            und = sorted(set(re.findall(r"undefined reference to [`']([^'`]+)'", se_raw)))
+            stubs = undefined_symbol_stubs(und, ll_text) if und else None
+            if stubs:
+                ll_stub, c_stub = stubs
+                objs = []
+                if ll_stub:
+                    (wd / "cand_globals.ll").write_text(ll_stub)
+                    rc2, _, se2, _ = run([LLC, "-O0", "-filetype=obj", "-relocation-model=pic",
+                                          str(wd / "cand_globals.ll"), "-o", str(wd / "cand_globals.o")])
+                    if rc2 == 0:
+                        objs.append(str(wd / "cand_globals.o"))
+                if c_stub:
+                    (wd / "cand_stubs.c").write_text(c_stub)
+                    rc2, _, se2, _ = run([GCC, "-c", "-O0", "-w", str(wd / "cand_stubs.c"), "-o",
+                                          str(wd / "cand_stubs.o")])
+                    if rc2 == 0:
+                        objs.append(str(wd / "cand_stubs.o"))
+                if objs:
+                    rc, so, se, _ = run(link[:-3] + objs + link[-3:])
         if rc != 0:
             (wd / "cand.link.err").write_text(se)
             und = re.findall(r"undefined reference to [`']([^'`]+)'", se)
@@ -2376,6 +2456,20 @@ class Checker:
             link = [SAN_LINKER if san else CLANGXX, *san, str(wd / "cs_main.o"), *map(str, objs), "-lm", "-o",
                     str(exe)]
         rc, so, se, _ = run(link)
+        if rc != 0:
+            # A function the design's own sources define in a file the cgeist command does not name (a
+            # testbench helper main.cpp calls: GNN-virtual-node gin_vn_base's fetch_one_graph /
+            # load_weights in load_weights_graph.cpp; W9r14-impl, DoD 1): compile that file too.
+            und = sorted(set(re.findall(r"undefined reference to [`']([^'`(]+)", se)))
+            extra_srcs = design_sources_defining(ddir, srcs, und) if und else []
+            added = []
+            for s2 in extra_srcs:
+                o2 = compile_one(s2)
+                if o2 is None:
+                    return None
+                added.append(str(o2))
+            if added:
+                rc, so, se, _ = run(link[:-3] + added + link[-3:])
         if rc != 0:
             (wd / f"{tag}.link.err").write_text(se)
             und = re.findall(r"undefined reference to [`']([^'`]+)'", se)
