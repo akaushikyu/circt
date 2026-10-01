@@ -444,10 +444,44 @@ LogicalResult ModuloProblem::verify() {
 
   // Don't call SharedOperatorsProblem::verify() here to prevent redundant
   // verification of the base problem.
+  // One pass over the operations for every limited resource (calling
+  // verifyUtilization per resource is quadratic: hls-est's per-bank port
+  // resources of a large pipeline, hp_fft_hls n1024 UF32); the first
+  // oversubscribed resource in getResourceTypes() order is reported, as
+  // verifyUtilization would.
+  unsigned ii = *getInitiationInterval();
+  llvm::DenseMap<ResourceType, llvm::SmallDenseMap<unsigned, unsigned>> counts;
   for (auto rsrc : getResourceTypes())
-    if (failed(verifyUtilization(rsrc)))
-      return failure();
-
+    if (getLimit(rsrc))
+      counts[rsrc];
+  if (counts.empty())
+    return success();
+  llvm::SmallVector<ResourceType, 4> seen;
+  for (auto *op : getOperations()) {
+    auto maybeRsrcs = getLinkedResourceTypes(op);
+    if (!maybeRsrcs)
+      continue;
+    seen.clear();
+    for (ResourceType rsrc : *maybeRsrcs) {
+      if (llvm::is_contained(seen, rsrc))
+        continue; // an operation counts once per resource
+      seen.push_back(rsrc);
+      auto it = counts.find(rsrc);
+      if (it != counts.end())
+        ++it->second[*getStartTime(op) % ii];
+    }
+  }
+  for (auto rsrc : getResourceTypes()) {
+    auto it = counts.find(rsrc);
+    if (it == counts.end())
+      continue;
+    unsigned limit = *getLimit(rsrc);
+    // The first congruence class over the limit in the map's order, as
+    // verifyUtilization iterates its own map built in the same order.
+    for (auto &kv : it->second)
+      if (kv.second > limit)
+        return verifyUtilization(rsrc);
+  }
   return success();
 }
 
