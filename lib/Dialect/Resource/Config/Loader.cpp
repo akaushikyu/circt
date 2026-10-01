@@ -950,6 +950,8 @@ void fillTool(const json::Object &t, ToolProfile &tool) {
   h.pipelineDecision.flattenAcrossCalls = boolean(pd, "flatten_across_calls");
   h.pipelineDecision.sinkParentCode =
       boolean(pd, "sink_parent_code", true);
+  h.pipelineDecision.sinkParentTrailingCode =
+      boolean(pd, "sink_parent_trailing_code", true);
   h.pipelineDecision.foldUnrolledGuards =
       boolean(pd, "fold_unrolled_guards", true);
   h.pipelineDecision.pipelineOffSequential =

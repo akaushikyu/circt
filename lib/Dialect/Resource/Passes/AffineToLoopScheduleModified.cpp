@@ -135,6 +135,8 @@ private:
 
   void uniqueGlobalRefs();
   void sinkFlattenedParentCode();
+  void sinkTrailingParentCode(AffineForOp candidateValue,
+                              ArrayRef<AffineForOp> chain);
 
   void hoistInvariantLoads();
   void tagMemoryRecurrences();
@@ -201,6 +203,13 @@ private:
                      "the pipelined body under a first-iteration guard: "
                      "Vitis allocates its ports in the pipeline "
                      "(VITIS_NOTES N65)"),
+      llvm::cl::init(true)};
+  Option<bool> sinkParentTrailingCode{
+      *this, "sink-flattened-parent-trailing-code",
+      llvm::cl::desc("Move the straight-line code after the child loop of "
+                     "a parent flattened into a pipelined loop into the "
+                     "pipelined body under a last-iteration guard "
+                     "(VITIS_NOTES N97 (b))"),
       llvm::cl::init(true)};
   Option<bool> mergeIfElse{
       *this, "merge-if-else-accesses",
@@ -606,10 +615,9 @@ static AddrRelation compareAddresses(const AccessAddr &a,
       diff;
   AffineValueMap::difference(va, vb, &diff);
   bool allZero = true;
-  for (unsigned dimensionIndex = 0, elementCount = diff.getNumResults();
-       dimensionIndex < elementCount; ++dimensionIndex) {
-    auto candidateValue =
-        dyn_cast<AffineConstantExpr>(diff.getResult(dimensionIndex));
+  for (unsigned d = 0, elementCount = diff.getNumResults(); d < elementCount;
+       ++d) {
+    auto candidateValue = dyn_cast<AffineConstantExpr>(diff.getResult(d));
     if (!candidateValue)
       allZero = false;
     else if (candidateValue.getValue() != 0)
@@ -2005,7 +2013,8 @@ void AffineToLoopSchedule::sinkFlattenedParentCode() {
         break;
       chain.push_back(portValue);
     }
-    for (unsigned lowerIndex = 1; lowerIndex < chain.size(); ++lowerIndex) {
+    for (unsigned lowerIndex = 1; sinkParentCode && lowerIndex < chain.size();
+         ++lowerIndex) {
       AffineForOp parent = chain[lowerIndex];
       Operation *below = chain[lowerIndex - 1];
       if (parent.getNumIterOperands() != 0)
@@ -2074,6 +2083,91 @@ void AffineToLoopSchedule::sinkFlattenedParentCode() {
           "hls.flattened_parent_code",
           buildPoint.getI64IntegerAttr(static_cast<int64_t>(lowerIndex)));
     }
+    if (sinkParentTrailingCode)
+      sinkTrailingParentCode(candidateValue, chain);
+  }
+}
+
+/// VITIS_NOTES N97 (b) (kernel w9r13p_st_row; class_ece8893 anuvab / ayush
+/// lab2 `rOut`): the code after the child loop in a flattened parent's body
+/// runs in the flattened pipeline too, in the last iteration of the loops
+/// below the parent: `for i { for j (pipelined, flattened) t.d[j] = ..;
+/// s.write(t); }` packs t into the stream word inside the i x j pipeline
+/// (Vitis t RAM_1WNR 16 copies). Moves it to the end of C's body under
+/// `affine.if` (every loop from the parent's child down to C at its last
+/// iteration). Only code without loops (a call is allowed when its callee
+/// has no body: a stream method), whose values nothing before it uses, in
+/// parents without iter_args, and only when it accesses memory.
+void AffineToLoopSchedule::sinkTrailingParentCode(AffineForOp candidateValue,
+                                                  ArrayRef<AffineForOp> chain) {
+  for (unsigned lowerIndex = 1; lowerIndex < chain.size(); ++lowerIndex) {
+    AffineForOp parent = chain[lowerIndex];
+    Operation *below = chain[lowerIndex - 1];
+    if (parent.getNumIterOperands() != 0)
+      break;
+    SmallVector<Operation *> post;
+    bool ok = true, accessesMemory = false;
+    for (Operation *op = below->getNextNode();
+         op && op != parent.getBody()->getTerminator();
+         op = op->getNextNode()) {
+      bool bad = false;
+      op->walk([&](Operation *in) {
+        if (isa<AffineForOp, scf::ForOp, scf::WhileOp>(in))
+          bad = true;
+        if (isa<AffineReadOpInterface, AffineWriteOpInterface, memref::LoadOp,
+                memref::StoreOp>(in))
+          accessesMemory = true;
+
+        for (Value valueHandle : in->getOperands())
+          if (valueHandle.getDefiningOp() == below)
+            bad = true;
+        if (auto call = dyn_cast<func::CallOp>(in)) {
+          auto callee = SymbolTable::lookupNearestSymbolFrom<func::FuncOp>(
+              call, call.getCalleeAttr());
+          if (!callee || !callee.isExternal())
+            bad = true;
+        } else if (isa<CallOpInterface>(in)) {
+          bad = true;
+        }
+      });
+      if (bad) {
+        ok = false;
+        break;
+      }
+      post.push_back(op);
+    }
+    if (!ok || post.empty() || !accessesMemory)
+      continue;
+
+    SmallVector<AffineExpr> exprs;
+    SmallVector<bool> eqs;
+    SmallVector<Value> dims;
+    for (unsigned k = 0; k < lowerIndex && ok; ++k) {
+      AffineForOp inner = chain[k];
+      std::optional<uint64_t> trip = getConstantTripCount(inner);
+      if (!inner.hasConstantLowerBound() || !trip || *trip == 0) {
+        ok = false;
+        break;
+      }
+      int64_t last = inner.getConstantLowerBound() +
+                     static_cast<int64_t>(*trip - 1) * inner.getStepAsInt();
+      exprs.push_back(
+          getAffineDimExpr(dims.size(), candidateValue.getContext()) - last);
+      eqs.push_back(true);
+      dims.push_back(inner.getInductionVar());
+    }
+    if (!ok)
+      continue;
+    IntegerSet set = IntegerSet::get(dims.size(), 0, exprs, eqs);
+    OpBuilder buildPoint(candidateValue.getBody()->getTerminator());
+    auto guard =
+        AffineIfOp::create(buildPoint, parent.getLoc(), set, dims, false);
+    Block *then = guard.getThenBlock();
+    for (Operation *op : post)
+      op->moveBefore(then->getTerminator());
+    guard->setAttr(
+        "hls.flattened_parent_trailing_code",
+        buildPoint.getI64IntegerAttr(static_cast<int64_t>(lowerIndex)));
   }
 }
 
@@ -2225,10 +2319,9 @@ static void chainSharedCalleeInstances(Operation *loop,
 
   auto holdForDepth = [&](Operation *call) {
     unsigned depth = 0;
-    if (auto dimensionIndex = call->getAttrOfType<IntegerAttr>(
+    if (auto d = call->getAttrOfType<IntegerAttr>(
             circt::hls_analysis::kCallDepthAttr))
-      depth =
-          static_cast<unsigned>(std::max<int64_t>(1, dimensionIndex.getInt()));
+      depth = static_cast<unsigned>(std::max<int64_t>(1, d.getInt()));
     else if (auto opr = problem.getLinkedOperatorType(call))
       depth = problem.getLatency(*opr).value_or(0) + 1;
     if (depth == 0)
@@ -2750,9 +2843,9 @@ LogicalResult AffineToLoopSchedule::createPlugins() {
     diag.errors.push_back("tool.backend.memory_mapper.primitive: no such "
                           "device memory");
   if (!diag.ok()) {
-    InFlightDiagnostic dimensionIndex =
+    InFlightDiagnostic d =
         getOperation().emitError("--convert-affine-to-loopschedule: ");
-    llvm::interleave(diag.errors, dimensionIndex, "; ");
+    llvm::interleave(diag.errors, d, "; ");
     return failure();
   }
   const circt::hlsest::Config &installed = circt::hlsest::Config::get();
@@ -2813,6 +2906,8 @@ void AffineToLoopSchedule::runOnOperation() {
     applyConfigured(trackGlobals, me.trackGlobals);
     applyConfigured(sinkParentCode,
                     cfg.tool.hls.pipelineDecision.sinkParentCode);
+    applyConfigured(sinkParentTrailingCode,
+                    cfg.tool.hls.pipelineDecision.sinkParentTrailingCode);
     const circt::hlsest::SchedulingConfig &sc = cfg.scheduling;
     applyConfigured(fastThreshold, static_cast<unsigned>(sc.fastThreshold));
     applyConfigured(fastOpsThreshold,
@@ -2825,7 +2920,7 @@ void AffineToLoopSchedule::runOnOperation() {
   tlsTrackGlobals = trackGlobals;
   if (trackGlobals)
     uniqueGlobalRefs();
-  if (sinkParentCode)
+  if (sinkParentCode || sinkParentTrailingCode)
     sinkFlattenedParentCode();
   coalescePerfectNests();
 
@@ -3270,7 +3365,7 @@ static std::optional<int64_t>
 constantBankOf(ArrayRef<AffineExpr> indices,
                const hls_analysis::BankLayout &layout) {
   int64_t bank = 0;
-  for (auto [dimensionIndex, portValue] : llvm::enumerate(layout.dims)) {
+  for (auto [d, portValue] : llvm::enumerate(layout.dims)) {
     if (portValue.dim >= indices.size())
       return std::nullopt;
     auto candidateValue = dyn_cast<AffineConstantExpr>(
@@ -3278,7 +3373,7 @@ constantBankOf(ArrayRef<AffineExpr> indices,
     if (!candidateValue || candidateValue.getValue() < 0 ||
         candidateValue.getValue() >= portValue.factor)
       return std::nullopt;
-    bank += candidateValue.getValue() * layout.strides[dimensionIndex];
+    bank += candidateValue.getValue() * layout.strides[d];
   }
   return bank;
 }
@@ -3525,13 +3620,12 @@ maxiBundleRequests(Value mem, bool isLoad) {
   if (!ifaces)
     return std::nullopt;
   for (Attribute attr : ifaces) {
-    auto dimensionIndex = dyn_cast<DictionaryAttr>(attr);
-    auto mode = dimensionIndex ? dimensionIndex.getAs<StringAttr>("mode")
-                               : StringAttr();
+    auto d = dyn_cast<DictionaryAttr>(attr);
+    auto mode = d ? d.getAs<StringAttr>("mode") : StringAttr();
     if (!mode || mode.getValue() != mc->mode)
       continue;
     std::string bundle = mc->defaultBundle;
-    if (auto buildPoint = dimensionIndex.getAs<StringAttr>("bundle"))
+    if (auto buildPoint = d.getAs<StringAttr>("bundle"))
       bundle = buildPoint.getValue().str();
     return std::make_pair(bundle, limit);
   }
@@ -4143,10 +4237,9 @@ public:
       unsigned best = ~0u;
       StringRef bestName;
       for (const std::string &candidateValue : classes) {
-        unsigned dimensionIndex =
-            StringRef(kv.first).edit_distance(candidateValue);
-        if (dimensionIndex < best) {
-          best = dimensionIndex;
+        unsigned d = StringRef(kv.first).edit_distance(candidateValue);
+        if (d < best) {
+          best = d;
           bestName = candidateValue;
         }
       }
@@ -4612,11 +4705,10 @@ circt::hlsest::ScheduleView::fromIR(func::FuncOp func) {
     OpSchedule stringValue;
     stringValue.op = op;
     stringValue.start = start;
-    if (auto dimensionIndex =
-            op->getAttrOfType<DictionaryAttr>("hls.op_timing")) {
-      if (auto candidateValue = dimensionIndex.getAs<StringAttr>("cls"))
+    if (auto d = op->getAttrOfType<DictionaryAttr>("hls.op_timing")) {
+      if (auto candidateValue = d.getAs<StringAttr>("cls"))
         stringValue.cls = candidateValue.getValue().str();
-      if (auto lowerIndex = dimensionIndex.getAs<IntegerAttr>("latency"))
+      if (auto lowerIndex = d.getAs<IntegerAttr>("latency"))
         stringValue.latency = static_cast<unsigned>(lowerIndex.getInt());
     }
     if (auto useValue = op->getAttrOfType<IntegerAttr>("hls.unit"))

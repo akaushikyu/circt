@@ -4,11 +4,11 @@
 // consumer's `row_t t = s.read()` has no memory in Vitis; hls-est reads its
 // elements at `(k * 2) / 2`-shaped indices that are constants once the pipeline
 // unrolls k (ConstantIndex.h folds division and shifts), so rule (c) makes it
-// registers and cons runs at II 1. The producer's t stays RAM_2P 2 (Vitis
-// RAM_1WNR 32: the packing reads after the k loop belong to the flattened r x k
-// pipeline, OPEN_ISSUES O137 (b), not modelled).
+// registers and cons runs at II 1. The producer's t is RAM_1WNR 32 since
+// W9r14-impl (N97 (b): the packing reads after the k loop belong to the
+// flattened r x k pipeline, w9r14_n97b_st_row.mlir).
 // CHECK: pipeline @ {{.*}}:63:7 in @{{.*}}: ii=1
-// CHECK: Total BRAM: 2
+// CHECK: Total BRAM: 32
 
 module {
   llvm.mlir.global internal constant @str0("s\00") {addr_space = 0 : i32}

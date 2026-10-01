@@ -74,6 +74,7 @@
         "promote_pipelined": true,
         "flatten_across_calls": false,
         "sink_parent_code": true,
+        "sink_parent_trailing_code": true,
         "fold_unrolled_guards": true,
         "pipeline_off_sequential": true,
         "do_while_flatten_refusal": true,

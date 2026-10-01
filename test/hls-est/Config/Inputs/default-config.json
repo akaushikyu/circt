@@ -803,6 +803,7 @@
         "_policy": "plugin name (a pipeline_policy): The PipelinePolicy [D-02, D-07, D-08]",
         "_promote_pipelined": "bool: Promote the invariant accesses of the pipelined loop itself to registers after the unroll [D-06]",
         "_sink_parent_code": "bool: The straight-line code (with memory accesses, no loops) before the child loop in the body of a loop flattened into a pipeline runs in the pipeline under a first-iteration guard, so its accesses count in the pipeline's port demand and schedule; a measured Vitis rule (VITIS_NOTES N65)",
+        "_sink_parent_trailing_code": "bool: The straight-line code after the child loop in the body of a loop flattened into a pipeline (memory accesses, register code, calls of functions without a body such as a stream write; no loops) runs in the pipeline under a last-iteration guard, so its accesses count in the pipeline's port demand and schedule; a measured Vitis rule (VITIS_NOTES N97 (b); kernel w9r13p_st_row: the 64 packing reads of a struct written to a stream, t RAM_1WNR 32; class_ece8893 anuvab / ayush lab2 rOut; off: the code stays after the pipelined loop)",
         "do_while_flatten_refusal": true,
         "do_while_min_subloop_trip": 3,
         "flatten_across_calls": false,
@@ -812,7 +813,8 @@
         "pipeline_off_sequential": true,
         "policy": "vitis-pipeline-loops",
         "promote_pipelined": true,
-        "sink_parent_code": true
+        "sink_parent_code": true,
+        "sink_parent_trailing_code": true
       },
       "streams": {
         "_dataflow_argument_fifos": "bool: A dataflow function forwards each scalar / m_axi pointer argument a later process reads through a FIFO <arg>_c, depth = processes on the longest channel path to the reader (+1 when the first process does not read it); priced as a stream FIFO (VITIS_NOTES N54) [P-06]",
