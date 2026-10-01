@@ -7,7 +7,7 @@
 // registers and cons runs at II 1. The producer's t is RAM_1WNR 32 since
 // W9r14-impl (N97 (b): the packing reads after the k loop belong to the
 // flattened r x k pipeline, w9r14_n97b_st_row.mlir).
-// CHECK: pipeline @ {{.*}}:63:7 in @{{.*}}: ii=1
+// CHECK: pipeline @ {{.*}}:63:7{{.*}} in @{{.*}}: ii=1
 // CHECK: Total BRAM: 32
 
 module {
