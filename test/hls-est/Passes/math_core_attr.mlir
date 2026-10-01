@@ -16,7 +16,7 @@
 
 // IR-NOT: @table
 // IR-NOT: @helper
-// IR-DAG: func.func private @tanh16_5(i16) -> i16 attributes {hls.math_core = {function = "tanh", type = "ap_fixed<16,5>"}}
+// IR-DAG: func.func private @tanh16_5(i16) -> i16 attributes {hls.core_tables = {{\[\[}}128, 128, "table"{{\]\]}}, hls.math_core = {function = "tanh", type = "ap_fixed<16,5>"}}
 // IR-DAG: func.func private @expf_core(f32) -> f32 attributes {hls.math_core = {function = "exp"}}
 // IR-LABEL: func.func @top
 // IR: call @tanh16_5(%{{.*}}) {hls.math_core = {function = "tanh", type = "ap_fixed<16,5>"}}
