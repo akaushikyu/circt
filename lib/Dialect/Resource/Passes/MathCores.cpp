@@ -151,11 +151,16 @@ bool MathCostConfig::load(StringRef file, std::string &error) {
     }
     if (const llvm::json::Array *tabs = opHandle->getArray("tables"))
       for (const llvm::json::Value &typeValue : *tabs)
-        if (const llvm::json::Object *to = typeValue.getAsObject())
-          if (std::optional<StringRef> elementCount = to->getString("name")) {
-            entryValue.tableName = elementCount->str();
-            break;
-          }
+        if (const llvm::json::Object *to = typeValue.getAsObject()) {
+          if (std::optional<StringRef> elementCount = to->getString("name"))
+            if (entryValue.tableName.empty())
+              entryValue.tableName = elementCount->str();
+          std::optional<int64_t> words = to->getInteger("words");
+          std::optional<int64_t> bits = to->getInteger("bits");
+          if (words && bits && *words > 0 && *bits > 0)
+            entryValue.tableShapes.push_back(
+                {*words, static_cast<unsigned>(*bits)});
+        }
     entryValue.cordicTrips = opHandle->getInteger("cordic_loop_trip_count");
     entryValue.bramIfUnrolled =
         opHandle->getInteger("bram_18k_if_cordic_loop_unrolled");
@@ -355,7 +360,12 @@ static void recognise(Operation *op, SmallVectorImpl<Site> &out) {
     Site s;
     s.op = op;
     s.function = fn.str();
-    s.type = scalarTypeName(op->getOperand(0).getType());
+
+    Type coreType = op->getOperand(0).getType();
+    if (op->getNumResults() == 1 &&
+        isa<FloatType>(getElementTypeOrSelf(op->getResult(0).getType())))
+      coreType = op->getResult(0).getType();
+    s.type = scalarTypeName(coreType);
     s.typeSource = "mlir";
     s.opText = op->getName().getStringRef().str();
     s.args.append(op->operand_begin(), op->operand_end());
@@ -951,12 +961,12 @@ static std::string locText(Location loc) {
   return out;
 }
 
-std::vector<MathCoreRecord>
-analyzeMathCores(ModuleOp module, const MathCostConfig &config,
-                 llvm::function_ref<bool(Operation *)> covers,
-                 llvm::function_ref<unsigned(Operation *)> instancesOf,
-                 llvm::function_ref<void(Location, const std::string &)> warn,
-                 llvm::function_ref<int64_t(int64_t, unsigned)> romBlocks) {
+std::vector<MathCoreRecord> analyzeMathCores(
+    ModuleOp module, const MathCostConfig &config,
+    llvm::function_ref<bool(Operation *)> covers,
+    llvm::function_ref<unsigned(Operation *)> instancesOf,
+    llvm::function_ref<void(Location, const std::string &)> warn,
+    llvm::function_ref<int64_t(int64_t, unsigned, unsigned)> romBlocks) {
   std::vector<Site> sites;
   module.walk([&](Operation *op) {
     if (!covers(op) || !op->getParentOfType<func::FuncOp>())
@@ -1015,8 +1025,10 @@ analyzeMathCores(ModuleOp module, const MathCostConfig &config,
       if (!words || !bits)
         continue;
       int64_t blocks =
-          romBlocks(words.getInt(), static_cast<unsigned>(bits.getInt()));
+          romBlocks(words.getInt(), static_cast<unsigned>(bits.getInt()), 1);
       entryValue.bram += blocks;
+      entryValue.tableShapes.push_back(
+          {words.getInt(), static_cast<unsigned>(bits.getInt())});
       if (blocks && entryValue.tableName.empty() && arrayValue.size() > 2)
         if (auto elementCount = dyn_cast<StringAttr>(arrayValue[2]))
           entryValue.tableName = elementCount.getValue().str();
@@ -1211,6 +1223,9 @@ analyzeMathCores(ModuleOp module, const MathCostConfig &config,
 
     int64_t perInst = entryValue ? entryValue->bram : 0;
     bool cordic = entryValue && entryValue->instancing == "cordic_loop";
+    const bool shareTables =
+        romBlocks &&
+        circt::hlsest::Config::get().tool.hls.inlinedTablesInPipelines;
     unsigned pipeInst = 0;
     int64_t bram = 0;
     for (Operation *portValue : pipeOrder) {
@@ -1238,8 +1253,22 @@ analyzeMathCores(ModuleOp module, const MathCostConfig &config,
           reg.bramPerInstance = *entryValue->bramIfUnrolled;
         }
       }
+
+      bool userUnrolled = llvm::any_of(valueHandle, [](const Site *s) {
+        return s->op->hasAttr(circt::hls_analysis::kUserUnrollCopyAttr);
+      });
+      if (shareTables && entryValue && !cordic && reg.instances > 1 &&
+          !userUnrolled && entryValue->coreKind == "library_module" &&
+          !entryValue->tableShapes.empty() &&
+          (StringRef(entryValue->type).starts_with("ap_fixed<") ||
+           StringRef(entryValue->type).starts_with("ap_ufixed<"))) {
+        reg.sharedTables = true;
+        for (auto [words, bits] : entryValue->tableShapes)
+          reg.sharedTablesBram += romBlocks(words, bits, reg.instances);
+      }
       pipeInst += reg.instances;
-      bram += reg.instances * reg.bramPerInstance;
+      bram += reg.sharedTables ? reg.sharedTablesBram
+                               : reg.instances * reg.bramPerInstance;
       resultValue.regions.push_back(std::move(reg));
     }
 
@@ -1337,6 +1366,12 @@ analyzeMathCores(ModuleOp module, const MathCostConfig &config,
                "stays a loop (one per call site) -> " +
                std::to_string(reg.instances) + " x " +
                std::to_string(reg.bramPerInstance);
+      else if (reg.kind == "pipeline" && reg.sharedTables)
+        why += std::to_string(reg.calls) + " call(s) per iteration at II " +
+               std::to_string(reg.ii) + (reg.iiAssumed ? " (estimated)" : "") +
+               " -> the core is inlined: one set of tables read " +
+               std::to_string(reg.instances) + " times per cycle (N16 R6) = " +
+               std::to_string(reg.sharedTablesBram);
       else if (reg.kind == "pipeline")
         why += std::to_string(reg.calls) + " call(s) per iteration at II " +
                std::to_string(reg.ii) + (reg.iiAssumed ? " (estimated)" : "") +
@@ -1395,6 +1430,10 @@ llvm::json::Object mathCoreJson(const MathCoreRecord &resultValue) {
     exprValue["calls"] = static_cast<int64_t>(globalOp.calls);
     exprValue["instances"] = static_cast<int64_t>(globalOp.instances);
     exprValue["bram_per_instance"] = globalOp.bramPerInstance;
+    if (globalOp.sharedTables) {
+      exprValue["shared_tables"] = true;
+      exprValue["shared_tables_bram"] = globalOp.sharedTablesBram;
+    }
     regions.push_back(std::move(exprValue));
   }
   opHandle["regions"] = std::move(regions);
@@ -1449,8 +1488,12 @@ void printMathCoreText(const MathCoreRecord &resultValue,
                  : "")
          << (globalOp.cordicKept ? ", CORDIC loop kept (one per call site)"
                                  : "");
-    os << " -> " << globalOp.instances << " instance(s) x "
-       << globalOp.bramPerInstance << "\n";
+    if (globalOp.sharedTables)
+      os << " -> inlined, one set of tables read " << globalOp.instances
+         << " times per cycle = " << globalOp.sharedTablesBram << "\n";
+    else
+      os << " -> " << globalOp.instances << " instance(s) x "
+         << globalOp.bramPerInstance << "\n";
   }
   for (const MathSiteRecord &s : resultValue.sites)
     os << "  call " << s.op << " @ " << s.loc << ": " << s.status << " ("

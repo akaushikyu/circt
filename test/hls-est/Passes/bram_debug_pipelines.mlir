@@ -67,8 +67,10 @@ module {
 // CHECK-NEXT:   "scheduler": "simplex",
 // CHECK-NEXT:   "scope_loc": "k.cpp:13:5",
 // CHECK-NEXT:   "source": "auto",
+// CHECK-NEXT:   "sunk_trailing_ops": 0,
 // CHECK-NEXT:   "trip_count": 65,
 // CHECK-NEXT:   "unroll_partial": null,
+// CHECK-NEXT:   "unroll_runtime_guarded": false,
 // CHECK-NEXT:   "unrolled": []
 // CHECK:        "flattened_parents": 0,
 // CHECK-NEXT:   "folded_guards": 0,
@@ -79,8 +81,10 @@ module {
 // CHECK-NEXT:   "scheduler": "simplex",
 // CHECK-NEXT:   "scope_loc": "k.cpp:19:3",
 // CHECK-NEXT:   "source": "auto",
+// CHECK-NEXT:   "sunk_trailing_ops": 0,
 // CHECK-NEXT:   "trip_count": 8,
 // CHECK-NEXT:   "unroll_partial": null,
+// CHECK-NEXT:   "unroll_runtime_guarded": false,
 // CHECK-NEXT:   "unrolled": [
 // CHECK-NEXT:     {
 // CHECK-NEXT:       "factor": 16,

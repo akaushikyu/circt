@@ -2098,6 +2098,52 @@ void AffineToLoopSchedule::sinkFlattenedParentCode() {
 /// iteration). Only code without loops (a call is allowed when its callee
 /// has no body: a stream method), whose values nothing before it uses, in
 /// parents without iter_args, and only when it accesses memory.
+/// Whether the store `op` writes a local that only stores fill and only
+/// calls of functions without a body read (through casts): the temporary
+/// cgeist makes for a struct passed by reference to `hls::stream::write`,
+/// part of the stream write N97 (b) sinks, not an array the design reads.
+static bool stagesExternalCallArgument(Operation *op) {
+  Value mem;
+  if (auto st = dyn_cast<memref::StoreOp>(op))
+    mem = st.getMemRef();
+  else if (auto st = dyn_cast<AffineWriteOpInterface>(op))
+    mem = st.getMemRef();
+  while (auto cast = mem ? mem.getDefiningOp<memref::CastOp>() : nullptr)
+    mem = cast.getSource();
+  if (!mem || !mem.getDefiningOp<memref::AllocaOp>())
+    return false;
+  bool externalCall = false;
+  SmallVector<Value> work{mem};
+  while (!work.empty()) {
+    Value valueHandle = work.pop_back_val();
+    for (Operation *user : valueHandle.getUsers()) {
+      if (auto cast = dyn_cast<memref::CastOp>(user)) {
+        work.push_back(cast.getResult());
+        continue;
+      }
+      if (auto st = dyn_cast<memref::StoreOp>(user)) {
+        if (st.getMemRef() != valueHandle)
+          return false;
+        continue;
+      }
+      if (auto st = dyn_cast<AffineWriteOpInterface>(user)) {
+        if (st.getMemRef() != valueHandle)
+          return false;
+        continue;
+      }
+      auto call = dyn_cast<func::CallOp>(user);
+      if (!call)
+        return false;
+      auto callee = SymbolTable::lookupNearestSymbolFrom<func::FuncOp>(
+          call, call.getCalleeAttr());
+      if (!callee || !callee.isExternal())
+        return false;
+      externalCall = true;
+    }
+  }
+  return externalCall;
+}
+
 void AffineToLoopSchedule::sinkTrailingParentCode(AffineForOp candidateValue,
                                                   ArrayRef<AffineForOp> chain) {
   for (unsigned lowerIndex = 1; lowerIndex < chain.size(); ++lowerIndex) {
@@ -2107,6 +2153,10 @@ void AffineToLoopSchedule::sinkTrailingParentCode(AffineForOp candidateValue,
       break;
     SmallVector<Operation *> post;
     bool ok = true, accessesMemory = false;
+
+    const bool sinkStores =
+        circt::hlsest::Config::get()
+            .tool.hls.pipelineDecision.sinkParentTrailingStores;
     for (Operation *op = below->getNextNode();
          op && op != parent.getBody()->getTerminator();
          op = op->getNextNode()) {
@@ -2117,6 +2167,9 @@ void AffineToLoopSchedule::sinkTrailingParentCode(AffineForOp candidateValue,
         if (isa<AffineReadOpInterface, AffineWriteOpInterface, memref::LoadOp,
                 memref::StoreOp>(in))
           accessesMemory = true;
+        if (!sinkStores && isa<AffineWriteOpInterface, memref::StoreOp>(in) &&
+            !stagesExternalCallArgument(in))
+          bad = true;
 
         for (Value valueHandle : in->getOperands())
           if (valueHandle.getDefiningOp() == below)
@@ -2163,8 +2216,17 @@ void AffineToLoopSchedule::sinkTrailingParentCode(AffineForOp candidateValue,
     auto guard =
         AffineIfOp::create(buildPoint, parent.getLoc(), set, dims, false);
     Block *then = guard.getThenBlock();
-    for (Operation *op : post)
+    for (Operation *op : post) {
       op->moveBefore(then->getTerminator());
+
+      op->walk([&](Operation *in) {
+        if (isa<AffineReadOpInterface, AffineWriteOpInterface, memref::LoadOp,
+                memref::StoreOp, CallOpInterface>(in))
+          in->setAttr(
+              circt::hls_analysis::kSunkTrailingCodeAttr,
+              buildPoint.getI64IntegerAttr(static_cast<int64_t>(lowerIndex)));
+      });
+    }
     guard->setAttr(
         "hls.flattened_parent_trailing_code",
         buildPoint.getI64IntegerAttr(static_cast<int64_t>(lowerIndex)));
@@ -4055,6 +4117,7 @@ AffineToLoopSchedule::createLoopSchedulePipeline(Operation *loop,
         circt::hls_analysis::kLoopFlattenedParentsAttr,
         circt::hls_analysis::kLoopAutoUnrolledAttr,
         circt::hls_analysis::kLoopUnrollPartialAttr,
+        circt::hls_analysis::kLoopUnrollRuntimeGuardedAttr,
         circt::hls_analysis::kLoopSchedulerAttr, kMemoryRecurrenceAttr,
         circt::hls_analysis::kFoldedGuardsAttr,
         circt::hls_analysis::kPinnedGuardOperandsAttr})

@@ -952,6 +952,8 @@ void fillTool(const json::Object &t, ToolProfile &tool) {
       boolean(pd, "sink_parent_code", true);
   h.pipelineDecision.sinkParentTrailingCode =
       boolean(pd, "sink_parent_trailing_code", true);
+  h.pipelineDecision.sinkParentTrailingStores =
+      boolean(pd, "sink_parent_trailing_stores", false);
   h.pipelineDecision.foldUnrolledGuards =
       boolean(pd, "fold_unrolled_guards", true);
   h.pipelineDecision.pipelineOffSequential =
@@ -1001,6 +1003,8 @@ void fillTool(const json::Object &t, ToolProfile &tool) {
   h.partitioning.steerAffineLoads = boolean(pa, "steer_affine_loads");
   h.partitioning.steerWindowGroups =
       boolean(pa, "steer_window_groups", true);
+  h.partitioning.inductionResidueBanks =
+      boolean(pa, "induction_residue_banks", true);
 
   const json::Object &fo = obj(hls, "folding");
   h.folding.ruleSet = str(fo, "rule_set");
@@ -1029,6 +1033,8 @@ void fillTool(const json::Object &t, ToolProfile &tool) {
       boolean(dm, "load_store_cycles", true);
   mid.deadMemory.overwrittenCallOutputs =
       boolean(dm, "overwritten_call_outputs", true);
+  mid.deadMemory.overwrittenByLoops =
+      boolean(dm, "overwritten_by_loops", true);
 
   h.honourInlineOff = boolean(obj(hls, "inlining"), "honour_inline_off");
   const json::Object &sc = obj(hls, "structs");
@@ -1056,6 +1062,8 @@ void fillTool(const json::Object &t, ToolProfile &tool) {
       boolean(obj(hls, "math_library"), "local_struct_tables_at_run_time", true);
   h.fixedExpTablesWhenUnlisted = boolean(
       obj(hls, "math_library"), "fixed_exp_tables_when_unlisted", true);
+  h.inlinedTablesInPipelines = boolean(
+      obj(hls, "math_library"), "inlined_tables_in_pipelines", true);
 
   const json::Object &be = obj(t, "backend");
   tool.backend.id = str(be, "id");

@@ -382,6 +382,9 @@ struct PipelineDecisionConfig {
   /// ... and the code after the child loop, in its last iteration
   /// (VITIS_NOTES N97 (b)).
   bool sinkParentTrailingCode = true;
+  /// ... also when that code writes memory (W9r14 review: Vitis disables
+  /// the flatten for such a nest, [HLS 214-437]; off by default).
+  bool sinkParentTrailingStores = false;
   /// After the unroll decisions, an affine.if whose set is empty (or
   /// universal) once an unrolled copy's constant index is substituted loses
   /// its dead arm (VITIS_NOTES N89).
@@ -447,6 +450,10 @@ struct PartitioningConfig {
   /// dimension (base + constant on each) and copies that share a residue
   /// class form further groups, so a bank is read once per class member.
   bool steerWindowGroups = true;
+  /// An scf.for induction variable plus a constant, with a constant lower
+  /// bound and a step that is a multiple of a cyclic factor, addresses one
+  /// bank (W9r14 review, N103 copies, kernel w9r14rv_uv_lb0).
+  bool inductionResidueBanks = true;
 };
 
 struct FoldingConfig {
@@ -464,6 +471,9 @@ struct DeadMemoryConfig {
   /// A kept call's one-element output that is overwritten (or never touched)
   /// after the call before any read does not keep the call (N107).
   bool overwrittenCallOutputs = true;
+  /// ... also when the overwrite is the first access inside a loop that runs
+  /// at least once (W9r14 review, kernel w9r14rv_dc_loopw).
+  bool overwrittenByLoops = true;
 };
 
 struct MiddleEndConfig {
@@ -531,6 +541,9 @@ struct HlsToolConfig {
   /// An ap_fixed hls::exp without a cost table entry is priced as the ROM
   /// tables of its body (VITIS_NOTES N106).
   bool fixedExpTablesWhenUnlisted = true;
+  /// In a pipelined loop, the ap_fixed library cores whose tables are known
+  /// share one set of tables read k times per cycle (N16 R6).
+  bool inlinedTablesInPipelines = true;
 
   /// The implicit buffer of `protocol` (e.g. "axi4-mm"), or null.
   const ImplicitBufferConfig *implicitBuffer(llvm::StringRef protocol) const;

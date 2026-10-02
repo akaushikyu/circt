@@ -75,6 +75,7 @@
         "flatten_across_calls": false,
         "sink_parent_code": true,
         "sink_parent_trailing_code": true,
+        "sink_parent_trailing_stores": false,
         "fold_unrolled_guards": true,
         "pipeline_off_sequential": true,
         "do_while_flatten_refusal": true,
@@ -95,7 +96,8 @@
         "steer_affine_loads": true,
         "compound_assign_two_stores": true,
         "block_bank_from_loop_range": true,
-        "steer_window_groups": true
+        "steer_window_groups": true,
+        "induction_residue_banks": true
       },
       "folding": { "rule_set": "vitis-undef", "canonicalize": true, "max_rounds": 16 },
       "middle_end": {
@@ -115,7 +117,8 @@
           "honour_preserve": false,
           "global_shared_by_functions_escapes": true,
           "load_store_cycles": true,
-          "overwritten_call_outputs": true
+          "overwritten_call_outputs": true,
+          "overwritten_by_loops": true
         }
       },
       "inlining": { "honour_inline_off": true },
@@ -123,7 +126,7 @@
       "narrowing": { "stored_ranges": true, "load_demand": true, "full_address_interface_modes": ["m_axi"], "complete_read_selector": true },
       "globals": { "attribute_accesses": true },
       "grouping": { "plugin": "identity" },
-      "math_library": { "table": "", "local_struct_tables_at_run_time": true, "fixed_exp_tables_when_unlisted": true }
+      "math_library": { "table": "", "local_struct_tables_at_run_time": true, "fixed_exp_tables_when_unlisted": true, "inlined_tables_in_pipelines": true }
     },
     "backend": {
       "id": "vitis-internal",

@@ -420,6 +420,41 @@ static std::optional<int64_t> constantIndexOf(Value indexValue) {
   return evaluateConstantInt(indexValue);
 }
 
+static std::pair<Value, int64_t> residueBase(Value valueHandle, int64_t factor,
+                                             unsigned depth);
+
+/// The bank of `idx` along a cyclic partition `p` when the index is the
+/// induction variable of an scf.for plus a constant, the loop's lower bound
+/// and step are constants and the step is a multiple of the factor: every
+/// iteration then reaches the same bank, (lb + c) mod factor. This is the
+/// form the guarded copies of a run-time-trip partial user unroll take
+/// (--auto-pipeline-unroll, VITIS_NOTES N103): copy u of `for (i = 0; i < n;
+/// i++) A[i]` unrolled by 2 reads A[2k + u], one bank of a cyclic-2
+/// partition (W9r14 review kernel w9r14rv_uv_lb0: Vitis single PIPO, 58).
+/// With a run-time lower bound (`for (i = ptr[k]; ...)`, N103's uv_var /
+/// nikhil lab3) the bank stays unknown. Key
+/// tool.hls.partitioning.induction_residue_banks.
+static std::optional<int64_t>
+inductionResidueBank(Value indexValue, const DimPartition &portValue) {
+  if (!circt::hlsest::Config::get()
+           .tool.hls.partitioning.inductionResidueBanks ||
+      portValue.kind != PartitionSpec::Cyclic || portValue.factor <= 1)
+    return std::nullopt;
+  auto [base, candidateValue] = residueBase(indexValue, portValue.factor, 0);
+  auto arg = dyn_cast<BlockArgument>(base);
+  if (!arg)
+    return std::nullopt;
+  auto loop = dyn_cast_or_null<scf::ForOp>(arg.getOwner()->getParentOp());
+  if (!loop || loop.getInductionVar() != arg)
+    return std::nullopt;
+  std::optional<int64_t> lb = getConstantIntValue(loop.getLowerBound());
+  std::optional<int64_t> step = getConstantIntValue(loop.getStep());
+  if (!lb || !step || *step <= 0 || *step % portValue.factor != 0)
+    return std::nullopt;
+  int64_t bank = (*lb + candidateValue) % portValue.factor;
+  return bank < 0 ? bank + portValue.factor : bank;
+}
+
 static MemrefBanking resolveMemref(OpBuilder &buildPoint, Location loc,
                                    ValueRange indices,
                                    const BankLayout &lowerIndex) {
@@ -440,6 +475,17 @@ static MemrefBanking resolveMemref(OpBuilder &buildPoint, Location loc,
             arith::ConstantIndexOp::create(buildPoint, loc, off);
         continue;
       }
+    }
+
+    if (std::optional<int64_t> bank =
+            inductionResidueBank(indexValue, portValue)) {
+      mb.choice.constBank.push_back(*bank);
+      Value dimensionIndex =
+          arith::ConstantIndexOp::create(buildPoint, loc, portValue.factor);
+      mb.bankedIndices[portValue.dim] =
+          arith::DivUIOp::create(buildPoint, loc, indexValue, dimensionIndex)
+              .getResult();
+      continue;
     }
 
     bool bankIsDiv = portValue.kind == PartitionSpec::Block;
@@ -539,7 +585,7 @@ static bool isMultipleOf(Value valueHandle, int64_t factor, ConstOf constOf,
 }
 
 static std::pair<Value, int64_t> residueBase(Value valueHandle, int64_t factor,
-                                             unsigned depth = 0) {
+                                             unsigned depth) {
   bool pow2 = llvm::isPowerOf2_64(static_cast<uint64_t>(factor));
   unsigned bits = llvm::Log2_64(static_cast<uint64_t>(factor));
   auto constOf = [](Value exprValue) -> std::optional<int64_t> {
@@ -678,7 +724,7 @@ static std::optional<int64_t> constantBankOf(Value indexValue,
                                              const DimPartition &portValue) {
   std::optional<int64_t> candidateValue = constantIndexOf(indexValue);
   if (!candidateValue)
-    return std::nullopt;
+    return inductionResidueBank(indexValue, portValue);
   int64_t bank = bankAndOffset(*candidateValue, portValue).first;
   if (bank < 0 || bank >= portValue.factor)
     return std::nullopt;
@@ -1135,14 +1181,16 @@ static void steerLoadGroups(Value site, ArrayRef<Value> banks,
     for (const DimPartition &portValue : lowerIndex.dims) {
       Value indexValue = ld.getIndices()[portValue.dim];
       if (lowerIndex.dims.size() == 1
-              ? constantIndexOf(indexValue).has_value()
+              ? constantIndexOf(indexValue).has_value() ||
+                    inductionResidueBank(indexValue, portValue).has_value()
               : constantBankOf(indexValue, portValue).has_value()) {
         std::optional<int64_t> bank = constantBankOf(indexValue, portValue);
         key.second.push_back({bank ? *bank : -1, nullptr});
         constBanks.push_back(bank ? bank : std::optional<int64_t>(-1));
         continue;
       }
-      auto [base, candidateValue] = residueBase(indexValue, portValue.factor);
+      auto [base, candidateValue] =
+          residueBase(indexValue, portValue.factor, 0);
       key.second.push_back({0, base.getAsOpaquePointer()});
       constBanks.push_back(std::nullopt);
       memoryOp.offsets.push_back(candidateValue);

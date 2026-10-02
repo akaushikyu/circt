@@ -8,7 +8,9 @@
 // and the preload of the next are separated by the mid loop, so the PIPO is
 // single (200-741): 67. hls-est: tool.hls.dataflow_channels.
 // promoted_invariant_accesses; off: separate, 131.
+// CHECK: mode: single (every process uses one port of the bank (the loop-invariant accesses of the pipelined loop(s) at {{.*}} are registers: one load before, one store after the loop, VITIS_NOTES N105))
 // CHECK: Total BRAM: 67
+// OFF-NOT: VITIS_NOTES N105
 // OFF: Total BRAM: 131
 
 module {

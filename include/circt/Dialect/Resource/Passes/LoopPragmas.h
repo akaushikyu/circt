@@ -45,6 +45,21 @@ constexpr llvm::StringLiteral kLoopUnrollOffAttr = "hls.unroll_off";
 /// completely for an enclosing automatic pipeline, so no loop around it is
 /// auto-pipelined; the loop itself still is.
 constexpr llvm::StringLiteral kLoopUnrollPartialAttr = "hls.unroll_partial";
+/// `hls.unroll_runtime_guarded` (unit), with `hls.unroll_partial`, on the
+/// scf.for --auto-pipeline-unroll made from a run-time-trip loop with a
+/// partial user unroll: its body holds the guarded copies (VITIS_NOTES N103).
+constexpr llvm::StringLiteral kLoopUnrollRuntimeGuardedAttr =
+    "hls.unroll_runtime_guarded";
+/// `hls.sunk_trailing_code = L : i64` on an access or call that
+/// --convert-affine-to-loopschedule moved from after the child loop of the
+/// flattened parent L levels up into the pipeline (VITIS_NOTES N97 (b)).
+constexpr llvm::StringLiteral kSunkTrailingCodeAttr = "hls.sunk_trailing_code";
+/// `hls.user_unroll_copy` (unit) on a call or math op in the body of a loop
+/// --auto-pipeline-unroll unrolled for a user `unroll` pragma (complete or
+/// partial; its copies inherit it). Vitis keeps such a library core a module
+/// per copy instead of inlining it into the pipeline (VITIS_NOTES N16 R6,
+/// W9r14 review fixes).
+constexpr llvm::StringLiteral kUserUnrollCopyAttr = "hls.user_unroll_copy";
 /// `hls.unroll_remainder` (unit) on a call or math op of the remainder
 /// iterations of a partial user unroll, which --auto-pipeline-unroll unrolls
 /// into straight-line code after the main loop: Vitis has no epilogue loop

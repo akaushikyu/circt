@@ -56,6 +56,9 @@ struct MathCostEntry {
   /// pipelines them.
   bool blocksAutoPipelining = false;
   std::string tableName;         // first ROM table, names an inlined core
+  /// The ROM tables of one instance, (words, bits) each: the cost table's
+  /// "tables" of the entry, or the hls.core_tables of an N106 entry.
+  std::vector<std::pair<int64_t, unsigned>> tableShapes;
 };
 
 /// The parsed cost table. Only the keys hls-est uses are read; the rest
@@ -85,6 +88,11 @@ struct MathRegionRecord {
                              // one call site hls-est's auto-unroll made
   unsigned instances = 0;
   int64_t bramPerInstance = 0;
+  /// pipeline: the `instances` concurrent calls share one set of tables,
+  /// each read that many times per cycle (VITIS_NOTES N16 R6); the region
+  /// then costs `sharedTablesBram`, not instances x bramPerInstance.
+  bool sharedTables = false;
+  int64_t sharedTablesBram = 0;
 };
 
 /// One call site.
@@ -123,17 +131,19 @@ struct MathCoreRecord {
 /// with `config`; the cores of a function are built once per instance of it
 /// (`instancesOf`). Unlisted (function, type) pairs get a record with status
 /// "unknown_cost" and BRAM 0; `warn` is called once per such pair that has a
-/// live, non-constant call. `romBlocks` prices a one-read ROM of (words,
-/// bits); with it, an unlisted ap_fixed exp whose function records its
-/// tables (hls.core_tables) is priced as those tables (VITIS_NOTES N106).
+/// live, non-constant call. `romBlocks` prices a ROM of (words, bits) read
+/// n times per cycle; with it, an unlisted ap_fixed exp whose function
+/// records its tables (hls.core_tables) is priced as those tables
+/// (VITIS_NOTES N106), and the concurrent calls of an ap_fixed library core
+/// in a pipelined loop share one set of tables (N16 R6).
 std::vector<MathCoreRecord>
 analyzeMathCores(mlir::ModuleOp module, const MathCostConfig &config,
                  llvm::function_ref<bool(mlir::Operation *)> covers,
                  llvm::function_ref<unsigned(mlir::Operation *)> instancesOf,
                  llvm::function_ref<void(mlir::Location, const std::string &)>
                      warn,
-                 llvm::function_ref<int64_t(int64_t, unsigned)> romBlocks =
-                     nullptr);
+                 llvm::function_ref<int64_t(int64_t, unsigned, unsigned)>
+                     romBlocks = nullptr);
 
 /// The "math" object of a math_core debug record (JSON v2, additive).
 llvm::json::Object mathCoreJson(const MathCoreRecord &r);

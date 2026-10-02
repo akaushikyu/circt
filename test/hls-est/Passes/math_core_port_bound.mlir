@@ -17,16 +17,16 @@
 // two remainder iterations follow as straight-line code; their calls are
 // still marked as copies of the unrolled body's.
 // IR-NOT: affine.for
-// IR-COUNT-8: call @exp_core({{.*}}) {hls.math_core = {function = "exp", type = "ap_fixed<32,16>"}} :
-// IR-COUNT-2: call @exp_core({{.*}}) {hls.math_core = {function = "exp", type = "ap_fixed<32,16>"}, hls.unroll_remainder}
+// IR-COUNT-8: call @exp_core({{.*}}) {hls.math_core = {function = "exp", type = "ap_fixed<32,16>"}, hls.user_unroll_copy} :
+// IR-COUNT-2: call @exp_core({{.*}}) {hls.math_core = {function = "exp", type = "ap_fixed<32,16>"}, hls.unroll_remainder, hls.user_unroll_copy}
 
 // Trip 9, factor 8: both the main loop and the one-iteration cleanup are
 // promoted; the last copy is the remainder's.
 // IR9-NOT: affine.for
-// IR9-COUNT-8: call @exp_core({{.*}}) {hls.math_core = {function = "exp", type = "ap_fixed<32,16>"}} :
+// IR9-COUNT-8: call @exp_core({{.*}}) {hls.math_core = {function = "exp", type = "ap_fixed<32,16>"}, hls.user_unroll_copy} :
 // IR9-NEXT: affine.store
 // IR9-NEXT: affine.load
-// IR9-NEXT: call @exp_core({{.*}}) {hls.math_core = {function = "exp", type = "ap_fixed<32,16>"}, hls.unroll_remainder}
+// IR9-NEXT: call @exp_core({{.*}}) {hls.math_core = {function = "exp", type = "ap_fixed<32,16>"}, hls.unroll_remainder, hls.user_unroll_copy}
 
 // CHECK: math.core function=exp type=ap_fixed<32,16> func=@top instances=2 bram=10
 // TWO: math.core function=exp type=ap_fixed<32,16> func=@top instances=4 bram=20

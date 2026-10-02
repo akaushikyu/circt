@@ -7,6 +7,7 @@ add_mlir_library(HLSPasses
         CyclicSchedulingAnalysisModified.cpp
         AutoPipelineUnroll.cpp
         DebugUnroll.cpp
+        AffineUnroll.cpp
         InferVitisSplitArray.cpp
         VitisFold.cpp
         PromoteGlobalsToAllocas.cpp

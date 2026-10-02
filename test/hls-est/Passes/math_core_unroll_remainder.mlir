@@ -16,7 +16,7 @@
 // IR: affine.for %{{.*}} = 0 to 96 step 16 {
 // IR-COUNT-16: call @exp_core({{.*}}) {hls.math_core
 // IR: } {{{.*}}hls.unroll_partial = 16 : i64}
-// IR-COUNT-4: call @exp_core({{.*}}) {hls.math_core = {function = "exp", type = "ap_fixed<33,9>"}, hls.unroll_remainder}
+// IR-COUNT-4: call @exp_core({{.*}}) {hls.math_core = {function = "exp", type = "ap_fixed<33,9>"}, hls.unroll_remainder, hls.user_unroll_copy}
 
 // CHECK: math.core function=exp type=ap_fixed<33,9> func=@top instances=1 bram=7 (exp_33_9_test, per_concurrent_call)
 // CHECK: Total BRAM: 7

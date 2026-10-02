@@ -987,7 +987,8 @@ static bool loopBetween(Operation *a, Operation *buildPoint) {
 }
 
 static std::string sameCycleAccesses(ArrayRef<AccessSummary> accesses,
-                                     SeqContext *seq) {
+                                     SeqContext *seq,
+                                     std::string *promotedNote = nullptr) {
   using ProcessScope = std::pair<Operation *, Operation *>;
   SmallVector<ProcessScope> scopes;
   for (const AccessSummary &a : accesses)
@@ -1004,6 +1005,11 @@ static std::string sameCycleAccesses(ArrayRef<AccessSummary> accesses,
     if (promote && !via && group.front()->ii != 0 && scope &&
         invariantInPipeline(group, scope)) {
       promoted.push_back(scope);
+      if (promotedNote) {
+        std::string at = locString(scope->getLoc());
+        if (promotedNote->find(at) == std::string::npos)
+          *promotedNote += (promotedNote->empty() ? "" : ", ") + at;
+      }
       continue;
     }
     if (group.size() < 2)
@@ -1051,7 +1057,8 @@ static BRAMCost estimateChannel(MemoryResourceOpInterface iface,
                                 MemrefRecord &rec, const DataflowChannel &ch,
                                 ArrayRef<AccessSummary> accesses,
                                 SeqContext *seq, const Models &models,
-                                const std::string &secondPort) {
+                                const std::string &secondPort,
+                                const std::string &promotedLoops = {}) {
   rec.shape = iface.getStaticShape();
   Type elt = iface.getElementType();
   {
@@ -1152,6 +1159,13 @@ static BRAMCost estimateChannel(MemoryResourceOpInterface iface,
         " (separate memories even with one port per process)";
   else
     portValue.modeReason = "every process uses one port of the bank";
+  if (!twoPorts && !promotedLoops.empty())
+    portValue.modeReason +=
+        " (the loop-invariant accesses of the pipelined loop(s) "
+        "at " +
+        promotedLoops +
+        " are registers: one load before, one store after the "
+        "loop, VITIS_NOTES N105)";
   portValue.modeReason += clamped;
 
   BRAMCost cost;
@@ -1194,7 +1208,15 @@ public:
       return it->second;
     SmallVector<AccessSummary> accesses =
         collectAccessSummaries(sitesOf(op), instances);
-    return cache[op] = sameCycleAccesses(accesses, seq);
+    std::string promoted;
+    std::string &pair = cache[op] = sameCycleAccesses(accesses, seq, &promoted);
+    promotedCache[op] = std::move(promoted);
+    return pair;
+  }
+
+  const std::string &promotedOf(Operation *op) {
+    ofBank(op);
+    return promotedCache[op];
   }
 
   std::string ofArray(Operation *op) {
@@ -1234,6 +1256,7 @@ private:
             op->getAttr("hls.bank_of").getAsOpaquePointer(),
             op->getAttr("hls.bank_count").getAsOpaquePointer()};
   }
+  std::map<Operation *, std::string> promotedCache;
   std::map<BankKey, SmallVector<Operation *>> &banksOf(Operation *scope) {
     auto [it, fresh] = bankIndex.try_emplace(scope);
     if (fresh)
@@ -1361,7 +1384,7 @@ tryDataflowChannel(MemoryResourceOpInterface iface, MemrefRecord &rec,
       analyzeDataflowChannel(op, anchors, words, &merges);
   if (valueHandle.channel)
     return estimateChannel(iface, rec, *valueHandle.channel, accesses, seq,
-                           models, ports.ofArray(op));
+                           models, ports.ofArray(op), ports.promotedOf(op));
   if (valueHandle.inRegion && config().tool.hls.streams.streamPragmaArrays)
     if (std::optional<StreamHandleRecord> fifo =
             streamPragmaArrayFifo(op, elt, models))
@@ -1907,6 +1930,10 @@ struct PipelineRecord {
   unsigned flattenedParents = 0;
   std::optional<int64_t> unrollPartial;
 
+  bool unrollRuntimeGuarded = false;
+
+  int64_t sunkTrailingOps = 0;
+
   std::string scheduler;
   struct Unrolled {
     std::string loc;
@@ -1964,6 +1991,12 @@ collectPipelineRecords(ModuleOp module, const TopScope &scope) {
         resultValue.flattenedParents = static_cast<unsigned>(fp.getInt());
     if (auto up = portValue->getAttrOfType<IntegerAttr>(kLoopUnrollPartialAttr))
       resultValue.unrollPartial = up.getInt();
+    resultValue.unrollRuntimeGuarded =
+        portValue->hasAttr(circt::hls_analysis::kLoopUnrollRuntimeGuardedAttr);
+    portValue->walk([&](Operation *op) {
+      if (op->hasAttr(circt::hls_analysis::kSunkTrailingCodeAttr))
+        ++resultValue.sunkTrailingOps;
+    });
     if (auto stringValue =
             portValue->getAttrOfType<StringAttr>(kLoopSchedulerAttr))
       resultValue.scheduler = stringValue.getValue().str();
@@ -2422,6 +2455,10 @@ static void printDebugText(ArrayRef<MemrefRecord> records,
        << " flattened_parents=" << portValue.flattenedParents;
     if (portValue.unrollPartial)
       os << " unroll_partial=" << *portValue.unrollPartial;
+    if (portValue.unrollRuntimeGuarded)
+      os << " (run-time trip: guarded copies, N103)";
+    if (portValue.sunkTrailingOps)
+      os << " sunk_trailing_ops=" << portValue.sunkTrailingOps << " (N97 (b))";
     if (!portValue.scheduler.empty())
       os << " scheduler=" << portValue.scheduler;
     if (DictionaryAttr memoryOp = portValue.memoryRecurrence) {
@@ -2872,6 +2909,8 @@ static std::error_code writeDebugJson(ArrayRef<MemrefRecord> records,
     po["source"] = portValue.source;
     po["flattened_parents"] = static_cast<int64_t>(portValue.flattenedParents);
     po["unroll_partial"] = optInt(portValue.unrollPartial);
+    po["unroll_runtime_guarded"] = portValue.unrollRuntimeGuarded;
+    po["sunk_trailing_ops"] = portValue.sunkTrailingOps;
     po["scheduler"] = portValue.scheduler.empty()
                           ? llvm::json::Value(nullptr)
                           : llvm::json::Value(portValue.scheduler);
@@ -3710,7 +3749,7 @@ struct BRAMAnalysisLoopSchedule
                      << "--bram-analysis: math-costs: " << msg;
                },
 
-               [&](int64_t words, unsigned bits) -> int64_t {
+               [&](int64_t words, unsigned bits, unsigned reads) -> int64_t {
                  circt::hlsest::MemoryRequest rom;
                  rom.words = words;
                  rom.writeWidth = bits;
@@ -3725,10 +3764,20 @@ struct BRAMAnalysisLoopSchedule
                          : config().device.memory(candidateValue.memory);
                  if (!mem)
                    return 0;
-                 return mapBlocks(
-                     *models.mapper, *mem,
-                     config().tool.hls.memoryArchitecture.pricedWide, words,
-                     bits);
+                 if (reads <= 1)
+                   return mapBlocks(
+                       *models.mapper, *mem,
+                       config().tool.hls.memoryArchitecture.pricedWide, words,
+                       bits);
+                 PortDemand demand;
+                 demand.reads = demand.total = reads;
+                 ReplicationRecord rep;
+                 circt::hlsest::PlanContext ctx;
+                 circt::hlsest::MemoryPlan plan =
+                     models.policy->plan(demand, rep, rom, ctx);
+                 return mapBlocks(*models.mapper, *mem, plan.pricedConfig,
+                                  words, bits) *
+                        std::max<int64_t>(1, plan.copies);
                })) {
         printMathCoreLine(memoryOp, llvm::outs());
         total += memoryOp.bram;

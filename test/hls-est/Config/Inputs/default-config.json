@@ -609,9 +609,11 @@
       },
       "math_library": {
         "_fixed_exp_tables_when_unlisted": "bool: An hls::exp of ap_fixed / ap_ufixed whose (function, type) the cost table does not list is priced as the ROM tables its body reads (recorded by --lower-polygeist-subindex as hls.core_tables: the branch the template parameters select in hls_exp_apfixed.h), each a one-read ROM at the band formula, below the block threshold 0; one set per instance (per_concurrent_call); a measured Vitis rule (VITIS_NOTES N106; kernels w9r14p_ex_21_9 / ex_24_12 5, ex_32_8 7; off: unknown cost, 0) [N-15]",
+        "_inlined_tables_in_pipelines": "bool: In a pipelined loop, k = ceil(calls / II) > 1 concurrent calls of an ap_fixed library core whose ROM tables are known (the cost table's tables of a library_module entry, or N106's hls.core_tables) share one set of tables read k times per cycle, each priced as a k-read ROM (up to two reads one memory, more ceil(k / 2) copies, N8), instead of k instances; calls that are copies of a user `unroll` pragma (partial or complete) stay one module per copy; a measured Vitis rule (VITIS_NOTES N16 R6: exp_32_16 v3x2 5, v4 16; W9r14 review kernel w9r14rv_ex_21_9u2: two exp<21,9> calls at II 1, 5; corpus zijun_wang lab2: 25 calls from the pipeline's unroll of an inner loop, inlined, 169; anuvab / ayush / kaihong / ritik lab2 (unroll factor=F) and ben_hall lab2 (a complete unroll pragma) keep exp_*_s modules; the trigger is unconfirmed; off: k instances) [N-15]",
         "_local_struct_tables_at_run_time": "bool: A table filled from math calls of the loop index is evaluated at compile time when it is a plain local or a global (also through one-element register temporaries and per-bank stores), but computed at run time (a core) when it is a member memory of a local struct array (VITIS_NOTES N60); off: the stores are judged as before W9r7 [N-15]",
         "_table": "string: Path of the math-core cost table (math_costs.json format; relative to the file that sets it); empty: math calls cost nothing (--bram-analysis=math-costs= overrides) [S-04, N-15]",
         "fixed_exp_tables_when_unlisted": true,
+        "inlined_tables_in_pipelines": true,
         "local_struct_tables_at_run_time": true,
         "table": ""
       },
@@ -692,12 +694,14 @@
           "_global_shared_by_functions_escapes": "bool: A global used by more than one function escapes [E-02]",
           "_honour_preserve": "bool: hls.preserve keeps a dead array (Vitis: no) [E-04]",
           "_load_store_cycles": "bool: An array whose loads feed (as value, address or condition) stores into itself, directly or through other arrays, is kept: no cyclic dead-store elimination; a measured Vitis rule (VITIS_NOTES N66)",
+          "_overwritten_by_loops": "bool: overwritten_call_outputs also accepts an overwrite that is the first access of the local inside a loop with a constant trip count of at least one (nested loops included) that comes next after the call; a measured Vitis rule (W9r14 review kernel w9r14rv_dc_loopw: the outputs are overwritten in a 4-trip loop, Vitis deletes the call, 0; off: only a plain store, 16) [P-12]",
           "_overwritten_call_outputs": "bool: dead_calls also deletes a call whose written one-element locals (scalar reference outputs) are, after the call, stored again in the same block before any other access or never accessed again up to the function's return, even when the variable is read elsewhere; a measured Vitis rule (VITIS_NOTES N107; kernels w9r14p_dc_dead 0 against dc_live 16; whetstone mod7; off: such a call is live) [P-12]",
           "_overwritten_stores": "bool: A store a later store of the same access overwrites before any read is deleted [E-03]",
           "dead_calls": true,
           "global_shared_by_functions_escapes": true,
           "honour_preserve": false,
           "load_store_cycles": true,
+          "overwritten_by_loops": true,
           "overwritten_call_outputs": true,
           "overwritten_stores": true
         },
@@ -741,6 +745,7 @@
         "_block_bank_from_loop_range": "bool: A block-partitioned dimension whose index stays inside one block over the constant iteration range of its enclosing loops (buf[i + 64], i < 64, block depth 64) is accessed in that one bank, not through a store per candidate bank (VITIS_NOTES N86)",
         "_compound_assign_two_stores": "bool: An ap_fixed compound assignment (/=, *=, +=, -=; cgeist marks its store hls.ap_compound_assign) to a bank chosen at run time writes that bank twice: never RAM_1WNR, two writes per iteration (VITIS_NOTES N38 R-cmpd)",
         "_constant_index": "object: Rule (b): a dimension every access indexes with a constant [Q-03]",
+        "_induction_residue_banks": "bool: A memref index that is the induction variable of an scf.for plus a constant addresses one bank of a cyclic partition when the loop's lower bound and step are constants and the step is a multiple of the factor ((lb + c) mod factor; the offset stays a run-time value): the guarded copies of a run-time-trip partial user unroll from a constant start (N103); a measured Vitis rule (W9r14 review kernel w9r14rv_uv_lb0: lb 0, factor 2, cyclic 2, Vitis single PIPO 58; with a run-time start, N103 uv_var, 116; off: every such bank is unknown)",
         "_inference": "object: The td=auto port-pressure search [Q-06..Q-08]",
         "_policy": "plugin name (a partition_policy): The PartitionPolicy [Q-03, Q-04, Q-08, Q-15]",
         "_steer_affine_loads": "bool: Unrolled copies of a partitioned load with distinct constant offsets read each bank once",
@@ -767,6 +772,7 @@
           "pipo_streams": true,
           "through_calls": true
         },
+        "induction_residue_banks": true,
         "inference": {
           "_max_dims": "uint: Dimensions partitioned per array [Q-08]",
           "_max_factor": "uint: Largest factor (0: the extent) [Q-08]",
@@ -804,6 +810,7 @@
         "_promote_pipelined": "bool: Promote the invariant accesses of the pipelined loop itself to registers after the unroll [D-06]",
         "_sink_parent_code": "bool: The straight-line code (with memory accesses, no loops) before the child loop in the body of a loop flattened into a pipeline runs in the pipeline under a first-iteration guard, so its accesses count in the pipeline's port demand and schedule; a measured Vitis rule (VITIS_NOTES N65)",
         "_sink_parent_trailing_code": "bool: The straight-line code after the child loop in the body of a loop flattened into a pipeline (memory accesses, register code, calls of functions without a body such as a stream write; no loops) runs in the pipeline under a last-iteration guard, so its accesses count in the pipeline's port demand and schedule; a measured Vitis rule (VITIS_NOTES N97 (b); kernel w9r13p_st_row: the 64 packing reads of a struct written to a stream, t RAM_1WNR 32; class_ece8893 anuvab / ayush lab2 rOut; off: the code stays after the pipelined loop)",
+        "_sink_parent_trailing_stores": "bool: sink_parent_trailing_code also sinks trailing code that writes memory (an array or scalar store); a measured Vitis rule for the default off (W9r14 review kernel w9r14rv_st_arr: stores to an output array after the child loop, Vitis disables the flatten, [HLS 214-437], 2 BRAM; sunk: 8); only a stream write after the loop is measured to flatten (N97 (b)); on: the W9r14-impl behaviour",
         "do_while_flatten_refusal": true,
         "do_while_min_subloop_trip": 3,
         "flatten_across_calls": false,
@@ -814,7 +821,8 @@
         "policy": "vitis-pipeline-loops",
         "promote_pipelined": true,
         "sink_parent_code": true,
-        "sink_parent_trailing_code": true
+        "sink_parent_trailing_code": true,
+        "sink_parent_trailing_stores": false
       },
       "streams": {
         "_dataflow_argument_fifos": "bool: A dataflow function forwards each scalar / m_axi pointer argument a later process reads through a FIFO <arg>_c, depth = processes on the longest channel path to the reader (+1 when the first process does not read it); priced as a stream FIFO (VITIS_NOTES N54) [P-06]",

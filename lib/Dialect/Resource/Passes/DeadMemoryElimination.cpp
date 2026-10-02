@@ -6,6 +6,7 @@
 #include "circt/Dialect/Resource/Passes/VitisCleanup.h"
 
 #include "mlir/Dialect/Affine/Analysis/AffineAnalysis.h"
+#include "mlir/Dialect/Affine/Analysis/LoopAnalysis.h"
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
@@ -25,6 +26,8 @@
 #include "llvm/ADT/StringMap.h"
 #include "llvm/Support/Path.h"
 #include "llvm/Support/raw_ostream.h"
+
+#include <functional>
 
 #include <string>
 #include <vector>
@@ -632,7 +635,12 @@ static bool overwrittenAfterCall(func::CallOp call, const MemObject &o) {
     });
     return resultValue.wasInterrupted();
   };
-  for (Operation *op = call->getNextNode(); op; op = op->getNextNode()) {
+
+  enum class Effect { None, Overwrites, Touches };
+  const bool throughLoops =
+      circt::hlsest::Config::get()
+          .tool.hls.middleEnd.deadMemory.overwrittenByLoops;
+  std::function<Effect(Operation *)> effectOf = [&](Operation *op) -> Effect {
     Value mem, stored;
     if (auto st = dyn_cast<affine::AffineStoreOp>(op)) {
       mem = st.getMemRef();
@@ -642,8 +650,26 @@ static bool overwrittenAfterCall(func::CallOp call, const MemObject &o) {
       stored = st.getValueToStore();
     }
     if (mem && aliases.contains(mem) && !aliases.contains(stored))
+      return Effect::Overwrites;
+    if (!touches(op))
+      return Effect::None;
+
+    if (auto loop = dyn_cast<affine::AffineForOp>(op); loop && throughLoops) {
+      std::optional<uint64_t> trip = affine::getConstantTripCount(loop);
+      if (trip && *trip >= 1)
+        for (Operation &in : loop.getBody()->without_terminator()) {
+          Effect entryValue = effectOf(&in);
+          if (entryValue != Effect::None)
+            return entryValue;
+        }
+    }
+    return Effect::Touches;
+  };
+  for (Operation *op = call->getNextNode(); op; op = op->getNextNode()) {
+    Effect entryValue = effectOf(op);
+    if (entryValue == Effect::Overwrites)
       return true;
-    if (touches(op))
+    if (entryValue == Effect::Touches)
       return false;
     if (op->hasTrait<OpTrait::IsTerminator>())
       return isa<func::ReturnOp>(op);

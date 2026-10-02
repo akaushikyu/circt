@@ -5,6 +5,7 @@
 #include "circt/Dialect/Resource/Passes/AutoPipelineUnroll.h"
 #include "../Plugins/Builtin/Builtins.h"
 #include "circt/Dialect/Resource/Config/ConfigUtils.h"
+#include "circt/Dialect/Resource/Passes/AffineUnroll.h"
 #include "circt/Dialect/Resource/Passes/CallInstances.h"
 #include "circt/Dialect/Resource/Passes/DoWhileFlatten.h"
 #include "circt/Dialect/Resource/Passes/FloatOps.h"
@@ -64,6 +65,7 @@ using circt::hls_analysis::kLoopUncountedAttr;
 using circt::hls_analysis::kLoopUnrollAttr;
 using circt::hls_analysis::kLoopUnrollOffAttr;
 using circt::hls_analysis::kLoopUnrollPartialAttr;
+using circt::hls_analysis::kLoopUnrollRuntimeGuardedAttr;
 
 namespace {
 
@@ -1347,6 +1349,8 @@ struct AutoPipelineUnrollPass
       std::optional<uint64_t> trip = getConstantTripCount(loop);
       loop->removeAttr(kLoopUnrollAttr);
       Builder buildPoint(loop.getContext());
+      if (factor != 1)
+        markUserUnrollCopies(loop);
       if (factor == 1) {
         loop->setAttr(kLoopUnrollPartialAttr, buildPoint.getI64IntegerAttr(1));
         remark(loop.getLoc(), "user unroll: factor 1, the loop is never "
@@ -1360,7 +1364,7 @@ struct AutoPipelineUnrollPass
         }
         remark(loop.getLoc(),
                "user unroll: completely (trip " + Twine(*trip) + ")");
-        if (failed(loopUnrollFull(loop)))
+        if (failed(circt::hls_analysis::hlsLoopUnrollFull(loop)))
           LLVM_DEBUG(llvm::dbgs() << "  loopUnrollFull failed\n");
         continue;
       }
@@ -1390,11 +1394,26 @@ struct AutoPipelineUnrollPass
     });
     for (scf::ForOp loop : runtimeLoops) {
       uint64_t factor = *userUnrollFactor(loop);
+      markUserUnrollCopies(loop);
       remark(loop.getLoc(), "user unroll: run-time trip count, by factor " +
                                 Twine(factor) +
                                 " with guarded copies (VITIS_NOTES N103)");
       applyRuntimePartialUnroll(loop, factor);
     }
+  }
+
+  /// Marks the calls and math ops of a loop a user `unroll` pragma unrolls
+  /// (hls.user_unroll_copy; the copies inherit the mark): debug provenance
+  /// and the N16 R6 test in --bram-analysis (a library core called from such
+  /// copies stays one module per copy).
+  static void markUserUnrollCopies(Operation *loop) {
+    Builder buildPoint(loop->getContext());
+    loop->walk([&](Operation *op) {
+      if (isa<CallOpInterface>(op) ||
+          op->getName().getDialectNamespace() == "math")
+        op->setAttr(circt::hls_analysis::kUserUnrollCopyAttr,
+                    buildPoint.getUnitAttr());
+    });
   }
 
   /// `#pragma HLS unroll factor=F` on an scf.for whose trip count is only
@@ -1462,6 +1481,7 @@ struct AutoPipelineUnrollPass
         newLoop->setAttr(attr.getName(), attr.getValue());
     newLoop->setAttr(kLoopUnrollPartialAttr, buildPoint.getI64IntegerAttr(
                                                  static_cast<int64_t>(factor)));
+    newLoop->setAttr(kLoopUnrollRuntimeGuardedAttr, buildPoint.getUnitAttr());
     loop.replaceAllUsesWith(newLoop.getResults());
     loop.erase();
   }
@@ -1515,7 +1535,7 @@ struct AutoPipelineUnrollPass
             inner->removeAttr(kUnrollPendingAttr);
         });
     };
-    if (failed(loopUnrollByFactor(loop, factor))) {
+    if (failed(circt::hls_analysis::hlsLoopUnrollByFactor(loop, factor))) {
 
       LLVM_DEBUG(llvm::dbgs() << "  loopUnrollByFactor failed\n");
       loop->removeAttr(kUnrollPendingAttr);
@@ -1568,7 +1588,7 @@ struct AutoPipelineUnrollPass
       remark(forOp.getLoc(),
              "user unroll: remainder iterations unrolled completely (Vitis "
              "keeps them in the unrolled body, there is no epilogue loop)");
-      if (failed(loopUnrollFull(forOp)))
+      if (failed(circt::hls_analysis::hlsLoopUnrollFull(forOp)))
         remark(forOp.getLoc(), "user unroll: the remainder loop has a "
                                "dynamic trip count, left rolled");
     }
@@ -1629,7 +1649,7 @@ struct AutoPipelineUnrollPass
       loop->removeAttr(kLoopFlattenedParentsAttr);
       loop->removeAttr(kLoopAutoUnrolledAttr);
       LocationAttr loc = loop.getLoc();
-      if (failed(loopUnrollFull(loop))) {
+      if (failed(circt::hls_analysis::hlsLoopUnrollFull(loop))) {
         LLVM_DEBUG(llvm::dbgs() << "  loopUnrollFull failed\n");
         continue;
       }
