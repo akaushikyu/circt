@@ -229,7 +229,7 @@ class_ece8893_2023_spring,GradCAM__src_hls__conv_ds,0,0,0,0,True,exact,compared,
 class_ece8893_2023_spring,GradCAM__src_hls__linear_fc,8,8,0,0,True,exact,compared,ok,ok,
 class_ece8893_2023_spring,GradCAM__src_hls__maxpool,22,22,0,0,True,exact,compared,ok,ok,
 class_ece8893_2023_spring,Monte-Carlo__MersenneTwister,4,4,0,0,True,exact,compared,ok,ok,
-class_ece8893_2023_spring,Monte-Carlo__Paths,294,264,-30,30,False,under,compared,ok,ok,math_core:pow_generic_double_s: hls-est None vs Vitis 30
+class_ece8893_2023_spring,Monte-Carlo__Paths,294,294,0,0,True,exact,compared,ok,ok,
 class_ece8893_2023_spring,Monte-Carlo__Random 100 Paths,78,78,0,0,True,exact,compared,ok,ok,
 class_ece8893_2023_spring,YOLOv4-Tiny-Accelerator__HLS_C__CSP_Layer1Layer2,133,133,0,0,True,exact,compared,ok,ok,
 class_ece8893_2023_spring,YOLOv4-Tiny-Accelerator__HLS_C__Conv2D_Layer1Layer2,54,54,0,0,True,exact,compared,ok,ok,
@@ -253,17 +253,17 @@ class_ece8893_spring_2025,Sunchips_Topic5_Modular_Multiplication,0,0,0,0,True,ex
 class_ece8893_spring_2025,Xiyin_Xue_Lab2_2025,137,137,0,0,True,exact,compared,ok,ok,math_core:exp_33_9_s: hls-est 7 vs Vitis None; exp_x_msb_1_table: hls-est None vs Vitis 2; f_x_msb_2_table: hls-est None vs Vitis 2
 class_ece8893_spring_2025,Xiyin_xue_lab3,250,250,0,0,True,exact,compared,ok,ok,
 class_ece8893_spring_2025,adithi_upadhya_ece8893_spring25_lab2,2057,2057,0,0,True,exact,compared,ok,ok,
-class_ece8893_spring_2025,adithi_upadhya_ece8893_spring25_lab3,212,180,-32,32,False,under,compared,ok,ok,local_C: hls-est 32 vs Vitis 64
+class_ece8893_spring_2025,adithi_upadhya_ece8893_spring25_lab3,212,212,0,0,True,exact,compared,ok,ok,
 class_ece8893_spring_2025,akshaya_shivprasad_ece8893_spring25_lab2,473,473,0,0,True,exact,compared,ok,ok,K_local: hls-est 240 vs Vitis None; V_local: hls-est 192 vs Vitis None; K_local_0_i: hls-est None vs Vitis 30
 class_ece8893_spring_2025,akshaya_shivprasad_ece8893_spring25_lab3,4,4,0,0,True,exact,compared,ok,ok,
 class_ece8893_spring_2025,anirudh_tulasi_ece8893_spring25_lab2,459,459,0,0,True,exact,compared,ok,ok,
 class_ece8893_spring_2025,anirudh_tulasi_ece8893_spring25_lab3,,24,,,False,,vitis missing,vitis timeout,ok,row_indices_B_local: hls-est 8 vs Vitis None; column_indices_A_local: hls-est 4 vs Vitis None; values_A_local: hls-est 4 vs Vitis None
-class_ece8893_spring_2025,anuvab_sen_ece_8893_spring_29__Anuvab_Sen_lab_2_ECE_8893_spring_29,1353,1318,-35,35,False,under,compared,ok,ok,k_fifo: hls-est 114 vs Vitis None; out_fifo: hls-est 114 vs Vitis None; q_fifo: hls-est 114 vs Vitis None
+class_ece8893_spring_2025,anuvab_sen_ece_8893_spring_29__Anuvab_Sen_lab_2_ECE_8893_spring_29,1353,1353,0,0,True,exact,compared,ok,ok,k_fifo: hls-est 114 vs Vitis None; out_fifo: hls-est 114 vs Vitis None; q_fifo: hls-est 114 vs Vitis None
 class_ece8893_spring_2025,anuvab_sen_ece_8893_spring_29__Anuvab_Sen_lab_3_ECE_8893_spring_29,86,86,0,0,True,exact,compared,ok,ok,a_stream: hls-est 5 vs Vitis None; mult_stream: hls-est 5 vs Vitis None
 class_ece8893_spring_2025,apurba_prasad_padhy_ece8893_spring25_lab2,362,362,0,0,True,exact,compared,ok,ok,K_local: hls-est 128 vs Vitis None; Q_local: hls-est 128 vs Vitis None; V_local: hls-est 100 vs Vitis None
 class_ece8893_spring_2025,arati_ganesh_ece8893_spring25_lab2,1228,1228,0,0,True,exact,compared,ok,ok,att_stream_raw: hls-est 356 vs Vitis None; att_stream_soft: hls-est 356 vs Vitis None; p_ZZ21compute_attention_HLSPA100_A128_8ap_fixedILi16ELi5EL9ap_q_mode5EL9ap_o_mode: hls-est None vs Vitis 256
 class_ece8893_spring_2025,arati_ganesh_ece8893_spring25_lab3,24,24,0,0,True,exact,compared,ok,ok,
-class_ece8893_spring_2025,ayush_saxena_ece_8893_spring_26__Ayush_Saxena_lab_2_ECE_8893_spring_26,1361,1346,-15,15,False,under,compared,ok,ok,k_fifo: hls-est 114 vs Vitis None; out_fifo: hls-est 114 vs Vitis None; q_fifo: hls-est 114 vs Vitis None
+class_ece8893_spring_2025,ayush_saxena_ece_8893_spring_26__Ayush_Saxena_lab_2_ECE_8893_spring_26,1361,1361,0,0,True,exact,compared,ok,ok,k_fifo: hls-est 114 vs Vitis None; out_fifo: hls-est 114 vs Vitis None; q_fifo: hls-est 114 vs Vitis None
 class_ece8893_spring_2025,ayush_saxena_ece_8893_spring_26__Ayush_Saxena_lab_3_ECE_8893_spring_26,247,247,0,0,True,exact,compared,ok,ok,a_fifo: hls-est 173 vs Vitis None; c_fifo: hls-est 57 vs Vitis None; row_a_1: hls-est 2 vs Vitis None
 class_ece8893_spring_2025,barry_walker_lab_2,830,930,100,100,False,over<=15%,compared,ok,ok,K_row_buffer: hls-est 114 vs Vitis None; Q_row_buffer: hls-est 114 vs Vitis None; V_row_buffer: hls-est 114 vs Vitis None
 class_ece8893_spring_2025,barry_walker_lab_3,624,624,0,0,True,exact,compared,ok,ok,accum_buffers: hls-est 384 vs Vitis None; write_buffers: hls-est 144 vs Vitis None; B_local_0: hls-est 16 vs Vitis None
@@ -276,10 +276,10 @@ class_ece8893_spring_2025,ece8893_dataset_lab_1__0002,82,82,0,0,True,exact,compa
 class_ece8893_spring_2025,gabriel_lopez_lugo_ece8893_spring2025__gabriel_lopez_lugo_lab2,203,203,0,0,True,exact,compared,ok,ok,softmax_result: hls-est 9 vs Vitis None
 class_ece8893_spring_2025,gabriel_lopez_lugo_ece8893_spring2025__gabriel_lopez_lugo_lab3,44,44,0,0,True,exact,compared,ok,ok,C_local: hls-est 8 vs Vitis None; sparse_matrix_multiply_HLS_vector_vector_int_vector_vector_int_vector_C_l: hls-est None vs Vitis 8
 class_ece8893_spring_2025,hyungseok_bae_lab2_2025,232,232,0,0,True,exact,compared,ok,ok,fifo_softmax2av: hls-est 89 vs Vitis None
-class_ece8893_spring_2025,hyungseok_bae_lab3_2025,322,154,-168,168,False,under,compared,ok,ok,p_ZZ26sparse_matrix_multiply_HLSPKN3hls6vectorI8ap_fixedILi16ELi5EL9ap_q_mode5EL9: hls-est None vs Vitis 192; local_row_idx_B: hls-est 16 vs Vitis None; idx_stream: hls-est 15 vs Vitis None
+class_ece8893_spring_2025,hyungseok_bae_lab3_2025,322,322,0,0,True,exact,compared,ok,ok,p_ZZ26sparse_matrix_multiply_HLSPKN3hls6vectorI8ap_fixedILi16ELi5EL9ap_q_mode5EL9: hls-est None vs Vitis 192; local_row_idx_B: hls-est 128 vs Vitis None; local_B: hls-est 64 vs Vitis None
 class_ece8893_spring_2025,kaihong_lin_lab2,460,460,0,0,True,exact,compared,ok,ok,
 class_ece8893_spring_2025,kaihong_lin_lab3,,218,,,False,,vitis missing,vitis memory limit,ok,A_dense: hls-est 64 vs Vitis None; B_dense: hls-est 64 vs Vitis None; C_local: hls-est 32 vs Vitis None
-class_ece8893_spring_2025,kamya_hari_lab_2_2025,2056,2050,-6,6,False,under,compared,ok,ok,exp_x_msb_1_table: hls-est None vs Vitis 2; f_x_msb_2_table: hls-est None vs Vitis 2; f_x_msb_3_table: hls-est None vs Vitis 2
+class_ece8893_spring_2025,kamya_hari_lab_2_2025,2056,2057,1,1,False,over<=15%,compared,ok,ok,math_core:exp_32_8_s: hls-est 7 vs Vitis None; exp_x_msb_1_table: hls-est None vs Vitis 2; f_x_msb_2_table: hls-est None vs Vitis 2
 class_ece8893_spring_2025,kamya_hari_lab_3_2025,,51,,,False,,vitis missing,vitis timeout,ok,result: hls-est 16 vs Vitis None; local_B: hls-est 8 vs Vitis None; local_B_colptrs: hls-est 8 vs Vitis None
 class_ece8893_spring_2025,karthikeya_sharma_ece8893_spring_25_lab_2,383,383,0,0,True,exact,compared,ok,ok,p_ZZ16computeAttentionRN3hls6streamI8ap_fixedILi16ELi5EL9ap_q_mode5EL9ap_o_mode3E: hls-est None vs Vitis 316; K_BRAM: hls-est 128 vs Vitis None; Q_BRAM: hls-est 128 vs Vitis None
 class_ece8893_spring_2025,karthikeya_sharma_ece8893_spring_25_lab_3,104,104,0,0,True,exact,compared,ok,ok,dense_row: hls-est 57 vs Vitis None; column_indices_A_row_stream: hls-est 2 vs Vitis None; mem3_m_axi: hls-est 2 vs Vitis 1
@@ -289,13 +289,13 @@ class_ece8893_spring_2025,lab3_hanchen,16,16,0,0,True,exact,compared,ok,ok,
 class_ece8893_spring_2025,lab3_sushkrutha,46,46,0,0,True,exact,compared,ok,ok,
 class_ece8893_spring_2025,matrix_methods__ben_hall_lab2_2025_attention,432,432,0,0,True,exact,compared,ok,ok,
 class_ece8893_spring_2025,matrix_methods__ben_hall_lab3_sparse_matrix_multiplication,132,76,-56,56,False,under,compared,ok,ok,B: hls-est 4 vs Vitis 60
-class_ece8893_spring_2025,max_beaulieu_Lab_3_2025,35,69,34,34,False,over>15%,compared,ok,ok,mem1_m_axi: hls-est 16 vs Vitis None; mem2_m_axi: hls-est 16 vs Vitis None; colIdxA_stream: hls-est 2 vs Vitis None
+class_ece8893_spring_2025,max_beaulieu_Lab_3_2025,35,35,0,0,True,exact,compared,ok,ok,colIdxA_stream: hls-est 2 vs Vitis None; colPtrB_stream: hls-est 2 vs Vitis None; rowIdxB_stream: hls-est 2 vs Vitis None
 class_ece8893_spring_2025,michael_meng_ece_8893_spring_25__lab2,73,73,0,0,True,exact,compared,ok,ok,
 class_ece8893_spring_2025,michael_meng_ece_8893_spring_25__lab3,100,104,4,4,False,over<=15%,compared,ok,ok,col_ptr_B_local: hls-est 2 vs Vitis 0; row_ptr_A_local: hls-est 2 vs Vitis 0
 class_ece8893_spring_2025,minjun_kim_Lab2_2025,709,709,0,0,True,exact,compared,ok,ok,k_stream: hls-est 64 vs Vitis None; q_stream: hls-est 64 vs Vitis None; v_stream: hls-est 64 vs Vitis None
 class_ece8893_spring_2025,minjun_kim_Lab3_2025,20,20,0,0,True,exact,compared,ok,ok,
 class_ece8893_spring_2025,mizanur_Lab2_2025,968,968,0,0,True,exact,compared,ok,ok,
-class_ece8893_spring_2025,mizanur_Lab3_2025,260,324,64,64,False,over>15%,compared,ok,ok,local_C: hls-est 128 vs Vitis 64; row_indices_B_loc: hls-est 64 vs Vitis None; row_indices_B_loc_0_i_i: hls-est None vs Vitis 1
+class_ece8893_spring_2025,mizanur_Lab3_2025,260,260,0,0,True,exact,compared,ok,ok,row_indices_B_loc: hls-est 64 vs Vitis None; row_indices_B_loc_0_i_i: hls-est None vs Vitis 1; row_indices_B_loc_10_i_i: hls-est None vs Vitis 1
 class_ece8893_spring_2025,mohammad_zain_lab_2,113,113,0,0,True,exact,compared,ok,ok,attention_softmax_fifo: hls-est 1 vs Vitis None
 class_ece8893_spring_2025,mohammad_zain_lab_3,425,453,28,28,False,over<=15%,compared,ok,ok,C_local: hls-est 57 vs Vitis 29
 class_ece8893_spring_2025,nayan_nair_ece8893_spring25_lab2,2114,2114,0,0,True,exact,compared,ok,ok,
@@ -303,7 +303,7 @@ class_ece8893_spring_2025,nayan_nair_ece8893_spring25_lab3,25,25,0,0,True,exact,
 class_ece8893_spring_2025,neuro_monarchs_neural_kernel_ece8893_spring_2025,,36121,,,False,,vitis missing,vitis timeout,ok,padded: hls-est 32768 vs Vitis None; f1: hls-est 1024 vs Vitis None; f2: hls-est 1024 vs Vitis None
 class_ece8893_spring_2025,neuro_monarchs_symbolic_kernel_ece8893_spring_2025,973,981,8,8,False,over<=15%,compared,ok,ok,A_buffers: hls-est 232 vs Vitis None; B_buffers: hls-est 232 vs Vitis None; C_buffers: hls-est 232 vs Vitis None
 class_ece8893_spring_2025,nikhil_p_ece8893_spring25_lab2,95,128,33,33,False,over>15%,compared,ok,ok,K_lcl: hls-est 16 vs Vitis None; V_lcl: hls-est 96 vs Vitis 84; mem2_m_axi: hls-est 4 vs Vitis 0
-class_ece8893_spring_2025,nikhil_p_ece8893_spring25_lab3,743,571,-172,172,False,under,compared,ok,ok,row_indices_B_local: hls-est 114 vs Vitis 228; values_B_local: hls-est 58 vs Vitis 116; C_local: hls-est 57 vs Vitis None
+class_ece8893_spring_2025,nikhil_p_ece8893_spring25_lab3,743,743,0,0,True,exact,compared,ok,ok,C_local: hls-est 57 vs Vitis None
 class_ece8893_spring_2025,nikhil_s_ece8893_sp25_lab2,521,521,0,0,True,exact,compared,ok,ok,
 class_ece8893_spring_2025,nikhil_s_ece8893_sp25_lab3,25,25,0,0,True,exact,compared,ok,ok,
 class_ece8893_spring_2025,oscar_baglivio_lab_2,242,242,0,0,True,exact,compared,ok,ok,
@@ -318,7 +318,7 @@ class_ece8893_spring_2025,sahith_lab2_2025,,,,,False,,vitis missing,vitis failed
 class_ece8893_spring_2025,sahith_lab3_2025,284,284,0,0,True,exact,compared,ok,ok,
 class_ece8893_spring_2025,shengxi_liang_ece8893_spring_25__Shengxi_Liang_LAB2,,,,,False,,vitis missing,vitis failed,cgeist error: top.cpp:29:42: error: use of undeclared variable 'V_local' in '#pragma HLS array_partition',
 class_ece8893_spring_2025,shengxi_liang_ece8893_spring_25__Shengxi_Liang_LAB3,263,263,0,0,True,exact,compared,ok,ok,a_row_stream: hls-est 173 vs Vitis None; row_stream: hls-est 57 vs Vitis None; a_row_1: hls-est 2 vs Vitis None
-class_ece8893_spring_2025,shibao_su_ece8893_lab2,,302,,,False,,vitis missing,vitis timeout,ok,K_local: hls-est 60 vs Vitis None; Output_local: hls-est 60 vs Vitis None; Q_local: hls-est 60 vs Vitis None
+class_ece8893_spring_2025,shibao_su_ece8893_lab2,,307,,,False,,vitis missing,vitis timeout,ok,K_local: hls-est 60 vs Vitis None; Output_local: hls-est 60 vs Vitis None; Q_local: hls-est 60 vs Vitis None
 class_ece8893_spring_2025,shibao_su_ece8893_lab3,41,41,0,0,True,exact,compared,ok,ok,fifo_C: hls-est 1 vs Vitis None
 class_ece8893_spring_2025,shreesahitya_balaje_lab2,,32779,,,False,,vitis missing,vitis timeout,ok,attention_local: hls-est 8704 vs Vitis None; V_local: hls-est 8192 vs Vitis None; K_local: hls-est 7680 vs Vitis None
 class_ece8893_spring_2025,shreesahitya_balaje_lab3,54,54,0,0,True,exact,compared,ok,ok,
@@ -810,4 +810,4 @@ vitis_examples,20_basic_examples_vhls_resolved_array_access_bottleneck,0,0,0,0,T
 vitis_examples,21_basic_examples_vhls_uram_ecc,,0,,,False,,vitis missing,vitis failed,ok,
 vitis_examples,22_basic_examples_vhls_fixed_point_hamming_window,1,1,0,0,True,exact,compared,ok,ok,hamming_window@static@window_coeff: hls-est 1 vs Vitis None; window_coeff: hls-est None vs Vitis 1
 vitis_examples,28_vitis_accel_examples_streaming_vadd,58,58,0,0,True,exact,compared,ok,ok,
-whetstone,whetstone,0,16,16,16,False,over>15%,compared,ok,ok,math_core:sin_or_cos_double_s: hls-est 16 vs Vitis None
+whetstone,whetstone,0,0,0,0,True,exact,compared,ok,ok,
