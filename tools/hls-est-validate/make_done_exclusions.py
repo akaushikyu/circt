@@ -50,6 +50,15 @@ INPUT_DOMAIN = [
     ("divides by zero on the driver's inputs (AddressSanitizer FPE)", re.compile(r"AddressSanitizer: FPE")),
 ]
 
+# Designs whose reference fails an assertion of the source itself on the driver's inputs: the same class
+# (the input is outside the source's domain, the reference is not defective), checked per design because an
+# abort can also be a real defect (W9 round 14 review finding 7).
+INPUT_DOMAIN_DESIGNS = {
+    "vitis_examples/28_vitis_accel_examples_streaming_vadd":
+        "the source's own assert(size % NUM_WORDS == 0) (vadd.cpp:134) fails on the driver's random size"
+        " (exit -6 in all 6 modes)",
+}
+
 
 def load(path):
     with open(path) as f:
@@ -207,6 +216,10 @@ def main():
         if not s or s.get("status") != "n/a":
             continue
         reason = str(s.get("reason") or "")
+        if k in INPUT_DOMAIN_DESIGNS:
+            input_limits.append((k, "fails an assertion of the source on the driver's inputs",
+                                 reason + "; " + INPUT_DOMAIN_DESIGNS[k], run[k].get("cgeist_status")))
+            continue
         for out, classes in ((defects, NATIVE_DEFECT), (input_limits, INPUT_DOMAIN)):
             hit = next((cls for cls, rx in classes if rx.search(reason)), None)
             if hit:
@@ -288,9 +301,10 @@ def main():
         L.append("")
     L.append("### Not excluded: the driver's inputs, not the reference (%d, open)" % len(input_limits))
     L.append("")
-    L.append("The source divides by zero on every input check_semantics makes; the reference is not defective."
-             " An input in the source's domain (a positive-definite matrix for cholesky, nonzero denominators"
-             " for attention) would make these checkable.")
+    L.append("The source divides by zero, or fails one of its own assertions, on every input check_semantics"
+             " makes; the reference is not defective. An input in the source's domain (a positive-definite matrix"
+             " for cholesky, nonzero denominators for attention, a size that is a multiple of NUM_WORDS for"
+             " streaming_vadd) would make these checkable.")
     L.append("")
     L.append("| design | check_semantics reason | cgeist |")
     L.append("|---|---|---|")

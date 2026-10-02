@@ -38,7 +38,7 @@ module {
   func.func @top(%x: memref<10xi32>, %y: memref<10xi32>) {
     affine.for %i = 0 to 10 {
       %v = affine.load %x[%i] : memref<10xi32>
-      %e = func.call @exp_core(%v) {hls.math_core = {function = "exp", type = "ap_fixed<32,16>"}} : (i32) -> i32
+      %e = func.call @exp_core(%v) {hls.math_core = {function = "exp", type = "ap_fixed<32,16>"}, hls.user_unroll_copy} : (i32) -> i32
       affine.store %e, %y[%i] : memref<10xi32>
     } {hls.pipeline_off, hls.unroll = [{factor = 8 : i32, skip_exit_check = false}]}
     return
@@ -51,7 +51,7 @@ module {
   func.func @top(%x: memref<9xi32>, %y: memref<9xi32>) {
     affine.for %i = 0 to 9 {
       %v = affine.load %x[%i] : memref<9xi32>
-      %e = func.call @exp_core(%v) {hls.math_core = {function = "exp", type = "ap_fixed<32,16>"}} : (i32) -> i32
+      %e = func.call @exp_core(%v) {hls.math_core = {function = "exp", type = "ap_fixed<32,16>"}, hls.user_unroll_copy} : (i32) -> i32
       affine.store %e, %y[%i] : memref<9xi32>
     } {hls.pipeline_off, hls.unroll = [{factor = 8 : i32, skip_exit_check = false}]}
     return
@@ -64,10 +64,10 @@ module {
   func.func @top(%x: memref<16xi32>, %w: memref<16xi32>, %y: memref<16xi32>, %z: memref<16xi32>) {
     affine.for %i = 0 to 16 {
       %v = affine.load %x[%i] : memref<16xi32>
-      %e = func.call @exp_core(%v) {hls.math_core = {function = "exp", type = "ap_fixed<32,16>"}} : (i32) -> i32
+      %e = func.call @exp_core(%v) {hls.math_core = {function = "exp", type = "ap_fixed<32,16>"}, hls.user_unroll_copy} : (i32) -> i32
       affine.store %e, %y[%i] : memref<16xi32>
       %u = affine.load %w[%i] : memref<16xi32>
-      %f = func.call @exp_core(%u) {hls.math_core = {function = "exp", type = "ap_fixed<32,16>"}} : (i32) -> i32
+      %f = func.call @exp_core(%u) {hls.math_core = {function = "exp", type = "ap_fixed<32,16>"}, hls.user_unroll_copy} : (i32) -> i32
       affine.store %f, %z[%i] : memref<16xi32>
     } {hls.pipeline_off, hls.unroll = [{factor = 4 : i32, skip_exit_check = false}]}
     return
@@ -80,7 +80,7 @@ module {
   func.func @top(%x: memref<64xi32> {hls.array_partition = [{dim = 1 : i32, factor = 4 : i32, kind = "cyclic", variable = "in"}]}, %y: memref<64xi32> {hls.array_partition = [{dim = 1 : i32, factor = 4 : i32, kind = "cyclic", variable = "out"}]}) {
     affine.for %i = 0 to 64 {
       %v = affine.load %x[%i] : memref<64xi32>
-      %e = func.call @exp_core(%v) {hls.math_core = {function = "exp", type = "ap_fixed<32,16>"}} : (i32) -> i32
+      %e = func.call @exp_core(%v) {hls.math_core = {function = "exp", type = "ap_fixed<32,16>"}, hls.user_unroll_copy} : (i32) -> i32
       affine.store %e, %y[%i] : memref<64xi32>
     } {hls.pipeline_off, hls.unroll = [{factor = 4 : i32, skip_exit_check = false}]}
     return

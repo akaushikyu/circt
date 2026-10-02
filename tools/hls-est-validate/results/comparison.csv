@@ -332,7 +332,7 @@ class_ece8893_spring_2025,vishnu_varma_venkata_ece8893_spring25_lab2,2114,2114,0
 class_ece8893_spring_2025,vishnu_varma_venkata_ece8893_spring25_lab3,340,340,0,0,True,exact,compared,ok,ok,
 class_ece8893_spring_2025,zihan_qi_lab2,207,215,8,8,False,over<=15%,compared,ok,ok,Output_temp: hls-est 8 vs Vitis None
 class_ece8893_spring_2025,zihan_qi_lab3,1920,1920,0,0,True,exact,compared,ok,ok,C_stream: hls-est 1856 vs Vitis None
-class_ece8893_spring_2025,zijun_wang_ece8893_spring25_lab2,457,463,6,6,False,over<=15%,compared,ok,ok,math_core:exp_33_9_s: hls-est 175 vs Vitis None; exp_x_msb_1_table: hls-est None vs Vitis 52; f_x_msb_2_table: hls-est None vs Vitis 52
+class_ece8893_spring_2025,zijun_wang_ece8893_spring25_lab2,457,457,0,0,True,exact,compared,ok,ok,math_core:exp_33_9_s: hls-est 169 vs Vitis None; exp_x_msb_1_table: hls-est None vs Vitis 52; f_x_msb_2_table: hls-est None vs Vitis 52
 class_ece8893_spring_2025,zijun_wang_ece8893_spring25_lab3,270,270,0,0,True,exact,compared,ok,ok,p_ZZ26sparse_matrix_multiply_HLSP8ap_fixedILi16ELi5EL9ap_q_mode5EL9ap_o_mode3ELi0: hls-est None vs Vitis 56; sparse_matrix_multiply_HLS_ap_fixed_int_int_ap_fixed_int_int_ap_fixed: hls-est None vs Vitis 39; buf_A_vals: hls-est 32 vs Vitis None
 flowgnn,dgn,,12353,,,False,,vitis missing,vitis failed,ok,messages_ping: hls-est 4096 vs Vitis None; messages_pong: hls-est 4096 vs Vitis None; h_node: hls-est 2048 vs Vitis None
 flowgnn,gat,,11433,,,False,,vitis missing,vitis timeout,ok,h_node_ping: hls-est 2048 vs Vitis None; h_node_pong: hls-est 2048 vs Vitis None; out_nodes_features_skip_concat_bias_ping: hls-est 2048 vs Vitis None
