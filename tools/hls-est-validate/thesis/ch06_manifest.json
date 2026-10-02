@@ -1,6 +1,6 @@
 {
  "_doc": "Inputs of make_thesis_tables.py (chapter 6). Paths only, never numbers: every number in the thesis tables is computed from these files. '$SCRATCH' is ~/hls-est-work/coord/scratch, '$RESULTS' is tools/hls-est-validate/results. 'changelog' names the CHANGELOG.md entry (or round report) that documents the run; 'notes' names the VITIS_NOTES / OPEN_ISSUES entries a rule implements. A run is a run_hlsest.py result file; it is re-scored against the current results/vitis.json, so all rows share one ground truth.",
- "newest_run": "$SCRATCH/w9r13fix/G2.json",
+ "newest_run": "$SCRATCH/w9r14i/F2.json",
  "newest_run_label": "final evaluation run",
  "outofband_classes": {
   "per_design": "$SCRATCH/w9r10p/final.json",
@@ -257,11 +257,18 @@
    "changelog": "2026-10-22 W9r13-impl"
   },
   {
-   "label": "round 13 review (final)",
+   "label": "round 13 review",
    "date": "2026-10-22",
    "run": "$SCRATCH/w9r13fix/G2.json",
    "shim": "real",
    "changelog": "2026-10-22 W9 round 13 review fixes"
+  },
+  {
+   "label": "round 14 (final)",
+   "date": "2026-10-22",
+   "run": "$SCRATCH/w9r14i/F2.json",
+   "shim": "real",
+   "changelog": "2026-10-22 W9r14-impl"
   }
  ],
  "rule_pairs": [
