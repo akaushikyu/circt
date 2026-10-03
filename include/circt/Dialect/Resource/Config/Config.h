@@ -248,6 +248,19 @@ struct ReplicationConfig {
   /// for a callee reading it through a parameter: its accesses go through
   /// its two ports (VITIS_NOTES N85).
   bool portBoundWritableGlobals = true;
+  /// A replicable bank read in a pipelined loop that does not write it only by
+  /// steered reads (unrolled copies of one read whose bank is chosen at run
+  /// time) gets ceil(R / II) copies, one more than the shared-write-port rule
+  /// (VITIS_NOTES N115: kernel w9r15p_rc_rot 16 copies against rc_fix 15;
+  /// NeuroFPGA padded_A). Off by default: polybench_pragmas k3mm tmp2, 64
+  /// steered reads per bank at II 4, has 15 copies in Vitis (OPEN_ISSUES O153)
+  bool rotatingReadsFullCopies = false;
+  /// A user bind_storage type=ram_1wnr makes the bank replicable even when a
+  /// loop stores it more than once per iteration; that loop's II rises instead
+  /// (VITIS_NOTES N113: kernels w9r15p_bw_1wnr 12 against bw_none 4; FocusedACO
+  /// route). Off by default: on FocusedACO it needs N114 (exclusive predicated
+  /// loads share a port slot, unconfirmed) to stay in band
+  bool userRam1wnrReplicable = false;
 };
 
 struct RomConfig {
@@ -400,6 +413,19 @@ struct PipelineDecisionConfig {
   int64_t doWhileMinSubLoopTrip = 3;
   /// A user `unroll factor=F` (1 < F) on an scf.for with a run-time trip count is applied as F guarded copies of the body in a loop of step F*step (copy u runs under iv + u*step < ub, Vitis keeps the exit test in the unrolled body); a copy's index into a cyclic partition is then not a constant bank, so e
   bool partialUnrollRuntimeLoops = true;
+  /// The occupancy of a kept call in a pipelined loop is recomputed once the
+  /// automatic partitions are decided: accesses to arrays that became
+  /// registers, and loads whose value is unused, take no port (OPEN_ISSUES O133
+  /// / O144, Dehazing calculate_median: its scalarised window; off: the
+  /// occupancy --auto-pipeline-unroll estimated before the partitions)
+  bool callOccupancyAfterPartition = true;
+  /// fold_unrolled_guards also substitutes guard operands computed from
+  /// constants through nested affine.apply and index arithmetic (an unrolled
+  /// copy's apply of apply of a constant), so a guard whose operands are all
+  /// constants folds (OPEN_ISSUES O151: nikhil_p lab2 kernel_attention_V, V_lcl
+  /// read 7 times on banks 0..3 and 6 times on 4..15 as in Vitis; off: only a
+  /// constant or a one-level apply of constants)
+  bool foldNestedConstantGuards = true;
 };
 
 struct PartitionInferenceConfig {
@@ -434,6 +460,12 @@ struct PartitioningConfig {
   /// An index computed by division, remainder, shifts or bit operations on
   /// constants is a constant (VITIS_NOTES N97 (a)).
   bool constantIndexFoldDivision = true;
+  /// (b) / banking: a value chosen by an scf.if / select whose condition
+  /// folds to a constant is that constant (VITIS_NOTES N110 corpus).
+  bool constantIndexFoldConditionals = true;
+  /// (c) through element / row views (polygeist.subindex, memref.cast)
+  /// passed to callees (N94 through the view, O133).
+  bool constantIndexThroughViews = true;
   /// After a user block partition, rule (b) asks for a constant offset
   /// inside the block, not a constant index (VITIS_NOTES N104).
   bool constantIndexBlockOffset = true;
@@ -454,12 +486,38 @@ struct PartitioningConfig {
   /// bound and a step that is a multiple of a cyclic factor, addresses one
   /// bank (W9r14 review, N103 copies, kernel w9r14rv_uv_lb0).
   bool inductionResidueBanks = true;
+  /// A store whose bank is chosen at run time writes only the banks its index
+  /// can reach when only the known low bits of its operands are used (an
+  /// affine.for counter is lb + step * t, any other operand unknown): copy u of
+  /// Cl[i][jj + u] with jj stepping by 32 writes banks u and u + 32, not every
+  /// bank of the partition (OPEN_ISSUES O150: ben_hall lab3, kernel
+  /// w9r8p_fl_pre; a loop range does not prune: vishnu lab3 row_ptr_A_local;
+  /// off: a store_enable on every bank)
+  bool reachableStoreBanks = true;
+  /// A one-element bank of a complete partition (memory banking's hls.partition
+  /// alloca) is a register: no port pool in a pipelined loop, priced as
+  /// registers (VITIS_NOTES N111: kernel w9r15p_rg_net, a compare-and-swap
+  /// network on a completely partitioned int v[8] runs at II 1; off: two ports
+  /// per element)
+  bool completePartitionRegisters = true;
+  /// A memref index whose low bits are known modulo a power-of-two cyclic
+  /// factor ((n & ~7) + k: residue k mod 8; through casts, add / sub, masks
+  /// with all-zero or all-one low bits, multiplies and shifts by a multiple of
+  /// the factor) addresses that one bank, its offset computed at run time, as
+  /// LLVM's known bits give Vitis (VITIS_NOTES N115 control kernel
+  /// w9r15p_rc_fix: 15 copies per bank; off: the bank is chosen at run time)
+  bool knownResidueBanks = true;
 };
 
 struct FoldingConfig {
   std::string ruleSet; ///< vitis-undef | zero | a plugin
   bool canonicalize = true;
   int64_t maxRounds = 16;
+  /// The address of a local array or global (or of a view of one) compared with
+  /// the null pointer folds to a constant (never null), so a comparison does
+  /// not keep the array alive (VITIS_NOTES N118: kernel w9r15p_pb_null, Vitis 0
+  /// BRAM; nikhil_p lab2 K_lcl; off: the comparison keeps it)
+  bool storageAddressNotNull = true;
 };
 
 struct DeadMemoryConfig {
@@ -474,6 +532,13 @@ struct DeadMemoryConfig {
   /// ... also when the overwrite is the first access inside a loop that runs
   /// at least once (W9r14 review, kernel w9r14rv_dc_loopw).
   bool overwrittenByLoops = true;
+  /// A store into an element of a registers array (hls.registers) that no used
+  /// load reads, in its function or in the kept callees it is passed to, is
+  /// deleted with the values computed only for it, after the automatic
+  /// partitions (VITIS_NOTES N110: Vitis passes a kept callee only the window
+  /// elements it reads; Dehazing calculate_median, kernel w9r15p_dw_dead; off:
+  /// every store stays)
+  bool unreadRegisterElements = true;
 };
 
 struct MiddleEndConfig {
@@ -494,6 +559,18 @@ struct MiddleEndConfig {
   /// body's top level wrote earlier in the same iteration uses no port.
   bool forwardToGuardedLoads = true;
   DeadMemoryConfig deadMemory;
+  /// LICM: a loop-invariant load in the condition region of an scf.while (a
+  /// bound re-read every iteration, for (i = rp[r]; i < rp[r + 1]; ++i)) moves
+  /// in front of the loop, so it shares the enclosing scope's states
+  /// (VITIS_NOTES N120: davendra lab3 row_ptr_A_local, kernels w9r15p_rp_*;
+  /// off: it stays in the condition)
+  bool licmHoistWhileConditions = true;
+  /// GVN also on memref.load (an index computed outside the affine form): a
+  /// load of the same index values as an earlier load of the block, nothing in
+  /// between that may write it, is the same value (Dehazing debayer with its
+  /// counters raised by cgeist: 27 reads of in_tile, 9 distinct; off: only
+  /// affine.load)
+  bool gvnMemrefLoads = true;
 };
 
 struct StructConfig {
@@ -515,6 +592,9 @@ struct NarrowingConfig {
   bool loadDemand = true;
   std::vector<std::string> fullAddressInterfaceModes;
   bool completeReadSelector = true;
+  /// A RAM whose every stored value is a constant is narrowed by N26's ROM
+  /// reinterpretation of that set (N112).
+  bool constantSetReinterpretation = true;
 };
 
 struct HlsToolConfig {
@@ -631,6 +711,10 @@ struct CallDepthConfig {
   int64_t narrowMultiplyMaxBits = 32;
   int64_t narrowMultiplyCycles = 2;
   int64_t portsPerMemory = 2;
+  /// Two calls of one function at the top level of their caller that no
+  /// value or array orders still share an instance when their inputs become
+  /// ready in different states of the caller's call schedule (N116).
+  bool staggeredCallsShareInstance = true;
   int64_t indexBits = 32;
   std::vector<DelayBand> carryChainNs, ternaryAdderNs;
 
@@ -645,6 +729,9 @@ struct SchedulingConfig {
   /// Loop-carried memory recurrences bound the II of a pipelined loop
   /// (VITIS_NOTES N87, MemoryRecurrences.h).
   bool memoryRecurrences = true;
+  /// A read-modify-write of one array at an address computed inside the
+  /// loop body (h[v]++) bounds the II at least this much (N117; 0: off).
+  int64_t unknownAddressMinII = 2;
   /// Cycles an operator class adds to such a recurrence chain
   /// (`<class>_f32` / `<class>_f64` before `<class>`); a class not listed
   /// adds its operator latency (VITIS_NOTES N83).

@@ -25,7 +25,9 @@
           "callee_stores_per_loop": true,
           "caller_stores_per_loop": true,
           "port_bound_several_arrays": true,
-          "port_bound_writable_globals": true
+          "port_bound_writable_globals": true,
+          "rotating_reads_full_copies": false,
+          "user_ram_1wnr_replicable": false
         },
         "rom": { "sdp_max_reads": 2, "copies": "ceil_half", "sequential_state_reads": true },
         "sequential_scope": { "model": "stretch-pair", "loads_before_consumer": true },
@@ -77,14 +79,16 @@
         "sink_parent_trailing_code": true,
         "sink_parent_trailing_stores": false,
         "fold_unrolled_guards": true,
+        "fold_nested_constant_guards": true,
         "pipeline_off_sequential": true,
         "do_while_flatten_refusal": true,
         "do_while_min_subloop_trip": 3,
-        "partial_unroll_runtime_loops": true
+        "partial_unroll_runtime_loops": true,
+        "call_occupancy_after_partition": true
       },
       "partitioning": {
         "policy": "vitis-td",
-        "constant_index": { "min_extent": 2, "max_extent": 64, "after_user_partition": true, "non_affine_arrays": true, "pipo_streams": true, "globals": true, "through_calls": true, "fold_division": true, "block_offset": true },
+        "constant_index": { "min_extent": 2, "max_extent": 64, "after_user_partition": true, "non_affine_arrays": true, "pipo_streams": true, "globals": true, "through_calls": true, "fold_division": true, "fold_conditionals": true, "through_views": true, "block_offset": true },
         "inference": {
           "target_ii": 1,
           "ports": { "any": 2, "read": 1, "write": 1 },
@@ -96,16 +100,21 @@
         "steer_affine_loads": true,
         "compound_assign_two_stores": true,
         "block_bank_from_loop_range": true,
+        "reachable_store_banks": true,
+        "complete_partition_registers": true,
+        "known_residue_banks": true,
         "steer_window_groups": true,
         "induction_residue_banks": true
       },
-      "folding": { "rule_set": "vitis-undef", "canonicalize": true, "max_rounds": 16 },
+      "folding": { "rule_set": "vitis-undef", "canonicalize": true, "max_rounds": 16, "storage_address_not_null": true },
       "middle_end": {
         "licm_hoist_invariant_loads": true,
         "licm_hoist_past_calls": true,
         "licm_hoist_conditional": true,
+        "licm_hoist_while_conditions": true,
         "merge_if_else_accesses": true,
         "gvn_loads": true,
+        "gvn_memref_loads": true,
         "gvn_conditional_loads": true,
         "globals": true,
         "dse_guarded_stores": true,
@@ -118,12 +127,13 @@
           "global_shared_by_functions_escapes": true,
           "load_store_cycles": true,
           "overwritten_call_outputs": true,
-          "overwritten_by_loops": true
+          "overwritten_by_loops": true,
+          "unread_register_elements": true
         }
       },
       "inlining": { "honour_inline_off": true },
       "structs": { "aggregate": true, "globals": true, "scalar_registers": true, "through_calls": true, "element_copy_loops": true, "temporary_registers": true, "member_partitions": true, "specialize_split_casts": true },
-      "narrowing": { "stored_ranges": true, "load_demand": true, "full_address_interface_modes": ["m_axi"], "complete_read_selector": true },
+      "narrowing": { "stored_ranges": true, "load_demand": true, "full_address_interface_modes": ["m_axi"], "complete_read_selector": true, "constant_set_reinterpretation": true },
       "globals": { "attribute_accesses": true },
       "grouping": { "plugin": "identity" },
       "math_library": { "table": "", "local_struct_tables_at_run_time": true, "fixed_exp_tables_when_unlisted": true, "inlined_tables_in_pipelines": true }
@@ -187,6 +197,7 @@
     "dependences": {
       "model": "cached-o1",
       "memory_recurrences": true,
+      "unknown_address_min_ii": 2,
       "recurrence_latencies": { "comb": 0, "multicycle": 0, "fpaddsub_f32": 4, "fpaddsub_f64": 5, "fpmul_f32": 3, "fpmul_f64": 6 }
     },
     "modulo": {
@@ -212,6 +223,7 @@
       "narrow_multiply_max_bits": 32,
       "narrow_multiply_cycles": 2,
       "ports_per_memory": 2,
+      "staggered_calls_share_instance": true,
       "index_bits": 32,
       "carry_chain_ns": [
         { "max_bits": 10, "ns": 1.91 },

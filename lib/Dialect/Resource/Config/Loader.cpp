@@ -865,6 +865,10 @@ void fillTool(const json::Object &t, ToolProfile &tool) {
       boolean(rep, "port_bound_several_arrays", true);
   m.replication.portBoundWritableGlobals =
       boolean(rep, "port_bound_writable_globals", true);
+  m.replication.rotatingReadsFullCopies =
+      boolean(rep, "rotating_reads_full_copies", false);
+  m.replication.userRam1wnrReplicable =
+      boolean(rep, "user_ram_1wnr_replicable", false);
   const json::Object &rom = obj(ma, "rom");
   m.rom.sdpMaxReads = integer(rom, "sdp_max_reads");
   m.rom.copies = str(rom, "copies");
@@ -956,6 +960,8 @@ void fillTool(const json::Object &t, ToolProfile &tool) {
       boolean(pd, "sink_parent_trailing_stores", false);
   h.pipelineDecision.foldUnrolledGuards =
       boolean(pd, "fold_unrolled_guards", true);
+  h.pipelineDecision.foldNestedConstantGuards =
+      boolean(pd, "fold_nested_constant_guards", true);
   h.pipelineDecision.pipelineOffSequential =
       boolean(pd, "pipeline_off_sequential", true);
   h.pipelineDecision.doWhileFlattenRefusal =
@@ -964,6 +970,8 @@ void fillTool(const json::Object &t, ToolProfile &tool) {
       integer(pd, "do_while_min_subloop_trip", 3);
   h.pipelineDecision.partialUnrollRuntimeLoops =
       boolean(pd, "partial_unroll_runtime_loops", true);
+  h.pipelineDecision.callOccupancyAfterPartition =
+      boolean(pd, "call_occupancy_after_partition", true);
 
   const json::Object &pa = obj(hls, "partitioning");
   h.partitioning.policy = str(pa, "policy");
@@ -983,12 +991,22 @@ void fillTool(const json::Object &t, ToolProfile &tool) {
       boolean(obj(pa, "constant_index"), "through_calls", true);
   h.partitioning.constantIndexFoldDivision =
       boolean(obj(pa, "constant_index"), "fold_division", true);
+  h.partitioning.constantIndexFoldConditionals =
+      boolean(obj(pa, "constant_index"), "fold_conditionals", true);
+  h.partitioning.constantIndexThroughViews =
+      boolean(obj(pa, "constant_index"), "through_views", true);
   h.partitioning.constantIndexBlockOffset =
       boolean(obj(pa, "constant_index"), "block_offset", true);
   h.partitioning.compoundAssignTwoStores =
       boolean(pa, "compound_assign_two_stores", true);
   h.partitioning.blockBankFromLoopRange =
       boolean(pa, "block_bank_from_loop_range", true);
+  h.partitioning.reachableStoreBanks =
+      boolean(pa, "reachable_store_banks", true);
+  h.partitioning.completePartitionRegisters =
+      boolean(pa, "complete_partition_registers", true);
+  h.partitioning.knownResidueBanks =
+      boolean(pa, "known_residue_banks", true);
   const json::Object &inf = obj(pa, "inference");
   PartitionInferenceConfig &pi = h.partitioning.inference;
   pi.targetII = integer(inf, "target_ii");
@@ -1009,6 +1027,8 @@ void fillTool(const json::Object &t, ToolProfile &tool) {
   const json::Object &fo = obj(hls, "folding");
   h.folding.ruleSet = str(fo, "rule_set");
   h.folding.canonicalize = boolean(fo, "canonicalize");
+  h.folding.storageAddressNotNull =
+      boolean(fo, "storage_address_not_null", true);
   h.folding.maxRounds = integer(fo, "max_rounds");
 
   const json::Object &me = obj(hls, "middle_end");
@@ -1016,8 +1036,11 @@ void fillTool(const json::Object &t, ToolProfile &tool) {
   mid.licmHoistInvariantLoads = boolean(me, "licm_hoist_invariant_loads");
   mid.licmHoistPastCalls = boolean(me, "licm_hoist_past_calls");
   mid.licmHoistConditional = boolean(me, "licm_hoist_conditional");
+  mid.licmHoistWhileConditions =
+      boolean(me, "licm_hoist_while_conditions", true);
   mid.mergeIfElseAccesses = boolean(me, "merge_if_else_accesses");
   mid.gvnLoads = boolean(me, "gvn_loads");
+  mid.gvnMemrefLoads = boolean(me, "gvn_memref_loads", true);
   mid.gvnConditionalLoads = boolean(me, "gvn_conditional_loads", true);
   mid.trackGlobals = boolean(me, "globals", true);
   mid.dseGuardedStores = boolean(me, "dse_guarded_stores", true);
@@ -1035,6 +1058,8 @@ void fillTool(const json::Object &t, ToolProfile &tool) {
       boolean(dm, "overwritten_call_outputs", true);
   mid.deadMemory.overwrittenByLoops =
       boolean(dm, "overwritten_by_loops", true);
+  mid.deadMemory.unreadRegisterElements =
+      boolean(dm, "unread_register_elements", true);
 
   h.honourInlineOff = boolean(obj(hls, "inlining"), "honour_inline_off");
   const json::Object &sc = obj(hls, "structs");
@@ -1049,6 +1074,8 @@ void fillTool(const json::Object &t, ToolProfile &tool) {
       boolean(sc, "specialize_split_casts", true);
   const json::Object &na = obj(hls, "narrowing");
   h.narrowing.storedRanges = boolean(na, "stored_ranges");
+  h.narrowing.constantSetReinterpretation =
+      boolean(na, "constant_set_reinterpretation", true);
   h.narrowing.loadDemand = boolean(na, "load_demand");
   h.narrowing.fullAddressInterfaceModes =
       strings(na, "full_address_interface_modes");
@@ -1113,6 +1140,7 @@ void fillScheduling(const json::Object &s, SchedulingConfig &sc) {
   const json::Object &de = obj(s, "dependences");
   sc.dependenceModel = str(de, "model");
   sc.memoryRecurrences = boolean(de, "memory_recurrences", true);
+  sc.unknownAddressMinII = integer(de, "unknown_address_min_ii", 2);
   for (const auto &kv : obj(de, "recurrence_latencies"))
     if (std::optional<int64_t> i = kv.second.getAsInteger())
       sc.recurrenceLatencies[kv.first.str()] = *i;
@@ -1140,6 +1168,8 @@ void fillScheduling(const json::Object &s, SchedulingConfig &sc) {
   c.narrowMultiplyMaxBits = integer(cd, "narrow_multiply_max_bits");
   c.narrowMultiplyCycles = integer(cd, "narrow_multiply_cycles");
   c.portsPerMemory = integer(cd, "ports_per_memory");
+  c.staggeredCallsShareInstance =
+      boolean(cd, "staggered_calls_share_instance", true);
   c.indexBits = integer(cd, "index_bits");
   eachObject(cd, "carry_chain_ns", [&](const json::Object &b) {
     c.carryChainNs.push_back({optInteger(b, "max_bits"), number(b, "ns")});
