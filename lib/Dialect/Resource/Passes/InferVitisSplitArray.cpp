@@ -75,6 +75,7 @@
 #include "circt/Dialect/Resource/Config/ConfigUtils.h"
 #include "circt/Dialect/Resource/Passes/ConstantIndex.h"
 #include "circt/Dialect/Resource/Passes/LoopPragmas.h"
+#include "circt/Dialect/Resource/Passes/PolygeistCompat.h"
 #include "mlir/Dialect/Affine/Analysis/LoopAnalysis.h"
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
@@ -814,6 +815,26 @@ constantDimsOfAffine(AffineMap map, ValueRange mapOperands,
   return dims;
 }
 
+/// Whether a user array_partition of `def` is `complete` on every dimension
+/// of `ty` (dim=0, or one complete entry per dimension).
+static bool userCompleteEveryDim(Operation *def, MemRefType ty) {
+  auto entries = def->getAttrOfType<ArrayAttr>(kPartitionAttr);
+  if (!entries)
+    return false;
+  SmallVector<bool> complete(ty.getRank(), false);
+  for (Attribute a : entries) {
+    auto entry = dyn_cast<DictionaryAttr>(a);
+    auto dim = entry ? entry.getAs<IntegerAttr>("dim") : IntegerAttr();
+    auto kind = entry ? entry.getAs<StringAttr>("kind") : StringAttr();
+    if (!dim || !kind || kind.getValue() != "complete")
+      continue;
+    for (int64_t d = 0; d < ty.getRank(); ++d)
+      if (dim.getInt() == d + 1 || dim.getInt() == 0)
+        complete[d] = true;
+  }
+  return llvm::all_of(complete, [](bool c) { return c; });
+}
+
 /// Per dimension of `def` (type `ty`): the block size of a user block
 /// array_partition on it, 0 without one (N104).
 static SmallVector<int64_t> userBlockSizes(Operation *def, MemRefType ty) {
@@ -858,6 +879,10 @@ struct ConstantIndexInfo {
   unsigned affineAccesses = 0;
   /// Per dimension: every access indexes it with a constant.
   SmallVector<bool> constantDim;
+  /// Some accesses were reached through an element / row view
+  /// (polygeist.subindex, memref.cast) passed to a callee: memory banking
+  /// does not split through such views, so only rule (c) may follow.
+  bool throughViews = false;
 };
 
 /// Whether `store` writes a constant under the first-call guard of a static
@@ -886,6 +911,13 @@ static bool isStaticInitStore(Operation *store, Value stored) {
   return false;
 }
 
+/// Whether rule (b) / (c) follows element and row views passed to callees
+/// (key tool.hls.partitioning.constant_index.through_views).
+static bool viewsFollowed() {
+  return circt::hlsest::Config::get()
+      .tool.hls.partitioning.constantIndexThroughViews;
+}
+
 /// The uses of `mem` (an array, or a callee parameter it reaches) into
 /// `info`. With `throughCalls`, a call passing the array is followed into
 /// the callee's parameter, whose accesses count as the array's (VITIS_NOTES
@@ -902,6 +934,58 @@ static void analyzeConstantIndexUses(Value mem, unsigned rank,
   for (OpOperand &use : mem.getUses()) {
     Operation *user = use.getOwner();
     SmallVector<bool> dims;
+    // A view of the array taken for a reference / pointer parameter (`f(a[i])`
+    // with `T &`, or a cast to a dynamic shape): its accesses are the
+    // array's (VITIS_NOTES N94 through the view; Dehazing's vals_tmp elements
+    // passed to compare_and_swap_unit are scalars in Vitis, 214-449).
+    if (throughCalls && viewsFollowed()) {
+      if (auto cast = dyn_cast<memref::CastOp>(user)) {
+        auto to = dyn_cast<MemRefType>(cast.getType());
+        if (!to || static_cast<unsigned>(to.getRank()) != rank) {
+          info.complete = false;
+          return;
+        }
+        info.throughViews = true;
+        analyzeConstantIndexUses(cast.getResult(), rank, throughCalls, info,
+                                 visited, blockSizes);
+        if (!info.complete)
+          return;
+        continue;
+      }
+      if (auto sub = dyn_cast<circt::hls_analysis::SubIndexOp>(user);
+          sub && sub.getSource() == mem &&
+          (sub.isElementView() || sub.isRowSelect())) {
+        auto to = cast<MemRefType>(sub.getType());
+        unsigned viewRank = static_cast<unsigned>(to.getRank());
+        ConstantIndexInfo view;
+        view.constantDim.assign(viewRank, true);
+        analyzeConstantIndexUses(sub.getResult(), viewRank, throughCalls,
+                                 view, visited, {});
+        if (!view.complete) {
+          info.complete = false;
+          return;
+        }
+        info.throughViews = true;
+        info.accesses += view.accesses;
+        info.affineAccesses += view.affineAccesses;
+        bool indexConst = getConstantIndexValue(sub.getIndex()).has_value();
+        // Row select: dimension 0 is the view's index, the rest the view's
+        // dimensions. Element view: dimension 0 is index + the view's first
+        // index, the rest agree.
+        bool rowSelect = sub.isRowSelect();
+        if (view.accesses) {
+          for (unsigned d = 0; d < rank; ++d) {
+            bool c;
+            if (d == 0)
+              c = indexConst && (rowSelect || view.constantDim[0]);
+            else
+              c = view.constantDim[rowSelect ? d - 1 : d];
+            info.constantDim[d] = info.constantDim[d] && c;
+          }
+        }
+        continue;
+      }
+    }
     if (auto call = dyn_cast<func::CallOp>(user); call && throughCalls) {
       auto callee = dyn_cast_or_null<func::FuncOp>(call.resolveCallable());
       unsigned index = use.getOperandNumber();
@@ -1109,9 +1193,17 @@ decideFromConstantIndices(Operation *def, MemRefType ty,
     return decision; // escapes, or nothing to look at (dead: not ours)
   if (onlyB && llvm::all_of(info.constantDim, [](bool c) { return c; }))
     return decision;
+  bool allConstant = llvm::all_of(info.constantDim, [](bool c) { return c; });
+  // Accesses through element views: memory banking cannot split the array,
+  // so only registers can follow; a user complete partition of every
+  // dimension is registers as well (VITIS_NOTES N111, kernel w9r15p_rg_net:
+  // `int v[8]` complete, its elements passed by reference).
+  bool userComplete = afterUser && userCompleteEveryDim(def, ty);
+  if (info.throughViews && (!allConstant || (afterUser && !userComplete)))
+    return decision; // banking does not split through the views
 
   // (c) Every access constant in every dimension: scalarised.
-  if (!afterUser && llvm::all_of(info.constantDim, [](bool c) { return c; })) {
+  if ((!afterUser || (userComplete && info.throughViews)) && allConstant) {
     decision.kind = AutomaticPartition::Registers;
     decision.reason = "every one of the " + std::to_string(info.accesses) +
                       " access(es) uses a constant index in every dimension: "
