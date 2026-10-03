@@ -12,6 +12,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/Resource/Passes/FoldUnrolledGuards.h"
+#include "circt/Dialect/Resource/Passes/ConstantIndex.h"
 
 #include "mlir/Analysis/FlatLinearValueConstraints.h"
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
@@ -344,6 +345,13 @@ struct ConditionBuilder {
 static GuardTruth evaluateGuard(scf::IfOp ifOp) {
   if (std::optional<int64_t> c = getConstantIntValue(ifOp.getCondition()))
     return *c ? GuardTruth::AlwaysTrue : GuardTruth::AlwaysFalse;
+  // A comparison of values computed from constants only (an unrolled copy's
+  // `index_cast(k) != 3`, Dehazing tile_median's window counters; VITIS_NOTES
+  // N110 corpus): LLVM folds it before Vitis schedules.
+  if (circt::hls_analysis::foldConstantConditionals())
+    if (std::optional<bool> c =
+            circt::hls_analysis::getConstantCondition(ifOp.getCondition()))
+      return *c ? GuardTruth::AlwaysTrue : GuardTruth::AlwaysFalse;
   ConditionBuilder cb(ifOp.getContext());
   std::optional<ConditionBuilder::Disj> t =
       cb.condition(ifOp.getCondition(), /*negate=*/false);

@@ -26,6 +26,7 @@
 #include "mlir/Dialect/Affine/Analysis/LoopAnalysis.h"
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
+#include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/Dialect/Utils/StaticValueUtils.h"
 #include "mlir/IR/AffineExpr.h"
 #include "mlir/IR/AffineMap.h"
@@ -35,6 +36,57 @@
 #include <optional>
 
 namespace circt::hls_analysis {
+
+inline std::optional<int64_t> getConstantIndexValue(mlir::Value v);
+
+/// Whether constant conditions fold (key
+/// tool.hls.partitioning.constant_index.fold_conditionals).
+inline bool foldConstantConditionals() {
+  return circt::hlsest::Config::get()
+      .tool.hls.partitioning.constantIndexFoldConditionals;
+}
+
+/// The value of an i1 condition computed from constants: a constant, or an
+/// arith.cmpi of two operands getConstantIndexValue resolves.
+inline std::optional<bool> getConstantCondition(mlir::Value c) {
+  if (auto cst = c.getDefiningOp<mlir::arith::ConstantOp>())
+    if (auto b = mlir::dyn_cast<mlir::BoolAttr>(cst.getValue()))
+      return b.getValue();
+  if (auto cst = c.getDefiningOp<mlir::arith::ConstantIntOp>())
+    return cst.value() != 0;
+  auto cmp = c.getDefiningOp<mlir::arith::CmpIOp>();
+  if (!cmp)
+    return std::nullopt;
+  std::optional<int64_t> a = getConstantIndexValue(cmp.getLhs());
+  std::optional<int64_t> b =
+      a ? getConstantIndexValue(cmp.getRhs()) : std::nullopt;
+  if (!a || !b)
+    return std::nullopt;
+  uint64_t ua = static_cast<uint64_t>(*a), ub = static_cast<uint64_t>(*b);
+  unsigned width = 64;
+  if (auto it = mlir::dyn_cast<mlir::IntegerType>(cmp.getLhs().getType()))
+    width = it.getWidth();
+  if (width == 0 || width > 64)
+    return std::nullopt;
+  if (width < 64) { // the unsigned predicates compare the bit patterns
+    ua &= (uint64_t(1) << width) - 1;
+    ub &= (uint64_t(1) << width) - 1;
+  }
+  using P = mlir::arith::CmpIPredicate;
+  switch (cmp.getPredicate()) {
+  case P::eq: return *a == *b;
+  case P::ne: return *a != *b;
+  case P::slt: return *a < *b;
+  case P::sle: return *a <= *b;
+  case P::sgt: return *a > *b;
+  case P::sge: return *a >= *b;
+  case P::ult: return ua < ub;
+  case P::ule: return ua <= ub;
+  case P::ugt: return ua > ub;
+  case P::uge: return ua >= ub;
+  }
+  return std::nullopt;
+}
 
 /// The value of an index operand if it is a compile-time constant by the time
 /// Vitis partitions and binds memories: an integer constant (also through
@@ -146,6 +198,31 @@ inline std::optional<int64_t> getConstantIndexValue(mlir::Value v) {
     if (auto ce = llvm::dyn_cast<mlir::AffineConstantExpr>(e))
       return ce.getValue();
     return std::nullopt;
+  }
+  // A value chosen by a condition computed from constants: the counter an
+  // unrolled loop advances only on some iterations (`if (k != 3) w[n++] =
+  // ..`, Dehazing tile_median's cross / diag windows) is a chain of scf.if /
+  // select results whose conditions fold once the loop is unrolled, as LLVM
+  // folds them before Vitis partitions (VITIS_NOTES N110 corpus: the windows
+  // are scalarised, 214-449).
+  if (foldConstantConditionals()) {
+    if (auto sel = v.getDefiningOp<mlir::arith::SelectOp>()) {
+      std::optional<bool> c = getConstantCondition(sel.getCondition());
+      if (!c)
+        return std::nullopt;
+      return getConstantIndexValue(*c ? sel.getTrueValue()
+                                      : sel.getFalseValue());
+    }
+    if (auto ifOp = v.getDefiningOp<mlir::scf::IfOp>()) {
+      std::optional<bool> c = getConstantCondition(ifOp.getCondition());
+      if (!c || (!*c && ifOp.getElseRegion().empty()))
+        return std::nullopt;
+      mlir::Block &blk = *c ? ifOp.getThenRegion().front()
+                            : ifOp.getElseRegion().front();
+      auto yield = mlir::cast<mlir::scf::YieldOp>(blk.getTerminator());
+      unsigned n = mlir::cast<mlir::OpResult>(v).getResultNumber();
+      return getConstantIndexValue(yield.getOperand(n));
+    }
   }
   if (mlir::affine::isAffineForInductionVar(v)) {
     mlir::affine::AffineForOp owner = mlir::affine::getForInductionVarOwner(v);
