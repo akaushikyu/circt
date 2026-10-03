@@ -248,6 +248,8 @@ struct PartitionRecord {
 
   SmallVector<int64_t> steeredGroups;
   std::optional<int64_t> forwardedReloads;
+
+  std::optional<int64_t> prunedStoreEnables;
 };
 
 struct BankMathRecord {
@@ -758,6 +760,8 @@ static void describeMemref(Operation *op, unsigned index,
                                      g.asArrayRef().end());
     if (auto fieldValue = st.getAs<IntegerAttr>("forwarded_reloads"))
       portValue.forwardedReloads = fieldValue.getInt();
+    if (auto fieldValue = st.getAs<IntegerAttr>("pruned_store_enables"))
+      portValue.prunedStoreEnables = fieldValue.getInt();
   }
 }
 
@@ -2681,6 +2685,9 @@ static llvm::json::Object toJson(const MemrefRecord &resultValue) {
       part["steered_groups"] = std::move(g);
       part["forwarded_reloads"] = *portValue.forwardedReloads;
     }
+
+    if (portValue.prunedStoreEnables)
+      part["pruned_store_enables"] = *portValue.prunedStoreEnables;
     o["partition"] = std::move(part);
   } else {
     o["partition"] = nullptr;

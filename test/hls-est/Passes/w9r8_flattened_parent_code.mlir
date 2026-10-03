@@ -6,11 +6,14 @@
 // version of kernel w9r8p_fl_pre (Vitis, 64 x 64: Bl RAM_1WNR 60, II 2): the
 // 16 reads of Bl[k][j] in the k body are charged to the flattened jj
 // pipeline (RAM_1WNR); without the rule they are a sequential scope (RAM_2P).
-// The II itself (5 here, 2 in Vitis) is the scheduler's (OPEN_ISSUES O87).
+// The II was 5 (every Cl store a store_enable on all 16 banks); with
+// tool.hls.partitioning.reachable_store_banks (OPEN_ISSUES O150, W9r15) copy u
+// writes bank u only and the 16 Bl reads bound it: II 1, Bl 15 copies (16;
+// Vitis at 64 x 64: II 2, Bl 15 copies x 4 = 60).
 // MLIR from the installed cgeist d0e92867 with the real headers.
 // CHECK: Bl (alloca)
 // CHECK: ram type: RAM_1WNR -- {{.*}}: 16R+0W per iteration
-// CHECK: Total BRAM: 4
+// CHECK: Total BRAM: 16
 // OFF: Bl (alloca)
 // OFF: ram type: RAM_2P
 // OFF: Total BRAM: 2

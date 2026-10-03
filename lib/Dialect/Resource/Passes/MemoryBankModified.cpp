@@ -29,6 +29,7 @@
 #include "mlir/Support/LLVM.h"
 #include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/SetVector.h"
 #include "llvm/ADT/StringSet.h"
 #include "llvm/Support/FormatVariadic.h"
 #include "llvm/Support/MathExtras.h"
@@ -268,6 +269,127 @@ static AffineMap rotatingIndexMap(const AffineBanking &ab,
   return AffineMap::get(nDims, nSyms, entryValue);
 }
 
+/// The candidate banks a rotating affine access can reach when nothing is
+/// known about its operands but their integer structure, as LLVM's known
+/// bits see an unrolled copy's index: ben_hall lab3's `Cl[i][jj + u] +=
+/// t[jj + u]` (Cl complete on dim 2, jj stepping by 32 after a factor-32
+/// unroll, `32 * d0 + u` once normalized) reaches only the indices congruent
+/// to u modulo 32, banks u and u + 32, where every store became a
+/// store_enable on all 64 banks (33 accesses per bank, ResMinII 17; Vitis
+/// writes each bank once per iteration: OPEN_ISSUES O150, kernel
+/// w9r8p_fl_pre). An affine.for counter is lb + step * t, every other
+/// operand an unknown integer (a loop's upper bound is not used: a store at
+/// `row[i][k]` with i in [1, 8) still reaches bank 0 in Vitis, vishnu lab3
+/// row_ptr_A_local); the index is evaluated over one power-of-two period of
+/// every operand and taken modulo that period (the known low bits), residues
+/// outside the dimension are unreachable. nullopt (every candidate) when the
+/// period space is large or no value is in range. Key
+/// tool.hls.partitioning.reachable_store_banks.
+static std::optional<SmallVector<int64_t>>
+reachableCandidates(AffineMap accessMap, ArrayRef<Value> operands,
+                    const AffineBanking &ab, const BankLayout &lowerIndex) {
+  constexpr int64_t kMaxPoints = 1 << 14;
+  unsigned nDims = accessMap.getNumDims();
+  unsigned nSyms = accessMap.getNumSymbols();
+  MLIRContext *context = accessMap.getContext();
+  SmallVector<AffineExpr> idxExprs;
+  int64_t extent = 1;
+  for (unsigned resultValue : ab.choice.rotating) {
+    const DimPartition &portValue = lowerIndex.dims[resultValue];
+    idxExprs.push_back(accessMap.getResult(portValue.dim));
+    extent = std::max(extent, portValue.extent);
+  }
+
+  SmallVector<unsigned> usedDims, usedSyms;
+  {
+    llvm::SmallSetVector<unsigned, 4> dimensionIndex, sy;
+    for (AffineExpr entryValue : idxExprs)
+      entryValue.walk([&](AffineExpr exprValue) {
+        if (auto de = dyn_cast<AffineDimExpr>(exprValue))
+          dimensionIndex.insert(de.getPosition());
+        else if (auto se = dyn_cast<AffineSymbolExpr>(exprValue))
+          sy.insert(se.getPosition());
+      });
+    usedDims.assign(dimensionIndex.begin(), dimensionIndex.end());
+    usedSyms.assign(sy.begin(), sy.end());
+  }
+  SmallVector<int64_t> counterLb, counterStep;
+  for (unsigned dimensionIndex : usedDims) {
+    int64_t lb = 0, step = 1;
+    if (affine::isAffineForInductionVar(operands[dimensionIndex])) {
+      affine::AffineForOp owner =
+          affine::getForInductionVarOwner(operands[dimensionIndex]);
+      if (owner.hasConstantLowerBound()) {
+        lb = owner.getConstantLowerBound();
+        step = owner.getStepAsInt();
+      }
+    }
+    counterLb.push_back(lb);
+    counterStep.push_back(step);
+  }
+  unsigned nUsed = usedDims.size() + usedSyms.size();
+  int64_t period = llvm::PowerOf2Ceil(static_cast<uint64_t>(extent));
+  int64_t points = 1;
+  for (unsigned loopIndex = 0; loopIndex < nUsed; ++loopIndex) {
+    points *= period;
+    if (points > kMaxPoints)
+      return std::nullopt;
+  }
+  std::set<int64_t> hit;
+  SmallVector<int64_t> typeValue(nUsed, 0);
+  for (int64_t pt = 0; pt < points; ++pt) {
+    SmallVector<AffineExpr> dimRepl, symRepl;
+    for (unsigned loopIndex = 0; loopIndex < nDims; ++loopIndex)
+      dimRepl.push_back(getAffineDimExpr(loopIndex, context));
+    for (unsigned loopIndex = 0; loopIndex < nSyms; ++loopIndex)
+      symRepl.push_back(getAffineSymbolExpr(loopIndex, context));
+
+    for (unsigned useValue = 0; useValue < usedDims.size(); ++useValue)
+      dimRepl[usedDims[useValue]] = getAffineConstantExpr(
+          counterLb[useValue] + counterStep[useValue] * typeValue[useValue],
+          context);
+    for (unsigned useValue = 0; useValue < usedSyms.size(); ++useValue)
+      symRepl[usedSyms[useValue]] =
+          getAffineConstantExpr(typeValue[usedDims.size() + useValue], context);
+    int64_t keyValue = 0;
+    bool inRange = true;
+    for (unsigned resultValue = 0; resultValue < idxExprs.size() && inRange;
+         ++resultValue) {
+      const DimPartition &portValue =
+          lowerIndex.dims[ab.choice.rotating[resultValue]];
+      auto candidateValue = dyn_cast<AffineConstantExpr>(simplifyAffineExpr(
+          idxExprs[resultValue].replaceDimsAndSymbols(dimRepl, symRepl), nDims,
+          nSyms));
+      if (!candidateValue)
+        return std::nullopt;
+
+      int64_t indexValue = llvm::mod(candidateValue.getValue(), period);
+      if (indexValue >= portValue.extent) {
+        inRange = false;
+        break;
+      }
+      int64_t bank = bankAndOffset(indexValue, portValue).first;
+      if (bank < 0 || bank >= portValue.factor)
+        return std::nullopt;
+      keyValue = keyValue * portValue.factor + bank;
+    }
+    if (inRange)
+      hit.insert(keyValue);
+    for (unsigned useValue = 0; useValue < nUsed; ++useValue) {
+      if (++typeValue[useValue] < period)
+        break;
+      typeValue[useValue] = 0;
+    }
+  }
+  if (hit.empty())
+    return std::nullopt;
+  return SmallVector<int64_t>(hit.begin(), hit.end());
+}
+
+static bool reachableStoreBanks() {
+  return circt::hlsest::Config::get().tool.hls.partitioning.reachableStoreBanks;
+}
+
 static void rewriteAffineLoad(affine::AffineLoadOp loadOp,
                               ArrayRef<Value> banks,
                               const BankLayout &lowerIndex) {
@@ -324,9 +446,10 @@ static bool compoundAssignTwoStores(Operation *store) {
              .tool.hls.partitioning.compoundAssignTwoStores;
 }
 
-static void rewriteAffineStore(affine::AffineStoreOp storeOp,
-                               ArrayRef<Value> banks,
-                               const BankLayout &lowerIndex) {
+/// Returns the store_enables left out because their bank is unreachable.
+static unsigned rewriteAffineStore(affine::AffineStoreOp storeOp,
+                                   ArrayRef<Value> banks,
+                                   const BankLayout &lowerIndex) {
   OpBuilder buildPoint(storeOp);
   Location loc = storeOp.getLoc();
   Value operandValue = storeOp.getValueToStore();
@@ -339,13 +462,22 @@ static void rewriteAffineStore(affine::AffineStoreOp storeOp,
                                   banks[ab.choice.bank(lowerIndex, 0)],
                                   ab.bankedMap, operands);
     storeOp.erase();
-    return;
+    return 0;
   }
 
   unsigned nDims = accessMap.getNumDims();
   unsigned nSyms = accessMap.getNumSymbols();
   int64_t elementCount = ab.choice.numCandidates(lowerIndex);
-  for (int64_t keyValue = 0; keyValue < elementCount; ++keyValue) {
+  SmallVector<int64_t> candidates;
+  std::optional<SmallVector<int64_t>> reach;
+  if (reachableStoreBanks())
+    reach = reachableCandidates(accessMap, operands, ab, lowerIndex);
+  if (reach)
+    candidates = *reach;
+  else
+    for (int64_t keyValue = 0; keyValue < elementCount; ++keyValue)
+      candidates.push_back(keyValue);
+  for (int64_t keyValue : candidates) {
     SmallVector<int64_t> dig = ab.choice.digits(lowerIndex, keyValue);
     SmallVector<AffineExpr> constraints;
     SmallVector<bool> eqFlags;
@@ -366,6 +498,8 @@ static void rewriteAffineStore(affine::AffineStoreOp storeOp,
                                 operands, operands, ab.bankedMap, cond);
   }
   storeOp.erase();
+  return static_cast<unsigned>(elementCount -
+                               static_cast<int64_t>(candidates.size()));
 }
 
 struct MemrefBanking {
@@ -987,6 +1121,7 @@ static unsigned forwardNestedReloads(Value site) {
 struct SteerStats {
   SmallVector<int64_t> groupSizes;
   unsigned forwardedReloads = 0;
+  unsigned prunedStoreEnables = 0;
 };
 
 static void steerLoadGroups(Value site, ArrayRef<Value> banks,
@@ -1258,7 +1393,8 @@ static void rewriteMemrefStore(memref::StoreOp storeOp, ArrayRef<Value> banks,
 /// steered across the banks and the forwarded if-arm reloads (N27 / N74),
 /// accumulated over the sites of a global. Read by the debug report only.
 static void recordSteering(ArrayRef<Value> banks, const SteerStats &stats) {
-  if (stats.groupSizes.empty() && stats.forwardedReloads == 0)
+  if (stats.groupSizes.empty() && stats.forwardedReloads == 0 &&
+      stats.prunedStoreEnables == 0)
     return;
   for (Value bank : banks) {
     Operation *mem = bank.getDefiningOp();
@@ -1269,23 +1405,29 @@ static void recordSteering(ArrayRef<Value> banks, const SteerStats &stats) {
       continue;
     Builder buildPoint(mem->getContext());
     SmallVector<int64_t> sizes;
-    int64_t forwarded = 0;
+    int64_t forwarded = 0, pruned = 0;
     if (auto old = mem->getAttrOfType<DictionaryAttr>("hls.steering")) {
       if (auto globalOp = old.getAs<DenseI64ArrayAttr>("groups"))
         sizes.append(globalOp.asArrayRef().begin(),
                      globalOp.asArrayRef().end());
       if (auto fieldValue = old.getAs<IntegerAttr>("forwarded_reloads"))
         forwarded = fieldValue.getInt();
+      if (auto portValue = old.getAs<IntegerAttr>("pruned_store_enables"))
+        pruned = portValue.getInt();
     }
     sizes.append(stats.groupSizes.begin(), stats.groupSizes.end());
     forwarded += stats.forwardedReloads;
-    mem->setAttr("hls.steering",
-                 buildPoint.getDictionaryAttr(
-                     {buildPoint.getNamedAttr(
-                          "groups", buildPoint.getDenseI64ArrayAttr(sizes)),
-                      buildPoint.getNamedAttr(
-                          "forwarded_reloads",
-                          buildPoint.getI64IntegerAttr(forwarded))}));
+    pruned += stats.prunedStoreEnables;
+    SmallVector<NamedAttribute> fields{
+        buildPoint.getNamedAttr("groups",
+                                buildPoint.getDenseI64ArrayAttr(sizes)),
+        buildPoint.getNamedAttr("forwarded_reloads",
+                                buildPoint.getI64IntegerAttr(forwarded))};
+
+    if (pruned)
+      fields.push_back(buildPoint.getNamedAttr(
+          "pruned_store_enables", buildPoint.getI64IntegerAttr(pruned)));
+    mem->setAttr("hls.steering", buildPoint.getDictionaryAttr(fields));
   }
 }
 
@@ -1664,15 +1806,21 @@ void BankingPlan::rewriteAccesses(Value site, const BankLayout &lowerIndex) {
   recordSteering(banks, stats);
   SmallVector<Operation *> users(site.getUsers().begin(),
                                  site.getUsers().end());
+  unsigned pruned = 0;
   for (Operation *user : users) {
     if (auto ld = dyn_cast<affine::AffineLoadOp>(user))
       rewriteAffineLoad(ld, banks, lowerIndex);
     else if (auto st = dyn_cast<affine::AffineStoreOp>(user))
-      rewriteAffineStore(st, banks, lowerIndex);
+      pruned += rewriteAffineStore(st, banks, lowerIndex);
     else if (auto ld = dyn_cast<memref::LoadOp>(user))
       rewriteMemrefLoad(ld, banks, lowerIndex);
     else if (auto st = dyn_cast<memref::StoreOp>(user))
       rewriteMemrefStore(st, banks, lowerIndex);
+  }
+  if (pruned) {
+    SteerStats prunedStats;
+    prunedStats.prunedStoreEnables = pruned;
+    recordSteering(banks, prunedStats);
   }
 }
 
