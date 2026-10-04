@@ -282,6 +282,7 @@ private:
   unsigned affineAccessDemand(Operation *op, OpOperand &use,
                               unsigned widthValue);
 
+  std::optional<unsigned> constantSetBits(const MemClass &candidateValue);
   void annotate();
   std::string demandChain(Operation *load) const;
   std::string nameOf(Value memref) const;
@@ -1784,6 +1785,49 @@ std::string Narrowing::demandChain(Operation *load) const {
   return os.str() + " -> ...";
 }
 
+/// The width of a RAM whose every stored value is a compile-time constant
+/// (a set of constants, not an interval), by N26's ROM rule: with no
+/// negative value, each value cut to the unsigned width of the largest is
+/// read as signed and the most signed bits any needs is kept (VITIS_NOTES
+/// N112: kernels w9r15p_wc_100 / 101 / 96 store {0, c} -> 6 bits, wc_64 -> 7;
+/// rosetta 3d-rendering frame_buffer {0, 100} -> 6). nullopt when a store's
+/// value is not a constant, the array has an initial value or the rule is
+/// off (tool.hls.narrowing.constant_set_reinterpretation).
+std::optional<unsigned>
+Narrowing::constantSetBits(const MemClass &candidateValue) {
+  if (!circt::hlsest::Config::get()
+           .tool.hls.narrowing.constantSetReinterpretation ||
+      candidateValue.initRange || candidateValue.stores.empty() ||
+      !candidateValue.declaredBits || candidateValue.declaredBits > 64)
+    return std::nullopt;
+  SmallVector<APInt> vals;
+  for (Operation *st : candidateValue.stores) {
+    std::optional<Access> arrayValue = asAccess(st);
+    std::optional<APInt> keyValue = arrayValue && arrayValue->stored
+                                        ? constantOf(arrayValue->stored)
+                                        : std::nullopt;
+    if (!keyValue)
+      return std::nullopt;
+    vals.push_back(keyValue->sextOrTrunc(candidateValue.declaredBits));
+  }
+  bool anyNegative = llvm::any_of(
+      vals, [](const APInt &valueHandle) { return valueHandle.isNegative(); });
+  unsigned width = 0;
+  if (anyNegative) {
+    for (const APInt &valueHandle : vals)
+      width = std::max(width, valueHandle.getSignificantBits());
+    return width;
+  }
+  unsigned arrayValue = 0;
+  for (const APInt &valueHandle : vals)
+    arrayValue = std::max(arrayValue, valueHandle.getActiveBits());
+  if (arrayValue == 0)
+    return std::nullopt;
+  for (const APInt &valueHandle : vals)
+    width = std::max(width, valueHandle.trunc(arrayValue).getSignificantBits());
+  return width;
+}
+
 void Narrowing::annotate() {
   for (MemClass &candidateValue : classes) {
     if (remarksOn && candidateValue.fixed)
@@ -1805,6 +1849,12 @@ void Narrowing::annotate() {
         if (candidateValue.widestStore)
           wr += " (widest store at " +
                 shortLoc(candidateValue.widestStore->getLoc()) + ")";
+        if (std::optional<unsigned> setBits = constantSetBits(candidateValue);
+            setBits && *setBits < bits) {
+          bits = std::max(1u, *setBits);
+          wr += "; every stored value a constant: " + std::to_string(bits) +
+                " bits by the ROM reinterpretation (VITIS_NOTES N112)";
+        }
         width = std::min(width, bits);
       }
     } else {

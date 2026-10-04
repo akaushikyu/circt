@@ -724,10 +724,21 @@ MemoryRecurrences circt::hls_analysis::findMemoryRecurrences(
         rec.load = load.op;
         rec.store = store.op;
         if (!store.known || !load.known) {
-          if (chain <= 0 || !identicalAddress(store, load))
+          // One address value the body computes (h[v]++): the next
+          // iteration may read what this one writes. Vitis forwards a
+          // chain of at least two cycles through a reuse register (R4);
+          // a shorter one still waits for the write, II 2 (VITIS_NOTES
+          // N117, kernel w9r15p_hs_rmw).
+          bool floor = options.unknownAddressMinII > 0;
+          if ((chain <= 0 && !floor) || !identicalAddress(store, load))
             continue; // unknown distance between different index values
           rec.distance = 1;
           rec.rule = "R4";
+          if (floor && chain < options.unknownAddressMinII) {
+            rec.rule = "N117";
+            chain = options.unknownAddressMinII;
+            rec.chain = chain;
+          }
         } else {
           // Only d < 2 + chain can bound the II above 1; d = 1 also decides
           // the register promotion of R1 / R3.

@@ -2,6 +2,7 @@
 
 #include "../Plugins/Builtin/Builtins.h"
 #include "circt/Dialect/Resource/Config/ConfigUtils.h"
+#include "circt/Dialect/Resource/Passes/PolygeistCompat.h"
 #include "circt/Dialect/Resource/Passes/ReadOnlyMemory.h"
 #include "circt/Dialect/Resource/Passes/VitisCleanup.h"
 #include "circt/Dialect/Resource/Plugins/PassPolicies.h"
@@ -9,6 +10,8 @@
 
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/IR/BuiltinOps.h"
@@ -580,6 +583,70 @@ static unsigned foldUniformTableLoads(ModuleOp module,
   return folded;
 }
 
+/// The address of a local array or a global (or of a row / element view of
+/// one, or of a parameter every call binds to one) compared with the null
+/// pointer: never null, so `K[k] ? 1 : 0` is 1
+/// and the comparison no longer keeps the array alive (VITIS_NOTES N118:
+/// kernel w9r15p_pb_null, Vitis 0 BRAM; nikhil_p lab2 K_lcl). The top
+/// function's arguments may be null and are left. Key
+/// tool.hls.folding.storage_address_not_null.
+struct FoldStorageAddressNullCompare : OpRewritePattern<LLVM::ICmpOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  /// `mem` names a local array or a global through views; a parameter does
+  /// when every call of its function passes one (kernel_compute_acc's K_lcl
+  /// parameter in nikhil_p lab2, a dataflow process).
+  static bool isStorage(Value mem, unsigned depth = 0) {
+    while (Operation *def = mem.getDefiningOp()) {
+      if (isa<memref::AllocaOp, memref::AllocOp, memref::GetGlobalOp>(def))
+        return true;
+      auto view = dyn_cast<ViewLikeOpInterface>(def);
+      if (!view)
+        return false;
+      mem = view.getViewSource();
+    }
+    auto arg = dyn_cast<BlockArgument>(mem);
+    auto fn = arg ? dyn_cast<func::FuncOp>(arg.getOwner()->getParentOp())
+                  : func::FuncOp();
+    if (!fn || depth > 4 || arg.getOwner() != &fn.getBody().front())
+      return false;
+    auto module = fn->getParentOfType<ModuleOp>();
+    std::optional<SymbolTable::UseRange> symbolUses =
+        module ? SymbolTable::getSymbolUses(fn, module) : std::nullopt;
+    if (!symbolUses || symbolUses->empty())
+      return false;
+    for (const SymbolTable::SymbolUse &useValue : *symbolUses) {
+      auto callSite = dyn_cast<func::CallOp>(useValue.getUser());
+      if (!callSite || arg.getArgNumber() >= callSite.getNumOperands() ||
+          !isStorage(callSite.getOperand(arg.getArgNumber()), depth + 1))
+        return false;
+    }
+    return true;
+  }
+
+  static bool isLocalOrGlobalStorage(Value ptr) {
+    auto m2p = ptr.getDefiningOp<circt::hls_analysis::Memref2PointerOp>();
+    return m2p && isStorage(m2p.getSource());
+  }
+
+  LogicalResult matchAndRewrite(LLVM::ICmpOp cmp,
+                                PatternRewriter &rewriter) const override {
+    LLVM::ICmpPredicate portValue = cmp.getPredicate();
+    if (portValue != LLVM::ICmpPredicate::eq &&
+        portValue != LLVM::ICmpPredicate::ne)
+      return failure();
+    Value arrayValue = cmp.getLhs(), buildPoint = cmp.getRhs();
+    if (buildPoint.getDefiningOp<LLVM::ZeroOp>())
+      std::swap(arrayValue, buildPoint);
+    if (!arrayValue.getDefiningOp<LLVM::ZeroOp>() ||
+        !isLocalOrGlobalStorage(buildPoint))
+      return failure();
+    rewriter.replaceOpWithNewOp<arith::ConstantOp>(
+        cmp, rewriter.getBoolAttr(portValue == LLVM::ICmpPredicate::ne));
+    return success();
+  }
+};
+
 /// An scf.for whose bounds and step have become constants (cgeist leaves a
 /// loop scf.for when its bound is not an affine symbol, e.g. loaded inside an
 /// enclosing loop; a fold above may make it constant) becomes the normalised
@@ -887,6 +954,8 @@ struct VitisFoldPass : PassWrapper<VitisFoldPass, OperationPass<>> {
     rules->populate(patterns, context);
     if (raiseCountedLoops)
       patterns.add<RaiseCountedScfFor, RaiseCountedScfWhile>(context);
+    if (cfg.tool.hls.folding.storageAddressNotNull)
+      patterns.add<FoldStorageAddressNullCompare>(context);
     if (canon) {
       for (Dialect *targetDialect : context->getLoadedDialects())
         targetDialect->getCanonicalizationPatterns(patterns);

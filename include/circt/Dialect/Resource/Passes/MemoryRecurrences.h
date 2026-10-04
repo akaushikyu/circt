@@ -95,6 +95,9 @@ struct MemoryRecurrenceOptions {
   /// the same iteration uses no port
   /// (tool.hls.middle_end.forward_to_guarded_loads).
   bool forwardToGuardedLoads = true;
+  /// R4 (one unknown address value): the II is at least this (N117,
+  /// scheduling.dependences.unknown_address_min_ii); 0 keeps the chain alone.
+  int64_t unknownAddressMinII = 0;
 };
 
 /// The memory recurrences of `loop` (an affine.for or a pipelined scf.for).

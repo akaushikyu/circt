@@ -36,6 +36,14 @@ enum class GuardTruth { Unknown, AlwaysTrue, AlwaysFalse };
 static std::optional<int64_t> constantOperand(Value v) {
   if (std::optional<int64_t> c = getConstantIntValue(v))
     return c;
+  // Nested applies and index arithmetic on constants (an unrolled copy's
+  // `apply(d0 * 16)(apply(d0 + 6)(%c0))`, nikhil_p lab2 kernel_attention_V):
+  // OPEN_ISSUES O151, key tool.hls.pipeline_decision.fold_nested_constant_guards.
+  if (circt::hlsest::Config::get()
+          .tool.hls.pipelineDecision.foldNestedConstantGuards)
+    if (std::optional<int64_t> c =
+            circt::hls_analysis::getConstantIndexValue(v))
+      return c;
   auto apply = v.getDefiningOp<AffineApplyOp>();
   if (!apply)
     return std::nullopt;

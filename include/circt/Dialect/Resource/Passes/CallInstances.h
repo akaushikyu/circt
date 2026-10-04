@@ -56,8 +56,11 @@
 
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/BuiltinOps.h"
+#include "mlir/IR/SymbolTable.h"
 #include "mlir/Interfaces/CallInterfaces.h"
 #include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/STLFunctionalExtras.h"
+#include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
 
@@ -262,6 +265,34 @@ unsigned groupConcurrentCalls(
     std::optional<int64_t> limit, llvm::SmallVectorImpl<unsigned> &group,
     std::string *rule = nullptr,
     llvm::function_ref<bool(unsigned, unsigned)> alsoOrdered = nullptr);
+
+/// The cycles one call of the loop-free `fn` holds its instance (its own
+/// II): its distinct accesses per memory at two per cycle (a memory's two
+/// ports), the busiest memory deciding, a nested call with its own
+/// occupancy; at least 1 (VITIS_NOTES N14 R7). `ignore`, when given, drops
+/// an access (the memory is registers, or the loaded value is unused).
+unsigned estimateCallOccupancy(
+    mlir::func::FuncOp fn, mlir::SymbolTableCollection &symbolTable,
+    llvm::SmallPtrSetImpl<mlir::Operation *> &stack,
+    llvm::function_ref<bool(mlir::Operation *access, mlir::Value mem)> ignore =
+        nullptr);
+
+/// `hls.call_depth_estimate = N : i64` on a call whose hls.call_depth the
+/// occupancy decided: the depth --auto-pipeline-unroll's delay model gave the
+/// callee (smaller than the occupancy), so that refreshCallOccupancies can take
+/// the maximum again with a new occupancy.
+constexpr llvm::StringLiteral kCallDepthEstimateAttr =
+    "hls.call_depth_estimate";
+
+/// Recomputes hls.call_occupancy (and hls.call_depth) of every call that has
+/// one once --infer-vitis-split-array has decided the automatic partitions:
+/// an access to an array that became registers (an alloca or global marked
+/// hls.registers, or a parameter every call site of its function binds to
+/// one) takes no port, and a load whose value nothing uses takes none either
+/// (Vitis removes it). OPEN_ISSUES O133 / O144: Dehazing's calculate_median
+/// read its square_window 49 times at two per cycle (occupancy 25) although
+/// the window is scalarised (214-449). Returns the number of calls changed.
+unsigned refreshCallOccupancies(mlir::ModuleOp module);
 
 } // namespace circt::hls_analysis
 

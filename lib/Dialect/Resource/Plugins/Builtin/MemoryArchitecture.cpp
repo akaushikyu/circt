@@ -781,6 +781,28 @@ static unsigned copiesForPortCycles(unsigned need) {
       1, static_cast<unsigned>(ceilDiv(need - shared, perCopy)));
 }
 
+/// Whether the memory `access` reads or writes carries a user
+/// `bind_storage type=ram_1wnr` (hls.bind_storage on its alloca / bank).
+static bool boundRam1wnr(Operation *access) {
+  Value mem;
+  for (Value v : access->getOperands())
+    if (isa<BaseMemRefType>(v.getType())) {
+      mem = v;
+      break;
+    }
+  Operation *def = mem ? mem.getDefiningOp() : nullptr;
+  auto binds = def ? def->getAttrOfType<ArrayAttr>("hls.bind_storage")
+                   : ArrayAttr();
+  if (!binds)
+    return false;
+  for (Attribute b : binds)
+    if (auto d = dyn_cast<DictionaryAttr>(b))
+      if (auto t = d.getAs<StringAttr>("type"))
+        if (t.getValue().equals_insensitive("ram_1wnr"))
+          return true;
+  return false;
+}
+
 static ReplicationRecord analyzeReplication(ArrayRef<AccessSummary> accesses,
                                             bool attributed) {
   ReplicationRecord r;
@@ -791,6 +813,7 @@ static ReplicationRecord analyzeReplication(ArrayRef<AccessSummary> accesses,
   struct ScopeStats {
     Operation *scope = nullptr;
     unsigned reads = 0, writes = 0, ii = 0;
+    unsigned rotatingReads = 0; // hls.rotating_bank reads (N115)
     bool portBound = false; // reached through a shared module (N14 R6)
     SmallVector<Operation *> stores;
   };
@@ -805,6 +828,8 @@ static ReplicationRecord analyzeReplication(ArrayRef<AccessSummary> accesses,
       st = &scopes.back();
     }
     (a.isWrite ? st->writes : st->reads)++;
+    if (!a.isWrite && a.op && a.op->hasAttr("hls.rotating_bank"))
+      ++st->rotatingReads;
     if (a.isWrite && a.op)
       st->stores.push_back(a.op);
     st->portBound |= a.portBound;
@@ -826,6 +851,14 @@ static ReplicationRecord analyzeReplication(ArrayRef<AccessSummary> accesses,
       config().tool.hls.memoryArchitecture.replication;
   r.replicable =
       static_cast<int64_t>(r.maxStoresPerLoop) <= repCfg.maxStoresPerIteration;
+  // A user `bind_storage type=ram_1wnr` makes the bank replicable whatever
+  // its loops store; a loop storing it twice per iteration raises its II
+  // instead (VITIS_NOTES N113: kernels w9r15p_bw_1wnr 12 against bw_none 4).
+  if (!r.replicable && repCfg.userRam1wnrReplicable &&
+      llvm::any_of(accesses, [](const AccessSummary &a) {
+        return a.op && boundRam1wnr(a.op);
+      }))
+    r.replicable = true;
   r.copies = 1;
   for (const ScopeStats &s : scopes) {
     if (!s.scope || !isa<LoopSchedulePipelineOp>(s.scope) || s.ii == 0)
@@ -837,6 +870,15 @@ static ReplicationRecord analyzeReplication(ArrayRef<AccessSummary> accesses,
     lr.writes = s.writes;
     lr.need = static_cast<unsigned>(ceilDiv(s.reads + s.writes, s.ii));
     lr.copies = std::min(copiesForPortCycles(lr.need), maxReplicationCopies());
+    // Every read of a loop that does not write the bank selects its bank at
+    // run time (a steered group): each is a muxed read of all banks, and the
+    // copies' shared write port takes no read slot
+    // (VITIS_NOTES N115: kernels w9r15p_rc_rot 16 copies against rc_fix 15;
+    // NeuroFPGA padded_A).
+    if (s.reads > 0 && s.writes == 0 && s.rotatingReads == s.reads &&
+        repCfg.rotatingReadsFullCopies)
+      lr.copies = std::min<unsigned>(std::max(1u, lr.need),
+                                     maxReplicationCopies());
     // A loop of a callee instantiated at more than one place reads the
     // caller's bank through the module's two ports (N14 R6, W3 review D2:
     // w3rev_k3 / k3b, w3fx_d2_conc: no replication, the loop's II rises).

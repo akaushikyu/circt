@@ -5,7 +5,6 @@
 #include "circt/Dialect/Resource/Passes/AutoPipelineUnroll.h"
 #include "../Plugins/Builtin/Builtins.h"
 #include "circt/Dialect/Resource/Config/ConfigUtils.h"
-#include "circt/Dialect/Resource/Passes/AffineUnroll.h"
 #include "circt/Dialect/Resource/Passes/CallInstances.h"
 #include "circt/Dialect/Resource/Passes/DoWhileFlatten.h"
 #include "circt/Dialect/Resource/Passes/FloatOps.h"
@@ -16,6 +15,7 @@
 #include "mlir/Dialect/Affine/Analysis/LoopAnalysis.h"
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
 #include "mlir/Dialect/Affine/LoopUtils.h"
+#include "circt/Dialect/Resource/Passes/AffineUnroll.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/LLVMIR/LLVMTypes.h"
@@ -1891,62 +1891,7 @@ struct AutoPipelineUnrollPass
   /// nested call counts with its own occupancy.
   static unsigned occupancy(func::FuncOp fn, SymbolTableCollection &symbolTable,
                             SmallPtrSetImpl<Operation *> &stack) {
-    if (!stack.insert(fn.getOperation()).second)
-      return 1;
-    unsigned cycles = 1;
-    llvm::MapVector<std::pair<Value, Operation *>, unsigned> perMemory;
-
-    std::set<
-        std::tuple<const void *, bool, const void *, std::vector<const void *>>>
-        seen;
-    fn.walk([&](Operation *op) {
-      Value mem;
-      bool isWrite = false;
-      Attribute map;
-      ValueRange indices;
-      if (auto lowerIndex = dyn_cast<AffineLoadOp>(op)) {
-        mem = lowerIndex.getMemRef();
-        map = lowerIndex.getMapAttr();
-        indices = lowerIndex.getMapOperands();
-      } else if (auto stringValue = dyn_cast<AffineStoreOp>(op)) {
-        mem = stringValue.getMemRef();
-        isWrite = true;
-        map = stringValue.getMapAttr();
-        indices = stringValue.getMapOperands();
-      } else if (auto lowerIndex = dyn_cast<memref::LoadOp>(op)) {
-        mem = lowerIndex.getMemRef();
-        indices = lowerIndex.getIndices();
-      } else if (auto stringValue = dyn_cast<memref::StoreOp>(op)) {
-        mem = stringValue.getMemRef();
-        isWrite = true;
-        indices = stringValue.getIndices();
-      } else if (auto callSite = dyn_cast<CallOpInterface>(op)) {
-        if (auto callee = dyn_cast_or_null<func::FuncOp>(
-                callSite.resolveCallableInTable(&symbolTable)))
-          if (!callee.isExternal())
-            cycles = std::max(cycles, occupancy(callee, symbolTable, stack));
-        return;
-      }
-      if (!mem)
-        return;
-      std::vector<const void *> address;
-      for (Value valueHandle : indices)
-        address.push_back(valueHandle.getAsOpaquePointer());
-      const void *memKey = mem.getAsOpaquePointer();
-      const void *mapKey = map ? map.getAsOpaquePointer() : nullptr;
-
-      if (!isWrite && seen.count({memKey, true, mapKey, address}))
-        return;
-      if (!seen.insert({memKey, isWrite, mapKey, std::move(address)}).second)
-        return;
-      circt::hls_analysis::StorageRoot root =
-          circt::hls_analysis::storageRoot(mem);
-      ++perMemory[{root.value, root.global}];
-    });
-    for (auto &[key, n] : perMemory)
-      cycles = std::max(cycles, (n + 1) / 2);
-    stack.erase(fn.getOperation());
-    return cycles;
+    return circt::hls_analysis::estimateCallOccupancy(fn, symbolTable, stack);
   }
 
   /// The call boundary after the decisions (VITIS_NOTES.md N14 R7): a loop
@@ -1979,10 +1924,15 @@ struct AutoPipelineUnrollPass
         callSite->setAttr(kCallOccupancyAttr,
                           buildPoint.getI64IntegerAttr(occ));
         if (std::optional<unsigned> dimensionIndex =
-                depthModel.depth(callee, symbolTable))
+                depthModel.depth(callee, symbolTable)) {
           callSite->setAttr(
               kCallDepthAttr,
               buildPoint.getI64IntegerAttr(std::max(*dimensionIndex, occ)));
+
+          if (*dimensionIndex < occ)
+            callSite->setAttr(circt::hls_analysis::kCallDepthEstimateAttr,
+                              buildPoint.getI64IntegerAttr(*dimensionIndex));
+        }
         return;
       }
       if (!loop->hasAttr(kLoopCallBoundaryAttr) &&
@@ -2079,6 +2029,7 @@ struct AutoPipelineUnrollPass
     module.walk([&](CallOpInterface callSite) {
       callSite->removeAttr(kCallOccupancyAttr);
       callSite->removeAttr(kCallDepthAttr);
+      callSite->removeAttr(circt::hls_analysis::kCallDepthEstimateAttr);
     });
     for (auto func : module.getOps<func::FuncOp>())
       func->removeAttr(circt::hls_analysis::kPortBoundArgsAttr);

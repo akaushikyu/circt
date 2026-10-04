@@ -390,6 +390,16 @@ static bool reachableStoreBanks() {
   return circt::hlsest::Config::get().tool.hls.partitioning.reachableStoreBanks;
 }
 
+/// `hls.rotating_bank` on a load of a steered group (unrolled copies of one
+/// read whose bank is chosen at run time, each bank read once per residue
+/// member): such reads get one more replicated copy (VITIS_NOTES N115,
+/// --bram-analysis). A lone rotating read (one load per candidate bank and
+/// a mux) keeps N4's count: polybench_pragmas syrk, forgebench
+/// mult_op_module_dot and the lab2 attention designs are Vitis' that way.
+static void markRotatingRead(Operation *load) {
+  load->setAttr("hls.rotating_bank", UnitAttr::get(load->getContext()));
+}
+
 static void rewriteAffineLoad(affine::AffineLoadOp loadOp,
                               ArrayRef<Value> banks,
                               const BankLayout &lowerIndex) {
@@ -589,6 +599,88 @@ inductionResidueBank(Value indexValue, const DimPartition &portValue) {
   return bank < 0 ? bank + portValue.factor : bank;
 }
 
+/// The residue of a memref index modulo a power-of-two cyclic factor when
+/// its low bits are known, as LLVM's known bits give Vitis: `(n & ~7) + k`
+/// with k a constant has residue k mod 8 whatever n is (VITIS_NOTES N115
+/// control kernel w9r15p_rc_fix: each read's bank is the constant k % 8,
+/// 15 copies per bank). Through casts, add / sub, and with a mask whose low
+/// bits are zero (residue 0) or all ones (the operand's residue), a multiply
+/// or shift that makes a multiple of the factor. Key
+/// tool.hls.partitioning.known_residue_banks.
+static std::optional<int64_t> knownResidue(Value valueHandle, int64_t factor,
+                                           unsigned depth = 0) {
+  if (std::optional<int64_t> candidateValue = constantIndexOf(valueHandle))
+    return llvm::mod(*candidateValue, factor);
+  Operation *def = valueHandle.getDefiningOp();
+  if (!def || depth > 16)
+    return std::nullopt;
+  unsigned bits = llvm::Log2_64(static_cast<uint64_t>(factor));
+  uint64_t low = (uint64_t(1) << bits) - 1;
+  if (isa<arith::IndexCastOp, arith::IndexCastUIOp, arith::ExtSIOp,
+          arith::ExtUIOp>(def))
+    return knownResidue(def->getOperand(0), factor, depth + 1);
+  if (auto tr = dyn_cast<arith::TruncIOp>(def)) {
+    if (tr.getType().getIntOrFloatBitWidth() < bits)
+      return std::nullopt;
+    return knownResidue(tr.getIn(), factor, depth + 1);
+  }
+  if (isa<arith::AddIOp, arith::SubIOp>(def)) {
+    std::optional<int64_t> arrayValue =
+        knownResidue(def->getOperand(0), factor, depth + 1);
+    std::optional<int64_t> buildPoint =
+        arrayValue ? knownResidue(def->getOperand(1), factor, depth + 1)
+                   : std::nullopt;
+    if (!arrayValue || !buildPoint)
+      return std::nullopt;
+    return llvm::mod(isa<arith::AddIOp>(def) ? *arrayValue + *buildPoint
+                                             : *arrayValue - *buildPoint,
+                     factor);
+  }
+  if (auto andOp = dyn_cast<arith::AndIOp>(def)) {
+    for (unsigned loopIndex = 0; loopIndex < 2; ++loopIndex) {
+      std::optional<int64_t> memoryOp =
+          constantIndexOf(def->getOperand(loopIndex));
+      if (!memoryOp)
+        continue;
+      uint64_t mask = static_cast<uint64_t>(*memoryOp) & low;
+      if (mask == 0)
+        return 0;
+      if (mask == low)
+        return knownResidue(def->getOperand(1 - loopIndex), factor, depth + 1);
+    }
+    return std::nullopt;
+  }
+  if (isa<arith::MulIOp>(def)) {
+    for (unsigned loopIndex = 0; loopIndex < 2; ++loopIndex)
+      if (std::optional<int64_t> memoryOp =
+              constantIndexOf(def->getOperand(loopIndex));
+          memoryOp && *memoryOp % factor == 0)
+        return 0;
+    return std::nullopt;
+  }
+  if (auto shl = dyn_cast<arith::ShLIOp>(def)) {
+    std::optional<int64_t> keyValue = constantIndexOf(shl.getRhs());
+    if (keyValue && *keyValue >= static_cast<int64_t>(bits) && *keyValue < 63)
+      return 0;
+    return std::nullopt;
+  }
+  return std::nullopt;
+}
+
+/// The bank of a non-constant memref index along `p` when it is known
+/// anyway: an scf.for counter stepping by a multiple of the factor
+/// (inductionResidueBank), or known low bits (knownResidue).
+static std::optional<int64_t> knownBank(Value indexValue,
+                                        const DimPartition &portValue) {
+  if (std::optional<int64_t> bank = inductionResidueBank(indexValue, portValue))
+    return bank;
+  if (portValue.kind == PartitionSpec::Cyclic && portValue.factor > 1 &&
+      llvm::isPowerOf2_64(static_cast<uint64_t>(portValue.factor)) &&
+      circt::hlsest::Config::get().tool.hls.partitioning.knownResidueBanks)
+    return knownResidue(indexValue, portValue.factor);
+  return std::nullopt;
+}
+
 static MemrefBanking resolveMemref(OpBuilder &buildPoint, Location loc,
                                    ValueRange indices,
                                    const BankLayout &lowerIndex) {
@@ -611,8 +703,7 @@ static MemrefBanking resolveMemref(OpBuilder &buildPoint, Location loc,
       }
     }
 
-    if (std::optional<int64_t> bank =
-            inductionResidueBank(indexValue, portValue)) {
+    if (std::optional<int64_t> bank = knownBank(indexValue, portValue)) {
       mb.choice.constBank.push_back(*bank);
       Value dimensionIndex =
           arith::ConstantIndexOp::create(buildPoint, loc, portValue.factor);
@@ -673,10 +764,11 @@ static void rewriteMemrefLoad(memref::LoadOp loadOp, ArrayRef<Value> banks,
   }
   int64_t elementCount = mb.choice.numCandidates(lowerIndex);
   SmallVector<Value, 8> vals;
-  for (int64_t keyValue = 0; keyValue < elementCount; ++keyValue)
+  for (int64_t keyValue = 0; keyValue < elementCount; ++keyValue) {
     vals.push_back(memref::LoadOp::create(
         buildPoint, loc, banks[mb.choice.bank(lowerIndex, keyValue)],
         mb.bankedIndices));
+  }
   Value result = vals[elementCount - 1];
   for (int64_t keyValue = elementCount - 1; keyValue-- > 0;) {
     Value kc = arith::ConstantIndexOp::create(buildPoint, loc, keyValue);
@@ -858,7 +950,7 @@ static std::optional<int64_t> constantBankOf(Value indexValue,
                                              const DimPartition &portValue) {
   std::optional<int64_t> candidateValue = constantIndexOf(indexValue);
   if (!candidateValue)
-    return inductionResidueBank(indexValue, portValue);
+    return knownBank(indexValue, portValue);
   int64_t bank = bankAndOffset(*candidateValue, portValue).first;
   if (bank < 0 || bank >= portValue.factor)
     return std::nullopt;
@@ -979,6 +1071,8 @@ static bool steerGroup(SmallVector<SteerMember> members, ArrayRef<Value> banks,
               indexValue[dimensionIndex]);
     bankVals.push_back(memref::LoadOp::create(
         buildPoint, loc, banks[choice.bank(lowerIndex, keyValue)], indexValue));
+    if (!choice.rotating.empty())
+      markRotatingRead(bankVals.back().getDefiningOp());
   }
   SmallVector<Value> results;
   for (size_t innerIndex = 0; innerIndex < members.size(); ++innerIndex) {

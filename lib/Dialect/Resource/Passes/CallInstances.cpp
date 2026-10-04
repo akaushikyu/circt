@@ -5,6 +5,7 @@
 #include "circt/Dialect/Resource/Passes/CallInstances.h"
 #include "circt/Dialect/LoopSchedule/LoopScheduleOps.h"
 #include "circt/Dialect/Resource/Config/Config.h"
+#include "circt/Dialect/Resource/Interfaces/MemoryDS.h"
 #include "circt/Dialect/Resource/Passes/ConstantIndex.h"
 #include "circt/Dialect/Resource/Passes/LoopPragmas.h"
 #include "circt/Dialect/Resource/Passes/PartitionLayout.h"
@@ -22,6 +23,9 @@
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/SmallPtrSet.h"
+#include <set>
+#include <tuple>
+#include <vector>
 
 #include <functional>
 
@@ -859,6 +863,97 @@ groupConcurrentCalls(func::FuncOp parent, ArrayRef<Operation *> sites,
         order(loopIndex, innerIndex, byValue);
   }
 
+  unsigned byStagger = 0;
+  if (circt::hlsest::Config::get()
+          .scheduling.callDepth.staggeredCallsShareInstance &&
+      elementCount > 1 && processes == 0) {
+    Block &body = parent.getBody().front();
+    SmallVector<Operation *> top;
+    DenseMap<Operation *, unsigned> topIndex;
+    for (Operation &op : body.without_terminator()) {
+      topIndex[&op] = top.size();
+      top.push_back(&op);
+    }
+    auto topOf = [&](Operation *op) -> Operation * {
+      while (op && op->getParentOp() != parentOp)
+        op = op->getParentOp();
+      return op;
+    };
+    bool allTop = llvm::all_of(sites, [&](Operation *stringValue) {
+      return stringValue->getParentOp() == parentOp;
+    });
+    if (allTop && top.size() <= 512) {
+      struct TopAccess {
+        SmallVector<StorageRoot, 4> reads, writes;
+        SmallVector<unsigned, 4> ssaDeps;
+      };
+      SmallVector<TopAccess> acc(top.size());
+      for (unsigned typeValue = 0; typeValue < top.size(); ++typeValue) {
+        top[typeValue]->walk([&](Operation *op) {
+          for (const RootAccess &ra : rootAccesses(op)) {
+            if (ra.reads)
+              acc[typeValue].reads.push_back(ra.root);
+            if (ra.writes)
+              acc[typeValue].writes.push_back(ra.root);
+          }
+          for (Value valueHandle : op->getOperands())
+            if (Operation *dimensionIndex = topOf(valueHandle.getDefiningOp());
+                dimensionIndex && dimensionIndex != top[typeValue])
+              acc[typeValue].ssaDeps.push_back(topIndex.lookup(dimensionIndex));
+        });
+      }
+      auto meets = [](ArrayRef<StorageRoot> arrayValue,
+                      ArrayRef<StorageRoot> b) {
+        return llvm::any_of(arrayValue, [&](const StorageRoot &exprValue) {
+          return llvm::is_contained(b, exprValue);
+        });
+      };
+      auto calleeOf = [](Operation *op) -> Operation * {
+        if (auto callSite = dyn_cast<CallOpInterface>(op))
+          if (func::FuncOp fieldValue = resolveDefinedCallee(callSite))
+            return fieldValue.getOperation();
+        return nullptr;
+      };
+      SmallVector<unsigned> finish(top.size(), 0), start(top.size(), 0);
+      for (unsigned keyValue = 0; keyValue < top.size(); ++keyValue) {
+        unsigned st = 0;
+        for (unsigned dimensionIndex : acc[keyValue].ssaDeps)
+          if (dimensionIndex < keyValue)
+            st = std::max(st, finish[dimensionIndex]);
+        Operation *ck = calleeOf(top[keyValue]);
+        for (unsigned lowerIndex = 0; lowerIndex < keyValue; ++lowerIndex) {
+          bool dep = meets(acc[lowerIndex].writes, acc[keyValue].reads) ||
+                     meets(acc[lowerIndex].writes, acc[keyValue].writes) ||
+                     meets(acc[lowerIndex].reads, acc[keyValue].writes);
+
+          bool bothCalls = isa<CallOpInterface>(top[lowerIndex]) &&
+                           isa<CallOpInterface>(top[keyValue]);
+          if (dep && bothCalls && distinctStreams &&
+              !sharesObject(top[lowerIndex], top[keyValue], streamArrays))
+            dep = false;
+          if (!dep && ck && calleeOf(top[lowerIndex]) == ck) {
+            std::optional<int64_t> lim =
+                allocationLimit(parent, cast<func::FuncOp>(ck));
+            dep = (lim && *lim == 1) ||
+                  sharesObject(top[lowerIndex], top[keyValue], streamArrays);
+          }
+          if (dep)
+            st = std::max(st, finish[lowerIndex]);
+        }
+        start[keyValue] = st;
+        bool step = isa<CallOpInterface>(top[keyValue]) ||
+                    top[keyValue]->getNumRegions();
+        finish[keyValue] = st + (step ? 1 : 0);
+      }
+      for (unsigned loopIndex = 0; loopIndex < elementCount; ++loopIndex)
+        for (unsigned innerIndex = loopIndex + 1; innerIndex < elementCount;
+             ++innerIndex)
+          if (start[topIndex.lookup(sites[loopIndex])] !=
+              start[topIndex.lookup(sites[innerIndex])])
+            order(loopIndex, innerIndex, byStagger);
+    }
+  }
+
   unsigned ports = static_cast<unsigned>(std::max<int64_t>(
       0, circt::hlsest::Config::get().scheduling.callDepth.portsPerMemory));
   unsigned byPorts = 0;
@@ -954,6 +1049,9 @@ groupConcurrentCalls(func::FuncOp parent, ArrayRef<Operation *> sites,
         stringValue += ", " + std::to_string(byPorts) +
                        " by the ports of a memory " +
                        "their operands are read from";
+      if (byStagger)
+        stringValue += ", " + std::to_string(byStagger) +
+                       " by inputs ready in different states";
       if (processes)
         stringValue += "; " + std::to_string(processes) +
                        " of them dataflow processes, an instance each";
@@ -1303,6 +1401,137 @@ InstanceModel computeInstances(ModuleOp module,
   for (func::FuncOp fieldValue : funcs)
     memoryOp.multiplicity[fieldValue.getOperation()] = mult(fieldValue);
   return memoryOp;
+}
+
+unsigned estimateCallOccupancy(
+    func::FuncOp fn, SymbolTableCollection &symbolTable,
+    SmallPtrSetImpl<Operation *> &stack,
+    llvm::function_ref<bool(Operation *access, Value mem)> ignore) {
+  if (!stack.insert(fn.getOperation()).second)
+    return 1;
+  unsigned cycles = 1;
+  llvm::MapVector<std::pair<Value, Operation *>, unsigned> perMemory;
+
+  std::set<
+      std::tuple<const void *, bool, const void *, std::vector<const void *>>>
+      seen;
+  fn.walk([&](Operation *op) {
+    Value mem;
+    bool isWrite = false;
+    Attribute map;
+    ValueRange indices;
+    if (auto lowerIndex = dyn_cast<affine::AffineLoadOp>(op)) {
+      mem = lowerIndex.getMemRef();
+      map = lowerIndex.getMapAttr();
+      indices = lowerIndex.getMapOperands();
+    } else if (auto stringValue = dyn_cast<affine::AffineStoreOp>(op)) {
+      mem = stringValue.getMemRef();
+      isWrite = true;
+      map = stringValue.getMapAttr();
+      indices = stringValue.getMapOperands();
+    } else if (auto lowerIndex = dyn_cast<memref::LoadOp>(op)) {
+      mem = lowerIndex.getMemRef();
+      indices = lowerIndex.getIndices();
+    } else if (auto stringValue = dyn_cast<memref::StoreOp>(op)) {
+      mem = stringValue.getMemRef();
+      isWrite = true;
+      indices = stringValue.getIndices();
+    } else if (auto callSite = dyn_cast<CallOpInterface>(op)) {
+      if (auto callee = dyn_cast_or_null<func::FuncOp>(
+              callSite.resolveCallableInTable(&symbolTable)))
+        if (!callee.isExternal())
+          cycles = std::max(cycles, estimateCallOccupancy(callee, symbolTable,
+                                                          stack, ignore));
+      return;
+    }
+    if (!mem || (ignore && ignore(op, mem)))
+      return;
+    std::vector<const void *> address;
+    for (Value valueHandle : indices)
+      address.push_back(valueHandle.getAsOpaquePointer());
+    const void *memKey = mem.getAsOpaquePointer();
+    const void *mapKey = map ? map.getAsOpaquePointer() : nullptr;
+
+    if (!isWrite && seen.count({memKey, true, mapKey, address}))
+      return;
+    if (!seen.insert({memKey, isWrite, mapKey, std::move(address)}).second)
+      return;
+    StorageRoot root = storageRoot(mem);
+    ++perMemory[{root.value, root.global}];
+  });
+  for (auto &[key, elementCount] : perMemory)
+    cycles = std::max(cycles, (elementCount + 1) / 2);
+  stack.erase(fn.getOperation());
+  return cycles;
+}
+
+unsigned refreshCallOccupancies(ModuleOp module) {
+  SymbolTableCollection symbolTable;
+
+  llvm::DenseMap<Operation *, SmallVector<CallOpInterface>> callers;
+  module.walk([&](CallOpInterface callSite) {
+    if (auto callee = dyn_cast_or_null<func::FuncOp>(
+            callSite.resolveCallableInTable(&symbolTable)))
+      if (!callee.isExternal())
+        callers[callee.getOperation()].push_back(callSite);
+  });
+  llvm::DenseSet<Value> registerParams;
+  auto isRegisters = [&](Value mem) {
+    StorageRoot root = storageRoot(mem);
+    if (root.global)
+      return root.global->hasAttr(kRegistersAttrName);
+    if (Operation *def = root.value.getDefiningOp())
+      return def->hasAttr(kRegistersAttrName);
+    return registerParams.contains(root.value);
+  };
+  for (bool changed = true; changed;) {
+    changed = false;
+    for (auto &[fnOp, calls] : callers) {
+      auto fn = cast<func::FuncOp>(fnOp);
+      for (BlockArgument arg : fn.getArguments()) {
+        if (!isa<MemRefType>(arg.getType()) || registerParams.contains(arg))
+          continue;
+        bool all = llvm::all_of(calls, [&](CallOpInterface callSite) {
+          unsigned elementCount = arg.getArgNumber();
+          return elementCount < callSite.getArgOperands().size() &&
+                 isRegisters(callSite.getArgOperands()[elementCount]);
+        });
+        if (all) {
+          registerParams.insert(arg);
+          changed = true;
+        }
+      }
+    }
+  }
+  auto ignore = [&](Operation *access, Value mem) {
+    if (isRegisters(mem))
+      return true;
+    return isa<affine::AffineLoadOp, memref::LoadOp>(access) &&
+           access->use_empty();
+  };
+  unsigned changedCalls = 0;
+  module.walk([&](CallOpInterface callSite) {
+    auto occ = callSite->getAttrOfType<IntegerAttr>(kCallOccupancyAttr);
+    auto callee = dyn_cast_or_null<func::FuncOp>(
+        callSite.resolveCallableInTable(&symbolTable));
+    if (!occ || !callee || callee.isExternal())
+      return;
+    SmallPtrSet<Operation *, 8> stack;
+    unsigned now = estimateCallOccupancy(callee, symbolTable, stack, ignore);
+    if (now == static_cast<unsigned>(occ.getInt()))
+      return;
+    Builder b(callSite.getContext());
+    callSite->setAttr(kCallOccupancyAttr, b.getI64IntegerAttr(now));
+
+    if (auto est = callSite->getAttrOfType<IntegerAttr>(kCallDepthEstimateAttr))
+      callSite->setAttr(kCallDepthAttr, b.getI64IntegerAttr(std::max<int64_t>(
+                                            est.getInt(), now)));
+    else if (auto depth = callSite->getAttrOfType<IntegerAttr>(kCallDepthAttr);
+             depth && depth.getInt() < now)
+      callSite->setAttr(kCallDepthAttr, b.getI64IntegerAttr(now));
+    ++changedCalls;
+  });
+  return changedCalls;
 }
 
 } // namespace circt::hls_analysis

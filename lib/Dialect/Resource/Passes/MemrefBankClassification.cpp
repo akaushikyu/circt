@@ -329,11 +329,11 @@ private:
 void annotateCalleeStoresPerLoop(ModuleOp module) {
   CalleeStores stores;
   OpBuilder buildPoint(module.getContext());
-  module.walk([&](memref::AllocaOp localAlloca) {
-    unsigned elementCount = stores.throughCalls(localAlloca.getResult());
+  module.walk([&](memref::AllocaOp alloca) {
+    unsigned elementCount = stores.throughCalls(alloca.getResult());
     if (elementCount > 1)
-      localAlloca->setAttr(kCalleeStoresPerLoopAttr,
-                           buildPoint.getI64IntegerAttr(elementCount));
+      alloca->setAttr(kCalleeStoresPerLoopAttr,
+                      buildPoint.getI64IntegerAttr(elementCount));
   });
   module.walk([&](func::FuncOp fn) {
     if (fn.isExternal())
@@ -614,6 +614,19 @@ BRAMClassification::BRAMClassification(Operation *op) {
   LLVM_DEBUG(dump(llvm::dbgs()));
 }
 
+/// One bank of a complete partition (a memref.alloca memory banking made,
+/// `hls.partition`, holding a single element) is a register: Vitis gives the
+/// elements of a completely partitioned array no port limit in a pipelined
+/// loop (VITIS_NOTES N111: kernel w9r15p_rg_net, a 19-step compare-and-swap
+/// network on `int v[8]` complete runs at II 1; with a 2-port pool per
+/// element hls-est had II 32). Key
+/// tool.hls.partitioning.complete_partition_registers.
+static bool isOneElementPartitionBank(Operation *alloca, MemRefType memTy) {
+  return memTy.getNumElements() == 1 && alloca->hasAttr("hls.partition") &&
+         circt::hlsest::Config::get()
+             .tool.hls.partitioning.completePartitionRegisters;
+}
+
 void BRAMClassification::enumerateBanks(Operation *root) {
 
   if (auto fn = dyn_cast<func::FuncOp>(root)) {
@@ -644,8 +657,8 @@ void BRAMClassification::enumerateBanks(Operation *root) {
         banks.try_emplace(arg, prof);
       }
   }
-  root->walk([&](memref::AllocaOp localAlloca) {
-    Value bank = localAlloca.getResult();
+  root->walk([&](memref::AllocaOp alloca) {
+    Value bank = alloca.getResult();
     auto memTy = dyn_cast<MemRefType>(bank.getType());
     if (!memTy || !memTy.hasStaticShape())
       return;
@@ -661,7 +674,8 @@ void BRAMClassification::enumerateBanks(Operation *root) {
                      : static_cast<unsigned>(
                            circt::hlsest::Config::get().frontend.indexBits);
     prof.depth = static_cast<unsigned>(memTy.getNumElements());
-    prof.registers = localAlloca->hasAttr(kRegistersAttrName);
+    prof.registers = alloca->hasAttr(kRegistersAttrName) ||
+                     isOneElementPartitionBank(alloca, memTy);
     if (prof.registers)
       prof.mode = StorageMode::Registers;
     banks.try_emplace(bank, prof);
@@ -684,6 +698,25 @@ void BRAMClassification::enumerateBanks(Operation *root) {
     prof.mode = StorageMode::Registers;
     banks.try_emplace(get.getResult(), prof);
   });
+}
+
+/// A bank whose alloca carries a user `bind_storage type=ram_1wnr` and the
+/// key tool.hls.memory_architecture.replication.user_ram_1wnr_replicable.
+static bool userRam1wnr(Value bank) {
+  if (!circt::hlsest::Config::get()
+           .tool.hls.memoryArchitecture.replication.userRam1wnrReplicable)
+    return false;
+  Operation *def = bank.getDefiningOp();
+  auto binds =
+      def ? def->getAttrOfType<ArrayAttr>("hls.bind_storage") : ArrayAttr();
+  if (!binds)
+    return false;
+  for (Attribute buildPoint : binds)
+    if (auto dimensionIndex = dyn_cast<DictionaryAttr>(buildPoint))
+      if (auto typeValue = dimensionIndex.getAs<StringAttr>("type"))
+        if (typeValue.getValue().equals_insensitive("ram_1wnr"))
+          return true;
+  return false;
 }
 
 void BRAMClassification::profileAccesses(Operation *root) {
@@ -730,6 +763,11 @@ void BRAMClassification::profileAccesses(Operation *root) {
 
     maxStoresPerLoop = std::max(maxStoresPerLoop, callerStoresPerLoop(bank));
     prof.replicable = maxStoresPerLoop <= 1;
+
+    if (!prof.replicable && userRam1wnr(bank)) {
+      prof.replicable = true;
+      maxStoresPerLoop = 1;
+    }
     prof.mode = prof.registers ? StorageMode::Registers
                                : classifyMode(maxStoresPerLoop);
     prof.type = classifyStorageKind(prof.maxReads, prof.maxWrites);

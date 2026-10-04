@@ -115,6 +115,8 @@ struct AffineToLoopSchedule
   void runOnOperation() override;
 
 private:
+  /// tool.hls.middle_end.gvn_memref_loads (set in runOnOperation).
+  bool gvnMemrefLoads = true;
   ModuloProblem getModuloProblem(CyclicProblem &prob);
   LogicalResult
   lowerAffineStructures(MemoryDependenceAnalysis &dependenceAnalysis);
@@ -546,6 +548,45 @@ void AffineToLoopSchedule::hoistInvariantLoads() {
     for (Operation *op : toHoist)
       op->moveBefore(forOp);
   }
+
+  if (circt::hlsest::Config::get().tool.hls.middleEnd.licmHoistWhileConditions)
+    getOperation().walk([&](scf::WhileOp whileOp) {
+      Block &before = whileOp.getBefore().front();
+      SmallVector<Operation *> moves;
+      DenseSet<Value> hoisted;
+      auto invariant = [&](Value valueHandle) {
+        return !whileOp->isAncestor(
+                   valueHandle.getParentRegion()->getParentOp()) ||
+               hoisted.contains(valueHandle);
+      };
+      for (Operation &op : before.without_terminator()) {
+        if (op.getNumRegions() != 0)
+          continue;
+        bool ok = false;
+        if (auto load = dyn_cast<AffineLoadOp>(op))
+          ok = llvm::all_of(load.getMapOperands(), invariant) &&
+               invariant(load.getMemRef()) &&
+               !isMemrefWrittenInLoop(aliasInfo(load.getMemRef()), whileOp,
+                                      hoistPastCalls);
+        else if (isMemoryEffectFree(&op) && isSpeculatable(&op) &&
+                 op.getNumResults() > 0)
+          ok = llvm::all_of(op.getOperands(), invariant);
+        if (!ok)
+          continue;
+        moves.push_back(&op);
+        for (Value r : op.getResults())
+          hoisted.insert(r);
+      }
+
+      if (llvm::none_of(moves,
+                        [](Operation *op) { return isa<AffineLoadOp>(op); }))
+        return;
+      for (Operation *op : moves) {
+        if (isa<AffineLoadOp>(op))
+          ++hoistedLoads;
+        op->moveBefore(whileOp);
+      }
+    });
   LLVM_DEBUG(llvm::dbgs() << "hoisted " << hoistedLoads
                           << " loop-invariant affine.load and " << hoistedPure
                           << " pure ops out of innermost loops\n");
@@ -911,11 +952,16 @@ void AffineToLoopSchedule::cleanupRedundantAccesses() {
     KnownAddressIndex index;
     DenseMap<Value, KnownValues> known;
     DenseMap<Value, Value> memberToRoot;
+
+    DenseMap<Value, std::map<std::vector<const void *>, Value>> memrefLoads;
     auto forget = [&](Value mem) {
       auto it = memberToRoot.find(mem);
-      if (it != memberToRoot.end())
+      if (it != memberToRoot.end()) {
         known.erase(it->second);
+        memrefLoads.erase(it->second);
+      }
       known.erase(mem);
+      memrefLoads.erase(mem);
     };
     auto forgetOperands = [&](Operation *op) {
       for (Value valueHandle : op->getOperands())
@@ -936,6 +982,29 @@ void AffineToLoopSchedule::cleanupRedundantAccesses() {
     };
 
     for (Operation &op : llvm::make_early_inc_range(*block)) {
+
+      if (auto mload = dyn_cast<memref::LoadOp>(op);
+          mload && cseLoads && gvnMemrefLoads) {
+        Value mem = mload.getMemRef();
+        if (!trackable(mem)) {
+          forget(mem);
+          continue;
+        }
+        std::vector<const void *> key;
+        for (Value valueHandle : mload.getIndices())
+          key.push_back(valueHandle.getAsOpaquePointer());
+        auto &seen = memrefLoads[mem];
+        auto it = seen.find(key);
+        if (it != seen.end()) {
+          addCounterAttr(it->second.getDefiningOp(), "hls.merged_loads", 1);
+          ++merged;
+          mload.getResult().replaceAllUsesWith(it->second);
+          mload.erase();
+          continue;
+        }
+        seen.emplace(std::move(key), mload.getResult());
+        continue;
+      }
       if (auto load = dyn_cast<AffineLoadOp>(op)) {
         Value mem = load.getMemRef();
         if (!trackable(mem)) {
@@ -982,6 +1051,7 @@ void AffineToLoopSchedule::cleanupRedundantAccesses() {
           forget(mem);
           continue;
         }
+        memrefLoads.erase(mem);
         AccessAddr addr(store.getAffineMap(), store.getMapOperands());
         KnownAddressIndex::Split split = index.split(addr);
         KnownValues &vals = known[mem];
@@ -1016,8 +1086,13 @@ void AffineToLoopSchedule::cleanupRedundantAccesses() {
         for (auto &entry : known)
           if (aliasInfo(entry.first).passedToCall)
             passed.push_back(entry.first);
-        for (Value root : passed)
+        for (auto &entry : memrefLoads)
+          if (aliasInfo(entry.first).passedToCall)
+            passed.push_back(entry.first);
+        for (Value root : passed) {
           known.erase(root);
+          memrefLoads.erase(root);
+        }
       }
 
       forgetOperands(&op);
@@ -2960,6 +3035,7 @@ void AffineToLoopSchedule::runOnOperation() {
     const circt::hlsest::MiddleEndConfig &me = cfg.tool.hls.middleEnd;
     applyConfigured(hoistInvariant, me.licmHoistInvariantLoads);
     applyConfigured(cseLoads, me.gvnLoads);
+    gvnMemrefLoads = me.gvnMemrefLoads;
     applyConfigured(forwardStores, me.storeForwarding);
     applyConfigured(hoistPastCalls, me.licmHoistPastCalls);
     applyConfigured(hoistConditional, me.licmHoistConditional);
@@ -3542,6 +3618,7 @@ void AffineToLoopSchedule::tagMemoryRecurrences() {
   options.recurrences = cfg.scheduling.memoryRecurrences;
   options.guardedStoreElimination = cfg.tool.hls.middleEnd.dseGuardedStores;
   options.forwardToGuardedLoads = cfg.tool.hls.middleEnd.forwardToGuardedLoads;
+  options.unknownAddressMinII = cfg.scheduling.unknownAddressMinII;
   Builder buildPoint(&getContext());
   auto locText = [](Operation *op) {
     std::string stringValue;
