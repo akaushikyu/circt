@@ -700,25 +700,6 @@ void BRAMClassification::enumerateBanks(Operation *root) {
   });
 }
 
-/// A bank whose alloca carries a user `bind_storage type=ram_1wnr` and the
-/// key tool.hls.memory_architecture.replication.user_ram_1wnr_replicable.
-static bool userRam1wnr(Value bank) {
-  if (!circt::hlsest::Config::get()
-           .tool.hls.memoryArchitecture.replication.userRam1wnrReplicable)
-    return false;
-  Operation *def = bank.getDefiningOp();
-  auto binds =
-      def ? def->getAttrOfType<ArrayAttr>("hls.bind_storage") : ArrayAttr();
-  if (!binds)
-    return false;
-  for (Attribute buildPoint : binds)
-    if (auto dimensionIndex = dyn_cast<DictionaryAttr>(buildPoint))
-      if (auto typeValue = dimensionIndex.getAs<StringAttr>("type"))
-        if (typeValue.getValue().equals_insensitive("ram_1wnr"))
-          return true;
-  return false;
-}
-
 void BRAMClassification::profileAccesses(Operation *root) {
 
   using LoopCounts = llvm::DenseMap<Operation *, std::pair<unsigned, unsigned>>;
@@ -763,11 +744,6 @@ void BRAMClassification::profileAccesses(Operation *root) {
 
     maxStoresPerLoop = std::max(maxStoresPerLoop, callerStoresPerLoop(bank));
     prof.replicable = maxStoresPerLoop <= 1;
-
-    if (!prof.replicable && userRam1wnr(bank)) {
-      prof.replicable = true;
-      maxStoresPerLoop = 1;
-    }
     prof.mode = prof.registers ? StorageMode::Registers
                                : classifyMode(maxStoresPerLoop);
     prof.type = classifyStorageKind(prof.maxReads, prof.maxWrites);
