@@ -89,6 +89,18 @@ while [[ -d "$(rebase_dir)" ]]; do
       fi
     fi
 
+    if git diff --cached --quiet; then
+      message="$(git show -s --format=%B "$original")"
+      GIT_EDITOR=true \
+        GIT_AUTHOR_NAME="$author_name" \
+        GIT_AUTHOR_EMAIL="$author_email" \
+        GIT_AUTHOR_DATE="$author_date" \
+        GIT_COMMITTER_NAME="$committer_name" \
+        GIT_COMMITTER_EMAIL="$committer_email" \
+        GIT_COMMITTER_DATE="$committer_date" \
+        git commit --allow-empty --no-verify -m "$message"
+    fi
+
     GIT_EDITOR=true \
       GIT_AUTHOR_NAME="$author_name" \
       GIT_AUTHOR_EMAIL="$author_email" \
