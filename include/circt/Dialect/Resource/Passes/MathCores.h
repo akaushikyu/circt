@@ -121,6 +121,14 @@ struct MathCoreRecord {
   /// Instances of the function the calls are in (a callee Vitis keeps as a
   /// module, instantiated more than once); `instances` and `bram` include it.
   unsigned functionInstances = 1;
+  /// The function's pipelined loops and its sequential code share the
+  /// instances (N178, W9r23 review D5).
+  bool sharedAcrossRegions = false;
+  /// The instances are those of the record of the same core in this sibling
+  /// kept callee (Vitis makes one instance in the common caller; W9r23
+  /// review D5); `bram` and `instances` then count only what this record
+  /// needs beyond them.
+  std::string sharedWithFunction;
   int64_t bram = 0;
   std::string loc;        // first site
   std::vector<MathRegionRecord> regions;

@@ -10,7 +10,9 @@
 // CHECK: ram type: RAM_S2P
 // CHECK: pipeline @ {{.*}} ii=2 trip=8192
 // CHECK: Total BRAM: 1{{$}}
-// OFF: ram type: RAM_T2P
+// Without the rule (OFF) the two writes take two ports: since W9r18-impl (N135, the writes in
+// different modulo slots) RAM_2P, before RAM_T2P.
+// OFF: ram type: RAM_2P
 // OFF: Total BRAM: 2{{$}}
 
 #set = affine_set<(d0) : (d0 == 0)>

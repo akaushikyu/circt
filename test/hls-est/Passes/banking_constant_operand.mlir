@@ -1,4 +1,7 @@
-// RUN: hls-est %s --memory-banking-bram | FileCheck %s
+// RUN: hls-est %s --config-set=tool.hls.partitioning.drop_unread_banks=false --memory-banking-bram | FileCheck %s
+// W9r21: the RUN lines pin tool.hls.partitioning.drop_unread_banks off (VITIS_NOTES
+// N157 would remove the banks these kernels write and never read); this test is
+// about the banking of constant indices.
 //
 // Banking must recognise a constant bank when the banked index is an SSA
 // constant (what --auto-pipeline-unroll leaves behind for the first unrolled

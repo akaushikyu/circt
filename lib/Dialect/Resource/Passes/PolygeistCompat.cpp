@@ -1,6 +1,14 @@
-
-
+//===- PolygeistCompat.cpp - polygeist.subindex in cgeist output ----------===//
+//
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//
+//===----------------------------------------------------------------------===//
+//
+// See PolygeistCompat.h.
+//
+//===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/Resource/Passes/PolygeistCompat.h"
 #include "circt/Dialect/Resource/Passes/CallInstances.h"
@@ -34,6 +42,10 @@ MLIR_DEFINE_EXPLICIT_TYPE_ID(circt::hls_analysis::Pointer2MemrefOp)
 MLIR_DEFINE_EXPLICIT_TYPE_ID(circt::hls_analysis::Memref2PointerOp)
 MLIR_DEFINE_EXPLICIT_TYPE_ID(circt::hls_analysis::UndefOp)
 
+//===----------------------------------------------------------------------===//
+// Dialect and op
+//===----------------------------------------------------------------------===//
+
 namespace {
 /// The polygeist ops are pure casts and views, so a callee that contains one
 /// may be inlined (without an interface MLIR's inliner refuses such a callee:
@@ -47,8 +59,8 @@ struct PolygeistCompatInlinerInterface : public DialectInlinerInterface {
 };
 } // namespace
 
-PolygeistCompatDialect::PolygeistCompatDialect(MLIRContext *context)
-    : Dialect(getDialectNamespace(), context,
+PolygeistCompatDialect::PolygeistCompatDialect(MLIRContext *ctx)
+    : Dialect(getDialectNamespace(), ctx,
               TypeID::get<PolygeistCompatDialect>()) {
   addOperations<SubIndexOp, Pointer2MemrefOp, Memref2PointerOp, UndefOp>();
   allowUnknownOperations();
@@ -80,14 +92,14 @@ struct AggregateMemRefElement
 } // namespace
 
 void circt::hls_analysis::registerPolygeistMemRefElementTypes(
-    DialectRegistry &targetRegistry) {
-  targetRegistry.addExtension(+[](MLIRContext *context, LLVM::LLVMDialect *) {
+    DialectRegistry &registry) {
+  registry.addExtension(+[](MLIRContext *ctx, LLVM::LLVMDialect *) {
     LLVM::LLVMStructType::attachInterface<
-        AggregateMemRefElement<LLVM::LLVMStructType>>(*context);
+        AggregateMemRefElement<LLVM::LLVMStructType>>(*ctx);
     LLVM::LLVMArrayType::attachInterface<
-        AggregateMemRefElement<LLVM::LLVMArrayType>>(*context);
+        AggregateMemRefElement<LLVM::LLVMArrayType>>(*ctx);
     LLVM::LLVMFunctionType::attachInterface<
-        AggregateMemRefElement<LLVM::LLVMFunctionType>>(*context);
+        AggregateMemRefElement<LLVM::LLVMFunctionType>>(*ctx);
   });
 }
 
@@ -103,15 +115,15 @@ unsigned circt::hls_analysis::aggregateElementBits(Type type) {
   if (auto st = dyn_cast<LLVM::LLVMStructType>(type)) {
     unsigned bits = 0;
     if (!st.isOpaque())
-      for (Type fieldValue : st.getBody())
-        bits += aggregateElementBits(fieldValue);
+      for (Type f : st.getBody())
+        bits += aggregateElementBits(f);
     return bits;
   }
   return 0;
 }
 
-void SubIndexOp::build(OpBuilder &passBuilder, OperationState &state,
-                       Type result, Value source, Value index) {
+void SubIndexOp::build(OpBuilder &builder, OperationState &state, Type result,
+                       Value source, Value index) {
   state.addOperands({source, index});
   state.addTypes(result);
 }
@@ -126,54 +138,55 @@ LogicalResult SubIndexOp::verify() {
 
 bool SubIndexOp::isRowSelect() {
   auto src = dyn_cast<MemRefType>(getSource().getType());
-  auto passResult = dyn_cast<MemRefType>(getResult().getType());
-  if (!src || !passResult || src.getRank() < 1 ||
-      passResult.getRank() + 1 != src.getRank())
+  auto res = dyn_cast<MemRefType>(getResult().getType());
+  if (!src || !res || src.getRank() < 1 || res.getRank() + 1 != src.getRank())
     return false;
-  if (!src.getLayout().isIdentity() || !passResult.getLayout().isIdentity())
+  if (!src.getLayout().isIdentity() || !res.getLayout().isIdentity())
     return false;
-  if (src.getElementType() != passResult.getElementType())
+  if (src.getElementType() != res.getElementType())
     return false;
-  return src.getShape().drop_front() == passResult.getShape();
+  return src.getShape().drop_front() == res.getShape();
 }
 
 bool SubIndexOp::isOffsetView() {
   auto src = dyn_cast<MemRefType>(getSource().getType());
-  auto passResult = dyn_cast<MemRefType>(getResult().getType());
-  if (!src || !passResult || src.getRank() < 1 ||
-      passResult.getRank() != src.getRank() || !src.hasStaticShape() ||
-      !passResult.hasStaticShape())
+  auto res = dyn_cast<MemRefType>(getResult().getType());
+  if (!src || !res || src.getRank() < 1 || res.getRank() != src.getRank() ||
+      !src.hasStaticShape() || !res.hasStaticShape())
     return false;
-  if (!src.getLayout().isIdentity() || !passResult.getLayout().isIdentity())
+  if (!src.getLayout().isIdentity() || !res.getLayout().isIdentity())
     return false;
-  if (src.getElementType() != passResult.getElementType())
+  if (src.getElementType() != res.getElementType())
     return false;
-  return src.getShape().drop_front() == passResult.getShape().drop_front() &&
-         passResult.getShape()[0] <= src.getShape()[0];
+  return src.getShape().drop_front() == res.getShape().drop_front() &&
+         res.getShape()[0] <= src.getShape()[0];
 }
 
 bool SubIndexOp::isElementView() {
   auto src = dyn_cast<MemRefType>(getSource().getType());
-  auto passResult = dyn_cast<MemRefType>(getResult().getType());
-  if (!src || !passResult || src.getRank() < 1 ||
-      passResult.getRank() != src.getRank() || !src.hasStaticShape() ||
-      !ShapedType::isDynamic(passResult.getShape()[0]))
+  auto res = dyn_cast<MemRefType>(getResult().getType());
+  if (!src || !res || src.getRank() < 1 || res.getRank() != src.getRank() ||
+      !src.hasStaticShape() || !ShapedType::isDynamic(res.getShape()[0]))
     return false;
-  if (!src.getLayout().isIdentity() || !passResult.getLayout().isIdentity())
+  if (!src.getLayout().isIdentity() || !res.getLayout().isIdentity())
     return false;
-  if (src.getElementType() != passResult.getElementType())
+  if (src.getElementType() != res.getElementType())
     return false;
-  return src.getShape().drop_front() == passResult.getShape().drop_front();
+  return src.getShape().drop_front() == res.getShape().drop_front();
 }
+
+//===----------------------------------------------------------------------===//
+// --lower-polygeist-subindex
+//===----------------------------------------------------------------------===//
 
 /// The memref operand of a load / store, or null.
 static Value accessedMemRef(Operation *op) {
-  if (auto lowerIndex = dyn_cast<affine::AffineLoadOp>(op))
-    return lowerIndex.getMemRef();
+  if (auto l = dyn_cast<affine::AffineLoadOp>(op))
+    return l.getMemRef();
   if (auto st = dyn_cast<affine::AffineStoreOp>(op))
     return st.getMemRef();
-  if (auto lowerIndex = dyn_cast<memref::LoadOp>(op))
-    return lowerIndex.getMemRef();
+  if (auto l = dyn_cast<memref::LoadOp>(op))
+    return l.getMemRef();
   if (auto st = dyn_cast<memref::StoreOp>(op))
     return st.getMemRef();
   return {};
@@ -181,9 +194,9 @@ static Value accessedMemRef(Operation *op) {
 
 /// A copy of `access` that reads / writes `view` instead of its memref.
 static Operation *cloneAccessOn(OpBuilder &b, Operation *access, Value view) {
-  IRMapping memoryOp;
-  memoryOp.map(accessedMemRef(access), view);
-  return b.clone(*access, memoryOp);
+  IRMapping m;
+  m.map(accessedMemRef(access), view);
+  return b.clone(*access, m);
 }
 
 /// `c ? A[i] : A[j]` on lvalues of one array: both operands of the
@@ -203,10 +216,10 @@ static bool mergeSameArrayViewConditional(Operation *op) {
   if (auto sel = dyn_cast<arith::SelectOp>(op)) {
     yielded = {sel.getTrueValue(), sel.getFalseValue()};
   } else {
-    for (Region &resultValue : op->getRegions()) {
-      if (resultValue.empty())
+    for (Region &r : op->getRegions()) {
+      if (r.empty())
         return false;
-      yielded.push_back(resultValue.front().getTerminator()->getOperand(0));
+      yielded.push_back(r.front().getTerminator()->getOperand(0));
     }
   }
   if (yielded.size() != 2)
@@ -218,7 +231,7 @@ static bool mergeSameArrayViewConditional(Operation *op) {
       views[0].getType() != views[1].getType() || !views[0].isElementView())
     return false;
   Value source = views[0].getSource();
-
+  // The array must be visible after the conditional.
   if (op->isAncestor(source.getParentRegion()->getParentOp()))
     return false;
   OpBuilder b(op);
@@ -229,29 +242,29 @@ static bool mergeSameArrayViewConditional(Operation *op) {
     index = arith::SelectOp::create(b, loc, sel.getCondition(),
                                     views[0].getIndex(), views[1].getIndex());
   } else {
-    Operation *elementCount;
+    Operation *n;
     if (auto aif = dyn_cast<affine::AffineIfOp>(op))
-      elementCount = affine::AffineIfOp::create(b, loc, TypeRange{indexTy},
-                                                aif.getIntegerSet(),
-                                                aif.getOperands(), true);
+      n = affine::AffineIfOp::create(b, loc, TypeRange{indexTy},
+                                     aif.getIntegerSet(), aif.getOperands(),
+                                     /*withElseRegion=*/true);
     else if (auto sif = dyn_cast<scf::IfOp>(op))
-      elementCount = scf::IfOp::create(b, loc, TypeRange{indexTy},
-                                       sif.getCondition(), true);
+      n = scf::IfOp::create(b, loc, TypeRange{indexTy}, sif.getCondition(),
+                            /*withElseRegion=*/true);
     else
       return false;
     for (unsigned arm = 0; arm < 2; ++arm) {
-      elementCount->getRegion(arm).takeBody(op->getRegion(arm));
-      elementCount->getRegion(arm).front().getTerminator()->setOperand(
+      n->getRegion(arm).takeBody(op->getRegion(arm));
+      n->getRegion(arm).front().getTerminator()->setOperand(
           0, views[arm].getIndex());
     }
-    index = elementCount->getResult(0);
+    index = n->getResult(0);
   }
   auto merged = SubIndexOp::create(b, loc, views[0].getType(), source, index);
   op->getResult(0).replaceAllUsesWith(merged.getResult());
   op->erase();
-  for (SubIndexOp valueHandle : views)
-    if (valueHandle->use_empty())
-      valueHandle->erase();
+  for (SubIndexOp v : views)
+    if (v->use_empty())
+      v->erase();
   return true;
 }
 
@@ -270,17 +283,16 @@ static unsigned sinkAccessesIntoViewConditionals(ModuleOp module) {
   module.walk([&](Operation *op) {
     if (!isa<affine::AffineIfOp, scf::IfOp, arith::SelectOp>(op))
       return;
-    if (llvm::any_of(op->getResultTypes(), [](Type typeValue) {
-          return isa<BaseMemRefType>(typeValue);
-        }))
+    if (llvm::any_of(op->getResultTypes(),
+                     [](Type t) { return isa<BaseMemRefType>(t); }))
       candidates.push_back(op);
   });
   unsigned moved = 0;
   for (Operation *op : candidates) {
-    auto armsPure = llvm::all_of(op->getRegions(), [](Region &resultValue) {
-      if (resultValue.empty())
-        return false;
-      for (Operation &in : resultValue.front().without_terminator())
+    auto armsPure = llvm::all_of(op->getRegions(), [](Region &r) {
+      if (r.empty())
+        return false; // an if without else cannot yield
+      for (Operation &in : r.front().without_terminator())
         if (!isMemoryEffectFree(&in) || in.getNumRegions() > 0)
           return false;
       return true;
@@ -291,74 +303,76 @@ static unsigned sinkAccessesIntoViewConditionals(ModuleOp module) {
       ++moved;
       continue;
     }
-    for (OpResult passResult : op->getResults()) {
-      if (!isa<BaseMemRefType>(passResult.getType()))
+    for (OpResult res : op->getResults()) {
+      if (!isa<BaseMemRefType>(res.getType()))
         continue;
-      SmallVector<Operation *> users(passResult.getUsers().begin(),
-                                     passResult.getUsers().end());
-
+      SmallVector<Operation *> users(res.getUsers().begin(),
+                                     res.getUsers().end());
+      // Every use must be the memref of an access (not a stored value).
       bool onlyAccesses =
-          !users.empty() && llvm::all_of(users, [&](Operation *useValue) {
-            return accessedMemRef(useValue) == passResult &&
-                   (!isa<affine::AffineStoreOp, memref::StoreOp>(useValue) ||
-                    useValue->getOperand(0) != passResult);
+          !users.empty() && llvm::all_of(users, [&](Operation *u) {
+            return accessedMemRef(u) == res &&
+                   (!isa<affine::AffineStoreOp, memref::StoreOp>(u) ||
+                    u->getOperand(0) != res);
           });
       if (!onlyAccesses)
         continue;
-      unsigned indexValue = passResult.getResultNumber();
+      unsigned idx = res.getResultNumber();
       for (Operation *access : users) {
         OpBuilder b(access);
         Location loc = access->getLoc();
         TypeRange types = access->getResultTypes();
-
+        // Builds one arm: `arm` recomputes the view (or, for a select, is
+        // empty and `selected` is the operand) and accesses it.
         auto fill = [&](OpBuilder &ab, Region *arm, Value selected) {
-          IRMapping memoryOp;
+          IRMapping m;
           Value view = selected;
           if (arm) {
             for (Operation &in : arm->front().without_terminator())
-              ab.clone(in, memoryOp);
-            view = memoryOp.lookupOrDefault(
-                arm->front().getTerminator()->getOperand(indexValue));
+              ab.clone(in, m);
+            view = m.lookupOrDefault(
+                arm->front().getTerminator()->getOperand(idx));
           }
           Operation *a = cloneAccessOn(ab, access, view);
           return a->getResults();
         };
         Operation *nif = nullptr;
         if (auto aif = dyn_cast<affine::AffineIfOp>(op)) {
-          auto elementCount = affine::AffineIfOp::create(
-              b, loc, types, aif.getIntegerSet(), aif.getOperands(), true);
-          OpBuilder tb = elementCount.getThenBodyBuilder();
+          auto n = affine::AffineIfOp::create(
+              b, loc, types, aif.getIntegerSet(), aif.getOperands(),
+              /*withElseRegion=*/true);
+          OpBuilder tb = n.getThenBodyBuilder();
           ValueRange tv = fill(tb, &aif.getThenRegion(), {});
           affine::AffineYieldOp::create(tb, loc, tv);
-          OpBuilder eb = elementCount.getElseBodyBuilder();
+          OpBuilder eb = n.getElseBodyBuilder();
           ValueRange ev = fill(eb, &aif.getElseRegion(), {});
           affine::AffineYieldOp::create(eb, loc, ev);
-          nif = elementCount;
+          nif = n;
         } else {
           Value cond = isa<scf::IfOp>(op)
                            ? cast<scf::IfOp>(op).getCondition()
                            : cast<arith::SelectOp>(op).getCondition();
-          auto elementCount = scf::IfOp::create(b, loc, types, cond, true);
+          auto n = scf::IfOp::create(b, loc, types, cond,
+                                     /*withElseRegion=*/true);
           for (unsigned arm = 0; arm < 2; ++arm) {
-            Block &blk = arm == 0 ? elementCount.getThenRegion().front()
-                                  : elementCount.getElseRegion().front();
-
+            Block &blk = arm == 0 ? n.getThenRegion().front()
+                                  : n.getElseRegion().front();
+            // scf.if with results gets no terminator; without, a yield.
             if (!blk.empty())
               blk.back().erase();
             OpBuilder ab = OpBuilder::atBlockEnd(&blk);
-            ValueRange valueHandle;
+            ValueRange v;
             if (auto sif = dyn_cast<scf::IfOp>(op))
-              valueHandle = fill(
-                  ab, arm == 0 ? &sif.getThenRegion() : &sif.getElseRegion(),
-                  {});
+              v = fill(ab,
+                       arm == 0 ? &sif.getThenRegion() : &sif.getElseRegion(),
+                       {});
             else
-              valueHandle =
-                  fill(ab, nullptr,
+              v = fill(ab, nullptr,
                        arm == 0 ? cast<arith::SelectOp>(op).getTrueValue()
                                 : cast<arith::SelectOp>(op).getFalseValue());
-            scf::YieldOp::create(ab, loc, valueHandle);
+            scf::YieldOp::create(ab, loc, v);
           }
-          nif = elementCount;
+          nif = n;
         }
         access->replaceAllUsesWith(nif->getResults());
         access->erase();
@@ -406,30 +420,29 @@ static void recordCoreTables(func::FuncOp core, SymbolTable &symbols) {
           work.push_back(callee);
         return;
       }
-      auto globalUse = dyn_cast<memref::GetGlobalOp>(op);
-      if (!globalUse)
+      auto gg = dyn_cast<memref::GetGlobalOp>(op);
+      if (!gg)
         return;
-      auto global = symbols.lookup<memref::GlobalOp>(globalUse.getName());
+      auto global = symbols.lookup<memref::GlobalOp>(gg.getName());
       if (!global)
         return;
       if (seenGlobals.insert(global.getOperation()).second)
         referenced.push_back(global);
-      for (Operation *user : globalUse->getUsers())
+      for (Operation *user : gg->getUsers())
         if (isa<memref::StoreOp, affine::AffineStoreOp>(user))
           written.insert(global.getOperation());
     });
   }
   Builder b(core.getContext());
-  for (memref::GlobalOp globalOp : referenced) {
-    MemRefType memRefType = globalOp.getType();
-    if (written.contains(globalOp.getOperation()) ||
-        !globalOp.getInitialValue() || !memRefType.hasStaticShape() ||
-        !memRefType.getElementType().isIntOrFloat())
+  for (memref::GlobalOp g : referenced) {
+    MemRefType ty = g.getType();
+    if (written.contains(g.getOperation()) || !g.getInitialValue() ||
+        !ty.hasStaticShape() || !ty.getElementType().isIntOrFloat())
       continue;
-    tables.push_back(b.getArrayAttr(
-        {b.getI64IntegerAttr(memRefType.getNumElements()),
-         b.getI64IntegerAttr(memRefType.getElementTypeBitWidth()),
-         b.getStringAttr(globalOp.getSymName())}));
+    tables.push_back(
+        b.getArrayAttr({b.getI64IntegerAttr(ty.getNumElements()),
+                        b.getI64IntegerAttr(ty.getElementTypeBitWidth()),
+                        b.getStringAttr(g.getSymName())}));
   }
   if (!tables.empty())
     core->setAttr("hls.core_tables", b.getArrayAttr(tables));
@@ -437,40 +450,39 @@ static void recordCoreTables(func::FuncOp core, SymbolTable &symbols) {
 
 static void dropMathCoreBodies(ModuleOp module) {
   SmallVector<func::FuncOp> cores;
-  for (func::FuncOp fieldValue : module.getOps<func::FuncOp>())
-    if (fieldValue->hasAttr("hls.math_core") && !fieldValue.isExternal())
-      cores.push_back(fieldValue);
+  for (func::FuncOp f : module.getOps<func::FuncOp>())
+    if (f->hasAttr("hls.math_core") && !f.isExternal())
+      cores.push_back(f);
   if (cores.empty())
     return;
   {
     SymbolTable symbols(module);
-    for (func::FuncOp fieldValue : cores)
-      recordCoreTables(fieldValue, symbols);
+    for (func::FuncOp f : cores)
+      recordCoreTables(f, symbols);
   }
-
+  // The symbols the dropped bodies referenced: candidates for removal.
   SmallVector<StringAttr> candidates;
   auto collect = [&](Region &body) {
-    if (auto symbolUses = SymbolTable::getSymbolUses(&body))
-      for (const SymbolTable::SymbolUse &use : *symbolUses)
+    if (auto uses = SymbolTable::getSymbolUses(&body))
+      for (const SymbolTable::SymbolUse &use : *uses)
         candidates.push_back(use.getSymbolRef().getRootReference());
   };
-  for (func::FuncOp fieldValue : cores) {
-    collect(fieldValue.getBody());
-    fieldValue.getBody().getBlocks().clear();
-    fieldValue.setPrivate();
+  for (func::FuncOp f : cores) {
+    collect(f.getBody());
+    f.getBody().getBlocks().clear();
+    f.setPrivate();
   }
   SymbolTable symbols(module);
-  for (unsigned elementCount = 0; elementCount < candidates.size();
-       ++elementCount) {
-    Operation *symbolName = symbols.lookup(candidates[elementCount]);
-    if (!symbolName || !SymbolTable::symbolKnownUseEmpty(symbolName, module))
+  for (unsigned n = 0; n < candidates.size(); ++n) {
+    Operation *sym = symbols.lookup(candidates[n]);
+    if (!sym || !SymbolTable::symbolKnownUseEmpty(sym, module))
       continue;
-    auto symOp = dyn_cast<SymbolOpInterface>(symbolName);
-    if (!symOp || !symOp.isPrivate() || symbolName->hasAttr("hls.math_core"))
+    auto symOp = dyn_cast<SymbolOpInterface>(sym);
+    if (!symOp || !symOp.isPrivate() || sym->hasAttr("hls.math_core"))
       continue;
-    for (Region &resultValue : symbolName->getRegions())
-      collect(resultValue);
-    symbols.erase(symbolName);
+    for (Region &r : sym->getRegions())
+      collect(r);
+    symbols.erase(sym);
   }
 }
 
@@ -499,41 +511,37 @@ static void dropMathCoreBodies(ModuleOp module) {
 /// anything else, are left as they were.
 static unsigned lowerStreamElementViews(ModuleOp module) {
   SmallVector<func::CallOp> calls;
-  module.walk(
-      [&](func::CallOp candidateValue) { calls.push_back(candidateValue); });
+  module.walk([&](func::CallOp c) { calls.push_back(c); });
   unsigned rewritten = 0;
   for (func::CallOp call : calls) {
-    std::optional<StreamTemplate> typeValue =
-        parseStreamMethod(call.getCallee());
-    if (!typeValue || call.getNumOperands() < 2)
+    std::optional<StreamTemplate> t = parseStreamMethod(call.getCallee());
+    if (!t || call.getNumOperands() < 2)
       continue;
-    StringRef memoryOp = typeValue->method;
-    bool streamReads =
-        (memoryOp.starts_with("4read") && !memoryOp.starts_with("4readEv")) ||
-        memoryOp.starts_with("7read_nb") || memoryOp.starts_with("rs");
-    bool streamWrites = memoryOp.starts_with("5write") ||
-                        memoryOp.starts_with("8write_nb") ||
-                        memoryOp.starts_with("ls");
+    StringRef m = t->method;
+    bool streamReads = (m.starts_with("4read") && !m.starts_with("4readEv")) ||
+                       m.starts_with("7read_nb") || m.starts_with("rs");
+    bool streamWrites = m.starts_with("5write") || m.starts_with("8write_nb") ||
+                        m.starts_with("ls");
     if (!streamReads && !streamWrites)
       continue;
     auto si = call.getOperand(1).getDefiningOp<SubIndexOp>();
     if (!si)
       continue;
     auto src = dyn_cast<MemRefType>(si.getSource().getType());
-    auto passResult = dyn_cast<MemRefType>(si.getResult().getType());
-    if (!src || !passResult || src.getRank() < 1 ||
-        passResult.getRank() != src.getRank() || !src.hasStaticShape() ||
-        !ShapedType::isDynamic(passResult.getShape()[0]) ||
-        passResult.getShape().drop_front() != src.getShape().drop_front() ||
-        !src.getLayout().isIdentity() || !passResult.getLayout().isIdentity() ||
-        src.getElementType() != passResult.getElementType() ||
+    auto res = dyn_cast<MemRefType>(si.getResult().getType());
+    if (!src || !res || src.getRank() < 1 || res.getRank() != src.getRank() ||
+        !src.hasStaticShape() || !ShapedType::isDynamic(res.getShape()[0]) ||
+        res.getShape().drop_front() != src.getShape().drop_front() ||
+        !src.getLayout().isIdentity() || !res.getLayout().isIdentity() ||
+        src.getElementType() != res.getElementType() ||
         !src.getElementType().isIntOrFloat())
       continue;
-
+    // The members of one row (1 for a scalar element), as index tuples of
+    // the trailing dimensions.
     ArrayRef<int64_t> rowShape = src.getShape().drop_front();
     int64_t members = 1;
-    for (int64_t dimensionIndex : rowShape)
-      members *= dimensionIndex;
+    for (int64_t d : rowShape)
+      members *= d;
     constexpr int64_t kMaxRowMembers = 256;
     if (members < 1 || members > kMaxRowMembers)
       continue;
@@ -546,20 +554,19 @@ static unsigned lowerStreamElementViews(ModuleOp module) {
     tmpShape.append(rowShape.begin(), rowShape.end());
     auto tmp = memref::AllocaOp::create(
         entry, loc, MemRefType::get(tmpShape, src.getElementType()));
-    auto view = memref::CastOp::create(entry, loc, passResult, tmp);
-    Value indexValue = si.getIndex();
-    bool affineIdx =
-        affine::isValidDim(indexValue) || affine::isValidSymbol(indexValue);
+    auto view = memref::CastOp::create(entry, loc, res, tmp);
+    Value idx = si.getIndex();
+    bool affineIdx = affine::isValidDim(idx) || affine::isValidSymbol(idx);
     OpBuilder b(call);
     Value zero = arith::ConstantIndexOp::create(b, loc, 0);
-
-    auto memberIndices = [&](OpBuilder &bb, Value first, int64_t memoryOp) {
+    // The index list of member `m` (row-major over rowShape) in a row whose
+    // first index is `first`.
+    auto memberIndices = [&](OpBuilder &bb, Value first, int64_t m) {
       SmallVector<Value> ivs{first};
       SmallVector<Value> rest;
-      for (int64_t dimensionIndex : llvm::reverse(rowShape)) {
-        rest.push_back(
-            arith::ConstantIndexOp::create(bb, loc, memoryOp % dimensionIndex));
-        memoryOp /= dimensionIndex;
+      for (int64_t d : llvm::reverse(rowShape)) {
+        rest.push_back(arith::ConstantIndexOp::create(bb, loc, m % d));
+        m /= d;
       }
       ivs.append(rest.rbegin(), rest.rend());
       return ivs;
@@ -569,33 +576,33 @@ static unsigned lowerStreamElementViews(ModuleOp module) {
         return affine::AffineLoadOp::create(bb, loc, mem, ivs);
       return memref::LoadOp::create(bb, loc, mem, ivs);
     };
-    auto store = [&](OpBuilder &bb, Value valueHandle, Value mem,
-                     ValueRange ivs) {
+    auto store = [&](OpBuilder &bb, Value v, Value mem, ValueRange ivs) {
       if (affineIdx || mem == tmp.getResult())
-        affine::AffineStoreOp::create(bb, loc, valueHandle, mem, ivs);
+        affine::AffineStoreOp::create(bb, loc, v, mem, ivs);
       else
-        memref::StoreOp::create(bb, loc, valueHandle, mem, ivs);
+        memref::StoreOp::create(bb, loc, v, mem, ivs);
     };
-
+    // Every member is read before any is written (the stream method sees
+    // the row whole).
     auto copy = [&](OpBuilder &bb, Value from, Value fromFirst, Value to,
                     Value toFirst) {
       SmallVector<SmallVector<Value>> fromIvs, toIvs;
-      for (int64_t memoryOp = 0; memoryOp < members; ++memoryOp) {
-        fromIvs.push_back(memberIndices(bb, fromFirst, memoryOp));
-        toIvs.push_back(memberIndices(bb, toFirst, memoryOp));
+      for (int64_t m = 0; m < members; ++m) {
+        fromIvs.push_back(memberIndices(bb, fromFirst, m));
+        toIvs.push_back(memberIndices(bb, toFirst, m));
       }
       SmallVector<Value> vals;
-      for (int64_t memoryOp = 0; memoryOp < members; ++memoryOp)
-        vals.push_back(load(bb, from, fromIvs[memoryOp]));
-      for (int64_t memoryOp = 0; memoryOp < members; ++memoryOp)
-        store(bb, vals[memoryOp], to, toIvs[memoryOp]);
+      for (int64_t m = 0; m < members; ++m)
+        vals.push_back(load(bb, from, fromIvs[m]));
+      for (int64_t m = 0; m < members; ++m)
+        store(bb, vals[m], to, toIvs[m]);
     };
     if (streamWrites)
-      copy(b, si.getSource(), indexValue, tmp, zero);
+      copy(b, si.getSource(), idx, tmp, zero);
     call->setOperand(1, view);
     if (streamReads) {
       b.setInsertionPointAfter(call);
-      copy(b, tmp, zero, si.getSource(), indexValue);
+      copy(b, tmp, zero, si.getSource(), idx);
     }
     if (si->use_empty())
       si->erase();
@@ -629,51 +636,46 @@ specializeCastArguments(ModuleOp module,
   unsigned redirected = 0;
   for (unsigned round = 0; round < 16; ++round) {
     SmallVector<func::CallOp> calls;
-    module.walk(
-        [&](func::CallOp candidateValue) { calls.push_back(candidateValue); });
+    module.walk([&](func::CallOp c) { calls.push_back(c); });
     bool changed = false;
     for (func::CallOp call : calls) {
       func::FuncOp callee = resolveDefinedCallee(call);
       if (!callee || callee == call->getParentOfType<func::FuncOp>())
         continue;
       SmallVector<std::pair<unsigned, Type>> forms;
-      for (auto [loopIndex, valueHandle] :
-           llvm::enumerate(call.getArgOperands())) {
-        auto cast = valueHandle.getDefiningOp<memref::CastOp>();
-        if (!cast || loopIndex >= callee.getNumArguments() ||
-            callee.getArgument(loopIndex).getType() != valueHandle.getType())
+      for (auto [i, v] : llvm::enumerate(call.getArgOperands())) {
+        auto cast = v.getDefiningOp<memref::CastOp>();
+        if (!cast || i >= callee.getNumArguments() ||
+            callee.getArgument(i).getType() != v.getType())
           continue;
         auto from = dyn_cast<MemRefType>(cast.getSource().getType());
-        auto to = dyn_cast<MemRefType>(valueHandle.getType());
+        auto to = dyn_cast<MemRefType>(v.getType());
         if (!from || !to || !from.hasStaticShape() || to.hasStaticShape() ||
             from.getRank() != to.getRank() ||
             from.getElementType() != to.getElementType() ||
             !from.getLayout().isIdentity() || !to.getLayout().isIdentity() ||
             from.getMemorySpace() != to.getMemorySpace())
           continue;
-
+        // Arrays of scalars only: a one-element or struct memref is an
+        // object passed by pointer (`this`, a struct by reference), whose
+        // members --split-struct-memrefs follows through the calls itself.
         if (!from.getElementType().isIntOrFloat() || from.getNumElements() <= 1)
           continue;
-
+        // An array of the design (an alloca, a global, or one passed down
+        // from such through a parameter of a private function); the top's
+        // own array arguments are ports, whose partition is not at stake.
         if (auto arg = dyn_cast<BlockArgument>(cast.getSource()))
           if (auto owner =
                   dyn_cast<func::FuncOp>(arg.getOwner()->getParentOp()))
             if (owner.isPublic())
               continue;
-        if (!from.getElementType().isIntOrFloat() || from.getNumElements() <= 1)
-          continue;
-        if (auto argument = dyn_cast<BlockArgument>(cast.getSource()))
-          if (auto owner =
-                  dyn_cast<func::FuncOp>(argument.getOwner()->getParentOp()))
-            if (owner.isPublic())
-              continue;
-        forms.push_back({static_cast<unsigned>(loopIndex), from});
+        forms.push_back({static_cast<unsigned>(i), from});
       }
       if (forms.empty())
         continue;
       func::FuncOp clone;
-      for (auto &[keyValue, fn] : clones)
-        if (keyValue.callee == callee.getOperation() && keyValue.args == forms)
+      for (auto &[k, fn] : clones)
+        if (k.callee == callee.getOperation() && k.args == forms)
           clone = fn;
       if (!clone) {
         clone = callee.clone();
@@ -683,21 +685,21 @@ specializeCastArguments(ModuleOp module,
         Block &entry = clone.getBody().front();
         OpBuilder b(&entry, entry.begin());
         SmallVector<Type> inputs(clone.getArgumentTypes());
-        for (auto [loopIndex, memRefType] : forms) {
-          BlockArgument arg = clone.getArgument(loopIndex);
+        for (auto [i, ty] : forms) {
+          BlockArgument arg = clone.getArgument(i);
           Type ptrTy = arg.getType();
-          arg.setType(memRefType);
-          inputs[loopIndex] = memRefType;
+          arg.setType(ty);
+          inputs[i] = ty;
           SmallVector<OpOperand *> needPtr;
           for (OpOperand &use : arg.getUses()) {
-            Operation *useValue = use.getOwner();
+            Operation *u = use.getOwner();
             bool access =
-                isa<affine::AffineLoadOp, memref::LoadOp>(useValue) ||
-                (isa<affine::AffineStoreOp>(useValue) &&
-                 use.getOperandNumber() == cast<affine::AffineStoreOp>(useValue)
-                                               .getMemRefOperandIndex()) ||
-                (isa<memref::StoreOp>(useValue) &&
-                 cast<memref::StoreOp>(useValue).getValueToStore() != arg);
+                isa<affine::AffineLoadOp, memref::LoadOp>(u) ||
+                (isa<affine::AffineStoreOp>(u) &&
+                 use.getOperandNumber() ==
+                     cast<affine::AffineStoreOp>(u).getMemRefOperandIndex()) ||
+                (isa<memref::StoreOp>(u) &&
+                 cast<memref::StoreOp>(u).getValueToStore() != arg);
             if (!access)
               needPtr.push_back(&use);
           }
@@ -715,9 +717,9 @@ specializeCastArguments(ModuleOp module,
       }
       SmallVector<Value> operands(call.getArgOperands());
       SmallVector<memref::CastOp> casts;
-      for (auto [loopIndex, memRefType] : forms) {
-        auto cast = operands[loopIndex].getDefiningOp<memref::CastOp>();
-        operands[loopIndex] = cast.getSource();
+      for (auto [i, ty] : forms) {
+        auto cast = operands[i].getDefiningOp<memref::CastOp>();
+        operands[i] = cast.getSource();
         casts.push_back(cast);
       }
       OpBuilder b(call);
@@ -726,9 +728,9 @@ specializeCastArguments(ModuleOp module,
         nc->setDiscardableAttr(a.getName(), a.getValue());
       call.replaceAllUsesWith(nc.getResults());
       call.erase();
-      for (memref::CastOp candidateValue : casts)
-        if (candidateValue->use_empty())
-          candidateValue->erase();
+      for (memref::CastOp c : casts)
+        if (c->use_empty())
+          c->erase();
       ++redirected;
       changed = true;
     }
@@ -762,11 +764,21 @@ unsigned circt::hls_analysis::specializeStaticCastArguments(ModuleOp module) {
 
 namespace {
 
+// The partition pragma of a row parameter, moved to the whole array: a
+// 1-based `dim` shifts by one (0 = every dimension stays 0), as Vitis applies
+// it to the caller's array (VITIS_NOTES.md N17 (b): `f(A[k])` with `cyclic
+// factor=4 dim=1` on the parameter -> "factor 4 on dimension 2" of
+// A[4][1024], fbh1_prop_row_var / row_const, w7_prop_row0only /
+// w7_prop_row1only). Except when the whole array has a single row
+// (`A[1][N]`): Vitis then reports "Complete partitioning on dimension 1" and
+// keeps one bank of 1024x32 (w7_prop_row1; forgebench mult_op_module_dot
+// BRAM_C1 / BRAM_C2, VITIS_NOTES.md N24), i.e. the spec stays on dimension 1,
+// where a factor beyond the extent 1 is a complete partition of one element.
 static DictionaryAttr shiftPartitionDims(DictionaryAttr argAttrs,
-                                         MLIRContext *context,
+                                         MLIRContext *ctx,
                                          MemRefType wholeType) {
   if (!argAttrs)
-    return DictionaryAttr::get(context, {});
+    return DictionaryAttr::get(ctx, {});
   auto arr = argAttrs.getAs<ArrayAttr>("hls.array_partition");
   if (!arr)
     return argAttrs;
@@ -774,34 +786,33 @@ static DictionaryAttr shiftPartitionDims(DictionaryAttr argAttrs,
     return argAttrs;
   SmallVector<Attribute> entries;
   for (Attribute a : arr) {
-    auto dimensionIndex = dyn_cast<DictionaryAttr>(a);
-    if (!dimensionIndex) {
+    auto d = dyn_cast<DictionaryAttr>(a);
+    if (!d) {
       entries.push_back(a);
       continue;
     }
     SmallVector<NamedAttribute> fields;
-    for (NamedAttribute fieldValue : dimensionIndex) {
-      if (fieldValue.getName() == "dim")
-        if (auto dim = dyn_cast<IntegerAttr>(fieldValue.getValue()))
+    for (NamedAttribute f : d) {
+      if (f.getName() == "dim")
+        if (auto dim = dyn_cast<IntegerAttr>(f.getValue()))
           if (dim.getInt() > 0) {
             fields.push_back(NamedAttribute(
-                fieldValue.getName(),
+                f.getName(),
                 IntegerAttr::get(dim.getType(), dim.getInt() + 1)));
             continue;
           }
-      fields.push_back(fieldValue);
+      fields.push_back(f);
     }
-    entries.push_back(DictionaryAttr::get(context, fields));
+    entries.push_back(DictionaryAttr::get(ctx, fields));
   }
   SmallVector<NamedAttribute> out;
-  for (NamedAttribute fieldValue : argAttrs) {
-    if (fieldValue.getName() == "hls.array_partition")
-      out.push_back(NamedAttribute(fieldValue.getName(),
-                                   ArrayAttr::get(context, entries)));
+  for (NamedAttribute f : argAttrs) {
+    if (f.getName() == "hls.array_partition")
+      out.push_back(NamedAttribute(f.getName(), ArrayAttr::get(ctx, entries)));
     else
-      out.push_back(fieldValue);
+      out.push_back(f);
   }
-  return DictionaryAttr::get(context, out);
+  return DictionaryAttr::get(ctx, out);
 }
 
 struct LowerSubIndexPass
@@ -825,21 +836,21 @@ struct LowerSubIndexPass
            "accesses of the whole array, cloning a callee per array-argument "
            "form as Vitis does (N14 R4)";
   }
-  void getDependentDialects(DialectRegistry &targetRegistry) const override {
-    targetRegistry
-        .insert<affine::AffineDialect, memref::MemRefDialect, func::FuncDialect,
-                arith::ArithDialect, scf::SCFDialect>();
+  void getDependentDialects(DialectRegistry &registry) const override {
+    registry.insert<affine::AffineDialect, memref::MemRefDialect,
+                    func::FuncDialect, arith::ArithDialect, scf::SCFDialect>();
   }
 
+  // Clones per (callee, row parameters with their whole-array types).
   struct CloneKey {
     Operation *callee;
     SmallVector<std::pair<unsigned, Type>> rows;
-    bool operator==(const CloneKey &opHandle) const {
-      return callee == opHandle.callee && rows == opHandle.rows;
+    bool operator==(const CloneKey &o) const {
+      return callee == o.callee && rows == o.rows;
     }
   };
   SmallVector<std::pair<CloneKey, func::FuncOp>> clones;
-  SmallVector<func::FuncOp> clonedFrom;
+  SmallVector<func::FuncOp> clonedFrom; // originals that got a clone
   unsigned rewrittenAccesses = 0, redirectedCalls = 0, left = 0;
 
   func::FuncOp cloneForRows(func::FuncOp callee,
@@ -848,68 +859,68 @@ struct LowerSubIndexPass
                             SmallVectorImpl<SubIndexOp> &worklist) {
     CloneKey key{callee.getOperation(), SmallVector<std::pair<unsigned, Type>>(
                                             rows.begin(), rows.end())};
-    for (auto &[keyValue, fn] : clones)
-      if (keyValue == key)
+    for (auto &[k, fn] : clones)
+      if (k == key)
         return fn;
-    MLIRContext *context = callee.getContext();
+    MLIRContext *ctx = callee.getContext();
     func::FuncOp clone = callee.clone();
-
-    clone.walk(
-        [&](SubIndexOp stringValue) { worklist.push_back(stringValue); });
-
-    auto isRow = [&](unsigned portValue, Type whole) {
-      auto widthValue = dyn_cast<MemRefType>(whole);
-      auto old = dyn_cast<MemRefType>(callee.getArgument(portValue).getType());
-      return widthValue && old && widthValue.getRank() == old.getRank() + 1;
+    // Views the clone copied from the callee's body (a row it passes on to
+    // a further callee) are lowered like any other: the callee's own ones
+    // may already have been processed, the copies have not.
+    clone.walk([&](SubIndexOp s) { worklist.push_back(s); });
+    // A row select adds a dimension in front; an offset view (same rank)
+    // passes the whole array and the first element's index.
+    auto isRow = [&](unsigned p, Type whole) {
+      auto w = dyn_cast<MemRefType>(whole);
+      auto old = dyn_cast<MemRefType>(callee.getArgument(p).getType());
+      return w && old && w.getRank() == old.getRank() + 1;
     };
-    bool anyOffset = llvm::any_of(rows, [&](auto &resultValue) {
-      return !isRow(resultValue.first, resultValue.second);
-    });
+    bool anyOffset =
+        llvm::any_of(rows, [&](auto &r) { return !isRow(r.first, r.second); });
     std::string name = callee.getName().str() + (anyOffset ? "_off" : "_row");
-    for (auto &[portValue, memRefType] : rows)
-      name += "_" + std::to_string(portValue);
+    for (auto &[p, ty] : rows)
+      name += "_" + std::to_string(p);
     clone.setName(name);
     clone.setPrivate();
-
+    // New parameter list and attributes.
     SmallVector<Type> types;
     SmallVector<DictionaryAttr> attrs;
-    unsigned elementCount = callee.getNumArguments();
-    for (unsigned loopIndex = 0; loopIndex < elementCount; ++loopIndex) {
-      DictionaryAttr a = callee.getArgAttrDict(loopIndex);
-      auto it = llvm::find_if(rows, [&](auto &resultValue) {
-        return resultValue.first == loopIndex;
-      });
+    unsigned n = callee.getNumArguments();
+    for (unsigned i = 0; i < n; ++i) {
+      DictionaryAttr a = callee.getArgAttrDict(i);
+      auto it = llvm::find_if(rows, [&](auto &r) { return r.first == i; });
       if (it == rows.end()) {
-        types.push_back(callee.getArgument(loopIndex).getType());
-        attrs.push_back(a ? a : DictionaryAttr::get(context, {}));
+        types.push_back(callee.getArgument(i).getType());
+        attrs.push_back(a ? a : DictionaryAttr::get(ctx, {}));
         continue;
       }
       types.push_back(it->second);
       attrs.push_back(
-          isRow(loopIndex, it->second)
-              ? shiftPartitionDims(a, context, dyn_cast<MemRefType>(it->second))
-              : (a ? a : DictionaryAttr::get(context, {})));
-      types.push_back(IndexType::get(context));
-
+          isRow(i, it->second)
+              ? shiftPartitionDims(a, ctx, dyn_cast<MemRefType>(it->second))
+              : (a ? a : DictionaryAttr::get(ctx, {})));
+      types.push_back(IndexType::get(ctx));
+      // The index of the view: what --call-instances reads to tell calls on
+      // distinct constant elements apart (VITIS_NOTES N59) once the view is
+      // gone.
       attrs.push_back(DictionaryAttr::get(
-          context, {NamedAttribute(StringAttr::get(context, kViewIndexArgAttr),
-                                   UnitAttr::get(context))}));
+          ctx, {NamedAttribute(StringAttr::get(ctx, kViewIndexArgAttr),
+                               UnitAttr::get(ctx))}));
     }
     Block &entry = clone.getBody().front();
     OpBuilder b(&entry, entry.begin());
-    for (auto &[portValue, memRefType] : llvm::reverse(rows)) {
-      BlockArgument old = entry.getArgument(portValue);
+    for (auto &[p, ty] : llvm::reverse(rows)) {
+      BlockArgument old = entry.getArgument(p);
       Location loc = old.getLoc();
-      BlockArgument full = entry.insertArgument(portValue + 1, memRefType, loc);
-      BlockArgument row =
-          entry.insertArgument(portValue + 2, b.getIndexType(), loc);
+      BlockArgument full = entry.insertArgument(p + 1, ty, loc);
+      BlockArgument row = entry.insertArgument(p + 2, b.getIndexType(), loc);
       auto si = SubIndexOp::create(b, loc, old.getType(), full, row);
       old.replaceAllUsesWith(si.getResult());
-      entry.eraseArgument(portValue);
+      entry.eraseArgument(p);
       worklist.push_back(si);
     }
-    clone.setFunctionType(FunctionType::get(
-        context, types, callee.getFunctionType().getResults()));
+    clone.setFunctionType(
+        FunctionType::get(ctx, types, callee.getFunctionType().getResults()));
     clone.setAllArgAttrs(attrs);
     symbols.insert(clone, Block::iterator(callee.getOperation()));
     clones.push_back({key, clone});
@@ -918,6 +929,8 @@ struct LowerSubIndexPass
     return clone;
   }
 
+  // Rewrite one access through an offset view (`a + k`) into an access of
+  // the source: the first index moves by k.
   bool rewriteOffsetAccess(Operation *user, SubIndexOp si) {
     Value src = si.getSource();
     Value off = si.getIndex();
@@ -957,27 +970,26 @@ struct LowerSubIndexPass
         isLoad ? cast<affine::AffineLoadOp>(user).getMapOperands()
                : cast<affine::AffineStoreOp>(user).getMapOperands();
     unsigned nd = map.getNumDims(), ns = map.getNumSymbols();
-    MLIRContext *context = user->getContext();
+    MLIRContext *ctx = user->getContext();
     SmallVector<AffineExpr> results(map.getResults().begin(),
                                     map.getResults().end());
     SmallVector<Value> operands;
     if (affine::isValidSymbol(off)) {
-      results[0] = results[0] + getAffineSymbolExpr(ns, context);
-      map = AffineMap::get(nd, ns + 1, results, context);
+      results[0] = results[0] + getAffineSymbolExpr(ns, ctx);
+      map = AffineMap::get(nd, ns + 1, results, ctx);
       operands.append(mapOperands.begin(), mapOperands.end());
       operands.push_back(off);
     } else if (affine::isValidDim(off)) {
-      results[0] = results[0] + getAffineDimExpr(nd, context);
-      map = AffineMap::get(nd + 1, ns, results, context);
+      results[0] = results[0] + getAffineDimExpr(nd, ctx);
+      map = AffineMap::get(nd + 1, ns, results, ctx);
       operands.append(mapOperands.begin(), mapOperands.begin() + nd);
       operands.push_back(off);
       operands.append(mapOperands.begin() + nd, mapOperands.end());
     } else {
       SmallVector<Value> indices;
-      for (unsigned resultValue = 0; resultValue < map.getNumResults();
-           ++resultValue)
+      for (unsigned r = 0; r < map.getNumResults(); ++r)
         indices.push_back(affine::AffineApplyOp::create(
-            b, loc, map.getSubMap({resultValue}), mapOperands));
+            b, loc, map.getSubMap({r}), mapOperands));
       indices = shifted(indices);
       if (isLoad) {
         auto nl = memref::LoadOp::create(b, loc, src, indices);
@@ -1005,11 +1017,12 @@ struct LowerSubIndexPass
     return true;
   }
 
+  // Rewrite one access through the view into an access of the source.
   bool rewriteAccess(Operation *user, SubIndexOp si) {
     if (si.isOffsetView() || si.isElementView())
       return rewriteOffsetAccess(user, si);
     Value src = si.getSource();
-    Value indexValue = si.getIndex();
+    Value idx = si.getIndex();
     OpBuilder b(user);
     Location loc = user->getLoc();
     auto copyAttrs = [&](Operation *from, Operation *to) {
@@ -1018,7 +1031,7 @@ struct LowerSubIndexPass
           to->setDiscardableAttr(a.getName(), a.getValue());
     };
     if (auto load = dyn_cast<memref::LoadOp>(user)) {
-      SmallVector<Value> indices{indexValue};
+      SmallVector<Value> indices{idx};
       indices.append(load.getIndices().begin(), load.getIndices().end());
       auto nl = memref::LoadOp::create(b, loc, src, indices);
       copyAttrs(user, nl);
@@ -1027,7 +1040,7 @@ struct LowerSubIndexPass
       return true;
     }
     if (auto store = dyn_cast<memref::StoreOp>(user)) {
-      SmallVector<Value> indices{indexValue};
+      SmallVector<Value> indices{idx};
       indices.append(store.getIndices().begin(), store.getIndices().end());
       auto ns = memref::StoreOp::create(b, loc, store.getValue(), src, indices);
       copyAttrs(user, ns);
@@ -1044,31 +1057,30 @@ struct LowerSubIndexPass
         isLoad ? cast<affine::AffineLoadOp>(user).getMapOperands()
                : cast<affine::AffineStoreOp>(user).getMapOperands();
     unsigned nd = map.getNumDims(), ns = map.getNumSymbols();
-    MLIRContext *context = user->getContext();
+    MLIRContext *ctx = user->getContext();
     SmallVector<AffineExpr> results;
     SmallVector<Value> operands;
-    if (affine::isValidSymbol(indexValue)) {
-      results.push_back(getAffineSymbolExpr(0, context));
+    if (affine::isValidSymbol(idx)) {
+      results.push_back(getAffineSymbolExpr(0, ctx));
       for (AffineExpr e : map.getResults())
         results.push_back(e.shiftSymbols(ns, 1));
-      map = AffineMap::get(nd, ns + 1, results, context);
+      map = AffineMap::get(nd, ns + 1, results, ctx);
       operands.append(mapOperands.begin(), mapOperands.begin() + nd);
-      operands.push_back(indexValue);
+      operands.push_back(idx);
       operands.append(mapOperands.begin() + nd, mapOperands.end());
-    } else if (affine::isValidDim(indexValue)) {
-      results.push_back(getAffineDimExpr(0, context));
+    } else if (affine::isValidDim(idx)) {
+      results.push_back(getAffineDimExpr(0, ctx));
       for (AffineExpr e : map.getResults())
         results.push_back(e.shiftDims(nd, 1));
-      map = AffineMap::get(nd + 1, ns, results, context);
-      operands.push_back(indexValue);
+      map = AffineMap::get(nd + 1, ns, results, ctx);
+      operands.push_back(idx);
       operands.append(mapOperands.begin(), mapOperands.end());
     } else {
-
-      SmallVector<Value> indices{indexValue};
-      for (unsigned resultValue = 0; resultValue < map.getNumResults();
-           ++resultValue)
+      // Not an affine operand: materialize the indices and use memref ops.
+      SmallVector<Value> indices{idx};
+      for (unsigned r = 0; r < map.getNumResults(); ++r)
         indices.push_back(affine::AffineApplyOp::create(
-            b, loc, map.getSubMap({resultValue}), mapOperands));
+            b, loc, map.getSubMap({r}), mapOperands));
       if (isLoad) {
         auto nl = memref::LoadOp::create(b, loc, src, indices);
         copyAttrs(user, nl);
@@ -1095,37 +1107,33 @@ struct LowerSubIndexPass
     return true;
   }
 
+  // Redirect a func.call whose operands include views to the row clone.
   bool redirectCall(func::CallOp call, SymbolTable &symbols,
                     SmallVectorImpl<SubIndexOp> &worklist) {
     func::FuncOp callee = resolveDefinedCallee(call);
     if (!callee)
       return false;
     SmallVector<std::pair<unsigned, Type>> rows;
-    for (auto [loopIndex, valueHandle] :
-         llvm::enumerate(call.getArgOperands())) {
-      auto si = valueHandle.getDefiningOp<SubIndexOp>();
+    for (auto [i, v] : llvm::enumerate(call.getArgOperands())) {
+      auto si = v.getDefiningOp<SubIndexOp>();
       if (!si || !(si.isRowSelect() || si.isOffsetView()))
         continue;
-      if (loopIndex >= callee.getNumArguments() ||
-          callee.getArgument(loopIndex).getType() != valueHandle.getType())
+      if (i >= callee.getNumArguments() ||
+          callee.getArgument(i).getType() != v.getType())
         continue;
-      rows.push_back(
-          {static_cast<unsigned>(loopIndex), si.getSource().getType()});
+      rows.push_back({static_cast<unsigned>(i), si.getSource().getType()});
     }
     if (rows.empty())
       return false;
     func::FuncOp clone = cloneForRows(callee, rows, symbols, worklist);
     SmallVector<Value> operands;
-    for (auto [loopIndex, valueHandle] :
-         llvm::enumerate(call.getArgOperands())) {
-      auto it = llvm::find_if(rows, [&](auto &resultValue) {
-        return resultValue.first == loopIndex;
-      });
+    for (auto [i, v] : llvm::enumerate(call.getArgOperands())) {
+      auto it = llvm::find_if(rows, [&](auto &r) { return r.first == i; });
       if (it == rows.end()) {
-        operands.push_back(valueHandle);
+        operands.push_back(v);
         continue;
       }
-      auto si = valueHandle.getDefiningOp<SubIndexOp>();
+      auto si = v.getDefiningOp<SubIndexOp>();
       operands.push_back(si.getSource());
       operands.push_back(si.getIndex());
     }
@@ -1153,9 +1161,7 @@ struct LowerSubIndexPass
           op->getName().getDialectNamespace() !=
               PolygeistCompatDialect::getDialectNamespace())
         return;
-      auto isMemRef = [](Type typeValue) {
-        return isa<BaseMemRefType>(typeValue);
-      };
+      auto isMemRef = [](Type t) { return isa<BaseMemRefType>(t); };
       if (llvm::any_of(op->getOperandTypes(), isMemRef) ||
           llvm::any_of(op->getResultTypes(), isMemRef)) {
         op->emitError("polygeist op not modelled by hls-est takes or "
@@ -1181,11 +1187,12 @@ struct LowerSubIndexPass
     clonedFrom.append(specialised.begin(), specialised.end());
     SmallVector<SubIndexOp> worklist;
     module.walk([&](SubIndexOp si) { worklist.push_back(si); });
-
-    for (unsigned elementCount = 0;
-         elementCount < worklist.size() && elementCount < 100000;
-         ++elementCount) {
-      SubIndexOp si = worklist[elementCount];
+    // Calls first (a redirected call's clone adds views to the worklist),
+    // then the accesses through every view.
+    // In program order (the worklist only grows at the back), so the clone
+    // of the first call form comes first in the module.
+    for (unsigned n = 0; n < worklist.size() && n < 100000; ++n) {
+      SubIndexOp si = worklist[n];
       if (!si)
         continue;
       bool element = si.isElementView();
@@ -1195,7 +1202,7 @@ struct LowerSubIndexPass
                                      si->getUsers().end());
       for (Operation *user : users) {
         if (element && !accessedMemRef(user))
-          continue;
+          continue; // only its loads / stores (a call keeps the pointer)
         if (auto call = dyn_cast<func::CallOp>(user)) {
           redirectCall(call, symbols, worklist);
           continue;
@@ -1205,9 +1212,10 @@ struct LowerSubIndexPass
       }
       if (si->use_empty())
         si->erase();
-      worklist[elementCount] = nullptr;
+      worklist[n] = nullptr;
     }
-
+    // A view of a view (`&row[j]`, row = a[i]): its accesses became accesses
+    // of the outer view after that one was processed; lower those as well.
     for (bool again = true; again;) {
       again = false;
       SmallVector<SubIndexOp> left;
@@ -1215,8 +1223,8 @@ struct LowerSubIndexPass
       for (SubIndexOp si : left) {
         if (!si.isRowSelect() && !si.isOffsetView() && !si.isElementView())
           continue;
-        if (!llvm::all_of(si->getUsers(), [](Operation *useValue) {
-              return accessedMemRef(useValue) != Value();
+        if (!llvm::all_of(si->getUsers(), [](Operation *u) {
+              return accessedMemRef(u) != Value();
             }))
           continue;
         SmallVector<Operation *> users(si->getUsers().begin(),
@@ -1230,7 +1238,7 @@ struct LowerSubIndexPass
           si->erase();
       }
     }
-
+    // What stayed.
     module.walk([&](SubIndexOp si) {
       if (si->use_empty()) {
         si->erase();
@@ -1244,10 +1252,13 @@ struct LowerSubIndexPass
                   : "not a row of a static-shape array (nor an offset view of "
                     "one)");
     });
-
+    // An original callee that every call now reaches through a clone, and a
+    // clone whose only callers were themselves replaced by clones (a row
+    // passed on inside a callee that got a clone of its own); a dead
+    // private function would otherwise be costed as a root without top=.
     SmallVector<func::FuncOp> candidates(clonedFrom.begin(), clonedFrom.end());
     for (auto &[key, fn] : clones)
-      if (!llvm::is_contained(candidates, fn))
+      if (!llvm::is_contained(candidates, fn)) // a clone that got a clone
         candidates.push_back(fn);
     for (bool erased = true; erased;) {
       erased = false;

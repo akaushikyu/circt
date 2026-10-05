@@ -3,6 +3,7 @@
 // RUN: FileCheck %s --input-file=%t.ptr.err --check-prefix=PTRDBG
 // RUN: hls-est %s --symbol-privatize=exclude=nonaffine --symbol-dce --affine-loop-normalize --auto-pipeline-unroll --memory-banking-bram --convert-affine-to-loopschedule --bram-analysis -o /dev/null | FileCheck %s --check-prefix=NONAFF
 // RUN: hls-est %s --symbol-privatize=exclude=math_call --symbol-dce --affine-loop-normalize --auto-pipeline-unroll --memory-banking-bram --convert-affine-to-loopschedule --bram-analysis -o /dev/null 2>&1 | FileCheck %s --check-prefix=CALL
+// RUN: hls-est %s --symbol-privatize=exclude=math_call --symbol-dce --affine-loop-normalize --auto-pipeline-unroll --memory-banking-bram --convert-affine-to-loopschedule --config-set=scheduling.timing.operator_latencies.libm_call=-1 --bram-analysis -o /dev/null 2>&1 | FileCheck %s --check-prefix=CALLSEQ
 // RUN: hls-est %s --symbol-privatize=exclude=math_call --symbol-dce --affine-loop-normalize --auto-pipeline-unroll --memory-banking-bram --convert-affine-to-loopschedule --loopschedule-call-latency=1 --bram-analysis -o /dev/null 2>&1 | FileCheck %s --check-prefix=CALL1
 // RUN: hls-est %s --symbol-privatize=exclude=if_results --symbol-dce --affine-loop-normalize --auto-pipeline-unroll --memory-banking-bram --convert-affine-to-loopschedule --bram-analysis -o /dev/null | FileCheck %s --check-prefix=IFRES
 
@@ -60,13 +61,17 @@ func.func @nonaffine(%in: memref<512xi32>, %out: memref<512xi32>, %n: index) {
   return
 }
 
-// (c) A call to a math function in a loop body: by default the loop stays a
-// sequential affine.for (warning, no failure); with
-// --loopschedule-call-latency=1 the call gets an operator type and the loop
-// is pipelined, so `tbl` is read and written in one pipelined loop (2 ports,
-// 512x32 at x18 = 2 BRAM instead of 1).
-// CALL: warning: not pipelined (left as a sequential loop): unsupported operation {{.*}}func.call @tanhf
-// CALL: Total BRAM: 1
+// (c) A call to a C math library function in a loop body: tanhf is an
+// operator of the pipeline (scheduling.timing.operator_latencies.libm_call,
+// VITIS_NOTES N169: Vitis pipelines loops around tanhf), so `tbl` is read and
+// written in one pipelined loop (2 ports, 512x32 at x18 = 2 BRAM); with
+// libm_call = -1 the loop stays a sequential affine.for (warning, no failure,
+// 1 BRAM: the behaviour before W9r22-impl), and --loopschedule-call-latency=1
+// pipelines it as well.
+// CALL-NOT: warning: not pipelined
+// CALL: Total BRAM: 2
+// CALLSEQ: warning: not pipelined (left as a sequential loop): unsupported operation {{.*}}func.call @tanhf
+// CALLSEQ: Total BRAM: 1
 // CALL1-NOT: warning: not pipelined
 // CALL1: Total BRAM: 2
 func.func private @tanhf(f32) -> f32

@@ -58,7 +58,7 @@ func.func @divisible(%a: memref<8xi32>, %out: memref<8xi32>) {
 // CHECK-LABEL: func.func @single_main
 // CHECK:       affine.for %{{.*}} = 0 to 8 iter_args
 // CHECK-NOT:     affine.for
-// CHECK:       } {hls.pipeline = [{II = 0 : i32, source = "auto"}]}
+// CHECK:       } {hls.pipeline = [{II = 0 : i32, source = "auto"}], hls.promoted_element_iter_args = array<i64: {{[0-9, ]+}}>}
 // CHECK-COUNT-6: affine.store
 // CHECK-NEXT:  return
 func.func @single_main(%a: memref<6xi32>, %out: memref<6xi32>) {

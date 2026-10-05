@@ -73,8 +73,8 @@ LogicalResult unrollWithForwarding(AffineForOp loop, UnrollFn unroll) {
 } // namespace
 
 LogicalResult hlsLoopUnrollFull(AffineForOp loop) {
-  return unrollWithForwarding(loop,
-                              [](AffineForOp l) { return loopUnrollFull(l); });
+  return unrollWithForwarding(
+      loop, [](AffineForOp l) { return loopUnrollFull(l); });
 }
 
 LogicalResult hlsLoopUnrollByFactor(AffineForOp loop, uint64_t factor) {

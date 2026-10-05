@@ -294,6 +294,24 @@ constexpr llvm::StringLiteral kCallDepthEstimateAttr =
 /// the window is scalarised (214-449). Returns the number of calls changed.
 unsigned refreshCallOccupancies(mlir::ModuleOp module);
 
+/// Clones every kept callee (inline off, or kept by cgeist's automatic
+/// inlining) once per tuple of argument IR types its call sites give it, as
+/// Vitis does: a float / double array that is a port of the top function is
+/// an integer array in Vitis' IR (`[N x i32]*`), a caller-local or global one
+/// stays floating point, so call sites mixing them call different functions
+/// (`f`, `f.1`, ...), each a module with its own local arrays (VITIS_NOTES
+/// N165: kernels w9r22p_b1_mix 3 modules, b4_swap 2; controls b2 (locals
+/// only), b3 (ports only), b5 (int arrays) 1). The kind of a parameter of a
+/// non-root function is the kind its clone was made for; roots (functions
+/// no other function calls: the top) have port parameters. Calls are
+/// redirected to the clones. Returns the number of clones made.
+unsigned cloneKeptCalleesPerArgumentType(mlir::ModuleOp module);
+
+/// Whether `a` and `b` lie in different arms of one if (directly, or as
+/// recorded in `hls.if_arms` after --convert-affine-to-loopschedule hoisted
+/// them): they never run in one execution of the if.
+bool inExclusiveArms(mlir::Operation *a, mlir::Operation *b);
+
 } // namespace circt::hls_analysis
 
 #endif // CIRCT_DIALECT_RESOURCE_PASSES_CALLINSTANCES_H

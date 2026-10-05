@@ -29,6 +29,9 @@
 //        replaced by the forwarded value; the same II as R1.
 //   (R4) an address Vitis cannot compute (acc[idx[i]]), the same index
 //        value for L and S: a reuse register, the same II as R1.
+//   (N154) R1's shape on a lane chosen at run time of an aggregated word
+//        (hls.dynamic_lane): no promotion; II >= 3 + chain (the R2 bound
+//        with d = 1 plus the lane insert).
 //   (R2) d >= 2: the load of iteration n + d issues at least one state after
 //        the store of iteration n: II >= ceil((2 + chain) / d) (fadd 6,
 //        fmul 5, integer add 2 states from load to store, inclusive).
@@ -80,6 +83,11 @@ struct MemoryRecurrences {
   /// The access that stands for promoted ones (the R1 element's first load,
   /// the R3 store) and how many: a --bram-debug record.
   llvm::MapVector<mlir::Operation *, unsigned> standsFor;
+  /// The (store, load) pairs of N154's recurrences: the scheduler keeps the
+  /// next iteration's load after the store (a carried dependence), since the
+  /// word stays in memory.
+  llvm::SmallVector<std::pair<mlir::Operation *, mlir::Operation *>>
+      laneRecurrences;
 };
 
 /// Which of the analysis' results are wanted.
@@ -98,6 +106,14 @@ struct MemoryRecurrenceOptions {
   /// R4 (one unknown address value): the II is at least this (N117,
   /// scheduling.dependences.unknown_address_min_ii); 0 keeps the chain alone.
   int64_t unknownAddressMinII = 0;
+  /// A `#pragma HLS dependence variable=<v> inter false` removes the
+  /// loop-carried bounds of <v> (N122,
+  /// scheduling.dependences.user_inter_independence).
+  bool userInterIndependence = false;
+  /// A read-modify-write of a run-time lane of an aggregated word is a
+  /// recurrence through the memory, II 3 + chain, not a promoted element
+  /// (N154, scheduling.dependences.dynamic_lane_rmw).
+  bool dynamicLaneRmw = true;
 };
 
 /// The memory recurrences of `loop` (an affine.for or a pipelined scf.for).

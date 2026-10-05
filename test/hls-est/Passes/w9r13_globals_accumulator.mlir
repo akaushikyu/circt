@@ -5,10 +5,10 @@
 // c pipelined at II 1) with the accumulator Yb a global (as in ECG_Classifier
 // baseline conv1d_2, Vitis II 1). The guarded read-modify-writes of Yb[c][l]
 // merge to one load and one store per iteration only when the global is a
-// root memref: II 1, Wb RAM_1WNR 64. Before: II 9, Wb RAM_2P 16, total 32.
+// root memref: II 1, Wb RAM_1WNR 64. Before: II 9 (7 with hoist_common_arm_loads), 32.
 // CHECK: pipeline @ {{.*}}:42:9 in @{{.*}}: ii=1
 // CHECK: Total BRAM: 80
-// OFF: pipeline @ {{.*}}:42:9 in @{{.*}}: ii=9
+// OFF: pipeline @ {{.*}}:42:9 in @{{.*}}: ii=7
 // OFF: Total BRAM: 32
 
 #set = affine_set<(d0, d1) : (-d0 - d1 + 1 >= 0)>

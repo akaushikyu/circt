@@ -52,8 +52,59 @@ def math_core_index(path=None):
 
 MATH_CORES = math_core_index()
 
-# Partition-bank (`_1`, `_0_7`) and inline (`.i`, `.i2`) suffixes, as in align_arrays.py.
-BANK_TAIL_RE = re.compile(r"^(?:\.i\d*|[._]\d+)+$")
+# Partition-bank (`_1`, `_0_7`) and inline (`.i`, `.i2`; Vitis writes `_i`, `buf_bram_0_i`) suffixes, as in
+# align_arrays.py.
+BANK_TAIL_RE = re.compile(r"^(?:[._]i\d*|[._]\d+)+$")
+
+# The pseudo-array names of BRAM that Vitis reports outside its memory table (W9 round 23 review D11,
+# OPEN_ISSUES O242): the RAMs of s_axilite array arguments live in the `<bundle>_s_axi` adapter instance,
+# hls-est reports them per argument (ram_type S_AXILITE_RAM, VITIS_NOTES N176); FIFOs (hls::stream
+# channels) are neither memory rows nor instances, so the BRAM no other row explains stands for them.
+S_AXILITE_NAME = "(s_axilite adapter RAMs)"
+RESIDUAL_NAME = "(FIFOs and other non-array BRAM)"
+
+
+def demangled_nested_name(name):
+    """`xf_codec_internal_coeffOrderLut` for `_ZN2xf5codec8internalL13coeffOrderLutE`: the Itanium
+    nested name of a namespace-scope global joined with `_`, as Vitis names its memory rows; None when
+    `name` is not such a name."""
+    if not isinstance(name, str) or not name.startswith("_ZN") or not name.endswith("E"):
+        return None
+    parts, rest = [], name[3:-1]
+    if not rest:
+        return None
+    while rest:
+        mm = re.match(r"^L?(\d+)", rest)
+        if not mm:
+            return None
+        n = int(mm.group(1))
+        ident = rest[mm.end():mm.end() + n]
+        if len(ident) != n:
+            return None
+        parts.append(ident)
+        rest = rest[mm.end() + n:]
+    return "_".join(parts)
+
+
+_MANGLED_CACHE = {}
+
+
+def mangled_root(var, known):
+    """The hls-est name in `known` of a mangled global that the Vitis row `var` names: Vitis writes the
+    Itanium name with a `p` in front, cut to a length limit (`p_ZN2xf8security8internalL12table_crc32c`
+    for `_ZN2xf8security8internalL12table_crc32cE`), or the demangled nested name joined with `_`."""
+    key = id(known)
+    entry = _MANGLED_CACHE.get(key)
+    if entry is None or entry[0] is not known:
+        mangled = [k for k in known if isinstance(k, str) and k.startswith("_Z")]
+        entry = (known, mangled, {demangled_nested_name(k): k for k in mangled})
+        _MANGLED_CACHE.clear()
+        _MANGLED_CACHE[key] = entry
+    _, mangled, demangled = entry
+    hits = [k for k in mangled if var.startswith("p_Z") and len(var) >= 12 and ("p" + k).startswith(var)]
+    if not hits and var in demangled:
+        hits = [demangled[var]]
+    return hits[0] if len(hits) == 1 else None
 
 
 def known_root(name, known):
@@ -87,6 +138,24 @@ def vitis_array_name(m, known=None):
         stripped = re.sub(r"(?:_i\d*)+$", "", var)
         if stripped != var and stripped in known:
             return stripped
+        mangled = mangled_root(re.sub(r"(?:_\d+)+$", "", var), known) or mangled_root(var, known)
+        if mangled is not None:
+            return mangled
+        # An internal-linkage global `static T hist0[]`: Vitis writes `p_ZL5hist0`, hls-est the C name.
+        m_int = re.match(r"^p_ZL(\d+)([A-Za-z_]\w*)$", var)
+        if m_int and len(m_int.group(2)) >= int(m_int.group(1)):
+            ident = m_int.group(2)[:int(m_int.group(1))]
+            rest = m_int.group(2)[int(m_int.group(1)):]
+            if ident in known and (not rest or BANK_TAIL_RE.match(rest)):
+                return ident
+        # A field of a local struct: Vitis names it `<var>_<field>`, hls-est's split memref `<var>_<k>`
+        # (--split-struct-memrefs); matched when exactly one such split exists.
+        m_field = re.match(r"^(.+)_([A-Za-z]\w*)$", var)
+        if m_field:
+            fields = [k for k in known if isinstance(k, str) and
+                      re.fullmatch(re.escape(m_field.group(1)) + r"_\d+", k)]
+            if len(fields) == 1:
+                return fields[0]
     return m.get("array") or m.get("Memory")
 
 
@@ -153,6 +222,18 @@ def vitis_arrays(v, known=None):
         a["rows"] += 1
         a["cores"].add("m_axi_adapter")
         a["modules"].add(inst.get("parent", ""))
+    # s_axilite adapters: instance rows of a `<bundle>_s_axi` module hold the RAMs of s_axilite array
+    # arguments (VITIS_NOTES N176), one pseudo-array for all of them.
+    for inst in v.get("instances", []):
+        mod = inst.get("Module") or ""
+        if not mod.endswith("_s_axi") or not inst.get("BRAM_18K"):
+            continue
+        a = out.setdefault(S_AXILITE_NAME, {"name": S_AXILITE_NAME, "vitis_bram": 0, "banks": 0, "rows": 0,
+                                            "words": 0, "bits": None, "cores": set(), "modules": set()})
+        a["vitis_bram"] += inst.get("BRAM_18K") or 0
+        a["rows"] += 1
+        a["cores"].add("s_axilite_adapter")
+        a["modules"].add(inst.get("parent", ""))
     for inst in v.get("instances", []):
         mod = inst.get("Module") or ""
         if mod not in MATH_CORES["modules"] or inst.get("parent") in MATH_CORES["modules"]:
@@ -164,6 +245,13 @@ def vitis_arrays(v, known=None):
         a["rows"] += 1
         a["cores"].add("math_core")
         a["modules"].add(inst.get("parent", ""))
+    # What no row above explains (FIFOs, mostly): the total less the rows.
+    total = (v.get("totals") or {}).get("BRAM")
+    if isinstance(total, int):
+        rest = total - sum(a["vitis_bram"] for a in out.values())
+        if rest > 0:
+            out[RESIDUAL_NAME] = {"name": RESIDUAL_NAME, "vitis_bram": rest, "banks": 0, "rows": 0,
+                                  "words": 0, "bits": None, "cores": {"residual"}, "modules": set()}
     for a in out.values():
         a["cores"] = sorted(a["cores"])
         a["modules"] = sorted(a["modules"])
@@ -211,6 +299,11 @@ def hlsest_arrays(h):
     if dbg and "memrefs" in dbg:
         for m in dbg["memrefs"]:
             name = source_array_name(m.get("varname") or m.get("name") or m.get("id"))
+            # the pseudo-arrays Vitis reports outside its memory table (vitis_arrays)
+            if m.get("ram_type") == "S_AXILITE_RAM":
+                name = S_AXILITE_NAME
+            elif m.get("ram_type") == "FIFO":
+                name = RESIDUAL_NAME
             a = out.setdefault(name, {"name": name, "hlsest_bram": 0, "banks": 0, "kinds": set(),
                                       "status": set(), "shape": m.get("shape"), "elem_bits": m.get("elem_bits")})
             a["hlsest_bram"] += m.get("bram") or 0
@@ -286,17 +379,48 @@ def compare_one(key, v, h):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--vitis", default=str(C.RESULTS_DIR / "vitis.json"))
-    ap.add_argument("--hlsest", default=str(C.RESULTS_DIR / "hlsest.json"))
-    ap.add_argument("--out", default=str(C.RESULTS_DIR / "compare.json"))
-    ap.add_argument("--csv", default=str(C.RESULTS_DIR / "compare.csv"))
+    ap.add_argument("--catalog", choices=("training", "heldout", "heldout2"), default="training",
+                    help="'heldout': compare the held-out evaluation results (hls-doc/heldout.md): the "
+                         "defaults become results/{vitis,hlsest,compare}-heldout.*, and only the designs of "
+                         "--heldout-split are compared; 'heldout2': the second held-out set likewise "
+                         "(hls-doc/heldout2.md, results/*-heldout2.*)")
+    ap.add_argument("--heldout-split", choices=("eval", "locked", "all"), default="eval",
+                    help="with --catalog heldout (default 'eval'; 'locked' / 'all' are refused until Peter "
+                         "releases the locked split)")
+    ap.add_argument("--vitis", default=None)
+    ap.add_argument("--hlsest", default=None)
+    ap.add_argument("--out", default=None)
+    ap.add_argument("--csv", default=None)
     ap.add_argument("--quiet", action="store_true")
     ap.add_argument("--arrays", action="store_true", help="print per-array diffs of mismatches")
     args = ap.parse_args()
+    hs = args.catalog if args.catalog in C.HELDOUT_SETS else None
+    sfx = f"-{hs}" if hs else ""
+    for name, stem, ext in (("vitis", "vitis", "json"), ("hlsest", "hlsest", "json"),
+                            ("out", "compare", "json"), ("csv", "compare", "csv")):
+        path = getattr(args, name) or str(C.RESULTS_DIR / f"{stem}{sfx}.{ext}")
+        if C.heldout_set_of_name(Path(path).name) != hs:
+            sys.exit(f"--{name} {path}: {repr(hs) + ' held-out' if hs else 'training'} files are the ones whose "
+                     f"name {'contains ' + repr(hs) + ' (and no other held-out set)' if hs else 'does not contain heldout'}"
+                     " (hls-doc/heldout.md)")
+        setattr(args, name, path)
 
     V = C.load_json(args.vitis, {}) or {}
     H = C.load_json(args.hlsest, {}) or {}
     meta = H.pop("_meta", {})
+    for path, entries in ((args.vitis, V), (args.hlsest, H)):
+        wrong = sorted(k for k in entries if not k.startswith("_") and C.heldout_set_of_key(k) != hs)
+        if wrong:
+            sys.exit(f"{path}: {len(wrong)} entries of {'another held-out set or the training set' if hs else 'a held-out set'}"
+                     f" (e.g. {wrong[0]}) in a file whose name {'names ' + repr(hs) if hs else 'names no held-out set'};"
+                     " held-out results are kept in files named after their set (hls-doc/heldout.md)")
+    if hs:
+        import designs as D                  # noqa: E402  (harness module)
+        split = D.load_heldout_split(name=hs)["designs"]
+        D.heldout_select([], args.heldout_split, hs)      # refuses locked / all until that set is released
+        want = {k for k, v in split.items() if args.heldout_split == "all" or v["split"] == args.heldout_split}
+        V = {k: v for k, v in V.items() if k in want}
+        H = {k: v for k, v in H.items() if k in want}
     keys = sorted(set(V) | set(H))
     rows = [compare_one(k, V.get(k), H.get(k)) for k in keys]
     summary = summarize(rows)

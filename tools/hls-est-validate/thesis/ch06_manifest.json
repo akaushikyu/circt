@@ -1,6 +1,6 @@
 {
- "_doc": "Inputs of make_thesis_tables.py (chapter 6). Paths only, never numbers: every number in the thesis tables is computed from these files. '$SCRATCH' is ~/hls-est-work/coord/scratch, '$RESULTS' is tools/hls-est-validate/results. 'changelog' names the CHANGELOG.md entry (or round report) that documents the run; 'notes' names the VITIS_NOTES / OPEN_ISSUES entries a rule implements. A run is a run_hlsest.py result file; it is re-scored against the current results/vitis.json, so all rows share one ground truth.",
- "newest_run": "$SCRATCH/w9r14fx/G.json",
+ "_doc": "Inputs of make_thesis_tables.py (chapter 6). Paths only, never numbers: every number in the thesis tables is computed from these files. '$SCRATCH' is ~/hls-est-work/coord/scratch, '$RESULTS' is tools/hls-est-validate/results. 'changelog' names the CHANGELOG.md entry (or round report) that documents the run; 'notes' names the VITIS_NOTES / OPEN_ISSUES entries a rule implements. A run is a run_hlsest.py result file; it is re-scored against the current results/vitis.json, so all rows share one ground truth. 'heldout' lists the held-out eval split's scorings (Section 6.9): per row the run_hlsest.py results and compare.py outputs of the two eval datasets; the locked split never appears. 'heldout_locked' lists the held-out locked split's scorings (Section 6.9, Table 6.11), in the same form; Peter released the split on 2026-10-27.",
+ "newest_run": "$SCRATCH/w9r23fx/E.json",
  "newest_run_label": "final evaluation run",
  "outofband_classes": {
   "per_design": "$SCRATCH/w9r10p/final.json",
@@ -271,11 +271,116 @@
    "changelog": "2026-10-22 W9r14-impl"
   },
   {
-   "label": "round 14 review (final)",
+   "label": "round 14 review",
    "date": "2026-10-22",
    "run": "$SCRATCH/w9r14fx/G.json",
    "shim": "real",
    "changelog": "2026-10-22 W9 round 14 review fixes"
+  },
+  {
+   "label": "round 15",
+   "date": "2026-10-23",
+   "run": "$SCRATCH/w9r15i/F2.json",
+   "shim": "real",
+   "changelog": "2026-10-23 W9r15-impl"
+  },
+  {
+   "label": "round 15 review",
+   "date": "2026-10-23",
+   "run": "$SCRATCH/w9r15fx/H.json",
+   "shim": "real",
+   "changelog": "2026-10-23 W9 round 15 review fixes"
+  },
+  {
+   "label": "round 16",
+   "date": "2026-10-23",
+   "run": "$SCRATCH/w9r16i/F2.json",
+   "shim": "real",
+   "changelog": "2026-10-23 W9r16-impl"
+  },
+  {
+   "label": "round 16 review",
+   "date": "2026-10-23",
+   "run": "$SCRATCH/w9r16fx/R.json",
+   "shim": "real",
+   "changelog": "2026-10-23 W9 round 16 review fixes"
+  },
+  {
+   "label": "round 17",
+   "date": "2026-10-23",
+   "run": "$SCRATCH/w9r17i/F.json",
+   "shim": "real",
+   "changelog": "2026-10-23 W9r17-impl"
+  },
+  {
+   "label": "round 17 review",
+   "date": "2026-10-23",
+   "run": "$SCRATCH/w9r17fx/X2.json",
+   "shim": "real",
+   "changelog": "2026-10-23 W9 round 17 review fixes"
+  },
+  {
+   "label": "round 18",
+   "date": "2026-10-23",
+   "run": "$SCRATCH/w9r18i/F.json",
+   "shim": "real",
+   "changelog": "2026-10-23 W9r18-impl"
+  },
+  {
+   "label": "round 18 review",
+   "date": "2026-10-24",
+   "run": "$SCRATCH/w9r18fx/G.json",
+   "shim": "real",
+   "changelog": "2026-10-24 W9 round 18 review fixes"
+  },
+  {
+   "label": "round 19",
+   "date": "2026-10-24",
+   "run": "$SCRATCH/w9r19i/G.json",
+   "shim": "real",
+   "changelog": "2026-10-24 W9r19-impl"
+  },
+  {
+   "label": "round 19 review",
+   "date": "2026-10-24",
+   "run": "$SCRATCH/w9r19f/A.json",
+   "shim": "real",
+   "changelog": "2026-10-24 W9 round 19 review fixes"
+  },
+  {
+   "label": "round 20 (final)",
+   "date": "2026-10-24",
+   "run": "$SCRATCH/w9r20f/A.json",
+   "shim": "real",
+   "changelog": "2026-10-24 W9 round 20 review fixes"
+  },
+  {
+   "label": "round 21 (final)",
+   "date": "2026-10-25",
+   "run": "$SCRATCH/w9r21v/V.json",
+   "shim": "real",
+   "changelog": "2026-10-25 cgeist install and verification run after W9 round 21"
+  },
+  {
+   "label": "round 22 (final)",
+   "date": "2026-10-26",
+   "run": "$SCRATCH/w9r22i/F4.json",
+   "shim": "real",
+   "changelog": "2026-10-26 W9r22-impl: final run"
+  },
+  {
+   "label": "round 23 (final)",
+   "date": "2026-10-28",
+   "run": "$SCRATCH/w9r23i/F.json",
+   "shim": "real",
+   "changelog": "2026-10-28 W9r23-impl: final run F"
+  },
+  {
+   "label": "round 23 review",
+   "date": "2026-10-28",
+   "run": "$SCRATCH/w9r23fx/E.json",
+   "shim": "real",
+   "changelog": "2026-10-28 W9 round 23 review fixes"
   }
  ],
  "rule_pairs": [
@@ -616,10 +721,122 @@
  },
  "timing_csv": "hls-doc/hls-est-vs-vitis.csv",
  "snapshot": {
-  "_doc": "Frozen inputs that would otherwise change between renders: the commit counts and source sizes of chapter 5 are read at these commits (git), and the ad-hoc kernel cache of chapter 3 counts only result files written up to experiments_cutoff (local time). circt_commit is the commit that records the final evaluation run in the CHANGELOG; polygeist_commit is the Polygeist commit of the cgeist binary that produced the run's MLIR (CHANGELOG 2026-10-21 'W9 round 8 review fixes' names cgeist.g = Polygeist 537d6614, md5 a5056b23; round 12's final run adds the harness flag --hls-trip-one-pipeline-unroll, CHANGELOG 2026-10-22 W9r12-impl; the run file itself records polygeist_head 'unknown'; round 13's final run uses the private cgeist of Polygeist w9r13-cgeist 34767431, md5 5b74209f, CHANGELOG 2026-10-22 W9r13-impl; round 14's review-fix final run uses Polygeist w9r14-cgeist 856cbbba, md5 cdf7f768, CHANGELOG 2026-10-22 W9 round 14 review fixes).",
-  "circt_commit": "842610571",
-  "polygeist_commit": "856cbbba",
-  "cgeist_md5": "cdf7f768",
-  "experiments_cutoff": "2026-10-22T23:59:59"
- }
+  "_doc": "Frozen inputs that would otherwise change between renders: the commit counts and source sizes of chapter 5 are read at these commits (git), and the ad-hoc kernel cache of chapter 3 counts only result files written up to experiments_cutoff (local time). circt_commit is the commit that records the final evaluation run in the CHANGELOG; polygeist_commit is the Polygeist commit of the cgeist binary that produced the run's MLIR (CHANGELOG 2026-10-21 'W9 round 8 review fixes' names cgeist.g = Polygeist 537d6614, md5 a5056b23; round 12's final run adds the harness flag --hls-trip-one-pipeline-unroll, CHANGELOG 2026-10-22 W9r12-impl; the run file itself records polygeist_head 'unknown'; round 13's final run uses the private cgeist of Polygeist w9r13-cgeist 34767431, md5 5b74209f, CHANGELOG 2026-10-22 W9r13-impl; round 14's review-fix final run uses Polygeist w9r14-cgeist 856cbbba, md5 cdf7f768, CHANGELOG 2026-10-22 W9 round 14 review fixes; round 15's final run uses Polygeist w9r15-cgeist 35debb44, md5 aafb46ac, CHANGELOG 2026-10-23 W9r15-impl; round 16's final run uses Polygeist w9r16-cgeist 275303e7, md5 51afba54, CHANGELOG 2026-10-23 W9r16-impl; round 17's final run uses Polygeist w9r17-cgeist d77dc700, md5 ca4fc368, with the harness flags of circt e218c06b3, CHANGELOG 2026-10-23 W9r17-impl; round 17's review-fix run and round 18's final run use the installed cgeist of Polygeist b2b33b09, md5 2b5e2add, CHANGELOG 2026-10-23 W9 round 17 review fixes / W9r18-impl; round 20's final run (W9 round 20 review fixes) uses the installed cgeist of Polygeist 8c23ece4, md5 5523df29, installed in the W9 round 19 review fixes, and the hls-est of circt 55a1e7bfc's tree, md5 8a03d487; round 21's final run (V) uses the installed cgeist of Polygeist 16cb5cb5, md5 65aa635a; round 22's final run (W9r22-impl, run F4, --force-cgeist) uses the private cgeist of Polygeist w9r22-cgeist 449c7033, md5 91128806, and the hls-est of circt 814e87ba2, md5 4c6e5700; experiments_cutoff is the time of that render). Round 23's final run F uses the private cgeist of Polygeist w9r23-cgeist 28cad708, md5 d64b520a, CHANGELOG 2026-10-28 W9r23-impl: final run; circt ac46fb0c1 is the last code commit of round 23 and 5c11050ff its notes commit.",
+  "circt_commit": "5c11050ff",
+  "polygeist_commit": "28cad708",
+  "cgeist_md5": "d64b520a",
+  "experiments_cutoff": "2026-10-28T06:00:00"
+ },
+ "heldout": [
+  {
+   "label": "frozen tools (2026-10-25)",
+   "tools": "hls-est 0a5b0a16, cgeist 65aa635a",
+   "runs": [
+    "~/hls-est-work/heldout/score/hlsest-heldout-forgehls-eval.json",
+    "~/hls-est-work/heldout/score/hlsest-heldout-vitislib-eval.json"
+   ],
+   "cmps": [
+    "~/hls-est-work/heldout/score/compare-heldout-forgehls-eval.json",
+    "~/hls-est-work/heldout/score/compare-heldout-vitislib-eval.json"
+   ]
+  },
+  {
+   "label": "round 22 hls-est, frozen MLIR",
+   "tools": "hls-est of round 22, cgeist 65aa635a",
+   "runs": [
+    "$SCRATCH/w9r22i/A6_heldout_forgehls.json",
+    "$SCRATCH/w9r22i/A6_heldout_vitislib.json"
+   ],
+   "cmps": [
+    "$SCRATCH/w9r22i/A6_heldout_forgehls.cmp.json",
+    "$SCRATCH/w9r22i/A6_heldout_vitislib.cmp.json"
+   ]
+  },
+  {
+   "label": "round 22 (final)",
+   "tools": "hls-est of round 22, cgeist 91128806 (Polygeist w9r22-cgeist 449c7033)",
+   "runs": [
+    "$SCRATCH/w9r22i/F4_heldout_forgehls.json",
+    "$SCRATCH/w9r22i/F4_heldout_vitislib.json"
+   ],
+   "cmps": [
+    "$SCRATCH/w9r22i/F4_heldout_forgehls.cmp.json",
+    "$SCRATCH/w9r22i/F4_heldout_vitislib.cmp.json"
+   ]
+  },
+  {
+   "label": "round 23 (final)",
+   "tools": "hls-est of round 23, cgeist d64b520a (Polygeist w9r23-cgeist 28cad708)",
+   "runs": [
+    "$SCRATCH/w9r23i/F_heldout_ev_forgehls.json",
+    "$SCRATCH/w9r23i/F_heldout_ev_vitislib.json"
+   ],
+   "cmps": [
+    "$SCRATCH/w9r23i/F_heldout_ev_forgehls.cmp.json",
+    "$SCRATCH/w9r23i/F_heldout_ev_vitislib.cmp.json"
+   ]
+  },
+  {
+   "label": "round 23 review",
+   "tools": "hls-est of the round-23 review fixes, cgeist d64b520a (Polygeist w9r23-cgeist 28cad708)",
+   "runs": [
+    "$SCRATCH/w9r23fx/E_heldout_ev_forgehls.json",
+    "$SCRATCH/w9r23fx/E_heldout_ev_vitislib.json"
+   ],
+   "cmps": [
+    "$SCRATCH/w9r23fx/E_heldout_ev_forgehls.cmp.json",
+    "$SCRATCH/w9r23fx/E_heldout_ev_vitislib.cmp.json"
+   ]
+  }
+ ],
+ "heldout_locked": [
+  {
+   "label": "frozen tools (scored 2026-10-27)",
+   "tools": "hls-est 0a5b0a16, cgeist 65aa635a",
+   "runs": [
+    "~/hls-est-work/heldout/score_locked/hlsest-heldout-forgehls-locked-frozen.json",
+    "~/hls-est-work/heldout/score_locked/hlsest-heldout-vitislib-locked-frozen.json"
+   ],
+   "cmps": [
+    "~/hls-est-work/heldout/score_locked/compare-heldout-forgehls-locked-frozen.json",
+    "~/hls-est-work/heldout/score_locked/compare-heldout-vitislib-locked-frozen.json"
+   ]
+  },
+  {
+   "label": "round 22 (scored 2026-10-27)",
+   "tools": "hls-est of round 22 (d449ae6ac), cgeist 91128806 (Polygeist 449c7033)",
+   "runs": [
+    "~/hls-est-work/heldout/score_locked/hlsest-heldout-forgehls-locked-r22.json",
+    "~/hls-est-work/heldout/score_locked/hlsest-heldout-vitislib-locked-r22.json"
+   ],
+   "cmps": [
+    "~/hls-est-work/heldout/score_locked/compare-heldout-forgehls-locked-r22.json",
+    "~/hls-est-work/heldout/score_locked/compare-heldout-vitislib-locked-r22.json"
+   ]
+  },
+  {
+   "label": "round 23 (final)",
+   "tools": "hls-est of round 23, cgeist d64b520a (Polygeist w9r23-cgeist 28cad708)",
+   "runs": [
+    "$SCRATCH/w9r23i/F_heldout_lk_forgehls.json",
+    "$SCRATCH/w9r23i/F_heldout_lk_vitislib.json"
+   ],
+   "cmps": [
+    "$SCRATCH/w9r23i/F_heldout_lk_forgehls.cmp.json",
+    "$SCRATCH/w9r23i/F_heldout_lk_vitislib.cmp.json"
+   ]
+  },
+  {
+   "label": "round 23 review",
+   "tools": "hls-est of the round-23 review fixes, cgeist d64b520a (Polygeist w9r23-cgeist 28cad708)",
+   "runs": [
+    "$SCRATCH/w9r23fx/E_heldout_lk_forgehls.json",
+    "$SCRATCH/w9r23fx/E_heldout_lk_vitislib.json"
+   ],
+   "cmps": [
+    "$SCRATCH/w9r23fx/E_heldout_lk_forgehls.cmp.json",
+    "$SCRATCH/w9r23fx/E_heldout_lk_vitislib.cmp.json"
+   ]
+  }
+ ]
 }

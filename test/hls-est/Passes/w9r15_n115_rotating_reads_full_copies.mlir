@@ -1,15 +1,15 @@
 // RUN: hls-est %s --symbol-privatize=exclude=_Z3topPiS_S_ --symbol-dce --lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --infer-vitis-split-array=td=off --narrow-ram-widths --memory-banking-bram --convert-affine-to-loopschedule --bram-analysis --bram-debug -o /dev/null 2>&1 | FileCheck %s
-// RUN: hls-est %s --symbol-privatize=exclude=_Z3topPiS_S_ --symbol-dce --lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --infer-vitis-split-array=td=off --narrow-ram-widths --memory-banking-bram --convert-affine-to-loopschedule --bram-analysis --config-set tool.hls.memory_architecture.replication.rotating_reads_full_copies=true --bram-debug -o /dev/null 2>&1 | FileCheck %s --check-prefix=OFF
+// RUN: hls-est %s --symbol-privatize=exclude=_Z3topPiS_S_ --symbol-dce --lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --infer-vitis-split-array=td=off --narrow-ram-widths --memory-banking-bram --convert-affine-to-loopschedule --bram-analysis --config-set tool.hls.memory_architecture.replication.rotating_reads_full_copies=false --bram-debug -o /dev/null 2>&1 | FileCheck %s --check-prefix=OFF
 
 // VITIS_NOTES N115, kernel w9r15p_rc_rot (Vitis 2025.1 td=off: 272): int pa[511]
 // cyclic 8 read at n + k (k unrolled 256, n the pipelined index): every read's bank
 // rotates with n; Vitis gives each bank 16 copies (ceil(R / II), one more than the
 // shared-write-port rule). tool.hls.memory_architecture.replication.
-// rotating_reads_full_copies gives that (ON) but stays off by default: polybench_
-// pragmas k3mm tmp2 (64 steered reads per bank at II 4) is 15 copies in Vitis
-// (OPEN_ISSUES O153). Default: 15 copies (256).
-// CHECK: Total BRAM: 256
-// OFF: Total BRAM: 272
+// rotating_reads_full_copies gives that; since W9r16-impl it is on and applies
+// only where the in-bank address differs between the candidate banks (N125:
+// polybench_pragmas k3mm tmp2 keeps 15 copies). Off: 15 copies (256).
+// CHECK: Total BRAM: 272
+// OFF: Total BRAM: 256
 
 module {
   func.func @_Z3topPiS_S_(%arg0: memref<256xi32>, %arg1: memref<256xi32>, %arg2: memref<256xi32>) attributes {hls.orig_name = "top", llvm.linkage = #llvm.linkage<external>} {

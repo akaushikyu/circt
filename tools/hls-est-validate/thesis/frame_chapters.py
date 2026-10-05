@@ -116,8 +116,9 @@ def collect_comparison(N):
     N.put("in_goal", i("in_goal_band"), src)
     N.put("in_goal_pct", allrow["in_goal_band_pct_of_compared"], src)
     N.put("abs_err", fmt_int(i("total_abs_err")), src)
-    N.put("over_le15", i("over_le_15pct"), src)
-    N.put("over_gt15", i("over_gt_15pct"), src)
+    N.put("band_over_pct", T.BAND_PCT, VALIDATE / "make_compare_csv.py")   # BAND_OVER, MEMOS #95
+    N.put("over_le_band", i(T.make_compare_csv.COL_OVER_LE), src)
+    N.put("over_gt_band", i(T.make_compare_csv.COL_OVER_GT), src)
     N.put("under", i("under"), src)
     N.put("out_of_band", i("compared") - i("in_goal_band"), src)
     N.put("hlsest_failed", i("hlsest_failed_or_not_run"), src)
@@ -148,7 +149,7 @@ def collect_comparison(N):
     sub = [r for r in compared if r["dataset"] in HARNESS_SUBSET]
     N.put("subset_compared", len(sub), src2)
     N.put("subset_exact", sum(r["exact"] == "True" for r in sub), src2)
-    N.put("subset_in_goal", sum(r["goal_band"] in ("exact", "over<=15%") for r in sub), src2)
+    N.put("subset_in_goal", sum(r["goal_band"] in T.IN_BAND for r in sub), src2)
     N.put("subset_abs_err", sum(int(r["abs_diff"]) for r in sub), src2)
     for g in GATES:
         r = next(r for r in rows2 if r["dataset"] == "polybench_pragmas" and r["benchmark"] == g)

@@ -457,6 +457,6 @@ module {
 
 // ARMS-LABEL: func.func @if_arms
 // ARMS: affine.for
-// ARMS: memref.load %{{.*}}[%{{.*}}] {hls.if_arms = array<i64: [[IF:[0-9]+]], 0>}
+// ARMS: memref.load %{{.*}}[%{{.*}}] {hls.if_arms = array<i64: [[IF:[0-9]+]], 0>{{(, hls.select_reloads = -1 : i64)?}}}
 // ARMS: memref.load %{{.*}}[%{{.*}}] {hls.if_arms = array<i64: [[IF]], 1>}
 // ARMS: scf.if

@@ -33,7 +33,7 @@ The {{newest_label}} covers {{all_designs}} designs:
 - cgeist compiles {{all_cgeist_ok}} of them, and hls-est returns an estimate for {{all_hlsest_ok}}. cgeist fails on {{all_cgeist_fail}} designs; `done-exclusions.md` matches them to the Vitis rejections of the same sources. Of the compiled designs, {{all_hlsest_fail}} end without an estimate: in {{all_top_not_found}} hls-est finds no function with the top's name, and {{all_hlsest_timeout}} reach the 120 s limit. Only {{all_hlsest_fail_with_vitis}} of these {{all_hlsest_fail}} have a Vitis result.
 - Vitis has no result for {{all_estimated_no_vitis}} of the {{all_hlsest_ok}} designs hls-est estimates ({{all_no_vitis}} of all {{all_designs}} designs): Vitis rejected them, failed or timed out.
 - {{all_compared}} designs are compared. Of these, {{all_exact}} ({{all_exact_pct}} %) are exact and {{all_in_band}} ({{all_in_band_pct}} %) are in band.
-- Of the {{all_out_of_band}} designs out of band, {{all_under}} are under-counts and {{all_over_gt15}} over-count by more than {{band_over_pct}} %.
+- Of the {{all_out_of_band}} designs out of band, {{all_under}} are under-counts and {{all_over_gt_band}} over-count by more than {{band_over_pct}} %.
 - Over all compared designs, Σ|err| = {{all_abs_err}} BRAM_18K against {{all_vitis_bram_total}} BRAM_18K that Vitis allocates, a weighted error of {{all_weighted_err_pct}} %. The mean |relative error| is {{all_mean_abs_rel_pct}} %. Among the designs that are not exact, the median |relative error| is {{all_median_abs_rel_nonexact_pct}} %.
 
 Five things qualify these numbers; the strictest view (point 3) combines the first two.
@@ -177,18 +177,14 @@ The speed-up shows orders of magnitude. It is not a benchmark.
 
 The classes come from the round-10 out-of-band ranking (OPEN_ISSUES O113). That ranking split each out-of-band design's error per array and assigned each part to a cause. "changed since ranking" counts designs whose total has moved since the ranked run. For those, the class records the dominant cause at ranking time.
 
-The largest class is {{oob1_class}}: {{oob1_designs}} designs, Σ|d| {{oob1_sumd}}. These loops contain hls::stream reads or writes. hls-est leaves them unscheduled, because it has no timing for the stream calls, so it does not pipeline them; Vitis does (O54 (c)). The stream timing is proven (N82) and implemented, but it stays opt-in: switched on, it loses many designs that are exact today and so fails the adoption rule of Section 3.5 (O114). The reason it cannot be adopted yet is a separate gap, O1: loop-carried memory dependences do not reach hls-est's schedulers. The next classes are:
-- {{oob2_class}}: the greedy modulo scheduler's II on large bodies (O56).
-- {{oob3_class}}: an unroll factor on a pipelined loop with a run-time trip count.
+By the summed error, the classes are: {{oob_class_list}}. The class names come from the round-10 ranking; the designs' causes as of the newest run are in `hls-doc/done-exclusions.md` (part 3) and OPEN_ISSUES.md.
 
-Smaller classes are either proven rules that are not implemented yet, such as flattening across a stream access (N55), or rules whose Vitis trigger is itself unconfirmed: the do-while flatten refusal (N64) is unconfirmed as to which source shape causes it.
-
-Out-of-band designs total Σ|d| = {{oob_sumd}}. {{oob_under}} of them are under-counts. The largest under-count classes are schedule-driven: an II that is too high, or a loop that is not pipelined, gives fewer RAM_1WNR copies (N4, N38). The over-counts are spread over several classes: RAM_1WNR copy counts, arrays Vitis keeps in registers or removes (O60) and an m_axi adapter whose INTERFACE pragma Vitis drops.
+Out-of-band designs total Σ|d| = {{oob_sumd}}; {{oob_under}} of them are under-counts.
 
 ## 6.8 Threats to validity and what is not covered
 
 - **BRAM only.** hls-est models BRAM_18K, the resource with the most discrete and most explainable allocation. DSP, FF and LUT (Phase 6) are not evaluated here.
-- **In-sample evaluation.** The rules were found while working on the same catalogue they are scored on; there is no held-out test set. The harness subset was the development set only at the start; from the first full run on, the whole catalogue was. Many rules were found by chasing a catalogue mismatch and then proven on kernels written for that mismatch, so the kernels are not independent of the catalogue either. Three things mitigate this:
+- **In-sample evaluation.** The rules were found while working on the same catalogue they are scored on. A held-out set now exists (Section 6.9): its eval split was scored once with the frozen tools before any tuning, then used as validation data in round 22; its locked split was scored once on 2026-10-27, when Peter released it (frozen and round-22 tools, the two out-of-sample results of this thesis), and then became development data in round 23 too. A second held-out set, kept apart from all tuning, is the test set from round 23 on. The harness subset was the development set only at the start; from the first full run on, the whole catalogue was. Many rules were found by chasing a catalogue mismatch and then proven on kernels written for that mismatch, so the kernels are not independent of the catalogue either. Three things mitigate this:
   - No rule may branch on design names, array names or specific sizes.
   - Most rules are proven on minimal kernels that are not catalogue designs ({{notes_confirmed_kernels}} notes are confirmed by kernels; {{notes_confirmed_corpus}} are confirmed on catalogue designs or ground-truth reports only: {{notes_confirmed_corpus_list}}).
   - Rules that fail the catalogue gate stay opt-in (for example N82).
@@ -201,3 +197,20 @@ Out-of-band designs total Σ|d| = {{oob_sumd}}. {{oob_under}} of them are under-
 - **One target, one tool version, one mode.** The ground truth is Vitis 2025.1 on a single Zynq-7000 part (`xc7z020`) at 10 ns with `throughput_driven=off`. The `td=auto` behaviour differs (N2), for example in automatic array splitting, and is only partly modelled. The formula is the 7-series RAMB18 aspect-mode formula (N6, N8). For other families it is supplied as data by the configuration (`hls-doc/new-architecture.md`), but no other family has been measured against its tool. 
 - **An academic corpus.** HLSFactory_v2 is mostly benchmark kernels and student projects. Some of it is duplicated (Section 6.1), and {{all_compared_vitis_zero}} compared designs have no BRAM at all. Industrial designs, with deep call hierarchies, large IP libraries and many interface variants, are not represented.
 - **Ground-truth limits.** Some Vitis runs failed, timed out or were rejected (`done-exclusions.md`). Their designs are not compared, and the 120 s hls-est limit excludes a few large designs.
+
+## 6.9 Held-out evaluation
+
+The held-out catalogue (`hls-doc/heldout.md`) holds kernels of two corpora that never entered the training catalogue: ForgeHLS and the Vitis_Libraries 2025.1 L1 tests, normalised to the same part, clock and `throughput_driven=off`, split by source family into an eval and a locked half before any result existed. The eval split was scored once with the frozen tools of 2026-10-25 (the first row of Table 6.10); round 22 then used it as validation data: its misses were grouped by cause, each cause proven on minimal Vitis kernels with controls, and the rules implemented only where the training catalogue did not move. The locked split was not run with hls-est or cgeist, nor its Vitis results read, until Peter released it on 2026-10-27; it was then scored once with the frozen tools and once with the round-22 tools (the first two rows of Table 6.11), before round 23 used it.
+
+{{table:heldout}}
+
+*Table 6.10. The held-out eval split. "estimated" counts designs hls-est returned an estimate for (cgeist and hls-est both succeeded); "compared" also needs a Vitis result; the band is the training band (exact or at most {{band_over_pct}} % over). Row 1: the frozen tools; row 2: the round-22 hls-est on the frozen cgeist's MLIR (the estimator's rules alone); row 3: the round-22 cgeist and hls-est, which also compile designs the frozen cgeist rejected (`tables/ch06-heldout.md`).*
+
+On the frozen tools' MLIR the round-22 estimator moves the eval split from {{ho0_exact}} to {{ho1_exact}} exact designs of {{ho1_compared}} compared (Σ|err| {{ho0_abs_err}} to {{ho1_abs_err}}) with no change on any training design. With the round-22 front end, hls-est estimates {{ho2_ingested}} of the {{ho2_designs}} eval designs (the frozen tools: {{ho0_ingested}}), and {{ho2_exact}} of {{ho2_compared}} compared designs are exact; the Σ|err| of {{ho2_abs_err}} comes from the newly compiled Vitis_Libraries designs, whose misses have not been examined yet (OPEN_ISSUES O226; two hdrmerge designs alone account for 13,440). Because the eval split guided these rules, these numbers are validation numbers, not a test of generalisation. Round 23 then took both splits as development data: rows 4 of Table 6.10 and 3 of Table 6.11 are the final tools of round 23, with {{ho3_exact}} of {{ho3_compared}} eval designs and {{lk2_exact}} of {{lk2_compared}} locked designs exact (Σ|err| {{ho3_abs_err}} and {{lk2_abs_err}}).
+
+{{table:heldout_locked}}
+
+*Table 6.11. The held-out locked split, columns as Table 6.10. Row 1: the frozen tools of 2026-10-25; row 2: the round-22 cgeist and hls-est; both scored once on 2026-10-27, before any rule looked at the split, and so out of sample. Row 3: the round-23 tools, whose rules were found on this split and the eval split (`tables/ch06-heldout_locked.md`).*
+
+Out of sample, the frozen tools match {{lk0_exact}} of {{lk0_compared}} compared locked designs ({{lk0_exact_pct}} %) and the round-22 tools {{lk1_exact}} of {{lk1_compared}} ({{lk1_exact_pct}} %): on new corpora the estimator is right on most designs but misses whole families whose mechanism the training catalogue never showed (vision line buffers under `bind_storage`, cached m_axi ports, s_axilite array memories), which round 23 then proved on kernels and implemented.
+

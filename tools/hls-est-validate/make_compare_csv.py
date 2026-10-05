@@ -19,17 +19,35 @@ import common as C  # noqa: E402
 from compare import compare_one, summarize  # noqa: E402
 
 
-BAND_OVER = 0.15   # Peter's goal (2026-10-10): exact, or an over-count of at most 15 % of the Vitis value
+# The DoD-5 goal band: exact, or an over-count of at most BAND_OVER of the Vitis value; an under-count is
+# always out of band. Peter set 15 % on 2026-10-10 (CLAUDE.md DoD 5) and narrowed it to 5 % on 2026-10-24 ("I'm
+# setting it to 5% now new limit", MEMOS #95). This is the one place the band is defined: every label,
+# column name and sentence below and in the consumers (make_dod_status.py, make_done_exclusions.py,
+# make_vitis_comparison_csv.py, make_test_results.py, thesis/*) is derived from it.
+BAND_OVER = 0.05
+BAND_PCT = ("%g" % round(100 * BAND_OVER, 6))      # "5"
+BAND_TEXT = BAND_PCT + " %"                         # "5 %", for prose
+BAND_IN_LABEL = "over<=" + BAND_PCT + "%"           # goal_band value of an in-band over-count
+BAND_OUT_LABEL = "over>" + BAND_PCT + "%"           # goal_band value of an over-count beyond the band
+IN_BAND = ("exact", BAND_IN_LABEL)                  # the goal_band values that are in the band
+COL_OVER_LE = "over_le_" + BAND_PCT + "pct"         # comparison-summary.csv column names
+COL_OVER_GT = "over_gt_" + BAND_PCT + "pct"
+
+
+def in_band(vitis, est):
+    """True when est is exact or over-counts vitis by at most BAND_OVER (the DoD-5 band)."""
+    return vitis is not None and est is not None and vitis <= est <= vitis * (1 + BAND_OVER)
 
 
 def band(vitis, est):
-    """Classify one design against the goal band: 'exact', 'over<=15%', 'over>15%', 'under', or '' if not compared."""
+    """Classify one design against the goal band: 'exact', BAND_IN_LABEL, BAND_OUT_LABEL, 'under', or '' if not
+    compared."""
     if vitis is None or est is None:
         return ""
     if est == vitis:
         return "exact"
     if est > vitis:
-        return "over<=15%" if est <= vitis * (1 + BAND_OVER) else "over>15%"
+        return BAND_IN_LABEL if est <= vitis * (1 + BAND_OVER) else BAND_OUT_LABEL
     return "under"
 
 
@@ -42,8 +60,8 @@ def row_band(r):
 
 def band_counts(compared):
     b = [band(r["vitis_bram"], r["hlsest_bram"]) for r in compared]
-    inb = sum(1 for x in b if x in ("exact", "over<=15%"))
-    return [inb, b.count("over<=15%"), b.count("over>15%"), b.count("under"),
+    inb = sum(1 for x in b if x in IN_BAND)
+    return [inb, b.count(BAND_IN_LABEL), b.count(BAND_OUT_LABEL), b.count("under"),
             round(100 * inb / len(compared), 1) if compared else ""]
 
 
@@ -79,7 +97,7 @@ def main():
         w = csv.writer(f)
         w.writerow(["dataset", "designs", "with_vitis_result", "compared", "exact", "exact_pct_of_compared",
                     "total_abs_err", "mean_abs_err", "median_abs_err", "hlsest_failed_or_not_run", "vitis_failed",
-                    "in_goal_band", "over_le_15pct", "over_gt_15pct", "under", "in_goal_band_pct_of_compared"])
+                    "in_goal_band", COL_OVER_LE, COL_OVER_GT, "under", "in_goal_band_pct_of_compared"])
         def line(name, rs):
             c = [r for r in rs if r["status"] == "compared"]
             errs = [abs(r["diff"]) for r in c]
@@ -105,7 +123,8 @@ def main():
     print(f"ALL: compared {s['compared']}, exact {s['exact']}, |err| {s['total_abs_error']}")
     allc = [r for r in rows if r["status"] == "compared"]
     inb, le, gt, un, pct = band_counts(allc)
-    print(f"goal band (exact or over-count <= 15%): {inb}/{len(allc)} ({pct}%); over<=15%: {le}, over>15%: {gt}, under: {un}")
+    print(f"goal band (exact or over-count <= {BAND_TEXT}): {inb}/{len(allc)} ({pct}%); {BAND_IN_LABEL}: {le}, "
+          f"{BAND_OUT_LABEL}: {gt}, under: {un}")
     for ds, d in sorted(s["per_dataset"].items()):
         print(f"  {ds:22s} designs {d['designs']:3d} compared {d['compared']:3d} exact {d['exact']:3d} |err| {d['abs_error']:6d}")
 

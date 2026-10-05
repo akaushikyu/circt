@@ -3,7 +3,9 @@
 // DEFINE: %{pipe} = --affine-loop-normalize --memory-banking-bram --convert-affine-to-loopschedule
 
 // test-no-deps: no memory or iter_arg dependence (the pass still adds the
-// structural edges), so the accumulation no longer has II 5.
+// structural edges), so the accumulation no longer has II 5 (its chained fadd latency; 4
+// with N139's recurrence latencies, on in W9r18-impl, off by default since the W9 round 18
+// review fixes).
 // RUN: hls-est %S/Inputs/sched_kernel.mlir %{pipe} --bram-analysis --bram-debug-json=%t.deps.json -o /dev/null
 // RUN: FileCheck %s --check-prefix=DEPS < %t.deps.json
 // RUN: hls-est %S/Inputs/sched_kernel.mlir --load-plugin=%hls_est_test_plugin --config-set scheduling.dependences.model=test-no-deps %{pipe} --bram-analysis --bram-debug-json=%t.nodeps.json -o /dev/null
@@ -14,9 +16,11 @@
 // NODEPS-NOT:  "ii": 5,
 
 // test-clocked-timing: a floating-point multiply takes ceil(20 ns / clock)
-// cycles; at 5 ns the store after it starts two stages later than at 10 ns.
-// RUN: hls-est %S/Inputs/sched_kernel.mlir --load-plugin=%hls_est_test_plugin --config-set scheduling.timing.model=test-clocked-timing %{pipe} | FileCheck %s --check-prefix=CLK10
-// RUN: hls-est %S/Inputs/sched_kernel.mlir --load-plugin=%hls_est_test_plugin --config-set scheduling.timing.model=test-clocked-timing --config-set run.clock_ns=5 %{pipe} | FileCheck %s --check-prefix=CLK5
+// cycles; at 5 ns the store after it starts two stages later than at 10 ns (the recurrence
+// latencies of N139, which would replace the plugin's add latency on the accumulation, stay off:
+// off by default since the W9 round 18 review fixes, pinned here anyway).
+// RUN: hls-est %S/Inputs/sched_kernel.mlir --load-plugin=%hls_est_test_plugin --config-set scheduling.timing.model=test-clocked-timing --config-set scheduling.dependences.register_recurrence_latencies=false %{pipe} | FileCheck %s --check-prefix=CLK10
+// RUN: hls-est %S/Inputs/sched_kernel.mlir --load-plugin=%hls_est_test_plugin --config-set scheduling.timing.model=test-clocked-timing --config-set run.clock_ns=5 --config-set scheduling.dependences.register_recurrence_latencies=false %{pipe} | FileCheck %s --check-prefix=CLK5
 // CLK10: loopschedule.pipeline.stage start = 3 {
 // CLK10-NOT: loopschedule.pipeline.stage start = 5 {
 // CLK5:  loopschedule.pipeline.stage start = 5 {

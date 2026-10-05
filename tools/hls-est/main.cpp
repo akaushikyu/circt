@@ -1,51 +1,56 @@
-
-
 #include "circt/Dialect/LoopSchedule/LoopScheduleDialect.h"
-#include "circt/Dialect/Resource/Config/Config.h"
 #include "circt/Dialect/Resource/Interfaces/MemoryInterface.h"
 #include "circt/Dialect/Resource/Passes/AffineToLoopScheduleModified.h"
-#include "circt/Dialect/Resource/Passes/AutoPipelineUnroll.h"
 #include "circt/Dialect/Resource/Passes/BRAMAnalysis.h"
-#include "circt/Dialect/Resource/Passes/DebugUnroll.h"
-#include "circt/Dialect/Resource/Passes/HlsInliner.h"
-#include "circt/Dialect/Resource/Passes/InferVitisSplitArray.h"
-#include "circt/Dialect/Resource/Passes/MemoryBankModified.h"
 #include "circt/Dialect/Resource/Passes/MergeConditionalStores.h"
-#include "circt/Dialect/Resource/Passes/PolygeistCompat.h"
+#include "circt/Dialect/Resource/Passes/MemoryBankModified.h"
+#include "circt/Dialect/Resource/Passes/AutoPipelineUnroll.h"
+#include "circt/Dialect/Resource/Passes/InferVitisSplitArray.h"
+#include "circt/Dialect/Resource/Passes/DebugUnroll.h"
 #include "circt/Dialect/Resource/Passes/VitisCleanup.h"
-#include "circt/Dialect/Resource/Plugins/Registry.h"
+#include "circt/Dialect/Resource/Passes/HlsInliner.h"      // --inline keeps hls.inline_off callees (W3)
+#include "circt/Dialect/Resource/Passes/PolygeistCompat.h" // polygeist.subindex, --lower-polygeist-subindex (W3, O25)
+#include "circt/Dialect/Resource/Config/Config.h" // --hls-config et al. (P2)
+#include "circt/Dialect/Resource/Plugins/Registry.h" // the builtin plugins
 #include "mlir/IR/DialectRegistry.h"
 #include "mlir/Pass/PassManager.h"
 #include "mlir/Pass/PassRegistry.h"
 #include "mlir/Support/FileUtilities.h"
-#include "mlir/Tools/Plugins/PassPlugin.h"
 #include "mlir/Tools/mlir-opt/MlirOptMain.h"
-#include "mlir/Transforms/Passes.h"
-#include "llvm/Support/CommandLine.h"
+#include "mlir/Tools/Plugins/PassPlugin.h"
 #include "llvm/Support/DynamicLibrary.h"
+#include "llvm/Support/CommandLine.h"
 #include "llvm/Support/InitLLVM.h"
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/ToolOutputFile.h"
+#include "mlir/Transforms/Passes.h"   // createCSEPass, registerCSEPass, registerCanonicalizerPass et al.
 
-#include "mlir/Dialect/Affine/IR/AffineOps.h"
-#include "mlir/Dialect/Affine/Transforms/Passes.h"
-#include "mlir/Dialect/Arith/IR/Arith.h"
-#include "mlir/Dialect/ControlFlow/IR/ControlFlow.h"
-#include "mlir/Dialect/Func/IR/FuncOps.h"
-#include "mlir/Dialect/Index/IR/IndexDialect.h"
-#include "mlir/Dialect/MemRef/IR/MemRef.h"
-#include "mlir/Dialect/SCF/IR/SCF.h"
+#include "mlir/Dialect/Affine/IR/AffineOps.h"          // affine::AffineDialect
+#include "mlir/Dialect/Arith/IR/Arith.h"               // arith::ArithDialect
+#include "mlir/Dialect/MemRef/IR/MemRef.h"             // memref::MemRefDialect
+#include "mlir/Dialect/SCF/IR/SCF.h"                   // scf::SCFDialect
+#include "mlir/Dialect/Func/IR/FuncOps.h"              // func::FuncDialect
+#include "mlir/Dialect/ControlFlow/IR/ControlFlow.h"   // cf::ControlFlowDialect
+#include "mlir/Dialect/Index/IR/IndexDialect.h"        // index::IndexDialect
+#include "mlir/Dialect/Affine/Transforms/Passes.h"     // affine-loop-normalize et al.
 
-#include "circt/Dialect/Calyx/CalyxDialect.h"
-#include "circt/Dialect/Comb/CombDialect.h"
-#include "circt/Dialect/HW/HWDialect.h"
-#include "circt/Dialect/Resource/HLS/HLSOps.h"
-#include "circt/Dialect/Seq/SeqDialect.h"
-#include "mlir/Dialect/DLTI/DLTI.h"
-#include "mlir/Dialect/LLVMIR/LLVMDialect.h"
-#include "mlir/Dialect/LLVMIR/Transforms/InlinerInterfaceImpl.h"
+// CIRCT dialects
+
+#include "circt/Dialect/HW/HWDialect.h"                // hw::HWDialect
+#include "circt/Dialect/Comb/CombDialect.h"            // comb::CombDialect
+#include "circt/Dialect/Seq/SeqDialect.h"              // seq::SeqDialect
+#include "circt/Dialect/Calyx/CalyxDialect.h"          // calyx::CalyxDialect
+#include "circt/Dialect/Resource/HLS/HLSOps.h"         // custom dialect
 #include "mlir/Dialect/Math/IR/Math.h"
+#include "mlir/Dialect/DLTI/DLTI.h"              // dlti.dl_spec module attribute emitted by cgeist
+#include "mlir/Dialect/LLVMIR/LLVMDialect.h"    // llvm.linkage attrs / llvm.* ops emitted by cgeist
+#include "mlir/Dialect/LLVMIR/Transforms/InlinerInterfaceImpl.h" // --inline with the llvm dialect loaded
 
+//===----------------------------------------------------------------------===//
+// The configuration (hls-doc/configuration.md). The options are read after
+// the whole command line has been parsed, so a --hls-config file may name
+// plugins that a later --load-plugin registers.
+//===----------------------------------------------------------------------===//
 static llvm::cl::OptionCategory configCategory("hls-est configuration");
 
 static llvm::cl::list<std::string> configFiles(
@@ -53,10 +58,10 @@ static llvm::cl::list<std::string> configFiles(
     llvm::cl::desc("Configuration file (JSON) whose keys override the "
                    "compiled-in defaults; repeatable, later files win"),
     llvm::cl::value_desc("file"), llvm::cl::cat(configCategory));
-static llvm::cl::alias
-    configFilesAlias("config", llvm::cl::desc("Alias for --hls-config"),
-                     llvm::cl::aliasopt(configFiles),
-                     llvm::cl::cat(configCategory));
+static llvm::cl::alias configFilesAlias("config",
+                                        llvm::cl::desc("Alias for --hls-config"),
+                                        llvm::cl::aliasopt(configFiles),
+                                        llvm::cl::cat(configCategory));
 static llvm::cl::list<std::string> configSets(
     "config-set",
     llvm::cl::desc("One key of the configuration: <key.path>=<JSON value> (a "
@@ -104,9 +109,10 @@ static void loadHlsEstPlugin(const std::string &path) {
                  << " has no hlsEstGetPluginInfo entry point; its interface "
                     "version is not checked\n";
   } else if (infoFn().apiVersion != HLS_EST_PLUGIN_API_VERSION) {
-    llvm::errs() << "error: --load-plugin: " << path << " (" << infoFn().name
-                 << ") was built for hls-est plugin API " << infoFn().apiVersion
-                 << ", this hls-est has " << HLS_EST_PLUGIN_API_VERSION << "\n";
+    llvm::errs() << "error: --load-plugin: " << path << " ("
+                 << infoFn().name << ") was built for hls-est plugin API "
+                 << infoFn().apiVersion << ", this hls-est has "
+                 << HLS_EST_PLUGIN_API_VERSION << "\n";
     pluginLoadFailed = true;
     return;
   }
@@ -119,9 +125,7 @@ static llvm::cl::list<std::string> loadPlugins(
                    "the plugin interfaces become selectable by name in the "
                    "configuration); repeatable"),
     llvm::cl::value_desc("library"), llvm::cl::cat(configCategory),
-    llvm::cl::callback([](const std::string &path) {
-      loadHlsEstPlugin(path);
-    }));
+    llvm::cl::callback([](const std::string &path) { loadHlsEstPlugin(path); }));
 
 static llvm::cl::opt<bool> listPluginsOpt(
     "list-plugins",
@@ -140,14 +144,14 @@ static llvm::cl::opt<bool> defaultPipeline(
 static mlir::LogicalResult addPipelineFlags(llvm::StringRef flags,
                                             mlir::OpPassManager &pm) {
   llvm::SmallVector<llvm::StringRef> words;
-  flags.split(words, ' ', -1, false);
-  for (llvm::StringRef widthValue : words) {
-    auto [name, opts] = widthValue.ltrim('-').split('=');
+  flags.split(words, ' ', -1, /*KeepEmpty=*/false);
+  for (llvm::StringRef w : words) {
+    auto [name, opts] = w.ltrim('-').split('=');
     const mlir::PassRegistryEntry *entry = mlir::PassInfo::lookup(name);
     if (!entry)
       entry = mlir::PassPipelineInfo::lookup(name);
     if (!entry) {
-      llvm::errs() << "error: tool.pipeline: '" << widthValue
+      llvm::errs() << "error: tool.pipeline: '" << w
                    << "' is not a registered pass\n";
       return mlir::failure();
     }
@@ -177,9 +181,9 @@ static std::optional<int> setUpConfiguration() {
   if (listPluginsOpt) {
     for (const auto &[key, entries] : listPlugins()) {
       llvm::outs() << key << ":\n";
-      for (const PluginEntry &entryValue : entries)
-        llvm::outs() << "  " << entryValue.name << " [" << entryValue.origin
-                     << "] " << entryValue.description << "\n";
+      for (const PluginEntry &e : entries)
+        llvm::outs() << "  " << e.name << " [" << e.origin << "] "
+                     << e.description << "\n";
     }
     return 0;
   }
@@ -187,11 +191,11 @@ static std::optional<int> setUpConfiguration() {
   std::vector<std::string> files(configFiles.begin(), configFiles.end());
   std::vector<std::string> sets(configSets.begin(), configSets.end());
   Config config = buildConfig(files, sets, diag);
-  for (const std::string &widthValue : diag.warnings)
-    llvm::errs() << "warning: hls-config: " << widthValue << "\n";
+  for (const std::string &w : diag.warnings)
+    llvm::errs() << "warning: hls-config: " << w << "\n";
   if (!diag.ok()) {
-    for (const std::string &entryValue : diag.errors)
-      llvm::errs() << "error: hls-config: " << entryValue << "\n";
+    for (const std::string &e : diag.errors)
+      llvm::errs() << "error: hls-config: " << e << "\n";
     return 1;
   }
   if (dumpEffectiveConfigOpt)
@@ -201,30 +205,53 @@ static std::optional<int> setUpConfiguration() {
 }
 
 int main(int argc, char **argv) {
-
+  // The builtin plugins first, so that a plugin loaded on the command line
+  // cannot take a builtin's name, and the configuration can name them.
   circt::hlsest::registerBuiltinPlugins();
-  mlir::DialectRegistry targetRegistry;
+  mlir::DialectRegistry registry;
 
-  targetRegistry.insert<
-
-      mlir::affine::AffineDialect, mlir::arith::ArithDialect,
-      mlir::memref::MemRefDialect, mlir::scf::SCFDialect,
-      mlir::func::FuncDialect, mlir::cf::ControlFlowDialect,
-      mlir::index::IndexDialect, mlir::math::MathDialect, mlir::DLTIDialect,
+  registry.insert<
+      // Upstream
+      mlir::affine::AffineDialect,
+      mlir::arith::ArithDialect,
+      mlir::memref::MemRefDialect,
+      mlir::scf::SCFDialect,
+      mlir::func::FuncDialect,
+      mlir::cf::ControlFlowDialect,
+      mlir::index::IndexDialect,
+      mlir::math::MathDialect,
+      mlir::DLTIDialect,
       mlir::LLVM::LLVMDialect,
+      // CIRCT
+      circt::loopschedule::LoopScheduleDialect,
+      circt::hw::HWDialect,
+      circt::comb::CombDialect,
+      circt::seq::SeqDialect,
+      circt::calyx::CalyxDialect,
+      circt::hls_analysis::HLSDialect,
+      // cgeist's polygeist.subindex (a row passed by reference, W3) and its
+      // pointer casts pointer2memref / memref2pointer (W8b), O25
+      circt::hls_analysis::PolygeistCompatDialect
+  >();
 
-      circt::loopschedule::LoopScheduleDialect, circt::hw::HWDialect,
-      circt::comb::CombDialect, circt::seq::SeqDialect,
-      circt::calyx::CalyxDialect, circt::hls_analysis::HLSDialect,
-
-      circt::hls_analysis::PolygeistCompatDialect>();
-
-  circt::hls_analysis::registerHlsInlinerExtension(targetRegistry);
-
-  mlir::LLVM::registerInlinerInterface(targetRegistry);
-
-  circt::hls_analysis::registerPolygeistMemRefElementTypes(targetRegistry);
-  circt::hls_analysis::registerBRAMInterfaceExternalModels(targetRegistry);
+  // External interfaces still need their host dialects loaded above.
+  // The func dialect's inliner interface lives in an extension; without it
+  // `--inline` aborts ("DialectInlinerInterface ... never implemented").
+  // hls-est's own interface (HlsInliner.cpp) replaces the stock one: it
+  // keeps calls to `hls.inline_off` callees, which Vitis charges once per
+  // instance (VITIS_NOTES.md N14; --inline-ignore-inline-off restores the
+  // old behaviour).
+  circt::hls_analysis::registerHlsInlinerExtension(registry);
+  // The llvm dialect also only promises its inliner interface. It is loaded
+  // for every cgeist module (the `llvm.linkage` attribute of each function),
+  // and the inliner collects the interface of every loaded dialect, so
+  // without this `--inline` aborts on any cgeist output ("promised by dialect
+  // 'llvm' but never implemented"). The other dialects registered above
+  // implement theirs in the dialect itself; only func and llvm promise one.
+  mlir::LLVM::registerInlinerInterface(registry);
+  // cgeist's arrays of structs (`memref<N x !llvm.struct<...>>`), W8b / O25.
+  circt::hls_analysis::registerPolygeistMemRefElementTypes(registry);
+  circt::hls_analysis::registerBRAMInterfaceExternalModels(registry);
   circt::hls_analysis::registerBRAMLoopscheduleAnalysisPass();
   circt::hls_analysis::registerAffineToLoopScheduleAnalysisPass();
   circt::hls_analysis::registerMergeConditionalStoresPass();
@@ -235,22 +262,27 @@ int main(int argc, char **argv) {
   circt::hls_analysis::registerVitisCleanupPasses();
   circt::hls_analysis::registerLowerSubIndexPass();
   circt::hls_analysis::registerSplitStructMemrefsPass();
-
+  // Upstream affine passes (gives you -affine-loop-normalize, -affine-loop-unroll,
+  // -affine-loop-coalescing, etc. on the command line).
   mlir::affine::registerAffinePasses();
   mlir::registerCSEPass();
   mlir::registerCanonicalizerPass();
   mlir::registerTransformsPasses();
 
   auto [inputFilename, outputFilename] = mlir::registerAndParseCLIOptions(
-      argc, argv, "HLS BRAM analysis driver\n", targetRegistry);
+      argc, argv, "HLS BRAM analysis driver\n", registry);
   if (std::optional<int> exitCode = setUpConfiguration())
     return *exitCode;
   if (!defaultPipeline)
-    return mlir::asMainReturnCode(mlir::MlirOptMain(
-        argc, argv, inputFilename, outputFilename, targetRegistry));
+    return mlir::asMainReturnCode(
+        mlir::MlirOptMain(argc, argv, inputFilename, outputFilename, registry));
 
-  for (int loopIndex = 1; loopIndex < argc; ++loopIndex) {
-    llvm::StringRef arg(argv[loopIndex]);
+  // --default-pipeline: the configuration's tool.pipeline instead of pass
+  // flags (as MlirOptMain(argc, argv, input, output, registry) does
+  // otherwise). A pass given as well would be dropped silently, so it is an
+  // error.
+  for (int i = 1; i < argc; ++i) {
+    llvm::StringRef arg(argv[i]);
     if (!arg.starts_with("-"))
       continue;
     llvm::StringRef name = arg.ltrim('-').split('=').first;
@@ -265,8 +297,7 @@ int main(int argc, char **argv) {
     }
   }
   llvm::InitLLVM initLLVM(argc, argv);
-  mlir::MlirOptMainConfig config =
-      mlir::MlirOptMainConfig::createFromCLOptions();
+  mlir::MlirOptMainConfig config = mlir::MlirOptMainConfig::createFromCLOptions();
   std::string pipeline = circt::hlsest::Config::get().tool.pipeline;
   config.setPassPipelineSetupFn([pipeline](mlir::PassManager &pm) {
     return addPipelineFlags(pipeline, pm);
@@ -282,8 +313,7 @@ int main(int argc, char **argv) {
     llvm::errs() << errorMessage << "\n";
     return 1;
   }
-  if (failed(mlir::MlirOptMain(output->os(), std::move(file), targetRegistry,
-                               config)))
+  if (failed(mlir::MlirOptMain(output->os(), std::move(file), registry, config)))
     return 1;
   output->keep();
   return 0;

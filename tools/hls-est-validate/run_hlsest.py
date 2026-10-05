@@ -115,7 +115,9 @@ def check_shim_supported(shim):
     for i, f in enumerate(flags):
         if f == "-I" and i + 1 < len(flags) and not Path(flags[i + 1]).is_dir():
             sys.exit(f"shim {shim}: include directory {flags[i + 1]} does not exist")
-    needed = [f for f in flags if f in ("--xlx-headers", "--xlx-prelude")]
+    needed = [f for f in flags if f in ("--xlx-headers", "--xlx-prelude",
+                                        "--hls-auto-inline-rotated-size",
+                                        "--hls-keep-misfit-inline-off")]
     if not needed:
         return
     try:
@@ -126,7 +128,8 @@ def check_shim_supported(shim):
     missing = [f for f in needed if f not in out]
     if missing:
         sys.exit(f"shim {shim} needs cgeist {' '.join(missing)}, which {C.CGEIST} does not have "
-                 "(build Polygeist branch w11-integrate and point CGEIST_BIN at it)")
+                 "(build Polygeist branch hls-est-vitis-match (W9r17: w9r17-cgeist) and point "
+                 "CGEIST_BIN at it)")
     # The clang the cgeist embeds must accept the cc1 options the shim passes (-fxlx-bitwidth
     # comes from the llvm-project patch of branch w11-xlx-bitwidth; a cgeist built against an
     # unpatched LLVM has --xlx-headers but rejects it): compile a probe with the shim's flags.
@@ -250,7 +253,7 @@ def source_hash(d, shim):
 
 def select_designs(datasets="", benchmarks=""):
     """The designs of the comma-separated datasets / benchmarks (all when empty)."""
-    designs = D.load_designs()
+    designs = D.heldout_visible(D.load_designs())       # never a locked held-out design (HLS_EST_CATALOG)
     if datasets:
         ds = set(datasets.split(","))
         designs = [d for d in designs if d["dataset"] in ds]
@@ -359,9 +362,13 @@ def sanitize_mlir(path):
 
 # ------------------------------------------------------------- top in MLIR ---
 
+GLOBAL_INIT_PREFIX = "__hls_global_init."  # cgeist's dynamic global initialization, never a top
+
+
 def mlir_functions(mlir_path):
     txt = Path(mlir_path).read_text(errors="replace")
-    return re.findall(r"func\.func\s+(?:private\s+)?@([A-Za-z0-9_$.]+)", txt)
+    return [f for f in re.findall(r"func\.func\s+(?:private\s+)?@([A-Za-z0-9_$.]+)", txt)
+            if not f.startswith(GLOBAL_INIT_PREFIX)]
 
 
 def demangle(names):
@@ -634,7 +641,9 @@ def main():
     ap.add_argument("--shim", default=C.DEFAULT_SHIM,
                     help=f"header shim (default {C.DEFAULT_SHIM}; scalar / exact / real (the real Vitis headers, "
                          "needs a W11 cgeist) / polygeist / a directory)")
-    ap.add_argument("--out", default=str(C.RESULTS_DIR / "hlsest.json"))
+    ap.add_argument("--out", default=None,
+                    help="result JSON (default results/hlsest.json; results/hlsest-<set>.json for --catalog heldout / "
+                         "heldout2)")
     ap.add_argument("--run-id", default=None)
     ap.add_argument("--force-cgeist", action="store_true")
     ap.add_argument("--mlir-from", default=None,
@@ -652,8 +661,13 @@ def main():
     ap.add_argument("--load-plugin", action="append", default=[], metavar="LIB",
                     help="an hls-est plugin library (hls-doc/plugins.md; repeatable)")
     ap.add_argument("--catalog", choices=D.CATALOGS, default=None,
-                    help="design catalogue (designs.py): 'v2' (the HLSFactory 1.1.0 tree, default) or "
-                         "'polygeist' (the Polygeist lit copies; $HLS_EST_CATALOG changes the default)")
+                    help="design catalogue (designs.py): 'v2' (the HLSFactory 1.1.0 tree, default), "
+                         "'polygeist' (the Polygeist lit copies; $HLS_EST_CATALOG changes the default) or "
+                         "'heldout' (the held-out evaluation catalogue, hls-doc/heldout.md: frozen tools, "
+                         "scored once) or 'heldout2' (the second held-out set, hls-doc/heldout2.md)")
+    ap.add_argument("--heldout-split", choices=D.HELDOUT_SPLITS, default="eval",
+                    help="with --catalog heldout / heldout2: the split to run (default 'eval'; 'locked' and 'all' "
+                         "are refused until Peter releases that set's locked split, hls-doc/heldout.md)")
     args = ap.parse_args()
 
     shim = resolve_shim(args.shim)
@@ -666,7 +680,10 @@ def main():
         args.mlir_from_records = {k: v for k, v in prev.items() if k != "_meta"}
         mlir_from_meta = prev.get("_meta") or {}
     catalog = args.catalog or D.default_catalog()
+    args.out = C.heldout_out_path(args.out, catalog, "hlsest")
     designs = D.load_designs(catalog=catalog)
+    if catalog in D.HELDOUT_CATALOGS:
+        designs = D.heldout_select(designs, args.heldout_split, catalog)
     if args.datasets:
         ds = set(args.datasets.split(","))
         designs = [d for d in designs if d["dataset"] in ds]
@@ -684,7 +701,7 @@ def main():
     ghash, bsha = C.hls_est_identity()
     results = {"_meta": {"pipeline": args.pipeline, "shim": str(shim), "hls_est_git": ghash,
                          "cgeist": C.CGEIST, "cgeist_md5": C.cgeist_md5(),
-                         "polygeist_head": C.git_hash(Path(C.CGEIST).resolve().parents[2]),
+                         "polygeist_head": C.cgeist_git(),
                          "hls_est_sha256": bsha, "mlir_from": args.mlir_from,
                          "top_passes": ("none" if args.no_privatize else
                                         "--symbol-privatize=exclude=<top> --symbol-dce prepended per design; "
@@ -704,8 +721,9 @@ def main():
         "config_hash": effective_config_hash(CONFIG_ARGS),
         "config_args": shlex.join(CONFIG_ARGS),
     })
-    results["_meta"]["catalog"] = (f"{catalog} ({D.hlsfactory_root()})" if catalog != "polygeist"
-                                   else catalog)
+    results["_meta"]["catalog"] = (catalog if catalog == "polygeist" else
+                                   f"{catalog} ({D.heldout_root(catalog)}; split {args.heldout_split})"
+                                   if catalog in D.HELDOUT_CATALOGS else f"{catalog} ({D.hlsfactory_root()})")
     if args.mlir_from:
         # The MLIR of a --mlir-from run comes from the earlier run's cgeist, not from the one this
         # process would call (W9 round 8 review defect 9: run G recorded the installed cgeist while its

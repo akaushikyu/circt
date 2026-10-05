@@ -2,3 +2,6 @@
 *.json
 baseline/*.json
 *.lock
+# held-out evaluation outputs (hls-doc/heldout.md: vitis-/hlsest-/compare-/semantics-heldout.*, their CSVs and
+# pages) are never tracked: the held-out results are reported, not committed with the tuning data
+*heldout*

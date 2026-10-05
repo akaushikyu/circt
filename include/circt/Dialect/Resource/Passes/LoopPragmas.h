@@ -83,6 +83,14 @@ constexpr llvm::StringLiteral kLoopFlattenRefusedAttr = "hls.flatten_refused";
 /// their trip counts. A decision record for --bram-debug; no estimate reads
 /// it.
 constexpr llvm::StringLiteral kLoopAutoUnrolledAttr = "hls.auto_unrolled";
+/// `hls.promoted_element_iter_args = array<i64: ...>` on a loop (written by
+/// --auto-pipeline-unroll's register promotion): the indices of its iter_args
+/// that carry an array element promoted to a register (one load before the
+/// loop, one store after). --convert-affine-to-loopschedule bounds the II of
+/// such a recurrence through two or more multi-cycle operations by its chain
+/// latency + 1 (VITIS_NOTES N160).
+constexpr llvm::StringLiteral kLoopPromotedElementIterArgsAttr =
+    "hls.promoted_element_iter_args";
 /// `hls.scheduler = "<name>"` on a pipelined loop (written by
 /// --convert-affine-to-loopschedule, carried onto the loopschedule.pipeline
 /// op): the modulo scheduler that produced its schedule, "simplex" or

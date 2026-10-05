@@ -18,13 +18,30 @@
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/Dialect/Utils/StaticValueUtils.h"
 #include "mlir/IR/AffineExprVisitor.h"
 #include "mlir/IR/IntegerSet.h"
+#include "mlir/Interfaces/SideEffectInterfaces.h"
 
 using namespace mlir;
 using namespace mlir::affine;
+
+/// getConstantIntValue for values of at most 64 bits: it asserts on a wider
+/// constant (OPEN_ISSUES O208 H3, security ecdsa_nistp256_sign's i256), which
+/// is treated as unknown here.
+static std::optional<int64_t> smallConstantInt(OpFoldResult v) {
+  if (auto value = dyn_cast<Value>(v))
+    if (auto it = dyn_cast<IntegerType>(value.getType());
+        it && it.getWidth() > 64)
+      return std::nullopt;
+  if (auto attr = dyn_cast<Attribute>(v))
+    if (auto ia = dyn_cast<IntegerAttr>(attr);
+        ia && ia.getValue().getBitWidth() > 64)
+      return std::nullopt;
+  return getConstantIntValue(v);
+}
 
 namespace {
 /// What a guard is once its constant operands are substituted.
@@ -34,7 +51,7 @@ enum class GuardTruth { Unknown, AlwaysTrue, AlwaysFalse };
 /// The constant value of an if operand: an arith.constant, or an
 /// affine.apply whose operands are all constants.
 static std::optional<int64_t> constantOperand(Value v) {
-  if (std::optional<int64_t> c = getConstantIntValue(v))
+  if (std::optional<int64_t> c = smallConstantInt(v))
     return c;
   // Nested applies and index arithmetic on constants (an unrolled copy's
   // `apply(d0 * 16)(apply(d0 + 6)(%c0))`, nikhil_p lab2 kernel_attention_V):
@@ -49,7 +66,7 @@ static std::optional<int64_t> constantOperand(Value v) {
     return std::nullopt;
   SmallVector<Attribute> operands;
   for (Value o : apply.getMapOperands()) {
-    std::optional<int64_t> c = getConstantIntValue(o);
+    std::optional<int64_t> c = smallConstantInt(o);
     if (!c)
       return std::nullopt;
     operands.push_back(IntegerAttr::get(o.getType(), *c));
@@ -132,9 +149,9 @@ static std::optional<std::pair<int64_t, int64_t>> ivBounds(Value v) {
   auto forOp = dyn_cast<scf::ForOp>(arg.getOwner()->getParentOp());
   if (!forOp || forOp.getInductionVar() != v)
     return std::nullopt;
-  std::optional<int64_t> lb = getConstantIntValue(forOp.getLowerBound());
-  std::optional<int64_t> ub = getConstantIntValue(forOp.getUpperBound());
-  std::optional<int64_t> st = getConstantIntValue(forOp.getStep());
+  std::optional<int64_t> lb = smallConstantInt(forOp.getLowerBound());
+  std::optional<int64_t> ub = smallConstantInt(forOp.getUpperBound());
+  std::optional<int64_t> st = smallConstantInt(forOp.getStep());
   if (!lb || !ub || !st || *st <= 0)
     return std::nullopt;
   return std::make_pair(*lb, *ub - 1);
@@ -171,7 +188,7 @@ struct ConditionBuilder {
   AffineExpr expr(Value v, unsigned depth = 0) {
     if (depth > 32)
       return AffineExpr();
-    if (std::optional<int64_t> c = getConstantIntValue(v))
+    if (std::optional<int64_t> c = smallConstantInt(v))
       return getAffineConstantExpr(*c, ctx);
     Operation *def = v.getDefiningOp();
     if (!def)
@@ -209,14 +226,14 @@ struct ConditionBuilder {
       auto rem = sel.getFalseValue().getDefiningOp<arith::RemSIOp>();
       auto add = sel.getTrueValue().getDefiningOp<arith::AddIOp>();
       std::optional<int64_t> c =
-          rem ? getConstantIntValue(rem.getRhs()) : std::nullopt;
+          rem ? smallConstantInt(rem.getRhs()) : std::nullopt;
       if (cmp && rem && add && c && *c > 0 &&
           cmp.getPredicate() == arith::CmpIPredicate::slt &&
           cmp.getLhs() == rem.getResult() &&
-          getConstantIntValue(cmp.getRhs()) == 0 &&
+          smallConstantInt(cmp.getRhs()) == 0 &&
           llvm::is_contained(add->getOperands(), rem.getResult()) &&
           llvm::any_of(add->getOperands(), [&](Value o) {
-            return getConstantIntValue(o) == *c;
+            return smallConstantInt(o) == *c;
           })) {
         AffineExpr x = sub(rem.getLhs());
         return x ? x % *c : AffineExpr();
@@ -225,7 +242,7 @@ struct ConditionBuilder {
     }
     if (isa<arith::RemSIOp, arith::RemUIOp, arith::DivSIOp, arith::DivUIOp,
             arith::FloorDivSIOp>(def)) {
-      std::optional<int64_t> c = getConstantIntValue(def->getOperand(1));
+      std::optional<int64_t> c = smallConstantInt(def->getOperand(1));
       AffineExpr x = sub(def->getOperand(0));
       if (!c || *c <= 0 || !x)
         return leaf(v);
@@ -351,7 +368,7 @@ struct ConditionBuilder {
 /// variables): kernel w9r11rev_fg_mod, `if ((j * 4 + k) % 8 == 0)` in an
 /// unrolled k loop is `arith.remsi` + `scf.if`; copies k = 1..3 never run.
 static GuardTruth evaluateGuard(scf::IfOp ifOp) {
-  if (std::optional<int64_t> c = getConstantIntValue(ifOp.getCondition()))
+  if (std::optional<int64_t> c = smallConstantInt(ifOp.getCondition()))
     return *c ? GuardTruth::AlwaysTrue : GuardTruth::AlwaysFalse;
   // A comparison of values computed from constants only (an unrolled copy's
   // `index_cast(k) != 3`, Dehazing tile_median's window counters; VITIS_NOTES
@@ -378,6 +395,44 @@ static GuardTruth evaluateGuard(scf::IfOp ifOp) {
   if (cb.empty(*f))
     return GuardTruth::AlwaysTrue;
   return GuardTruth::Unknown;
+}
+
+/// An affine.if whose every constraint holds for all values of the loop
+/// induction variables it is computed from (inside their constant bounds):
+/// the guard `shift >= 0` that the real headers' `ap_uint >> int` lowers to,
+/// with `shift` the counter of a loop from 0 (VITIS_NOTES N127: kernel
+/// w9r16p_sh_guard, Vitis reads the element once; pp4fpgas huffman sort).
+/// LLVM's range analysis folds it before Vitis schedules; without the fold
+/// both arms read the same address and count as two reads. Key
+/// tool.hls.pipeline_decision.fold_domain_true_guards.
+static GuardTruth evaluateGuardOverDomain(AffineIfOp ifOp) {
+  if (!circt::hlsest::Config::get()
+           .tool.hls.pipelineDecision.foldDomainTrueGuards)
+    return GuardTruth::Unknown;
+  IntegerSet set = ifOp.getIntegerSet();
+  unsigned numDims = set.getNumDims();
+  ConditionBuilder cb(ifOp.getContext());
+  SmallVector<AffineExpr> dims, syms;
+  for (auto [i, v] : llvm::enumerate(ifOp.getOperands())) {
+    AffineExpr e = cb.expr(v);
+    if (!e)
+      return GuardTruth::Unknown;
+    (i < numDims ? dims : syms).push_back(e);
+  }
+  if (!llvm::any_of(cb.leaves, [](Value v) { return ivBounds(v).has_value(); }))
+    return GuardTruth::Unknown;
+  for (unsigned k = 0, e = set.getNumConstraints(); k < e; ++k) {
+    AffineExpr c = set.getConstraint(k).replaceDimsAndSymbols(dims, syms);
+    // The constraint fails somewhere when its negation has a point.
+    bool holds = set.isEq(k) ? cb.emptyConj({c - 1}, {false}) &&
+                                   cb.emptyConj({-c - 1}, {false})
+                             : cb.emptyConj({-c - 1}, {false});
+    if (!holds)
+      return GuardTruth::Unknown;
+  }
+  if (!cb.requirementsHold())
+    return GuardTruth::Unknown;
+  return GuardTruth::AlwaysTrue;
 }
 
 /// Replace `ifOp` by the operations of `block` (or by nothing).
@@ -487,6 +542,81 @@ static void countOnLoop(Operation *op, StringRef what, unsigned n) {
                                        (prev ? prev.getInt() : 0) + n));
 }
 
+/// Whether `v` is defined outside `ifOp` (so a load using it can move
+/// before the if).
+static bool definedOutside(Value v, Operation *ifOp) {
+  Operation *owner = v.getParentBlock()->getParentOp();
+  return !ifOp->isAncestor(owner);
+}
+
+/// The memory reads at the top level of `arm` that run before its first
+/// operation that may write memory (or has unknown effects): a memref.load or
+/// affine.load whose memref and indices are defined outside the if.
+static SmallVector<Operation *> leadingLoads(Block *arm, Operation *ifOp) {
+  SmallVector<Operation *> out;
+  for (Operation &op : *arm) {
+    if (isa<memref::LoadOp, AffineLoadOp>(op)) {
+      if (llvm::all_of(op.getOperands(),
+                       [&](Value v) { return definedOutside(v, ifOp); }))
+        out.push_back(&op);
+      continue;
+    }
+    if (isMemoryEffectFree(&op))
+      continue;
+    auto iface = dyn_cast<MemoryEffectOpInterface>(&op);
+    if (!iface || iface.hasEffect<MemoryEffects::Write>() ||
+        op.getNumRegions() != 0)
+      break;
+  }
+  return out;
+}
+
+/// Two loads of the same element: same memref and indices (and map).
+static bool sameElement(Operation *a, Operation *b) {
+  if (a->getName() != b->getName() || a->getOperands() != b->getOperands())
+    return false;
+  if (auto la = dyn_cast<AffineLoadOp>(a))
+    return la.getAffineMap() == cast<AffineLoadOp>(b).getAffineMap();
+  return true;
+}
+
+/// A load of the same element in both arms of an if, before either arm
+/// writes memory, is read once before the if: LLVM's SimplifyCFG hoists the
+/// common instructions of both successors before Vitis schedules
+/// (VITIS_NOTES N127: kernels w9r16p_sh_guard, w9r16rv_sh_neg (the guard of
+/// an ap_uint shift can fail) and w9r16rv_sh_var (run-time bound): Vitis
+/// reads `s_frequency` once in each; pp4fpgas huffman sort). Key
+/// tool.hls.pipeline_decision.hoist_common_arm_loads.
+static unsigned hoistCommonArmLoads(Operation *ifOp) {
+  Block *thenBlock, *elseBlock;
+  if (auto a = dyn_cast<AffineIfOp>(ifOp)) {
+    if (!a.hasElse())
+      return 0;
+    thenBlock = a.getThenBlock();
+    elseBlock = a.getElseBlock();
+  } else {
+    auto sIf = cast<scf::IfOp>(ifOp);
+    thenBlock = sIf.thenBlock();
+    elseBlock = sIf.elseBlock();
+    if (!elseBlock)
+      return 0;
+  }
+  SmallVector<Operation *> elseLoads = leadingLoads(elseBlock, ifOp);
+  unsigned hoisted = 0;
+  for (Operation *load : leadingLoads(thenBlock, ifOp)) {
+    auto it = llvm::find_if(
+        elseLoads, [&](Operation *e) { return e && sameElement(load, e); });
+    if (it == elseLoads.end())
+      continue;
+    load->moveBefore(ifOp);
+    (*it)->getResult(0).replaceAllUsesWith(load->getResult(0));
+    (*it)->erase();
+    *it = nullptr;
+    ++hoisted;
+  }
+  return hoisted;
+}
+
 circt::hls_analysis::FoldedGuards
 circt::hls_analysis::foldConstantAffineIfs(Operation *root) {
   SmallVector<Operation *> ifs;
@@ -502,6 +632,8 @@ circt::hls_analysis::foldConstantAffineIfs(Operation *root) {
     Block *thenBlock, *elseBlock;
     if (auto ifOp = dyn_cast<AffineIfOp>(op)) {
       truth = evaluateGuard(ifOp);
+      if (truth == GuardTruth::Unknown)
+        truth = evaluateGuardOverDomain(ifOp);
       thenBlock = ifOp.getThenBlock();
       elseBlock = ifOp.hasElse() ? ifOp.getElseBlock() : nullptr;
       if (truth == GuardTruth::Unknown) {
@@ -523,5 +655,56 @@ circt::hls_analysis::foldConstantAffineIfs(Operation *root) {
     inlineArm(op, truth == GuardTruth::AlwaysTrue ? thenBlock : elseBlock);
     ++result.folded;
   }
+  if (circt::hlsest::Config::get()
+          .tool.hls.pipelineDecision.hoistCommonArmLoads) {
+    SmallVector<Operation *> left;
+    root->walk([&](Operation *op) {
+      if (isa<AffineIfOp, scf::IfOp>(op))
+        left.push_back(op);
+    });
+    for (Operation *op : left)
+      result.hoistedLoads += hoistCommonArmLoads(op);
+  }
   return result;
+}
+
+unsigned circt::hls_analysis::foldUnrolledZeroProducts(Operation *root) {
+  SmallVector<arith::MulIOp> zero;
+  root->walk([&](arith::MulIOp mul) {
+    Type t = mul.getType();
+    if (!t.isIndex() && (!t.isSignlessInteger() || t.getIntOrFloatBitWidth() > 64))
+      return;
+    for (Value operand : mul->getOperands()) {
+      Type ot = operand.getType();
+      if (!ot.isIndex() && ot.getIntOrFloatBitWidth() > 64)
+        continue;
+      if (std::optional<int64_t> c = getConstantIndexValue(operand);
+          c && *c == 0) {
+        zero.push_back(mul);
+        return;
+      }
+    }
+  });
+  for (arith::MulIOp mul : zero) {
+    OpBuilder b(mul);
+    Value z = arith::ConstantOp::create(b, mul.getLoc(), mul.getType(),
+                                        b.getZeroAttr(mul.getType()));
+    mul.getResult().replaceAllUsesWith(z);
+    SmallVector<Operation *> work;
+    for (Value operand : mul->getOperands())
+      if (Operation *def = operand.getDefiningOp())
+        work.push_back(def);
+    mul.erase();
+    // What only fed the product is dead now (a load: no port).
+    while (!work.empty()) {
+      Operation *op = work.pop_back_val();
+      if (!isOpTriviallyDead(op))
+        continue;
+      for (Value operand : op->getOperands())
+        if (Operation *def = operand.getDefiningOp())
+          work.push_back(def);
+      op->erase();
+    }
+  }
+  return zero.size();
 }

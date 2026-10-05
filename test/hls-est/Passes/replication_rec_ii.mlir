@@ -110,7 +110,7 @@ func.func @independent(%a: memref<64x8xf32>, %out: memref<64xf32>) {
 // PROMOTE:       affine.for %{{.*}} = 0 to 64 iter_args
 // PROMOTE-NOT:     affine.load %[[ACC]][
 // PROMOTE-NOT:     affine.store %{{.*}}, %[[ACC]][
-// PROMOTE:       } {hls.pipeline = [{II = 0 : i32, source = "auto"}]}
+// PROMOTE:       } {hls.pipeline = [{II = 0 : i32, source = "auto"}], hls.promoted_element_iter_args = array<i64: {{[0-9, ]+}}>}
 // PROMOTE-COUNT-8: affine.store %{{.*}}, %[[ACC]][
 func.func @promoted(%a: memref<64x8xf32>, %out: memref<8xf32>) {
   %acc = memref.alloca() {hls.preserve, polygeist.varname = "acc"} : memref<8xf32>

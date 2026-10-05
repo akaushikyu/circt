@@ -193,6 +193,8 @@ def find_verilog_dir(where, results=None):
     `Vitis failed` (the ground-truth run has no numbers to match a work dir against; a
     --make-rtl re-run would fail the same way), `no RTL kept` (the harvest keeps no RTL and no
     leftover work dir matches; --make-rtl helps)."""
+    import designs as D                  # noqa: E402  (harness module: the held-out lock)
+    D.heldout_refuse_locked_key(where)
     p = Path(where)
     if p.is_dir():
         for cand in (p, p / "syn" / "verilog", p / "hls" / "syn" / "verilog", p / "hls" / "hls" / "syn" / "verilog",
@@ -241,8 +243,10 @@ def make_rtl(key, timeout=3600):
     """Run vitis_adhoc.py for a results key with --keep so that exp/<bench>/hls/hls/syn/verilog exists."""
     import designs              # noqa: E402  (harness modules; imported lazily)
     import run_vitis as RV      # noqa: E402
+    designs.heldout_refuse_locked_key(key)
     ds, bench = key.split("/", 1)
-    cands = [d for d in designs.load_designs() if d["dataset"] == ds and d["benchmark"] == bench]
+    cands = [d for d in designs.heldout_visible(designs.load_designs())
+             if d["dataset"] == ds and d["benchmark"] == bench]
     if not cands:
         return 2, f"{key}: not in designs.load_designs()"
     d = cands[0]

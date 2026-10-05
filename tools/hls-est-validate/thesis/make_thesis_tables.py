@@ -26,6 +26,7 @@ Outputs under --out:
 """
 import argparse
 import json
+import os
 import re
 import statistics
 import sys
@@ -126,7 +127,7 @@ def headline(rows, runs, subset, capacity):
 
 
 HEAD_COLS = [("designs", "designs"), ("cgeist_ok", "compiled"), ("hlsest_ok", "estimated"), ("compared", "compared"),
-             ("exact", "exact"), ("in_band", "in band"), ("under", "under"), ("over_gt15", "over >15 %"),
+             ("exact", "exact"), ("in_band", "in band"), ("under", "under"), ("over_gt_band", "over >" + T.BAND_TEXT),
              ("abs_err", "Σ|err|"), ("vitis_bram_total", "Σ Vitis"), ("weighted_err_pct", "weighted err %"),
              ("mean_abs_rel_pct", "mean |rel| %"), ("median_abs_rel_nonexact_pct", "median |rel| % (non-exact)")]
 
@@ -235,7 +236,7 @@ def baseline_view(rows, base, which):
 
 def baseline_table(h_all, b0, b1, label):
     cols = [("compared", "compared"), ("exact", "exact"), ("in_band", "in band"), ("under", "under"),
-            ("over_gt15", "over >15 %"), ("abs_err", "Σ|err|"), ("weighted_err_pct", "weighted err %")]
+            ("over_gt_band", "over >" + T.BAND_TEXT), ("abs_err", "Σ|err|"), ("weighted_err_pct", "weighted err %")]
     rows = [["B0: declared arrays, RAMB18 formula, two ports", *[fmt(b0[k]) for k, _ in cols]],
             ["B1: B0 + LUT RAM below 1024 bits (N5)", *[fmt(b1[k]) for k, _ in cols]],
             ["hls-est (all inferred decisions)", *[fmt(h_all[k]) for k, _ in cols]]]
@@ -271,11 +272,11 @@ def per_dataset_table(rows, label):
     for ds in sorted({r["dataset"] for r in rows}):
         s = T.summarize([r for r in rows if r["dataset"] == ds])
         out.append([ds, fmt(s["designs"]), fmt(s["cgeist_ok"]), fmt(s["hlsest_ok"]), fmt(s["compared"]),
-                    fmt(s["exact"]), fmt(s["in_band"]), fmt(s["under"]), fmt(s["over_gt15"]), fmt(s["abs_err"]),
+                    fmt(s["exact"]), fmt(s["in_band"]), fmt(s["under"]), fmt(s["over_gt_band"]), fmt(s["abs_err"]),
                     fmt(s["vitis_bram_total"]), fmt(s["weighted_err_pct"])])
     return Table("per_dataset", f"Accuracy per HLSFactory_v2 dataset (run {label})",
                  ["dataset", "designs", "compiled", "estimated", "compared", "exact", "in band", "under",
-                  "over >15 %", "Σ|err|", "Σ Vitis", "weighted err %"], "l" + "r" * 11, out, label)
+                  "over >" + T.BAND_TEXT, "Σ|err|", "Σ Vitis", "weighted err %"], "l" + "r" * 11, out, label)
 
 
 def history(manifest, vitis, subset):
@@ -558,14 +559,14 @@ def fig_errors(plt, rows, out):
     fig, (a, b) = plt.subplots(1, 2, figsize=(6.6, 2.7))
     clipped = [max(-100.0, min(200.0, x)) for x in nonexact]
     a.hist(clipped, bins=range(-100, 205, 5), color=BLUE, edgecolor="white", linewidth=0.5)
-    a.axvspan(0, 15, color=AQUA, alpha=0.15, linewidth=0)
+    a.axvspan(0, 100 * T.BAND_OVER, color=AQUA, alpha=0.15, linewidth=0)
     a.set_xlabel("relative error of non-exact designs (%)\n(clipped to [−100, 200])")
     a.set_ylabel("designs")
     xs = sorted(abs(x) for x in rel)
     n = len(xs)
     b.step(xs, [(i + 1) / n for i in range(n)], where="post", color=BLUE)
-    b.axvline(15, color=ORANGE, linewidth=1.0, linestyle="--")
-    b.text(16, 0.05, "15 %", color=INK2, fontsize=8)
+    b.axvline(100 * T.BAND_OVER, color=ORANGE, linewidth=1.0, linestyle="--")
+    b.text(100 * T.BAND_OVER * 1.07, 0.05, T.BAND_TEXT, color=INK2, fontsize=8)
     b.set_xscale("symlog", linthresh=1)
     b.set_xlim(0, max(xs) * 1.2)
     b.set_xlabel("|relative error| (%)")
@@ -578,7 +579,7 @@ def fig_scatter(plt, rows, out):
     comp = [r for r in rows if r["status"] == "compared"]
     fig, ax = plt.subplots(figsize=(4.4, 4.2))
     cats = (("exact", BLUE, lambda r: r["band"] == "exact"),
-            ("over ≤ 15 %", AQUA, lambda r: r["band"] == "over<=15%"),
+            ("over ≤ " + T.BAND_TEXT, AQUA, lambda r: r["band"] == T.make_compare_csv.BAND_IN_LABEL),
             ("out of band", ORANGE, lambda r: r["band"] not in T.IN_BAND))
     for lab, col, f in cats:
         sel = [r for r in comp if f(r)]
@@ -586,7 +587,7 @@ def fig_scatter(plt, rows, out):
                    edgecolor="white", linewidth=0.5, label=f"{lab} ({len(sel)})", zorder=3 if lab != "exact" else 2)
     hi = max(max(r["vitis"], r["hlsest"]) for r in comp) * 2
     ax.plot([1, hi], [1, hi], color=INK2, linewidth=0.8)
-    ax.plot([1, hi], [1.15, 1.15 * hi], color=INK2, linewidth=0.8, linestyle="--")
+    ax.plot([1, hi], [1 + T.BAND_OVER, (1 + T.BAND_OVER) * hi], color=INK2, linewidth=0.8, linestyle="--")
     ax.set_xscale("log")
     ax.set_yscale("log")
     ax.set_xlabel("Vitis BRAM_18K + 1")
@@ -645,6 +646,53 @@ def render(template, numbers, tables):
             raise KeyError(f"template placeholder {{{{{key}}}}} has no value in numbers.json")
         return str(numbers[key])
     return re.sub(r"\{\{([A-Za-z0-9_:.]+)\}\}", sub, template)
+
+
+def heldout_views(manifest, key="heldout"):
+    """A held-out split (hls-doc/heldout.md) scored by each manifest entry of `key` ('heldout': the eval split,
+    'heldout_locked': the locked split, released by Peter on 2026-10-27 and scored once with the frozen and the
+    round-22 tools before round 23 used it): per entry the run_hlsest.py results and compare.py outputs of the
+    ForgeHLS and Vitis_Libraries designs. Counts are taken from those files."""
+    out = []
+    for e in manifest.get(key, []):
+        designs = ingested = compared = exact = in_band = abs_err = nonzero = nonzero_exact = 0
+        for run_path in e["runs"]:
+            with open(T.expand(os.path.expanduser(run_path))) as f:
+                run = json.load(f)
+            recs = [v for k, v in run.items() if not k.startswith("_") and isinstance(v, dict)]
+            designs += len(recs)
+            ingested += sum(1 for v in recs if v.get("status") == "ok")
+        for cmp_path in e["cmps"]:
+            with open(T.expand(os.path.expanduser(cmp_path))) as f:
+                rows = json.load(f)["rows"]
+            keys = set()
+            for run_path in e["runs"]:
+                with open(T.expand(os.path.expanduser(run_path))) as f:
+                    keys |= {k for k in json.load(f) if not k.startswith("_")}
+            for r in rows:
+                if r["key"] not in keys or r.get("status") != "compared":
+                    continue
+                compared += 1
+                d, v = r["diff"], r["vitis_bram"]
+                exact += d == 0
+                in_band += d == 0 or (d > 0 and d <= T.BAND_OVER * v)
+                abs_err += abs(d)
+                if v > 0:
+                    nonzero += 1
+                    nonzero_exact += d == 0
+        out.append(dict(label=e["label"], tools=e["tools"], designs=designs, ingested=ingested, compared=compared,
+                        exact=exact, in_band=in_band, abs_err=abs_err, nonzero=nonzero, nonzero_exact=nonzero_exact))
+    return out
+
+
+def heldout_table(views, name="heldout",
+                  title="Held-out eval split (ForgeHLS + Vitis_Libraries L1), validation data from round 22 on",
+                  source="the manifest's 'heldout' entries"):
+    rows = [[v["label"], v["tools"], fmt(v["designs"]), fmt(v["ingested"]), fmt(v["compared"]), fmt(v["exact"]),
+             fmt(v["in_band"]), fmt(v["abs_err"]), f"{v['nonzero_exact']} / {v['nonzero']}"] for v in views]
+    return Table(name, title,
+                 ["scoring", "tools", "designs", "estimated", "compared", "exact", "in band", "Σ|err|",
+                  "exact / Vitis BRAM > 0"], ["l", "l", "r", "r", "r", "r", "r", "r", "r"], rows, source)
 
 
 def flat_numbers(prefix, d, out, digits=1):
@@ -710,7 +758,10 @@ def main():
         headline_table(h, label, capacity), per_array_table(pa, label), baseline_table(h["all"], b0, b1, label),
         per_dataset_table(rows, label), history_table(hist), rule_table(contrib, index),
         ablation_table(ab_ref, ab), timing_table(t), oob_table(groups, desc, label, manifest),
-        oob_design_table(oob, manifest))}
+        oob_design_table(oob, manifest), heldout_table(heldout_views(manifest)),
+        heldout_table(heldout_views(manifest, "heldout_locked"), "heldout_locked",
+                      "Held-out locked split (ForgeHLS + Vitis_Libraries L1): the test set until its release on "
+                      "2026-10-27, development data in round 23", "the manifest's 'heldout_locked' entries"))}
     for tb in tables.values():
         tb.write(out)
 
@@ -747,6 +798,14 @@ def main():
     numbers["oob_changed_since_ranking"] = fmt(sum(g["changed"] for g in groups.values()))
     for view in ("all", "distinct", "nonzero", "distinct_nonzero", "fits", "subset"):
         flat_numbers(f"{view}_", h[view], numbers)
+    for i, v in enumerate(heldout_views(manifest)):
+        flat_numbers(f"ho{i}_", {k: x for k, x in v.items() if isinstance(x, int)}, numbers)
+        if v.get("compared"):
+            numbers[f"ho{i}_exact_pct"] = fmt(100.0 * v["exact"] / v["compared"], 1)
+    for i, v in enumerate(heldout_views(manifest, "heldout_locked")):
+        flat_numbers(f"lk{i}_", {k: x for k, x in v.items() if isinstance(x, int)}, numbers)
+        if v.get("compared"):
+            numbers[f"lk{i}_exact_pct"] = fmt(100.0 * v["exact"] / v["compared"], 1)
     flat_numbers("pa_", pa, numbers)
     numbers["pa_exact_artefact_only"] = fmt(pa["exact_with_artefacts"] - pa["exact_real_mismatch"])
     flat_numbers("b0_", b0, numbers)
@@ -818,6 +877,12 @@ def main():
         numbers[f"oob{i + 1}_class"] = class_name(k, manifest)
         numbers[f"oob{i + 1}_designs"] = len(g["designs"])
         numbers[f"oob{i + 1}_sumd"] = fmt(g["sum_abs_d"])
+    # The list of every class, largest first: the prose must not assume a
+    # number of classes (W9 round 18 review fixes: two designs, two classes).
+    numbers["oob_class_list"] = "; ".join(
+        f"{class_name(k, manifest)} ({len(g['designs'])} design{'s' if len(g['designs']) != 1 else ''}, "
+        f"Σ|d| {fmt(g['sum_abs_d'])})" for k, g in big) or "none"
+    numbers["oob_class_names"] = ", ".join(class_name(k, manifest) for k, _ in big) or "none"
     numbers["oob_sumd"] = fmt(sum(abs(r["diff"]) for r in oob))
     numbers["oob_under"] = fmt(sum(r["diff"] < 0 for r in oob))
     for k in ("confirmed", "confirmed_kernels", "confirmed_corpus", "partly", "unconfirmed", "method", "notes",

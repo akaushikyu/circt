@@ -261,6 +261,21 @@ struct ReplicationConfig {
   /// route). Off by default: on FocusedACO it needs N114 (exclusive predicated
   /// loads share a port slot, unconfirmed) to stay in band
   bool userRam1wnrReplicable = false;
+  /// Steered reads (bank chosen at run time) in different arms of one if /
+  /// else-if chain share a port slot (VITIS_NOTES N124).
+  bool exclusiveSteeredReadsShareSlot = false;
+  /// A select of two loaded values of one array whose arm values are also
+  /// used elsewhere (a running maximum) loads the selected address once more:
+  /// one more read per select in the RAM_1WNR copy count (VITIS_NOTES N163).
+  bool selectOfLoadsReload = false;
+  /// A RAM_1WNR bank's independent reads in one state of sequential code
+  /// count toward its copies (VITIS_NOTES N164).
+  bool sequentialStateReads = false;
+  /// A user bind_storage of a plain RAM type (ram_1p, ram_2p, ram_t2p,
+  /// ram_s2p) pins the kind: no RAM_1WNR copies, the bank keeps the type's
+  /// ports in the scheduler (the II rises), and a ram_s2p bank is priced in
+  /// simple-dual-port mode (VITIS_NOTES N173).
+  bool userPlainRamPinsKind = false;
 };
 
 struct RomConfig {
@@ -269,6 +284,16 @@ struct RomConfig {
   /// A sequential scope reads a ROM in one state as often as it has
   /// independent reads at one dependence depth (W9r12, VITIS_NOTES N93).
   bool sequentialStateReads = true;
+  /// A kept callee pipelined at its caller loop's II spreads its ROM reads
+  /// over the II's slots (W9r19, VITIS_NOTES N144).
+  bool functionPipelineReads = true;
+  /// A ROM read by several kept functions is one copy per reading module
+  /// (W9r19, VITIS_NOTES N136 (a), (c), (d)).
+  bool moduleCopies = true;
+  /// ... also when their common parent reads it itself (N136 (b)); off until
+  /// the parent's own copy is priced as Vitis schedules it (OPEN_ISSUES
+  /// O130: machsuite aes_table's top copy).
+  bool moduleCopiesParentReads = false;
 };
 
 struct MemoryArchitectureConfig {
@@ -333,9 +358,25 @@ struct ImplicitBufferConfig {
   /// The read FIFO's width is rounded up to a power of two (an AXI data bus
   /// is 2^n bytes wide; N63, kernels w9r8p_mx_i9 / mx_i3 / mx_s5).
   bool readFifoPowerOfTwoWidth = true;
+  /// A load of a port element whose only use is a part-select
+  /// read-modify-write stored back to the same element, every byte of it
+  /// either kept whole or overwritten, is no read: Vitis writes the word with
+  /// byte strobes (VITIS_NOTES N152, kernels w9r21p_c1..c5).
+  bool readFifoStrobedPartWrites = true;
+  /// A bundle with a read port under `#pragma HLS cache` has this many
+  /// blocks of read cache in its adapter, in place of the read FIFO
+  /// (VITIS_NOTES N179); 0: the pragma is ignored.
+  int64_t readCacheBram = 0;
   int64_t writeBufferFreeMaxBurst = 16;
   int64_t writeBufferPortWidthBits = 18;
   int64_t writeBufferConfirmedMinBurst = 32;
+  /// A write buffer of max_write_burst_length x element bits below this many
+  /// bits is LUTRAM, 0 BRAM (VITIS_NOTES N158, kernels w9r21p_i1 / i2); 0:
+  /// no such test.
+  int64_t writeBufferMinBramBits = 1024;
+  /// The write buffer's BRAM is ceil(element bits / port_width_bits), the
+  /// widest element not padded to the bus minimum (VITIS_NOTES N158 (b)).
+  bool writeBufferElementWidth = true;
   std::string unresolvedCall; ///< rw | none
   /// Read / write requests one bundle accepts per cycle from a pipelined
   /// loop: a modulo-scheduler resource per bundle and direction (VITIS_NOTES
@@ -364,9 +405,15 @@ struct StreamConfig {
   /// A stream's width is cgeist's hls.stream_element_bits when present (the
   /// packed C++ element: bool 1 bit, VITIS_NOTES N58).
   bool declaredElementBits = true;
+  /// A function-static stream of a struct is as wide as the struct's C
+  /// storage, padding included (VITIS_NOTES N141).
+  bool staticStructStorageBits = true;
   /// A local array of a dataflow region with `#pragma HLS stream depth=D`
   /// is one FIFO of depth D at the element width (VITIS_NOTES N67).
   bool streamPragmaArrays = true;
+  /// A `stream depth` pragma naming one element of an array of streams
+  /// (`variable = s[0]`) deepens that element only (VITIS_NOTES N177).
+  bool elementDepthPragmas = false;
 };
 
 /// Dataflow ping-pong channels.
@@ -402,6 +449,9 @@ struct PipelineDecisionConfig {
   /// universal) once an unrolled copy's constant index is substituted loses
   /// its dead arm (VITIS_NOTES N89).
   bool foldUnrolledGuards = true;
+  /// After the unroll decisions, a product with a constant-zero operand (an
+  /// unrolled copy's counter 0) is the constant 0 (W9r23 review D12).
+  bool foldUnrolledZeroProducts = true;
   /// A `pipeline off` innermost loop stays sequential in the scheduler
   /// instead of being scheduled as a pipeline (W9 round 12 review).
   bool pipelineOffSequential = true;
@@ -409,6 +459,16 @@ struct PipelineDecisionConfig {
   /// sub-loop unroll makes the parent's next index a subscript of a
   /// multi-dimensional array (VITIS_NOTES N96).
   bool doWhileFlattenRefusal = true;
+  /// External library functions whose core has loops of its own (Vitis'
+  /// sin_or_cos_double / sin_or_cos_float): a loop calling one is neither
+  /// pipelined nor unrolled, nor are the loops around it (VITIS_NOTES N169).
+  std::vector<std::string> libraryCallsWithLoops;
+  /// External library functions (C names) whose Vitis core has no loop of
+  /// its own, so a loop calling one is pipelined like any other: timed with
+  /// the libm_call operator class (VITIS_NOTES N169). A name not listed
+  /// leaves the loop sequential (W9 round 22 review: fmod / atan2 cores have
+  /// loops and their callers are not pipelined).
+  std::vector<std::string> pipelinedLibraryCalls;
   /// ... only for a subscript made by a sub-loop of at least this trip count.
   int64_t doWhileMinSubLoopTrip = 3;
   /// A user `unroll factor=F` (1 < F) on an scf.for with a run-time trip count is applied as F guarded copies of the body in a loop of step F*step (copy u runs under iv + u*step < ub, Vitis keeps the exit test in the unrolled body); a copy's index into a cyclic partition is then not a constant bank, so e
@@ -426,6 +486,27 @@ struct PipelineDecisionConfig {
   /// read 7 times on banks 0..3 and 6 times on 4..15 as in Vitis; off: only a
   /// constant or a one-level apply of constants)
   bool foldNestedConstantGuards = true;
+  /// An affine.if that holds on its loops' whole domain folds (N127).
+  bool foldDomainTrueGuards = false;
+  /// A load of one element in both arms of an if is read once before it
+  /// (N127, W9r16 review).
+  bool hoistCommonArmLoads = false;
+  /// A pipelined loop promotes only locations invariant over the loops
+  /// flattened into it (W9r16 review, gp_flat).
+  bool promoteNestInvariantOnly = false;
+  /// After LICM's store after a promoted loop: loads of that element that
+  /// follow read the stored value, and the store before the loop and the
+  /// promoted store itself are deleted when overwritten before any read
+  /// (VITIS_NOTES N166 (a)).
+  bool promotedStoreCleanup = false;
+  /// The register promotion also rewrites accesses of the element nested in
+  /// if-arms of the loop body: the value is carried through the if as a
+  /// result (LLVM LICM promotes a conditional store to a non-escaping local;
+  /// W9 round 22 review kernel w9r22rv_k09_condacc).
+  bool promoteConditionalAccesses = false;
+  /// A perfect inner loop with a nest-invariant variable bound flattens
+  /// (W9r16 review, gp_flat).
+  bool flattenNestInvariantBounds = false;
 };
 
 struct PartitionInferenceConfig {
@@ -482,6 +563,16 @@ struct PartitioningConfig {
   /// dimension (base + constant on each) and copies that share a residue
   /// class form further groups, so a bank is read once per class member.
   bool steerWindowGroups = true;
+  /// The unrolled copies of a window read, each under its own guard (the one
+  /// access of the array under it; not a run-time partial unroll's trip
+  /// test; no call or store to the array in the block), still form one
+  /// steered group (VITIS_NOTES N155, kernel w9r21p_g1_rot5).
+  bool steerThroughGuards = true;
+  /// A bank no access reads, after the steered reads are limited to the
+  /// banks their counters reach, is removed with its stores, also when it is
+  /// passed to callees that only write it (VITIS_NOTES N157, kernel
+  /// w9r21p_k1_deadbank; YOLOv4-Tiny L5).
+  bool dropUnreadBanks = true;
   /// An scf.for induction variable plus a constant, with a constant lower
   /// bound and a step that is a multiple of a cyclic factor, addresses one
   /// bank (W9r14 review, N103 copies, kernel w9r14rv_uv_lb0).
@@ -507,6 +598,18 @@ struct PartitioningConfig {
   /// LLVM's known bits give Vitis (VITIS_NOTES N115 control kernel
   /// w9r15p_rc_fix: 15 copies per bank; off: the bank is chosen at run time)
   bool knownResidueBanks = true;
+  /// A block-partitioned memref index whose value range (types, masks,
+  /// constants) stays inside fewer blocks reaches only those (VITIS_NOTES
+  /// N175).
+  bool banksFromValueRange = false;
+  /// A partitioned local array passed to a kept callee whose parameter
+  /// declares a smaller first dimension keeps its partition across the call
+  /// (VITIS_NOTES N180).
+  bool reshapedCalleeParameters = false;
+  /// Reads of a completely partitioned dimension at a run-time bank index
+  /// address every bank at the in-bank offset 0, so reads that share their
+  /// other subscripts load each bank once (VITIS_NOTES N172).
+  bool sharedAddressBankReads = false;
 };
 
 struct FoldingConfig {
@@ -518,6 +621,22 @@ struct FoldingConfig {
   /// not keep the array alive (VITIS_NOTES N118: kernel w9r15p_pb_null, Vitis 0
   /// BRAM; nikhil_p lab2 K_lcl; off: the comparison keeps it)
   bool storageAddressNotNull = true;
+  /// Calls of the assertion failure handler build no hardware (N126).
+  bool dropAsserts = false;
+  /// A call whose arguments are all constants and whose callee computes
+  /// without memory is evaluated and replaced by its result (N130).
+  bool evaluateConstantCalls = true;
+  /// Operations one such evaluation may execute before it gives up.
+  int64_t constantCallMaxSteps = 1000000;
+  /// After the unroll decision, a load of a never-written initialised global
+  /// at constant subscripts is its initial value; a table every load of which
+  /// folds disappears (VITIS_NOTES N168).
+  bool constantGlobalLoadsAfterUnroll = false;
+  /// Loops of a function's entry that fill local arrays from constants are
+  /// evaluated; such an array becomes a constant table (VITIS_NOTES N174).
+  bool evaluateConstantFills = false;
+  /// The largest array (elements) such an evaluation keeps.
+  int64_t constantFillMaxElements = 4096;
 };
 
 struct DeadMemoryConfig {
@@ -571,6 +690,12 @@ struct MiddleEndConfig {
   /// counters raised by cgeist: 27 reads of in_tile, 9 distinct; off: only
   /// affine.load)
   bool gvnMemrefLoads = true;
+  /// Store-to-load forwarding and dead-store elimination in pipelined loop
+  /// bodies on partitioned local arrays before --memory-banking-bram splits
+  /// them (VITIS_NOTES N138: k2mm's unrolled tmp1 copies keep one load and
+  /// one store per iteration; off: only the cleanup after banking, which a
+  /// run-time bank hides the address from)
+  bool forwardBeforeBanking = false;
 };
 
 struct StructConfig {
@@ -585,6 +710,9 @@ struct StructConfig {
   /// parameter specialises the callee to the static type (OPEN_ISSUES O84
   /// (c)).
   bool specializeSplitCasts = true;
+  /// A pointer-to-struct argument of the top function without a memory
+  /// interface is one wide scalar register (W9r19, VITIS_NOTES N147).
+  bool topPointerScalar = true;
 };
 
 struct NarrowingConfig {
@@ -595,6 +723,22 @@ struct NarrowingConfig {
   /// A RAM whose every stored value is a constant is narrowed by N26's ROM
   /// reinterpretation of that set (N112).
   bool constantSetReinterpretation = true;
+  /// An undefined value adds nothing to a select's or an if's range
+  /// (N151 (b)).
+  bool undefContributesNothing = true;
+  /// A load from a register array or a struct field takes the range of the
+  /// store that reaches it in its block (N151 (c)).
+  bool reachingStoreRanges = true;
+  /// An accumulation `s += x` over a loop of T trips ranges over init +
+  /// T x the step's range, as an iter_arg or through memory (N159).
+  bool accumulationRanges = true;
+  /// An array whose element a called (kept) function writes through a
+  /// scalar reference parameter is not narrowed (N162).
+  bool calleeParamStoresFullRange = true;
+  /// A stored value that is a plain copy of the array's own loaded elements
+  /// (a swap) makes no cycle: the copy carries the array's range (VITIS_NOTES
+  /// N167; a copy through another array still does).
+  bool copiesCloseRanges = false;
 };
 
 struct HlsToolConfig {
@@ -609,6 +753,9 @@ struct HlsToolConfig {
   FoldingConfig folding;
   MiddleEndConfig middleEnd;
   bool honourInlineOff = true;
+  /// A kept callee is cloned per tuple of argument IR types of its call sites
+  /// (float / double top-level ports vs caller-local arrays; VITIS_NOTES N165).
+  bool clonePerArgumentType = false;
   StructConfig structs;
   NarrowingConfig narrowing;
   bool globalsAttributeAccesses = false;
@@ -624,6 +771,17 @@ struct HlsToolConfig {
   /// In a pipelined loop, the ap_fixed library cores whose tables are known
   /// share one set of tables read k times per cycle (N16 R6).
   bool inlinedTablesInPipelines = true;
+  /// Calls of different functions whose cost-table entries name the same
+  /// library module (sin and cos of double: sin_or_cos_double_s) share its
+  /// instances (VITIS_NOTES N169).
+  bool sharedLibraryModules = false;
+  /// A library math core is shared by calls in exclusive arms of one
+  /// pipelined iteration and by the pipelined loops of one function (they
+  /// run one after another) (VITIS_NOTES N178).
+  bool sequentialCoreSharing = false;
+  /// An array argument of the top bound to s_axilite is a RAM inside the
+  /// control adapter, priced like a two-port bank (VITIS_NOTES N176).
+  bool axiLiteArrayMemories = false;
 
   /// The implicit buffer of `protocol` (e.g. "axi4-mm"), or null.
   const ImplicitBufferConfig *implicitBuffer(llvm::StringRef protocol) const;
@@ -638,6 +796,9 @@ struct StorageSelectorConfig {
   /// The bind_storage impl that puts a bank in the block tier at any size
   /// (Vitis: bram, VITIS_NOTES N98); empty: none.
   std::string forcingImpl = "bram";
+  /// The bind_storage impl that puts a bank in the tier below the block tier
+  /// at any size (Vitis: lutram, VITIS_NOTES N171); empty: none.
+  std::string distributedImpl;
 
   /// Whether `bits` (words x exact element bits) stays below the block tier.
   bool belowBlock(int64_t bits) const {
@@ -715,6 +876,22 @@ struct CallDepthConfig {
   /// value or array orders still share an instance when their inputs become
   /// ready in different states of the caller's call schedule (N116).
   bool staggeredCallsShareInstance = true;
+  /// Calls are issued in program order: two calls of a function share an
+  /// instance when a call between them waits for the first (VITIS_NOTES
+  /// N156, kernels w9r21p_f1 .. f4); with staggeredCallsShareInstance, both
+  /// rules also apply in one nested block outside pipelines.
+  bool inOrderCallStarts = true;
+  /// A function's allocation limit caps the calls of each loop Vitis
+  /// outlines into a module of its own separately (N14 R5).
+  bool outlinedLoopsOwnAllocation = true;
+  /// A kept callee with an array parameter called inside a pipelined loop
+  /// Vitis outlines and outside it has an instance in each module (W9r19,
+  /// VITIS_NOTES N145).
+  bool outlinedPipelineArrayInstances = true;
+  /// Calls of a kept callee in two loops of its caller that run one after
+  /// the other share an instance (N16 R10 for kept callees; W9 round 19
+  /// review defect 3).
+  bool sequentialLoopsShareInstance = true;
   int64_t indexBits = 32;
   std::vector<DelayBand> carryChainNs, ternaryAdderNs;
 
@@ -732,10 +909,44 @@ struct SchedulingConfig {
   /// A read-modify-write of one array at an address computed inside the
   /// loop body (h[v]++) bounds the II at least this much (N117; 0: off).
   int64_t unknownAddressMinII = 2;
+  /// `#pragma HLS dependence variable=<v> inter false` removes <v>'s
+  /// loop-carried memory recurrences (N122).
+  bool userInterIndependence = true;
+  /// The memory-recurrence analysis evaluates an enclosing loop's induction
+  /// variable this many steps past its lower bound (O170 (b); 0: the lower
+  /// bound).
+  int64_t enclosingIvSampleSteps = 0;
+  /// The predicated stores of a run-time-chosen bank count as stores of the
+  /// array for its loop-carried memory recurrences (O170 (a)).
+  bool bankStoreRecurrences = false;
   /// Cycles an operator class adds to such a recurrence chain
   /// (`<class>_f32` / `<class>_f64` before `<class>`); a class not listed
   /// adds its operator latency (VITIS_NOTES N83).
   std::map<std::string, int64_t> recurrenceLatencies;
+  /// A floating-point add / multiply on a register (iter_arg) recurrence
+  /// takes its recurrenceLatencies value instead of its operator latency
+  /// (VITIS_NOTES N83: `s = s op a[i]` reaches the recurrence values).
+  bool registerRecurrenceLatencies = false;
+  /// An iter_arg that carries an array element promoted to a register,
+  /// through two or more multi-cycle operations, bounds the II by its chain
+  /// latency + 1 (VITIS_NOTES N160, kernels w9r21p_b1 / b2).
+  bool promotedElementRegisterCycle = true;
+  /// Any iter_arg (a scalar accumulator too) carried through a multi-cycle
+  /// double-precision operation fed by another multi-cycle floating-point
+  /// operation bounds the II by its chain latency + 1
+  /// (VITIS_NOTES N160 (b), kernels w9r21rev_r2c / r2d / r2e).
+  bool f64RegisterCycle = true;
+  /// The accesses of an aggregated word whose lane is read and written back
+  /// in one block share one port (VITIS_NOTES N154 (b)).
+  bool laneRmwOnePort = true;
+  /// Ops the N160 search may visit per loop before it gives up (designer
+  /// knob; 0: unlimited).
+  int64_t promotedElementSearchBudget = 1000000;
+  /// A read-modify-write of a lane chosen at run time in an aggregated word
+  /// (hls::vector) at a word address the loop keeps is a recurrence through
+  /// the memory, II >= 3 + chain, not a promoted element (VITIS_NOTES N154,
+  /// kernel w9r21p_e1_vecrmw).
+  bool dynamicLaneRmw = true;
   std::string moduloModel;
   int64_t fastThreshold = 150;
   int64_t fastOpsThreshold = 4096;
@@ -756,6 +967,13 @@ struct SchedulingConfig {
   /// hlsyn-vitis seidel-2d, 40 x 118 x 118 unrolled; 0: no guard).
   int64_t maxPipelineBodyOps = 250000;
   int64_t recurrenceRepairRounds = 64;
+  /// Greedy scheduler: ready ops in order of their latency path to the end
+  /// of the iteration, not program order (VITIS_NOTES N133).
+  bool heightPriority = false;
+  /// Greedy scheduler: at II > 1 each floating-point operator class (fadd,
+  /// fmul, dadd, dmul) has ceil(ops / II) units, one more per carried edge
+  /// they would break (VITIS_NOTES N135).
+  bool fpUnitLimits = false;
   bool userIITarget = true;
   std::string sequentialModel;
   std::string bindingModel;

@@ -1,9 +1,11 @@
 // RUN: hls-est %s --memory-banking-bram --convert-affine-to-loopschedule -o - | FileCheck %s --check-prefix=SCHED
 // RUN: hls-est %s --infer-vitis-split-array=td=auto -o - | FileCheck %s --check-prefix=SPLIT
 //
-// `hls.flattened_parents` says Vitis folds the enclosing loops into the
-// tagged loop's pipeline. Their induction variables are therefore loop-variant
-// for that pipeline:
+// `hls.flattened_parents = N` (written by --auto-pipeline-unroll) says Vitis
+// flattens the N enclosing loops into the tagged loop's pipeline
+// (VITIS_NOTES.md N3, pipeline_unroll.md R2 step 3: the parent's code is
+// sunk into the pipelined loop). Their induction variables are therefore
+// loop-variant for that pipeline:
 //  - the invariant-load hoist of --convert-affine-to-loopschedule must keep
 //    `lb[i]` inside the pipeline of j (it is re-read every iteration of the
 //    flattened 8x65 loop);

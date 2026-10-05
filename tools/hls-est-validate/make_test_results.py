@@ -9,9 +9,9 @@ a summary (README.md). Each row: test case -> hls-est prediction -> Vitis BRAM -
 
 Status of a row:
   exact        prediction == Vitis
-  in band      Vitis < prediction <= 1.15 x Vitis (Peter's goal of 2026-10-10: exact, or an
-               over-count of at most 15 %)
-  over         prediction > 1.15 x Vitis
+  in band      Vitis < prediction <= (1 + BAND_OVER) x Vitis (the DoD-5 goal: exact, or an
+               over-count of at most make_compare_csv.BAND_OVER, 5 % since 2026-10-24, MEMOS #95)
+  over         prediction > (1 + BAND_OVER) x Vitis
   under        prediction < Vitis
   no ground truth / top not found / hls-est failed / cgeist failure   (not compared)
 
@@ -35,10 +35,10 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import common as C                       # noqa: E402
 import run_hlsest as RH                  # noqa: E402
+from make_compare_csv import BAND_OVER, BAND_TEXT  # noqa: E402  (the one definition of the goal band)
 
 MIRROR = C.CIRCT / "test" / "hls-est" / "Mirror"
 MANIFEST = MIRROR / "manifest.json"
-BAND_OVER = 0.15
 FEATURE_GROUP = "cgeist-feature-tests"
 STATUS_ORDER = ("exact", "in band", "over", "under", "no ground truth", "top not found", "hls-est failed",
                 "cgeist failure")
@@ -162,7 +162,7 @@ def write_pages(out_dir, groups, manifest, rows_by_test, gen_line):
                "One row per cgeist HLS lit test (the Mirror suite, `test/hls-est/Mirror`; see "
                "[../tests.md](../tests.md)): the hls-est prediction with the default pipeline, the "
                "Vitis 2025.1 td=off BRAM_18K of the same sources, and the status: **exact**, **in band** "
-               "(over-count of at most 15 %), **over** (more than 15 % over), **under**, or not compared "
+               f"(over-count of at most {BAND_TEXT}), **over** (more than {BAND_TEXT} over), **under**, or not compared "
                "(no ground truth, hls-est failed, or cgeist cannot compile the test, which then has no "
                "Mirror test).", "",
                "| dataset | tests | compared | exact | in band | over | under | no ground truth | "

@@ -15,8 +15,10 @@
 // copies rewritten one by one each bank looks read 8 times per iteration and
 // is replicated 7 times (14 each, 224).
 
-// CHECK-COUNT-16: 64x32b -> RAM_1P (x36/port) = 1 BRAM_18K
-// CHECK: Total BRAM: 16
+// W9r21 (VITIS_NOTES N157, tool.hls.partitioning.drop_unread_banks): j + kw
+// reaches columns 0 .. 14 only, so bank 15 (written, never read) is removed.
+// CHECK-COUNT-15: 64x32b -> RAM_1P (x36/port) = 1 BRAM_18K
+// CHECK: Total BRAM: 15
 // JSON: "reads": 1,
 // JSON-NOT: "reads": 8,
 // OFF: "reads": 8,

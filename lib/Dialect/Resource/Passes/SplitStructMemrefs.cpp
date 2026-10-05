@@ -1268,12 +1268,14 @@ bool StructSplitter::analyse() {
   SmallVector<int64_t> path;
   if (!collectLeaves(structType, 0, path, leaves))
     return fail("struct member that is not a scalar or an array of scalars");
+  // The rank test first: drop_front of a rank-0 shape asserts (OPEN_ISSUES
+  // O208 H1: cgeist's local struct object memref<!llvm.struct<(i8)>>).
+  if (type.getRank() == 0)
+    return fail("rank-0 struct memref");
   // A callee's parameter may have an unknown first dimension (`P p[]`).
   for (int64_t d : type.getShape().drop_front())
     if (ShapedType::isDynamic(d))
       return fail("dynamic inner dimension");
-  if (type.getRank() == 0)
-    return fail("rank-0 struct memref");
   layoutWord();
   for (unsigned r = 0; r < roots.size(); ++r) {
     curRoot = r;
@@ -1740,6 +1742,46 @@ void StructSplitter::rewriteAggregated(ArrayRef<SmallVector<Value>> mems) {
     i = j;
   }
 
+  // The store groups whose element a lane load reads earlier in the same
+  // block (a lane read-modify-write; computed while the loads are still the
+  // original ops).
+  // The stored value must be computed from the loaded lane (`C[w][j] += x`;
+  // a plain copy into the word, e.g. hls::vector's assignment, is no
+  // read-modify-write: gabriel_lopez_lugo lab2 v_buf, RAM_1WNR in Vitis).
+  // The walk stops after kMaxRmwSliceOps definitions (a search bound, not a
+  // Vitis rule: a lane update is a few ops).
+  constexpr size_t kMaxRmwSliceOps = 256;
+  auto computedFrom = [](Value v, Operation *load) {
+    SmallVector<Value> work{v};
+    DenseSet<Operation *> seen;
+    while (!work.empty() && seen.size() < kMaxRmwSliceOps) {
+      Operation *def = work.pop_back_val().getDefiningOp();
+      if (!def || def->getBlock() != load->getBlock() ||
+          !seen.insert(def).second)
+        continue;
+      if (def == load)
+        return true;
+      for (Value o : def->getOperands())
+        work.push_back(o);
+    }
+    return false;
+  };
+  DenseSet<const Access *> laneReadBefore;
+  for (ArrayRef<Access *> group : groups) {
+    Operation *first = group.front()->op;
+    for (Access &ld : accesses)
+      if (!ld.isStore() && ld.leaf >= 0 && sameElement(&ld, group.front()) &&
+          ld.op->getBlock() == first->getBlock() &&
+          ld.op->isBeforeInBlock(first) &&
+          llvm::any_of(group, [&](Access *st) {
+            return st->op->getNumOperands() > 0 &&
+                   computedFrom(st->op->getOperand(0), ld.op);
+          })) {
+        laneReadBefore.insert(group.front());
+        break;
+      }
+  }
+
   // Loads: a word load, then the member's bits. The members of one element
   // read in one block with no store to the variable in between share one
   // word read (Vitis reads the word once and shifts each member out).
@@ -1882,6 +1924,21 @@ void StructSplitter::rewriteAggregated(ArrayRef<SmallVector<Value>> mems) {
       w = createWordLoad(ob, first->getLoc(), mems[group.front()->root][0],
                          group.front()->element);
       w.getDefiningOp()->setAttr("hls.read_modify_write", ob.getUnitAttr());
+      // A lane chosen at run time (VITIS_NOTES N154): the word's address is
+      // the same each iteration, yet Vitis sees the lane's own address, so
+      // --convert-affine-to-loopschedule keeps the word in memory.
+      if (llvm::any_of(group, [&](Access *acc) {
+            return acc->leaf >= 0 && !acc->innerConst;
+          }))
+        w.getDefiningOp()->setAttr("hls.dynamic_lane", ob.getUnitAttr());
+      // A lane read and then written back in the same block (`C[w][j] +=
+      // x` on an hls::vector word): the word's accesses share one port
+      // (VITIS_NOTES N154 (b), hls.lane_rmw on the word variable; read by
+      // --convert-affine-to-loopschedule under
+      // scheduling.dependences.lane_rmw_one_port).
+      if (laneReadBefore.contains(group.front()))
+        if (Operation *var = mems[group.front()->root][0].getDefiningOp())
+          var->setAttr("hls.lane_rmw", ob.getUnitAttr());
     }
     OpBuilder ob(last);
     Location l = last->getLoc();

@@ -167,7 +167,8 @@ name on both sides (Section 6.2 measures it), so per-array agreement is reported
 never as a claim about every array.
 
 A design counts as **exact** when its total equals Vitis's, and **in the goal band** when it is exact or
-over-counts by at most 15 % of the Vitis value; an under-count is out of the band whatever its size,
+over-counts by at most {{band_over_pct}} % of the Vitis value (the band was 15 % until Peter narrowed it on
+2026-10-24); an under-count is out of the band whatever its size,
 because an estimator that under-counts would let a design that does not fit pass. Every number of the
 results pages is generated from the run files by the harness scripts (`make_compare_csv.py`,
 `make_hlsdoc.py`), never typed.

@@ -31,6 +31,7 @@ struct FoldedGuards {
   unsigned folded = 0;         ///< ifs replaced by one arm (or erased)
   unsigned scfIfs = 0;         ///< of those, scf.if
   unsigned pinnedOperands = 0; ///< operands fixed by an equality (N89 (b))
+  unsigned hoistedLoads = 0;   ///< loads common to both arms (N127)
 };
 
 /// The counters on the nearest enclosing loop (--bram-debug pipelines[]).
@@ -46,6 +47,17 @@ constexpr llvm::StringLiteral kPinnedGuardOperandsAttr =
 /// and / or) is decided the same way. In the then arm of an affine.if left,
 /// an operand an equality of the set fixes is replaced by that constant.
 FoldedGuards foldConstantAffineIfs(mlir::Operation *root);
+
+/// Replace every integer multiplication under `root` with a constant-zero
+/// operand (an unrolled copy's counter 0, through casts and constant
+/// arithmetic) by the constant 0, as LLVM's instcombine does before Vitis
+/// schedules: what only fed the product (a load) becomes dead (W9r23 review
+/// D12: kernel w9r23rev_v5_block_mask_int, `out[j][p] = tab[t] * p` unrolled
+/// over p reads tab 3 times per iteration in Vitis, 2 copies per bank, not
+/// 4 reads and 3 copies). Key
+/// tool.hls.pipeline_decision.fold_unrolled_zero_products. Returns the
+/// number of products replaced.
+unsigned foldUnrolledZeroProducts(mlir::Operation *root);
 
 } // namespace circt::hls_analysis
 

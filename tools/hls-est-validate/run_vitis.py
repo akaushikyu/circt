@@ -13,6 +13,10 @@ and the .autopilot/db bitcode / schedule databases are copied into the cache
 entry (and the bitcode disassembled), then the Vitis work dir is deleted.
 
 Summary of all designs: results/vitis.json  (one entry per dataset/benchmark).
+With --catalog heldout (hls-doc/heldout.md) the summary is results/vitis-heldout.json (never
+results/vitis.json: the training ground truth stays untouched); the cache entries go to
+vitis-cache/heldout-*/ by dataset name, and a locked design's BRAM is not printed.  --catalog heldout2
+(hls-doc/heldout2.md) likewise: results/vitis-heldout2.json, vitis-cache/heldout2-*/, its own release variable.
 """
 import argparse
 import concurrent.futures as cf
@@ -102,13 +106,37 @@ def extra_cfg_for(td):
             + [f"syn.array_partition.throughput_driven={td}"])
 
 
+# Files in a design directory that no design compiles, hashed with their content at a pinned revision of
+# their repository so that a later edit leaves the ground truth's keys valid: {path suffix: (repo, rev)}.
+# Polygeist a95a973e (W9 round 14 review finding 10) edited the lit test hls-est-e2e.c in the
+# polybench_pragmas directory after its ground truth was synthesised; design_files hashes it (rglob), so
+# every polybench_pragmas key changed although no design changed (W9 round 15 review, finding 7).
+KEY_PINNED_CONTENT = {
+    "Polygeist/tools/cgeist/Test/HLS/polybench/hls-est-e2e.c": ("/mnt/d/HLS", "a95a973e^"),
+}
+_pinned_cache = {}
+
+
+def _key_bytes(p):
+    """A file's bytes for the cache key: its pinned revision's content (KEY_PINNED_CONTENT), else its own."""
+    s = str(p).replace("\\", "/")
+    for suffix, (repo, rev) in KEY_PINNED_CONTENT.items():
+        if s.endswith("/" + suffix):
+            if suffix not in _pinned_cache:
+                r = subprocess.run(["git", "-C", repo, "show", f"{rev}:{suffix}"], capture_output=True)
+                _pinned_cache[suffix] = r.stdout if r.returncode == 0 else None
+            if _pinned_cache[suffix] is not None:
+                return _pinned_cache[suffix]
+    return Path(p).read_bytes()
+
+
 def cache_key(d, extra_cfg=None, files=None):
     """The cache key of design record d: its files, top, flags and sources, the Vitis configuration and the
     [hls] lines (extra_cfg; default this run's EXTRA_CFG)."""
     cfg = EXTRA_CFG if extra_cfg is None else extra_cfg
     extra = "|".join([d["top"], C.PART, C.CLOCK, C.VITIS_VERSION, C.FLOW_TARGET,
                       " ".join(cflags_for(d)), " ".join(d["sources"]), " ".join(cfg), "cfg-v2"])
-    return C.sha256_of_files(design_files(d) if files is None else files, extra)[:16]
+    return C.sha256_of_files(design_files(d) if files is None else files, extra, read=_key_bytes)[:16]
 
 
 def equivalent_records(d):
@@ -452,7 +480,8 @@ def main():
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--keep-work", action="store_true")
     ap.add_argument("--list", action="store_true")
-    ap.add_argument("--out", default=str(C.RESULTS_DIR / "vitis.json"))
+    ap.add_argument("--out", default=None,
+                    help="summary JSON (default results/vitis.json; results/vitis-<set>.json for --catalog heldout / heldout2)")
     ap.add_argument("--reparse", action="store_true",
                     help="rebuild the summary from the cached reports (after a parser change); no synthesis")
     ap.add_argument("--td", default="off", choices=["off", "auto"],
@@ -460,12 +489,16 @@ def main():
     ap.add_argument("--catalog", choices=D.CATALOGS, default=None,
                     help="design catalogue (designs.py): 'v2' (the HLSFactory 1.1.0 tree, default) or "
                          "'polygeist' (the Polygeist lit copies; $HLS_EST_CATALOG changes the default).  A v2 design whose sources equal "
-                         "its Polygeist copy is that copy's record, so its cache entry is reused")
+                         "its Polygeist copy is that copy's record, so its cache entry is reused.  'heldout': the "
+                         "held-out evaluation catalogue (hls-doc/heldout.md), both splits, summary in "
+                         "results/vitis-heldout.json; 'heldout2': the second held-out set (hls-doc/heldout2.md), "
+                         "results/vitis-heldout2.json")
     args = ap.parse_args()
     global EXTRA_CFG
     EXTRA_CFG = extra_cfg_for(args.td)
 
     catalog = args.catalog or D.default_catalog()
+    args.out = C.heldout_out_path(args.out, catalog, "vitis")
     designs = [d for d in D.load_designs(catalog=catalog) if d.get("sources")]
     if args.datasets:
         ds = set(args.datasets.split(","))
@@ -499,8 +532,10 @@ def main():
             if not args.dry_run and r.get("status") != "locked":
                 update_summary(args.out, {C.design_key(d): r})
             tot = r.get("totals", {}) or {}
+            locked = ((d.get("heldout") or {}).get("split") == "locked"
+                      and not D.heldout_locked_released(D.heldout_set_of(d)))
             print(f"[{done}/{len(designs)}] {C.design_key(d):50s} {r.get('status'):14s} "
-                  f"BRAM={tot.get('BRAM')} {'(cached)' if r.get('cached') else str(r.get('elapsed_s', '')) + 's'} "
+                  f"BRAM={'(locked)' if locked else tot.get('BRAM')} {'(cached)' if r.get('cached') else str(r.get('elapsed_s', '')) + 's'} "
                   f"{r.get('note', '')}", flush=True)
     summary = C.load_json(args.out, {}) or {}
     n_ok = sum(1 for r in summary.values() if r.get("status") == "ok")

@@ -53,6 +53,16 @@ public:
     bool forced = !rule.forcingImpl.empty() && request.pragmaImpl &&
                   *request.pragmaImpl == rule.forcingImpl &&
                   request.words != 1;
+    // bind_storage impl=lutram (or RESOURCE core=RAM_*_LUTRAM) makes any
+    // array distributed RAM (VITIS_NOTES N171: w9r22p_g1 / g2, 64 x 64 bits,
+    // 0 BRAM).
+    if (!rule.distributedImpl.empty() && request.pragmaImpl &&
+        *request.pragmaImpl == rule.distributedImpl) {
+      c.tier = rule.below;
+      c.note = "bind_storage impl=" + rule.distributedImpl +
+               ": distributed RAM at any size, 0 BRAM";
+      return c;
+    }
     if (rule.belowBlock(bits) && !forced) {
       c.tier = rule.below;
       c.note = "size " + std::to_string(bits) + " bits" +

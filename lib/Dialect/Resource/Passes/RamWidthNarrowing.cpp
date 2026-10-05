@@ -1,16 +1,100 @@
-
-
+//===- RamWidthNarrowing.cpp - the element width Vitis gives a RAM --------===//
+//
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//
+//===----------------------------------------------------------------------===//
+//
+// --narrow-ram-widths
+//
+// Vitis stores fewer bits per word than the declared element type when it can
+// prove the other bits are never needed. The narrowing happens in reflow
+// after the arrays are partitioned (every bank of an array gets the same
+// width) and before the storage is chosen, so the LUTRAM threshold and the
+// BRAM formula see the narrow width (td=off kernels w9n_*: `int a[1024]`
+// becomes `[1024 x i6]` between a.o.1.ll and a.o.2.ll; `int a[64]` used as an
+// index of a 64-word table is 64x6 = LUTRAM, 0 BRAM). The width is
+//
+//   min(Wr, Wd), capped by the declared width, where
+//
+//   Wr  the bits every value stored into the array needs: the union of their
+//       integer ranges, unsigned width when no value is negative, else signed
+//       width (ReLU outputs 31 of 32 bits; `& 0x7F` 7; a clamp to [0, 255] 8,
+//       to [-128, 127] 8; a loop counter below 1024 10; an 8-term sum of
+//       4-bit values 7). Elements never written do not count; a load from
+//       another array has that array's range (a copy of a ReLU output is 31
+//       bits too); a scalar parameter of a callee has the union of what its
+//       call sites pass; a top-level scalar argument is full range.
+//
+//   Wd  1 + the highest bit any user of a load needs, walking the uses
+//       backwards: a subscript needs the low bits of the flattened address of
+//       the array it indexes (a 64 / 65 / 100 / 4096-word table: 6 / 7 / 7 /
+//       12; `t[64][64]`: 12 on the last dimension, 6 on the first; a
+//       cyclic or block partitioned dimension counts; a subscript of a
+//       completely partitioned dimension of S elements selects a bank and
+//       needs ceil(log2 S) bits in a read, every bit in a write, N91);
+//       add / sub / mul / and / or / xor pass the low-bit
+//       demand through; `& c` keeps up to the highest set bit of c (`& 0xF0`
+//       is 8 bits: the low bits stay); a right shift by c adds c; a
+//       truncation or extension caps it; a store into another array needs
+//       that array's Wd; comparisons, divisions, interface stores, returns
+//       and unknown calls need every bit (`a[i] < 5` and `tbl[a[i]] ^ a[i]`
+//       keep 32).
+//
+// Arrays that reach one callee memref parameter share one width (the larger:
+// a corpus design passes a 7-bit and a 12-bit index array through one
+// parameter, both are 12 bits). Interfaces (memref parameters of the top
+// function), arrays that escape to something this pass cannot follow, and
+// ROMs (initialised globals never written, arrays marked by
+// --mark-constant-fills, which have their own width rule) are not narrowed.
+//
+// The pass only annotates: every narrowed alloca / global gets
+// `hls.narrow_bits` (the width) and `hls.narrow_reason` (Wr, Wd and the use
+// that decided). --memory-banking-bram copies both to the banks and
+// --bram-analysis prices the array with that width. It runs after
+// --auto-pipeline-unroll (an unrolled accumulation is an expression tree,
+// not a recurrence) and before --memory-banking-bram.
+//
+// Vitis computes each array's range once, from the arrays its values are
+// loaded from: an array whose stored values depend on its own loads
+// (directly or around a cycle of arrays) sees those loads at full range
+// (`a[i] = a[i + 1] ^ (a[i] >> 1)` keeps 64 bits, kernel w9i_self), though a
+// mask after the load still bounds the value (w9i_selfadd).
+//
+// An undefined value (llvm.mlir.undef, an arm cgeist builds for a path that
+// returns nothing, e.g. hls::recip's `if (x == 0) return 0;`) contributes
+// nothing to a select or an if's result (VITIS_NOTES N151 (b), kernel
+// w9r21p_a1_lutdiv). A load from a register array (completely partitioned)
+// or from a field of a local struct (an llvm.load through cgeist's pointer)
+// takes the range of the store that reaches it in the same block, when one
+// does, rather than the union of every store into it (N151 (c), kernel
+// w9r21p_a5_overwrite; barry_walker lab2's attention_row_local.data).
+//
+// Not modelled (unconfirmed in Vitis): ranges through loop-carried scalars
+// (an iter_arg is full range here; two corpus designs narrow accumulations),
+// call results. The address width of interface arrays (VITIS_NOTES N41): a
+// subscript of an ap_memory array argument (no pragma under
+// flow_target=vivado) demands the bits of its address like a local; one of
+// an m_axi argument (tool.hls.narrowing.full_address_interface_modes)
+// demands every bit. A memcpy into a local array (cgeist's byte-copy loop
+// through polygeist.memref2pointer) is a store of unknown values, not an
+// escape.
+//
+//===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/Resource/Config/ConfigUtils.h"
 #include "circt/Dialect/Resource/HLS/HLSOps.h"
 #include "circt/Dialect/Resource/Passes/PartitionLayout.h"
+#include "circt/Dialect/Resource/Passes/PolygeistCompat.h"
 #include "circt/Dialect/Resource/Passes/VitisCleanup.h"
 
 #include "mlir/Dialect/Affine/IR/AffineMemoryOpInterfaces.h"
+#include "mlir/Dialect/Affine/Analysis/LoopAnalysis.h"
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/IR/BuiltinOps.h"
@@ -50,55 +134,58 @@ constexpr unsigned kMaxDemandRounds = 128;
 constexpr unsigned kMaxChainSteps = 6;
 
 /// Bits of an integer or index value (index: 64), 0 for anything else.
-unsigned bitWidthOf(Type typeValue) {
-  if (auto it = dyn_cast<IntegerType>(typeValue))
+unsigned bitWidthOf(Type t) {
+  if (auto it = dyn_cast<IntegerType>(t))
     return it.getWidth();
-  if (isa<IndexType>(typeValue))
+  if (isa<IndexType>(t))
     return IndexType::kInternalStorageBitWidth;
   return 0;
 }
 
 /// file:line:col (file name only) of the first file location in `loc`.
 std::string shortLoc(Location loc) {
-  if (auto fieldValue = dyn_cast<FileLineColLoc>(loc))
-    return (llvm::sys::path::filename(fieldValue.getFilename().getValue()) +
-            ":" + Twine(fieldValue.getLine()) + ":" +
-            Twine(fieldValue.getColumn()))
+  if (auto f = dyn_cast<FileLineColLoc>(loc))
+    return (llvm::sys::path::filename(f.getFilename().getValue()) + ":" +
+            Twine(f.getLine()) + ":" + Twine(f.getColumn()))
         .str();
-  if (auto elementCount = dyn_cast<NameLoc>(loc))
-    return shortLoc(elementCount.getChildLoc());
-  if (auto candidateValue = dyn_cast<CallSiteLoc>(loc))
-    return shortLoc(candidateValue.getCallee());
+  if (auto n = dyn_cast<NameLoc>(loc))
+    return shortLoc(n.getChildLoc());
+  if (auto c = dyn_cast<CallSiteLoc>(loc))
+    return shortLoc(c.getCallee());
   if (auto fu = dyn_cast<FusedLoc>(loc))
-    for (Location lowerIndex : fu.getLocations()) {
-      std::string stringValue = shortLoc(lowerIndex);
-      if (stringValue != "?")
-        return stringValue;
+    for (Location l : fu.getLocations()) {
+      std::string s = shortLoc(l);
+      if (s != "?")
+        return s;
     }
   return "?";
 }
 
 /// The bits a range needs: unsigned width when no value is negative, else
 /// the signed width. At least 1.
-unsigned bitsForRange(const ConstantIntRanges &resultValue) {
-  if (!resultValue.smin().isNegative())
-    return std::max(1u, resultValue.smax().getActiveBits());
-  return std::max(resultValue.smin().getSignificantBits(),
-                  resultValue.smax().getSignificantBits());
+unsigned bitsForRange(const ConstantIntRanges &r) {
+  if (!r.smin().isNegative())
+    return std::max(1u, r.smax().getActiveBits());
+  return std::max(r.smin().getSignificantBits(),
+                  r.smax().getSignificantBits());
 }
 
-std::string rangeText(const ConstantIntRanges &resultValue) {
-  bool isSigned = resultValue.smin().isNegative();
-  const APInt &lo = isSigned ? resultValue.smin() : resultValue.umin();
-  const APInt &hi = isSigned ? resultValue.smax() : resultValue.umax();
+std::string rangeText(const ConstantIntRanges &r) {
+  bool isSigned = r.smin().isNegative();
+  const APInt &lo = isSigned ? r.smin() : r.umin();
+  const APInt &hi = isSigned ? r.smax() : r.umax();
   return "[" + llvm::toString(lo, 10, isSigned) + ", " +
          llvm::toString(hi, 10, isSigned) + "]";
 }
 
+//===----------------------------------------------------------------------===//
+// Memory accesses.
+//===----------------------------------------------------------------------===//
+
 /// A read or write of one memref element.
 struct Access {
   Value memref;
-  Value stored;
+  Value stored; // the value a write stores; null for a read
 };
 
 std::optional<Access> asAccess(Operation *op) {
@@ -133,23 +220,28 @@ std::optional<unsigned> plainSubscriptPosition(Operation *op,
   return operandNo - first;
 }
 
-bool hasDivOrMod(AffineExpr entryValue) {
+bool hasDivOrMod(AffineExpr e) {
   bool found = false;
-  entryValue.walk([&](AffineExpr stringValue) {
-    if (stringValue.getKind() == AffineExprKind::Mod ||
-        stringValue.getKind() == AffineExprKind::FloorDiv ||
-        stringValue.getKind() == AffineExprKind::CeilDiv)
+  e.walk([&](AffineExpr s) {
+    if (s.getKind() == AffineExprKind::Mod ||
+        s.getKind() == AffineExprKind::FloorDiv ||
+        s.getKind() == AffineExprKind::CeilDiv)
       found = true;
   });
   return found;
 }
 
 /// Whether map operand `j` (dims first, then symbols) occurs in `e`.
-bool usesOperand(AffineExpr entryValue, AffineMap map, unsigned innerIndex) {
-  if (innerIndex < map.getNumDims())
-    return entryValue.isFunctionOfDim(innerIndex);
-  return entryValue.isFunctionOfSymbol(innerIndex - map.getNumDims());
+bool usesOperand(AffineExpr e, AffineMap map, unsigned j) {
+  if (j < map.getNumDims())
+    return e.isFunctionOfDim(j);
+  return e.isFunctionOfSymbol(j - map.getNumDims());
 }
+
+//===----------------------------------------------------------------------===//
+// Memory classes: an array with its banks-to-be, views and the callee
+// parameters it reaches. One class gets one width.
+//===----------------------------------------------------------------------===//
 
 /// Whether every use of `ptr` is either the address of an `llvm.store` or
 /// the base of an `llvm.getelementptr` whose result satisfies the same
@@ -164,7 +256,7 @@ static bool onlyStoredThrough(Value ptr, bool &any) {
         return false;
       continue;
     }
-
+    // llvm.store's operands are (value, address).
     if (name != "llvm.store" || use.getOperandNumber() != 1)
       return false;
     any = true;
@@ -192,35 +284,41 @@ static bool isMemcpyDestination(Operation *op) {
 }
 
 struct MemClass {
-  SmallVector<Operation *> roots;
+  SmallVector<Operation *> roots; // alloca / alloc / memref.global
   SmallVector<Operation *> loads;
   SmallVector<Operation *> stores;
-
+  // Never narrowed. `opaque`: its address and its values are unknown too (an
+  // interface, an escape); a ROM keeps its known address and values.
   bool fixed = false;
   bool opaque = false;
-
+  // Its subscripts index an address space this pass cannot see (an m_axi
+  // interface, an escape): a subscript demands every bit. An ap_memory
+  // interface is opaque but its address is the array's own (VITIS_NOTES N41).
   bool addressOpaque = false;
-
+  // Filled by a memcpy (cgeist's byte-copy loop through
+  // polygeist.memref2pointer): stores of unknown values (VITIS_NOTES N41).
   bool copiedIn = false;
   std::string fixedReason;
   Type elemType;
   unsigned declaredBits = 0;
-
+  // Values present before any store (an initial value), if any.
   std::optional<ConstantIntRanges> initRange;
-
+  // Fixpoint state.
   IntegerValueRange stored;
-  unsigned rangeChanges = 0;
+  unsigned rangeChanges = 0; // rounds in which `stored` grew
   bool grewThisRound = false;
   bool rangePinned = false;
   std::string pinReason;
-
+  // Its stored values depend on its own loads (directly or through other
+  // arrays): Vitis does not iterate, its loads are full range.
   bool cyclic = false;
-  int scc = -1;
-
+  int scc = -1; // the strongly connected component of a cyclic class
+  // A store whose value has no range at the fixpoint (it comes from
+  // something never reached): its range is unknown.
   bool unknownStore = false;
   unsigned demand = 0;
   bool demandPinned = false;
-
+  // Explanation.
   Operation *widestStore = nullptr;
   unsigned widestBits = 0;
   Operation *decidingLoad = nullptr;
@@ -229,60 +327,107 @@ struct MemClass {
 class Narrowing {
 public:
   Narrowing(ModuleOp module, bool useRanges, bool useDemand, bool remarks,
-            ArrayRef<std::string> fullAddressModes, bool completeReadSelector)
-      : module(module), symbols(module), partitions(module, false),
+            ArrayRef<std::string> fullAddressModes, bool completeReadSelector,
+            bool undefContributesNothing, bool reachingStoreRanges,
+            bool accumulationRanges, bool calleeParamStoresFullRange)
+      : module(module), symbols(module), partitions(module, /*warn=*/false),
         rangesOn(useRanges), demandOn(useDemand), remarksOn(remarks),
         completeReadSelector(completeReadSelector),
+        undefContributesNothing(undefContributesNothing),
+        reachingStoreRanges(reachingStoreRanges),
+        accumulationRanges(accumulationRanges),
+        calleeParamStoresFullRange(calleeParamStoresFullRange),
         fullAddressModes(fullAddressModes.begin(), fullAddressModes.end()) {}
 
   void run();
 
 private:
+  // --- Classes ---
   void buildClasses();
   unsigned nodeOf(const void *key);
-  void trackValue(Value valueHandle, unsigned node,
+  void trackValue(Value v, unsigned node,
                   SmallVectorImpl<std::pair<Value, unsigned>> &work);
   MemClass *classOf(Value memref) const;
-  func::FuncOp internalCallee(func::CallOp callSite) const;
-  bool isInternalFunction(func::FuncOp fieldValue) const;
-  bool computeInternal(func::FuncOp fieldValue) const;
-  bool hasFullAddressInterface(func::FuncOp fieldValue, unsigned arg) const;
+  func::FuncOp internalCallee(func::CallOp call) const;
+  bool isInternalFunction(func::FuncOp f) const;
+  bool computeInternal(func::FuncOp f) const;
+  bool hasFullAddressInterface(func::FuncOp f, unsigned arg) const;
 
+  // --- Stored ranges (forward) ---
   void solveRanges();
   void markCyclicClasses();
-  const SmallVector<unsigned, 2> &loadClassesOf(Value valueHandle);
-  IntegerValueRange rangeOf(Value valueHandle);
+  const SmallVector<unsigned, 2> &loadClassesOf(Value v);
+  IntegerValueRange rangeOf(Value v);
   IntegerValueRange operandRange(OpOperand &use);
-  std::optional<ConstantIntRanges>
-  conditionBound(Value valueHandle, Value cond, bool holds, unsigned depth = 0);
-  std::optional<ConstantIntRanges> compareBound(Value valueHandle,
-                                                arith::CmpIOp cmp, bool holds);
-  std::optional<APInt> constantOf(Value valueHandle);
-  std::optional<std::pair<uint64_t, uint64_t>>
-  smallUnsignedRange(Value valueHandle);
+  bool isUndefined(Value v) const;
+  const SmallVector<Operation *, 2> &reachingStore(Operation *load);
+  SmallVector<Operation *, 2> findReachingStore(Operation *load,
+                                                bool exactOnly = false,
+                                                Operation *from = nullptr);
+  // --- Accumulations (N159) ---
+  struct Accumulation {
+    Value init;                  ///< the loop's init operand
+    SmallVector<Value, 4> steps; ///< the addends of the yielded chain
+    int64_t trips = 0;
+  };
+  const std::optional<Accumulation> &accumulationOf(BlockArgument arg);
+  void updateAccumulations(Operation *yield);
+  DenseMap<Value, std::optional<Accumulation>> accumulations;
+  /// Per accumulation iter_arg: its range at the start of an iteration
+  /// (init + (T - 1) x step) and the loop result's (init + T x step).
+  DenseMap<Value, IntegerValueRange> accumulationRange;
+  DenseMap<Value, IntegerValueRange> accumulationResult;
+  DenseMap<Value, unsigned> accumulationChanges;
+  // The same accumulation through memory: `a[x] = init` before a loop of T
+  // trips whose body adds to a[x] (`a[x] = a[x] + s`, x invariant; N159).
+  struct MemAccumulation {
+    SmallVector<Operation *, 2> inits; ///< the stores of init before the loop
+    Operation *store = nullptr;        ///< the read-modify-write store
+    SmallVector<Value, 4> steps;       ///< its addends
+    int64_t trips = 0;
+  };
+  const std::optional<MemAccumulation> &memAccumulationOf(Operation *load);
+  DenseMap<Operation *, std::optional<MemAccumulation>> memAccumulations;
+  /// Per accumulating load: the range of one iteration's step (persists
+  /// across rounds, as the steps follow the load in program order).
+  DenseMap<Operation *, IntegerValueRange> memAccumulationStep;
+  DenseMap<Operation *, unsigned> memAccumulationStepChanges;
+  /// The read-modify-write store of each accumulating load -> the load.
+  DenseMap<Operation *, Operation *> memAccumulationLoadOf;
+  std::optional<std::pair<Value, int64_t>> pointerLocation(Value ptr);
+  Value rootOf(Value v) const;
+  bool writesCalleeParameter(Operation *store) const;
+  bool calleeMayWrite(func::FuncOp callee, unsigned arg, unsigned depth = 0);
+  DenseMap<std::pair<Operation *, unsigned>, bool> calleeWrites;
+  std::optional<ConstantIntRanges> conditionBound(Value v, Value cond,
+                                                  bool holds,
+                                                  unsigned depth = 0);
+  std::optional<ConstantIntRanges> compareBound(Value v, arith::CmpIOp cmp,
+                                                bool holds);
+  std::optional<APInt> constantOf(Value v);
+  std::optional<std::pair<uint64_t, uint64_t>> smallUnsignedRange(Value v);
   IntegerValueRange blockArgRange(BlockArgument arg);
   void forwardOp(Operation *op);
   void endRound();
   std::optional<std::pair<int64_t, int64_t>>
-  affineRange(AffineExpr entryValue, ValueRange dims, ValueRange syms);
+  affineRange(AffineExpr e, ValueRange dims, ValueRange syms);
 
+  // --- Demanded bits (backward) ---
   void solveDemand();
-  std::pair<unsigned, Operation *> valueDemand(Value valueHandle);
+  std::pair<unsigned, Operation *> valueDemand(Value v);
   unsigned useDemand(OpOperand &use);
-  unsigned resultDemand(Value resultValue) const {
-    return demand.lookup(resultValue);
-  }
+  unsigned resultDemand(Value r) const { return demand.lookup(r); }
   std::optional<unsigned> subscriptBits(Value memref, unsigned dim,
                                         bool isRead) const;
   std::optional<SmallVector<bool>> completeDims(Value memref) const;
   std::optional<std::pair<int64_t, int64_t>> subscriptRange(Operation *access,
                                                             unsigned dim);
-  bool differentBanks(Operation *arrayValue, Operation *buildPoint);
-  bool feedsBackIntoSameBank(Value valueHandle, unsigned cls, Operation *store);
-  unsigned affineAccessDemand(Operation *op, OpOperand &use,
-                              unsigned widthValue);
+  bool differentBanks(Operation *a, Operation *b);
+  bool feedsBackIntoSameBank(Value v, unsigned cls, Operation *store);
+  unsigned affineAccessDemand(Operation *op, OpOperand &use, unsigned w);
 
-  std::optional<unsigned> constantSetBits(const MemClass &candidateValue);
+  // --- Result ---
+  std::optional<unsigned> constantSetBits(const MemClass &c);
   void annotate();
   std::string demandChain(Operation *load) const;
   std::string nameOf(Value memref) const;
@@ -291,26 +436,57 @@ private:
   SymbolTable symbols;
   PartitionRoots partitions;
   bool rangesOn, demandOn, remarksOn;
-
+  // A read's subscript of a completely partitioned dimension of S elements
+  // demands ceil(log2 S) bits (the bank selector, VITIS_NOTES N91)
+  // (tool.hls.narrowing.complete_read_selector).
   bool completeReadSelector;
-
+  bool undefContributesNothing;
+  bool reachingStoreRanges;
+  bool accumulationRanges;
+  bool calleeParamStoresFullRange;
+  /// The reaching stores of a load (empty: none), computed once.
+  DenseMap<Operation *, SmallVector<Operation *, 2>> reachingStores;
+  /// The same with exactOnly (the store of the load's own address).
+  DenseMap<Operation *, SmallVector<Operation *, 2>> reachingStoresExact;
+  const SmallVector<Operation *, 2> &reachingStoreExact(Operation *load);
+  /// Per block, the ops that may write each root (in block order), and the
+  /// ops that may write without saying what.
+  struct BlockWriters {
+    DenseMap<Value, SmallVector<Operation *>> byRoot;
+    SmallVector<Operation *> unknown;
+  };
+  const BlockWriters &blockWriters(Block *block);
+  DenseMap<Block *, std::unique_ptr<BlockWriters>> blockWriterCache;
+  /// The memories a region op may write (their roots), or `unknown`.
+  struct RegionWrites {
+    DenseSet<Value> roots;
+    bool unknown = false;
+  };
+  const RegionWrites &regionWrites(Operation *op);
+  DenseMap<Operation *, std::unique_ptr<RegionWrites>> regionWriteCache;
+  // Interface modes whose array subscripts demand every bit
+  // (tool.hls.narrowing.full_address_interface_modes).
   SmallVector<std::string> fullAddressModes;
 
+  // Union-find over roots and callee parameters (keys: root ops, block
+  // arguments as opaque pointers).
   llvm::EquivalenceClasses<unsigned> unionFind;
   DenseMap<const void *, unsigned> nodeIds;
   DenseMap<Value, unsigned> nodeOfValue;
-  DenseMap<unsigned, std::string> opaqueNodes;
-  DenseSet<unsigned> addressKnownNodes;
-  DenseSet<unsigned> copiedInNodes;
-  SmallVector<Operation *> nodeRoot;
+  DenseMap<unsigned, std::string> opaqueNodes; // node -> why
+  DenseSet<unsigned> addressKnownNodes; // opaque, but own address (N41)
+  DenseSet<unsigned> copiedInNodes;     // a memcpy destination
+  SmallVector<Operation *> nodeRoot;           // node -> root op or null
   std::vector<MemClass> classes;
   DenseMap<unsigned, unsigned> classOfLeader;
 
+  // Ops in program order (post-order: a region op after its body).
   SmallVector<Operation *> ops;
 
+  // Forward state.
   DenseMap<Value, IntegerValueRange> ranges;
-  DenseMap<Value, IntegerValueRange> paramRange;
-  DenseMap<Value, unsigned> paramRangeChanges;
+  DenseMap<Value, IntegerValueRange> paramRange; // callee scalar params
+  DenseMap<Value, unsigned> paramRangeChanges; // rounds in which it grew
   DenseSet<Value> paramGrewThisRound;
   DenseSet<Value> paramRangePinned;
   bool rangesChanged = false;
@@ -318,6 +494,7 @@ private:
   DenseMap<Operation *, SmallVector<func::CallOp>> callSites;
   mutable DenseMap<Operation *, bool> internalFunctions;
 
+  // Backward state.
   DenseMap<Value, unsigned> demand;
   DenseMap<Value, Operation *> demandUser;
   DenseMap<Value, unsigned> paramDemand;
@@ -333,21 +510,21 @@ unsigned Narrowing::nodeOf(const void *key) {
   return it->second;
 }
 
-func::FuncOp Narrowing::internalCallee(func::CallOp callSite) const {
-  auto fieldValue = symbols.lookup<func::FuncOp>(callSite.getCallee());
-  if (!fieldValue || fieldValue.isExternal() || !isInternalFunction(fieldValue))
+func::FuncOp Narrowing::internalCallee(func::CallOp call) const {
+  auto f = symbols.lookup<func::FuncOp>(call.getCallee());
+  if (!f || f.isExternal() || !isInternalFunction(f))
     return {};
-  return fieldValue;
+  return f;
 }
 
 /// A private function whose every symbol use is a direct call: its parameters
 /// are what the call sites pass.
-bool Narrowing::isInternalFunction(func::FuncOp fieldValue) const {
-  auto cached = internalFunctions.find(fieldValue);
+bool Narrowing::isInternalFunction(func::FuncOp f) const {
+  auto cached = internalFunctions.find(f);
   if (cached != internalFunctions.end())
     return cached->second;
-  bool internal = computeInternal(fieldValue);
-  internalFunctions[fieldValue] = internal;
+  bool internal = computeInternal(f);
+  internalFunctions[f] = internal;
   return internal;
 }
 
@@ -356,316 +533,300 @@ bool Narrowing::isInternalFunction(func::FuncOp fieldValue) const {
 /// subscript is part of a bus address). An array parameter without a pragma
 /// is an ap_memory port under flow_target=vivado: its subscript demands the
 /// bits of its own address, as for a local (VITIS_NOTES N41).
-bool Narrowing::hasFullAddressInterface(func::FuncOp fieldValue,
-                                        unsigned arg) const {
-  auto ifaces = fieldValue.getArgAttrOfType<ArrayAttr>(arg, "hls.interface");
+bool Narrowing::hasFullAddressInterface(func::FuncOp f, unsigned arg) const {
+  auto ifaces = f.getArgAttrOfType<ArrayAttr>(arg, "hls.interface");
   if (!ifaces)
     return false;
-  for (Attribute arrayValue : ifaces) {
-    auto dimensionIndex = dyn_cast<DictionaryAttr>(arrayValue);
-    auto mode = dimensionIndex ? dimensionIndex.getAs<StringAttr>("mode")
-                               : StringAttr();
+  for (Attribute a : ifaces) {
+    auto d = dyn_cast<DictionaryAttr>(a);
+    auto mode = d ? d.getAs<StringAttr>("mode") : StringAttr();
     if (mode && llvm::is_contained(fullAddressModes, mode.getValue().str()))
       return true;
   }
   return false;
 }
 
-bool Narrowing::computeInternal(func::FuncOp fieldValue) const {
-  if (!fieldValue.isPrivate() || fieldValue.isExternal())
+bool Narrowing::computeInternal(func::FuncOp f) const {
+  if (!f.isPrivate() || f.isExternal())
     return false;
-  std::optional<SymbolTable::UseRange> symbolUses =
-      SymbolTable::getSymbolUses(fieldValue, module);
-  if (!symbolUses)
+  std::optional<SymbolTable::UseRange> uses =
+      SymbolTable::getSymbolUses(f, module);
+  if (!uses)
     return false;
   bool any = false;
-  for (const SymbolTable::SymbolUse &useValue : *symbolUses) {
-    if (!isa<func::CallOp>(useValue.getUser()))
+  for (const SymbolTable::SymbolUse &u : *uses) {
+    if (!isa<func::CallOp>(u.getUser()))
       return false;
     any = true;
   }
   return any;
 }
 
-void Narrowing::trackValue(Value valueHandle, unsigned node,
+void Narrowing::trackValue(Value v, unsigned node,
                            SmallVectorImpl<std::pair<Value, unsigned>> &work) {
-  if (nodeOfValue.try_emplace(valueHandle, node).second)
-    work.push_back({valueHandle, node});
+  if (nodeOfValue.try_emplace(v, node).second)
+    work.push_back({v, node});
 }
 
 void Narrowing::buildClasses() {
-  module.walk([&](func::CallOp callSite) {
-    if (auto fieldValue = symbols.lookup<func::FuncOp>(callSite.getCallee()))
-      callSites[fieldValue].push_back(callSite);
+  module.walk([&](func::CallOp call) {
+    if (auto f = symbols.lookup<func::FuncOp>(call.getCallee()))
+      callSites[f].push_back(call);
   });
   SmallVector<std::pair<Value, unsigned>> work;
   module.walk([&](Operation *op) {
     if (isa<memref::AllocaOp, memref::AllocOp>(op)) {
-      unsigned elementCount = nodeOf(op);
-      nodeRoot[elementCount] = op;
-      trackValue(op->getResult(0), elementCount, work);
+      unsigned n = nodeOf(op);
+      nodeRoot[n] = op;
+      trackValue(op->getResult(0), n, work);
     }
   });
   for (auto g : module.getOps<memref::GlobalOp>()) {
-    unsigned elementCount = nodeOf(g.getOperation());
-    nodeRoot[elementCount] = g;
+    unsigned n = nodeOf(g.getOperation());
+    nodeRoot[n] = g;
     if (g.isExternal())
-      opaqueNodes[elementCount] = "external global";
-    std::optional<SymbolTable::UseRange> symbolUses =
+      opaqueNodes[n] = "external global";
+    std::optional<SymbolTable::UseRange> uses =
         SymbolTable::getSymbolUses(g, module);
-    if (!symbolUses) {
-      opaqueNodes[elementCount] = "symbol uses unknown";
+    if (!uses) {
+      opaqueNodes[n] = "symbol uses unknown";
       continue;
     }
-    for (const SymbolTable::SymbolUse &useValue : *symbolUses) {
-      if (auto globalUse = dyn_cast<memref::GetGlobalOp>(useValue.getUser()))
-        trackValue(globalUse.getResult(), elementCount, work);
+    for (const SymbolTable::SymbolUse &u : *uses) {
+      if (auto gg = dyn_cast<memref::GetGlobalOp>(u.getUser()))
+        trackValue(gg.getResult(), n, work);
       else
-        opaqueNodes[elementCount] =
-            ("symbol used by " + useValue.getUser()->getName().getStringRef())
-                .str();
+        opaqueNodes[n] = ("symbol used by " +
+                          u.getUser()->getName().getStringRef())
+                             .str();
     }
   }
-  for (auto fieldValue : module.getOps<func::FuncOp>()) {
-    if (fieldValue.isExternal())
+  for (auto f : module.getOps<func::FuncOp>()) {
+    if (f.isExternal())
       continue;
-    bool internal = isInternalFunction(fieldValue);
-    for (BlockArgument arrayValue : fieldValue.getArguments()) {
-      if (!isa<BaseMemRefType>(arrayValue.getType()))
+    bool internal = isInternalFunction(f);
+    for (BlockArgument a : f.getArguments()) {
+      if (!isa<BaseMemRefType>(a.getType()))
         continue;
-      unsigned elementCount = nodeOf(arrayValue.getAsOpaquePointer());
+      unsigned n = nodeOf(a.getAsOpaquePointer());
       if (!internal) {
-        opaqueNodes[elementCount] = "interface (memref parameter of " +
-                                    fieldValue.getSymName().str() + ")";
-        if (!hasFullAddressInterface(fieldValue, arrayValue.getArgNumber()))
-          addressKnownNodes.insert(elementCount);
+        opaqueNodes[n] = "interface (memref parameter of " +
+                         f.getSymName().str() + ")";
+        if (!hasFullAddressInterface(f, a.getArgNumber()))
+          addressKnownNodes.insert(n);
       }
-      trackValue(arrayValue, elementCount, work);
+      trackValue(a, n, work);
     }
   }
 
   while (!work.empty()) {
-    auto [valueHandle, elementCount] = work.pop_back_val();
-    for (OpOperand &use : valueHandle.getUses()) {
+    auto [v, n] = work.pop_back_val();
+    for (OpOperand &use : v.getUses()) {
       Operation *user = use.getOwner();
       if (std::optional<Access> acc = asAccess(user))
-        if (acc->memref == valueHandle && acc->stored != valueHandle)
-          continue;
+        if (acc->memref == v && acc->stored != v)
+          continue; // the access is collected per class below
       if (auto view = dyn_cast<ViewLikeOpInterface>(user))
-        if (view.getViewSource() == valueHandle) {
-          for (Value resultValue : user->getResults())
-            if (isa<BaseMemRefType>(resultValue.getType()))
-              trackValue(resultValue, elementCount, work);
+        if (view.getViewSource() == v) {
+          for (Value r : user->getResults())
+            if (isa<BaseMemRefType>(r.getType()))
+              trackValue(r, n, work);
           continue;
         }
       if (isa<memref::DimOp, memref::DeallocOp>(user))
         continue;
       if (isMemcpyDestination(user)) {
-        copiedInNodes.insert(elementCount);
+        copiedInNodes.insert(n);
         continue;
       }
-      if (auto callSite = dyn_cast<func::CallOp>(user))
-        if (func::FuncOp callee = internalCallee(callSite)) {
-          BlockArgument portValue = callee.getArgument(use.getOperandNumber());
-          unionFind.unionSets(elementCount,
-                              nodeOf(portValue.getAsOpaquePointer()));
+      if (auto call = dyn_cast<func::CallOp>(user))
+        if (func::FuncOp callee = internalCallee(call)) {
+          BlockArgument p = callee.getArgument(use.getOperandNumber());
+          unionFind.unionSets(n, nodeOf(p.getAsOpaquePointer()));
           continue;
         }
-      opaqueNodes[elementCount] =
+      opaqueNodes[n] =
           ("escapes to " + user->getName().getStringRef()).str();
     }
   }
 
+  // One class per union-find set.
   for (const auto *ec : unionFind) {
     if (!ec->isLeader())
       continue;
     unsigned leader = ec->getData();
     classOfLeader[leader] = classes.size();
     classes.emplace_back();
-    MemClass &candidateValue = classes.back();
-    for (auto memoryOp = unionFind.member_begin(*ec);
-         memoryOp != unionFind.member_end(); ++memoryOp) {
-      if (Operation *root = nodeRoot[*memoryOp])
-        candidateValue.roots.push_back(root);
-      candidateValue.copiedIn |= copiedInNodes.contains(*memoryOp);
-      auto o = opaqueNodes.find(*memoryOp);
+    MemClass &c = classes.back();
+    for (auto m = unionFind.member_begin(*ec); m != unionFind.member_end();
+         ++m) {
+      if (Operation *root = nodeRoot[*m])
+        c.roots.push_back(root);
+      c.copiedIn |= copiedInNodes.contains(*m);
+      auto o = opaqueNodes.find(*m);
       if (o == opaqueNodes.end())
         continue;
-      candidateValue.addressOpaque |= !addressKnownNodes.contains(*memoryOp);
-      if (!candidateValue.opaque) {
-        candidateValue.opaque = candidateValue.fixed = true;
-        candidateValue.fixedReason = o->second;
+      c.addressOpaque |= !addressKnownNodes.contains(*m);
+      if (!c.opaque) {
+        c.opaque = c.fixed = true;
+        c.fixedReason = o->second;
       }
     }
   }
 
+  // Accesses, element types, ROMs, initial values.
   module.walk([&](Operation *op) {
     std::optional<Access> acc = asAccess(op);
     if (!acc)
       return;
-    MemClass *candidateValue = classOf(acc->memref);
-    if (!candidateValue)
+    MemClass *c = classOf(acc->memref);
+    if (!c)
       return;
-    (acc->stored ? candidateValue->stores : candidateValue->loads)
-        .push_back(op);
+    (acc->stored ? c->stores : c->loads).push_back(op);
   });
-  for (MemClass &candidateValue : classes) {
+  for (MemClass &c : classes) {
     auto setFixed = [&](const std::string &why) {
-      if (!candidateValue.fixed) {
-        candidateValue.fixed = true;
-        candidateValue.fixedReason = why;
+      if (!c.fixed) {
+        c.fixed = true;
+        c.fixedReason = why;
       }
     };
-    for (Operation *root : candidateValue.roots) {
-      Type elt =
-          isa<memref::GlobalOp>(root)
-              ? cast<memref::GlobalOp>(root).getType().getElementType()
-              : cast<MemRefType>(root->getResult(0).getType()).getElementType();
-      if (!candidateValue.elemType)
-        candidateValue.elemType = elt;
-      else if (candidateValue.elemType != elt)
+    for (Operation *root : c.roots) {
+      Type elt = isa<memref::GlobalOp>(root)
+                     ? cast<memref::GlobalOp>(root).getType().getElementType()
+                     : cast<MemRefType>(root->getResult(0).getType())
+                           .getElementType();
+      if (!c.elemType)
+        c.elemType = elt;
+      else if (c.elemType != elt)
         setFixed("element types differ");
       if (root->hasAttr("hls.const_fill"))
         setFixed("array written only with constants (ROM width rule)");
       auto g = dyn_cast<memref::GlobalOp>(root);
       if (!g || g.isExternal())
         continue;
-      unsigned widthValue = bitWidthOf(elt);
-      ConstantIntRanges initialValue =
-          ConstantIntRanges::constant(APInt(widthValue ? widthValue : 1, 0));
-      if (auto dimensionIndex =
-              dyn_cast_or_null<DenseIntElementsAttr>(g.getInitialValueAttr())) {
+      unsigned w = bitWidthOf(elt);
+      ConstantIntRanges init = ConstantIntRanges::constant(APInt(w ? w : 1, 0));
+      if (auto d = dyn_cast_or_null<DenseIntElementsAttr>(
+              g.getInitialValueAttr())) {
         bool first = true;
-        for (const APInt &valueHandle : dimensionIndex.getValues<APInt>()) {
-          ConstantIntRanges resultValue =
-              ConstantIntRanges::constant(valueHandle);
-          initialValue =
-              first ? resultValue : initialValue.rangeUnion(resultValue);
+        for (const APInt &v : d.getValues<APInt>()) {
+          ConstantIntRanges r = ConstantIntRanges::constant(v);
+          init = first ? r : init.rangeUnion(r);
           first = false;
         }
       }
-      if (widthValue)
-        candidateValue.initRange =
-            candidateValue.initRange
-                ? candidateValue.initRange->rangeUnion(initialValue)
-                : initialValue;
-      if (!g.isUninitialized() && candidateValue.stores.empty())
+      if (w)
+        c.initRange = c.initRange ? c.initRange->rangeUnion(init) : init;
+      if (!g.isUninitialized() && c.stores.empty())
         setFixed("initialised global never written: a ROM (ROM width rule)");
     }
-    if (!candidateValue.elemType && candidateValue.roots.empty())
-      continue;
-    candidateValue.declaredBits =
-        candidateValue.elemType ? bitWidthOf(candidateValue.elemType) : 0;
-    if (!isa_and_nonnull<IntegerType>(candidateValue.elemType))
+    if (!c.elemType && c.roots.empty())
+      continue; // only parameters: an interface, never priced here
+    c.declaredBits = c.elemType ? bitWidthOf(c.elemType) : 0;
+    if (!isa_and_nonnull<IntegerType>(c.elemType))
       setFixed("element type is not an integer");
-
-    for (Operation *ld : candidateValue.loads)
+    // Every access moves one element (no vector loads / stores).
+    for (Operation *ld : c.loads)
       if (ld->getNumResults() != 1 ||
-          ld->getResult(0).getType() != candidateValue.elemType)
+          ld->getResult(0).getType() != c.elemType)
         setFixed("an access moves more than one element");
-    for (Operation *st : candidateValue.stores)
-      if (asAccess(st)->stored.getType() != candidateValue.elemType)
+    for (Operation *st : c.stores)
+      if (asAccess(st)->stored.getType() != c.elemType)
         setFixed("an access moves more than one element");
   }
 }
 
 MemClass *Narrowing::classOf(Value memref) const {
-  auto elementCount = nodeOfValue.find(memref);
-  if (elementCount == nodeOfValue.end())
+  auto n = nodeOfValue.find(memref);
+  if (n == nodeOfValue.end())
     return nullptr;
-  unsigned leader = unionFind.getLeaderValue(elementCount->second);
-  auto candidateValue = classOfLeader.find(leader);
-  if (candidateValue == classOfLeader.end())
+  unsigned leader = unionFind.getLeaderValue(n->second);
+  auto c = classOfLeader.find(leader);
+  if (c == classOfLeader.end())
     return nullptr;
-  return const_cast<MemClass *>(&classes[candidateValue->second]);
+  return const_cast<MemClass *>(&classes[c->second]);
 }
 
 std::string Narrowing::nameOf(Value memref) const {
-  MemClass *candidateValue = classOf(memref);
-  if (candidateValue)
-    for (Operation *root : candidateValue->roots) {
-      if (auto variableName =
-              root->getAttrOfType<StringAttr>("polygeist.varname"))
-        return variableName.getValue().str();
+  MemClass *c = classOf(memref);
+  if (c)
+    for (Operation *root : c->roots) {
+      if (auto vn = root->getAttrOfType<StringAttr>("polygeist.varname"))
+        return vn.getValue().str();
       if (auto g = dyn_cast<memref::GlobalOp>(root))
         return g.getSymName().str();
     }
   if (auto arg = dyn_cast<BlockArgument>(memref))
-    if (auto fieldValue = dyn_cast<func::FuncOp>(arg.getOwner()->getParentOp()))
+    if (auto f = dyn_cast<func::FuncOp>(arg.getOwner()->getParentOp()))
       return "argument " + std::to_string(arg.getArgNumber()) + " of @" +
-             fieldValue.getSymName().str();
+             f.getSymName().str();
   return "<memref>";
 }
 
+//===----------------------------------------------------------------------===//
+// Stored ranges.
+//===----------------------------------------------------------------------===//
+
 std::optional<std::pair<int64_t, int64_t>>
-Narrowing::affineRange(AffineExpr entryValue, ValueRange dims,
-                       ValueRange syms) {
+Narrowing::affineRange(AffineExpr e, ValueRange dims, ValueRange syms) {
   using Range = std::pair<int64_t, int64_t>;
-  auto ofValue = [&](Value valueHandle) -> std::optional<Range> {
-    IntegerValueRange resultValue = rangeOf(valueHandle);
-    if (resultValue.isUninitialized())
+  auto ofValue = [&](Value v) -> std::optional<Range> {
+    IntegerValueRange r = rangeOf(v);
+    if (r.isUninitialized())
       return std::nullopt;
-    const ConstantIntRanges &candidateValue = resultValue.getValue();
-    if (candidateValue.smin().getSignificantBits() > 62 ||
-        candidateValue.smax().getSignificantBits() > 62)
+    const ConstantIntRanges &c = r.getValue();
+    if (c.smin().getSignificantBits() > 62 || c.smax().getSignificantBits() > 62)
       return std::nullopt;
-    return Range{candidateValue.smin().getSExtValue(),
-                 candidateValue.smax().getSExtValue()};
+    return Range{c.smin().getSExtValue(), c.smax().getSExtValue()};
   };
-  if (auto candidateValue = dyn_cast<AffineConstantExpr>(entryValue))
-    return Range{candidateValue.getValue(), candidateValue.getValue()};
-  if (auto dimensionIndex = dyn_cast<AffineDimExpr>(entryValue))
-    return ofValue(dims[dimensionIndex.getPosition()]);
-  if (auto stringValue = dyn_cast<AffineSymbolExpr>(entryValue))
-    return ofValue(syms[stringValue.getPosition()]);
-  auto bin = dyn_cast<AffineBinaryOpExpr>(entryValue);
+  if (auto c = dyn_cast<AffineConstantExpr>(e))
+    return Range{c.getValue(), c.getValue()};
+  if (auto d = dyn_cast<AffineDimExpr>(e))
+    return ofValue(dims[d.getPosition()]);
+  if (auto s = dyn_cast<AffineSymbolExpr>(e))
+    return ofValue(syms[s.getPosition()]);
+  auto bin = dyn_cast<AffineBinaryOpExpr>(e);
   if (!bin)
     return std::nullopt;
-  std::optional<Range> lowerIndex = affineRange(bin.getLHS(), dims, syms);
-  std::optional<Range> resultValue = affineRange(bin.getRHS(), dims, syms);
-  if (!lowerIndex || !resultValue)
+  std::optional<Range> l = affineRange(bin.getLHS(), dims, syms);
+  std::optional<Range> r = affineRange(bin.getRHS(), dims, syms);
+  if (!l || !r)
     return std::nullopt;
   constexpr int64_t kLimit = int64_t(1) << 60;
-  auto bounded = [&](Range exprValue) -> std::optional<Range> {
-    if (exprValue.first < -kLimit || exprValue.second > kLimit)
+  auto bounded = [&](Range x) -> std::optional<Range> {
+    if (x.first < -kLimit || x.second > kLimit)
       return std::nullopt;
-    return exprValue;
+    return x;
   };
-  switch (entryValue.getKind()) {
+  switch (e.getKind()) {
   case AffineExprKind::Add:
-    return bounded({lowerIndex->first + resultValue->first,
-                    lowerIndex->second + resultValue->second});
+    return bounded({l->first + r->first, l->second + r->second});
   case AffineExprKind::Mul: {
-    if (std::abs(lowerIndex->first) > (1 << 30) ||
-        std::abs(lowerIndex->second) > (1 << 30) ||
-        std::abs(resultValue->first) > (1 << 30) ||
-        std::abs(resultValue->second) > (1 << 30))
+    if (std::abs(l->first) > (1 << 30) || std::abs(l->second) > (1 << 30) ||
+        std::abs(r->first) > (1 << 30) || std::abs(r->second) > (1 << 30))
       return std::nullopt;
-    int64_t portValue[] = {lowerIndex->first * resultValue->first,
-                           lowerIndex->first * resultValue->second,
-                           lowerIndex->second * resultValue->first,
-                           lowerIndex->second * resultValue->second};
-    return Range{*std::min_element(portValue, portValue + 4),
-                 *std::max_element(portValue, portValue + 4)};
+    int64_t p[] = {l->first * r->first, l->first * r->second,
+                   l->second * r->first, l->second * r->second};
+    return Range{*std::min_element(p, p + 4), *std::max_element(p, p + 4)};
   }
   case AffineExprKind::FloorDiv:
   case AffineExprKind::CeilDiv: {
-    if (resultValue->first != resultValue->second || resultValue->first <= 0)
+    if (r->first != r->second || r->first <= 0)
       return std::nullopt;
-    int64_t candidateValue = resultValue->first;
-    bool ceil = entryValue.getKind() == AffineExprKind::CeilDiv;
-    auto div = [&](int64_t exprValue) {
-      return ceil ? llvm::divideCeilSigned(exprValue, candidateValue)
-                  : llvm::divideFloorSigned(exprValue, candidateValue);
+    int64_t c = r->first;
+    bool ceil = e.getKind() == AffineExprKind::CeilDiv;
+    auto div = [&](int64_t x) {
+      return ceil ? llvm::divideCeilSigned(x, c) : llvm::divideFloorSigned(x, c);
     };
-    return Range{div(lowerIndex->first), div(lowerIndex->second)};
+    return Range{div(l->first), div(l->second)};
   }
   case AffineExprKind::Mod: {
-    if (resultValue->first != resultValue->second || resultValue->first <= 0)
+    if (r->first != r->second || r->first <= 0)
       return std::nullopt;
-    if (lowerIndex->first >= 0 && lowerIndex->second < resultValue->first)
-      return *lowerIndex;
-    return Range{0, resultValue->first - 1};
+    if (l->first >= 0 && l->second < r->first)
+      return *l;
+    return Range{0, r->first - 1};
   }
   default:
     return std::nullopt;
@@ -679,68 +840,70 @@ IntegerValueRange Narrowing::blockArgRange(BlockArgument arg) {
     if (!lo || !hiExclusive || step <= 0)
       return IntegerValueRange::getMaxRange(arg);
     if (*hiExclusive <= *lo)
-      return IntegerValueRange();
+      return IntegerValueRange(); // the loop never runs
     int64_t last = *lo + ((*hiExclusive - 1 - *lo) / step) * step;
-    unsigned widthValue = bitWidthOf(arg.getType());
+    unsigned w = bitWidthOf(arg.getType());
     return IntegerValueRange(ConstantIntRanges::fromSigned(
-        APInt(widthValue, *lo, true), APInt(widthValue, last, true)));
+        APInt(w, *lo, /*isSigned=*/true), APInt(w, last, /*isSigned=*/true)));
   };
-  if (auto fieldValue = dyn_cast<affine::AffineForOp>(owner)) {
-    if (arg != fieldValue.getInductionVar())
-      return IntegerValueRange::getMaxRange(arg);
+  // N159: an accumulation's iter_arg has the range updateAccumulations
+  // found in the previous round (uninitialised until then).
+  if (isa<affine::AffineForOp, scf::ForOp>(owner) &&
+      arg.getArgNumber() > 0 && accumulationOf(arg)) {
+    auto it = accumulationRange.find(arg);
+    return it == accumulationRange.end() ? IntegerValueRange() : it->second;
+  }
+  if (auto f = dyn_cast<affine::AffineForOp>(owner)) {
+    if (arg != f.getInductionVar())
+      return IntegerValueRange::getMaxRange(arg); // an iter_arg: recurrence
     std::optional<int64_t> lo, hi;
-    AffineMap lbMap = fieldValue.getLowerBoundMap(),
-              ubMap = fieldValue.getUpperBoundMap();
-    auto lbOps = fieldValue.getLowerBoundOperands(),
-         ubOps = fieldValue.getUpperBoundOperands();
-
-    for (AffineExpr entryValue : lbMap.getResults()) {
-      auto resultValue = affineRange(
-          entryValue, ValueRange(lbOps).take_front(lbMap.getNumDims()),
-          ValueRange(lbOps).drop_front(lbMap.getNumDims()));
-      if (!resultValue)
+    AffineMap lbMap = f.getLowerBoundMap(), ubMap = f.getUpperBoundMap();
+    auto lbOps = f.getLowerBoundOperands(), ubOps = f.getUpperBoundOperands();
+    // A max of several lower bounds: at least the largest minimum; a min of
+    // upper bounds: at most the smallest maximum.
+    for (AffineExpr e : lbMap.getResults()) {
+      auto r = affineRange(e, ValueRange(lbOps).take_front(lbMap.getNumDims()),
+                           ValueRange(lbOps).drop_front(lbMap.getNumDims()));
+      if (!r)
         continue;
-      lo = lo ? std::max(*lo, resultValue->first) : resultValue->first;
+      lo = lo ? std::max(*lo, r->first) : r->first;
     }
-    for (AffineExpr entryValue : ubMap.getResults()) {
-      auto resultValue = affineRange(
-          entryValue, ValueRange(ubOps).take_front(ubMap.getNumDims()),
-          ValueRange(ubOps).drop_front(ubMap.getNumDims()));
-      if (!resultValue) {
+    for (AffineExpr e : ubMap.getResults()) {
+      auto r = affineRange(e, ValueRange(ubOps).take_front(ubMap.getNumDims()),
+                           ValueRange(ubOps).drop_front(ubMap.getNumDims()));
+      if (!r) {
         hi.reset();
         break;
       }
-      hi = hi ? std::min(*hi, resultValue->second) : resultValue->second;
+      hi = hi ? std::min(*hi, r->second) : r->second;
     }
     if (lbMap.getNumResults() == 0)
       lo.reset();
-
+    // The IV is at most the largest upper bound value minus one; step >= 1
+    // keeps it at most that.
     if (!lo || !hi)
       return IntegerValueRange::getMaxRange(arg);
     if (*hi <= *lo)
       return IntegerValueRange();
-    unsigned widthValue = bitWidthOf(arg.getType());
+    unsigned w = bitWidthOf(arg.getType());
     return IntegerValueRange(ConstantIntRanges::fromSigned(
-        APInt(widthValue, *lo, true), APInt(widthValue, *hi - 1, true)));
+        APInt(w, *lo, true), APInt(w, *hi - 1, true)));
   }
-  if (auto fieldValue = dyn_cast<scf::ForOp>(owner)) {
-    if (arg != fieldValue.getInductionVar())
+  if (auto f = dyn_cast<scf::ForOp>(owner)) {
+    if (arg != f.getInductionVar())
       return IntegerValueRange::getMaxRange(arg);
-    std::optional<int64_t> step = getConstantIntValue(fieldValue.getStep());
-    IntegerValueRange lb = rangeOf(fieldValue.getLowerBound());
-    IntegerValueRange ub = rangeOf(fieldValue.getUpperBound());
+    std::optional<int64_t> step = getConstantIntValue(f.getStep());
+    IntegerValueRange lb = rangeOf(f.getLowerBound());
+    IntegerValueRange ub = rangeOf(f.getUpperBound());
     if (lb.isUninitialized() || ub.isUninitialized() || !step || *step <= 0)
       return IntegerValueRange::getMaxRange(arg);
-    const ConstantIntRanges &lowerIndex = lb.getValue(),
-                            &useValue = ub.getValue();
-    if (lowerIndex.smin().getSignificantBits() > 62 ||
-        useValue.smax().getSignificantBits() > 62)
+    const ConstantIntRanges &l = lb.getValue(), &u = ub.getValue();
+    if (l.smin().getSignificantBits() > 62 || u.smax().getSignificantBits() > 62)
       return IntegerValueRange::getMaxRange(arg);
-    return fromBounds(lowerIndex.smin().getSExtValue(),
-                      useValue.smax().getSExtValue(), 1);
+    return fromBounds(l.smin().getSExtValue(), u.smax().getSExtValue(), 1);
   }
-  if (auto fieldValue = dyn_cast<func::FuncOp>(owner)) {
-    if (!isInternalFunction(fieldValue) || paramRangePinned.count(arg))
+  if (auto f = dyn_cast<func::FuncOp>(owner)) {
+    if (!isInternalFunction(f) || paramRangePinned.count(arg))
       return IntegerValueRange::getMaxRange(arg);
     auto it = paramRange.find(arg);
     return it == paramRange.end() ? IntegerValueRange() : it->second;
@@ -748,52 +911,51 @@ IntegerValueRange Narrowing::blockArgRange(BlockArgument arg) {
   return IntegerValueRange::getMaxRange(arg);
 }
 
-IntegerValueRange Narrowing::rangeOf(Value valueHandle) {
-  if (!bitWidthOf(valueHandle.getType()))
-    return IntegerValueRange::getMaxRange(valueHandle);
-  auto it = ranges.find(valueHandle);
+IntegerValueRange Narrowing::rangeOf(Value v) {
+  if (!bitWidthOf(v.getType()))
+    return IntegerValueRange::getMaxRange(v);
+  auto it = ranges.find(v);
   if (it != ranges.end())
     return it->second;
-  if (auto arg = dyn_cast<BlockArgument>(valueHandle)) {
-    IntegerValueRange resultValue = blockArgRange(arg);
-    ranges[valueHandle] = resultValue;
-    return resultValue;
+  if (auto arg = dyn_cast<BlockArgument>(v)) {
+    IntegerValueRange r = blockArgRange(arg);
+    ranges[v] = r;
+    return r;
   }
-  return IntegerValueRange::getMaxRange(valueHandle);
+  return IntegerValueRange::getMaxRange(v);
 }
 
 /// The range of `use`'s value at the user: its range, narrowed by the
 /// condition of every scf.if the user sits in (the else arm of
 /// `x < -128 ? -128 : min(x, 127)` sees x >= -128).
 IntegerValueRange Narrowing::operandRange(OpOperand &use) {
-  Value valueHandle = use.get();
-  IntegerValueRange resultValue = rangeOf(valueHandle);
-  if (resultValue.isUninitialized())
-    return resultValue;
-  ConstantIntRanges cur = resultValue.getValue();
+  Value v = use.get();
+  IntegerValueRange r = rangeOf(v);
+  if (r.isUninitialized())
+    return r;
+  ConstantIntRanges cur = r.getValue();
   for (Operation *at = use.getOwner(); at && !isa<func::FuncOp>(at);
        at = at->getParentOp()) {
     auto ifOp = dyn_cast_or_null<scf::IfOp>(at->getParentOp());
     if (!ifOp)
       continue;
     bool inThen = at->getParentRegion() == &ifOp.getThenRegion();
-    if (std::optional<ConstantIntRanges> buildPoint =
-            conditionBound(valueHandle, ifOp.getCondition(), inThen)) {
-      ConstantIntRanges exprValue = cur.intersection(*buildPoint);
-      if (exprValue.smin().sle(exprValue.smax()) &&
-          exprValue.umin().ule(exprValue.umax()))
-        cur = exprValue;
+    if (std::optional<ConstantIntRanges> b =
+            conditionBound(v, ifOp.getCondition(), inThen)) {
+      ConstantIntRanges x = cur.intersection(*b);
+      if (x.smin().sle(x.smax()) && x.umin().ule(x.umax()))
+        cur = x;
     }
   }
   return IntegerValueRange(cur);
 }
 
 /// A compile-time value of `v`: a constant op, or a range of one value.
-std::optional<APInt> Narrowing::constantOf(Value valueHandle) {
-  APInt candidateValue;
-  if (matchPattern(valueHandle, m_ConstantInt(&candidateValue)))
-    return candidateValue;
-  auto it = ranges.find(valueHandle);
+std::optional<APInt> Narrowing::constantOf(Value v) {
+  APInt c;
+  if (matchPattern(v, m_ConstantInt(&c)))
+    return c;
+  auto it = ranges.find(v);
   if (it != ranges.end() && !it->second.isUninitialized() &&
       it->second.getValue().smin() == it->second.getValue().smax())
     return it->second.getValue().smin();
@@ -802,37 +964,34 @@ std::optional<APInt> Narrowing::constantOf(Value valueHandle) {
 
 /// [umin, umax] of a value known to be non-negative and below 2^32.
 std::optional<std::pair<uint64_t, uint64_t>>
-Narrowing::smallUnsignedRange(Value valueHandle) {
-  std::optional<ConstantIntRanges> resultValue;
-  APInt candidateValue;
-  if (matchPattern(valueHandle, m_ConstantInt(&candidateValue)))
-    resultValue = ConstantIntRanges::constant(candidateValue);
-  else if (auto it = ranges.find(valueHandle);
+Narrowing::smallUnsignedRange(Value v) {
+  std::optional<ConstantIntRanges> r;
+  APInt c;
+  if (matchPattern(v, m_ConstantInt(&c)))
+    r = ConstantIntRanges::constant(c);
+  else if (auto it = ranges.find(v);
            it != ranges.end() && !it->second.isUninitialized())
-    resultValue = it->second.getValue();
-  if (!resultValue || resultValue->smin().isNegative() ||
-      resultValue->umax().getActiveBits() > 32)
+    r = it->second.getValue();
+  if (!r || r->smin().isNegative() || r->umax().getActiveBits() > 32)
     return std::nullopt;
-  return std::make_pair(resultValue->umin().getZExtValue(),
-                        resultValue->umax().getZExtValue());
+  return std::make_pair(r->umin().getZExtValue(), r->umax().getZExtValue());
 }
 
 /// Both bounds at once; nullopt when they contradict (no value satisfies
 /// both, so the code is dead and the bound is not used).
 static std::optional<ConstantIntRanges>
-meetBounds(std::optional<ConstantIntRanges> arrayValue,
-           std::optional<ConstantIntRanges> buildPoint) {
-  if (!arrayValue)
-    return buildPoint;
-  if (!buildPoint)
-    return arrayValue;
-  ConstantIntRanges exprValue = arrayValue->intersection(*buildPoint);
-  if (exprValue.smin().sgt(exprValue.smax()) ||
-      exprValue.umin().ugt(exprValue.umax()))
+meetBounds(std::optional<ConstantIntRanges> a,
+           std::optional<ConstantIntRanges> b) {
+  if (!a)
+    return b;
+  if (!b)
+    return a;
+  ConstantIntRanges x = a->intersection(*b);
+  if (x.smin().sgt(x.smax()) || x.umin().ugt(x.umax()))
     return std::nullopt;
-
-  APInt smin = exprValue.smin(), smax = exprValue.smax(),
-        umin = exprValue.umin(), umax = exprValue.umax();
+  // The two views describe one set: `x >= 0` (signed) and `x < 300`
+  // (signed) leave signed [0, 299], so the unsigned view is [0, 299] too.
+  APInt smin = x.smin(), smax = x.smax(), umin = x.umin(), umax = x.umax();
   if (!smin.isNegative()) {
     umin = llvm::APIntOps::umax(umin, smin);
     umax = llvm::APIntOps::umin(umax, smax);
@@ -848,11 +1007,11 @@ meetBounds(std::optional<ConstantIntRanges> arrayValue,
 
 /// Either bound: a bound only when both sides give one.
 static std::optional<ConstantIntRanges>
-joinBounds(std::optional<ConstantIntRanges> arrayValue,
-           std::optional<ConstantIntRanges> buildPoint) {
-  if (!arrayValue || !buildPoint)
+joinBounds(std::optional<ConstantIntRanges> a,
+           std::optional<ConstantIntRanges> b) {
+  if (!a || !b)
     return std::nullopt;
-  return arrayValue->rangeUnion(*buildPoint);
+  return a->rangeUnion(*b);
 }
 
 /// What `cond` being `holds` says about `v`: a bound when cond compares v (or
@@ -862,202 +1021,1090 @@ joinBounds(std::optional<ConstantIntRanges> arrayValue,
 /// an `arith.andi` / `arith.ori` of i1s is the same. When the conjunction
 /// holds, both bounds hold (Vitis narrows `x >= 0 && x < 300` to 9 bits);
 /// when a disjunction holds, one of them does. nullopt: it says nothing.
-std::optional<ConstantIntRanges> Narrowing::conditionBound(Value valueHandle,
-                                                           Value cond,
-                                                           bool holds,
-                                                           unsigned depth) {
+std::optional<ConstantIntRanges>
+Narrowing::conditionBound(Value v, Value cond, bool holds, unsigned depth) {
   if (depth > kMaxConditionDepth)
     return std::nullopt;
   if (auto cmp = cond.getDefiningOp<arith::CmpIOp>())
-    return compareBound(valueHandle, cmp, holds);
-  auto bound = [&](Value candidateValue, bool h) {
-    return conditionBound(valueHandle, candidateValue, h, depth + 1);
+    return compareBound(v, cmp, holds);
+  auto bound = [&](Value c, bool h) {
+    return conditionBound(v, c, h, depth + 1);
   };
-
+  // The bound of `lhs AND rhs` (isAnd) or `lhs OR rhs` being `holds`.
   auto combine = [&](Value lhs, Value rhs, bool isAnd) {
+    // a && b holds, or a || b fails: both sides (negated for ||) hold.
     if (isAnd == holds)
       return meetBounds(bound(lhs, holds), bound(rhs, holds));
     return joinBounds(bound(lhs, holds), bound(rhs, holds));
   };
-  if (auto arrayValue = cond.getDefiningOp<arith::AndIOp>();
-      arrayValue && arrayValue.getType().isInteger(1))
-    return combine(arrayValue.getLhs(), arrayValue.getRhs(), true);
-  if (auto o = cond.getDefiningOp<arith::OrIOp>();
-      o && o.getType().isInteger(1))
-    return combine(o.getLhs(), o.getRhs(), false);
+  if (auto a = cond.getDefiningOp<arith::AndIOp>(); a && a.getType().isInteger(1))
+    return combine(a.getLhs(), a.getRhs(), /*isAnd=*/true);
+  if (auto o = cond.getDefiningOp<arith::OrIOp>(); o && o.getType().isInteger(1))
+    return combine(o.getLhs(), o.getRhs(), /*isAnd=*/false);
   auto ifOp = cond.getDefiningOp<scf::IfOp>();
   if (!ifOp || ifOp.getNumResults() != 1 || ifOp.getElseRegion().empty() ||
       !cond.getType().isInteger(1))
     return std::nullopt;
   Value yThen = ifOp.thenYield().getOperand(0);
   Value yElse = ifOp.elseYield().getOperand(0);
-  APInt keyValue;
-  if (matchPattern(yElse, m_ConstantInt(&keyValue)) && keyValue.isZero())
-    return combine(ifOp.getCondition(), yThen, true);
-  if (matchPattern(yThen, m_ConstantInt(&keyValue)) && keyValue.isOne())
-    return combine(ifOp.getCondition(), yElse, false);
+  APInt k;
+  if (matchPattern(yElse, m_ConstantInt(&k)) && k.isZero())
+    return combine(ifOp.getCondition(), yThen, /*isAnd=*/true);
+  if (matchPattern(yThen, m_ConstantInt(&k)) && k.isOne())
+    return combine(ifOp.getCondition(), yElse, /*isAnd=*/false);
   return std::nullopt;
 }
 
 /// What the comparison `cmp` being `holds` says about `v` (see
 /// conditionBound).
 std::optional<ConstantIntRanges>
-Narrowing::compareBound(Value valueHandle, arith::CmpIOp cmp, bool holds) {
+Narrowing::compareBound(Value v, arith::CmpIOp cmp, bool holds) {
   using P = arith::CmpIPredicate;
   P pred = cmp.getPredicate();
   Value side = cmp.getLhs();
-  std::optional<APInt> candidateValue = constantOf(cmp.getRhs());
-  if (!candidateValue) {
-
-    candidateValue = constantOf(cmp.getLhs());
+  std::optional<APInt> c = constantOf(cmp.getRhs());
+  if (!c) {
+    // constant <pred> side  ==  side <swapped pred> constant
+    c = constantOf(cmp.getLhs());
     side = cmp.getRhs();
-    if (!candidateValue)
+    if (!c)
       return std::nullopt;
     switch (pred) {
-    case P::slt:
-      pred = P::sgt;
-      break;
-    case P::sle:
-      pred = P::sge;
-      break;
-    case P::sgt:
-      pred = P::slt;
-      break;
-    case P::sge:
-      pred = P::sle;
-      break;
-    case P::ult:
-      pred = P::ugt;
-      break;
-    case P::ule:
-      pred = P::uge;
-      break;
-    case P::ugt:
-      pred = P::ult;
-      break;
-    case P::uge:
-      pred = P::ule;
-      break;
-    default:
-      break;
+    case P::slt: pred = P::sgt; break;
+    case P::sle: pred = P::sge; break;
+    case P::sgt: pred = P::slt; break;
+    case P::sge: pred = P::sle; break;
+    case P::ult: pred = P::ugt; break;
+    case P::ule: pred = P::uge; break;
+    case P::ugt: pred = P::ult; break;
+    case P::uge: pred = P::ule; break;
+    default: break;
     }
   }
   if (!holds)
     pred = arith::invertPredicate(pred);
   bool sext = false, zext = false;
-  if (side != valueHandle) {
-    if (auto entryValue = side.getDefiningOp<arith::ExtSIOp>();
-        entryValue && entryValue.getIn() == valueHandle)
+  if (side != v) {
+    if (auto e = side.getDefiningOp<arith::ExtSIOp>(); e && e.getIn() == v)
       sext = true;
-    else if (auto entryValue = side.getDefiningOp<arith::ExtUIOp>();
-             entryValue && entryValue.getIn() == valueHandle)
+    else if (auto e = side.getDefiningOp<arith::ExtUIOp>(); e && e.getIn() == v)
       zext = true;
     else
       return std::nullopt;
   }
-  unsigned wide = candidateValue->getBitWidth();
-  bool isSigned =
-      pred == P::slt || pred == P::sle || pred == P::sgt || pred == P::sge;
+  unsigned wide = c->getBitWidth();
+  bool isSigned = pred == P::slt || pred == P::sle || pred == P::sgt ||
+                  pred == P::sge;
   APInt lo = isSigned ? APInt::getSignedMinValue(wide) : APInt::getZero(wide);
-  APInt hi =
-      isSigned ? APInt::getSignedMaxValue(wide) : APInt::getMaxValue(wide);
+  APInt hi = isSigned ? APInt::getSignedMaxValue(wide)
+                      : APInt::getMaxValue(wide);
   switch (pred) {
-  case P::eq:
-    lo = hi = *candidateValue;
-    break;
-  case P::slt:
-    if (candidateValue->isMinSignedValue())
-      return std::nullopt;
-    hi = *candidateValue - 1;
-    break;
-  case P::sle:
-    hi = *candidateValue;
-    break;
-  case P::sgt:
-    if (candidateValue->isMaxSignedValue())
-      return std::nullopt;
-    lo = *candidateValue + 1;
-    break;
-  case P::sge:
-    lo = *candidateValue;
-    break;
-  case P::ult:
-    if (candidateValue->isZero())
-      return std::nullopt;
-    hi = *candidateValue - 1;
-    break;
-  case P::ule:
-    hi = *candidateValue;
-    break;
-  case P::ugt:
-    if (candidateValue->isMaxValue())
-      return std::nullopt;
-    lo = *candidateValue + 1;
-    break;
-  case P::uge:
-    lo = *candidateValue;
-    break;
-  default:
-    return std::nullopt;
+  case P::eq: lo = hi = *c; break;
+  case P::slt: if (c->isMinSignedValue()) return std::nullopt; hi = *c - 1; break;
+  case P::sle: hi = *c; break;
+  case P::sgt: if (c->isMaxSignedValue()) return std::nullopt; lo = *c + 1; break;
+  case P::sge: lo = *c; break;
+  case P::ult: if (c->isZero()) return std::nullopt; hi = *c - 1; break;
+  case P::ule: hi = *c; break;
+  case P::ugt: if (c->isMaxValue()) return std::nullopt; lo = *c + 1; break;
+  case P::uge: lo = *c; break;
+  default: return std::nullopt;
   }
-  unsigned widthValue = bitWidthOf(valueHandle.getType());
+  unsigned w = bitWidthOf(v.getType());
   if (!sext && !zext)
     return isSigned || pred == P::eq ? ConstantIntRanges::fromSigned(lo, hi)
                                      : ConstantIntRanges::fromUnsigned(lo, hi);
-
+  // Bring the bound to v's width: clamp to the image of the extension, then
+  // truncate.
   if (pred == P::eq)
     isSigned = sext;
   if (sext && isSigned) {
-    APInt mn = APInt::getSignedMinValue(widthValue).sext(wide);
-    APInt mx = APInt::getSignedMaxValue(widthValue).sext(wide);
-    if (lo.slt(mn))
-      lo = mn;
-    if (hi.sgt(mx))
-      hi = mx;
+    APInt mn = APInt::getSignedMinValue(w).sext(wide);
+    APInt mx = APInt::getSignedMaxValue(w).sext(wide);
+    if (lo.slt(mn)) lo = mn;
+    if (hi.sgt(mx)) hi = mx;
     if (lo.sgt(hi))
       return std::nullopt;
-    return ConstantIntRanges::fromSigned(lo.trunc(widthValue),
-                                         hi.trunc(widthValue));
+    return ConstantIntRanges::fromSigned(lo.trunc(w), hi.trunc(w));
   }
   if (zext && !isSigned) {
-    APInt mx = APInt::getMaxValue(widthValue).zext(wide);
-    if (hi.ugt(mx))
-      hi = mx;
+    APInt mx = APInt::getMaxValue(w).zext(wide);
+    if (hi.ugt(mx)) hi = mx;
     if (lo.ugt(hi))
       return std::nullopt;
-    return ConstantIntRanges::fromUnsigned(lo.trunc(widthValue),
-                                           hi.trunc(widthValue));
+    return ConstantIntRanges::fromUnsigned(lo.trunc(w), hi.trunc(w));
+  }
+  // A signed comparison of a zero-extended value (`(int)x > 100 ? 100 : x`
+  // with x an unsigned char, the clamp of W9 round 21 review D8, kernel
+  // w9r21rev_r1c_iterinit: Vitis 11 bits): the value lies in [0, 2^w - 1],
+  // non-negative in the wider type.
+  if (zext && isSigned && w < wide) {
+    APInt mx = APInt::getMaxValue(w).zext(wide);
+    APInt zero = APInt::getZero(wide);
+    if (lo.slt(zero)) lo = zero;
+    if (hi.sgt(mx)) hi = mx;
+    if (lo.sgt(hi))
+      return std::nullopt;
+    return ConstantIntRanges::fromUnsigned(lo.trunc(w), hi.trunc(w));
   }
   return std::nullopt;
 }
 
+/// Whether `v` is an undefined value (tool.hls.narrowing.
+/// undef_contributes_nothing): it adds nothing to a select's or an if's range.
+bool Narrowing::isUndefined(Value v) const {
+  if (!undefContributesNothing)
+    return false;
+  Operation *def = v.getDefiningOp();
+  return def && isa<LLVM::UndefOp, LLVM::PoisonOp>(def);
+}
+
+/// Whether every subscript of the access `op` is the constant 0.
+static bool accessesElementZero(Operation *op) {
+  if (auto ld = dyn_cast<memref::LoadOp>(op))
+    return llvm::all_of(ld.getIndices(),
+                        [](Value i) { return matchPattern(i, m_Zero()); });
+  if (auto st = dyn_cast<memref::StoreOp>(op))
+    return llvm::all_of(st.getIndices(),
+                        [](Value i) { return matchPattern(i, m_Zero()); });
+  AffineMap map;
+  ValueRange operands;
+  if (auto rd = dyn_cast<affine::AffineReadOpInterface>(op)) {
+    map = rd.getAffineMap();
+    operands = rd.getMapOperands();
+  } else if (auto wr = dyn_cast<affine::AffineWriteOpInterface>(op)) {
+    map = wr.getAffineMap();
+    operands = wr.getMapOperands();
+  } else {
+    return false;
+  }
+  for (AffineExpr e : map.getResults()) {
+    auto c = dyn_cast<AffineConstantExpr>(e);
+    if (!c || c.getValue() != 0)
+      return false;
+  }
+  return true;
+}
+
+/// Whether `store` writes through a scalar reference parameter of a function
+/// that is called (a kept callee; the top function has no call site): a
+/// memref parameter whose every use in the callee is a load or store of
+/// element 0 (`int &seen`, a struct member by reference). A parameter that
+/// is a whole array (`int seen[128]`, indexed) does not count (kernel
+/// w9r21fx_x2_plainarr: narrowed to 1 bit in Vitis).
+bool Narrowing::writesCalleeParameter(Operation *store) const {
+  std::optional<Access> acc = asAccess(store);
+  if (!acc || !acc->stored || acc->memref.getDefiningOp())
+    return false;
+  auto arg = dyn_cast<BlockArgument>(acc->memref);
+  if (!arg || !arg.getOwner()->isEntryBlock())
+    return false;
+  auto f = dyn_cast<func::FuncOp>(arg.getOwner()->getParentOp());
+  if (!f || !callSites.count(f) || callSites.lookup(f).empty())
+    return false;
+  return llvm::all_of(arg.getUsers(), [&](Operation *user) {
+    std::optional<Access> a = asAccess(user);
+    return a && a->memref == arg && accessesElementZero(user);
+  });
+}
+
+/// The memory a memref or pointer value is a view of: through casts, views,
+/// cgeist's memref2pointer / pointer2memref and getelementptr.
+Value Narrowing::rootOf(Value v) const {
+  for (unsigned i = 0; i < 64; ++i) {
+    Operation *def = v.getDefiningOp();
+    if (!def)
+      return v;
+    if (isa<Memref2PointerOp, Pointer2MemrefOp, LLVM::GEPOp>(def)) {
+      v = def->getOperand(0);
+      continue;
+    }
+    if (auto view = dyn_cast<ViewLikeOpInterface>(def)) {
+      v = view.getViewSource();
+      continue;
+    }
+    return v;
+  }
+  return v;
+}
+
+/// Whether `callee` may write through its memref / pointer parameter `arg`:
+/// a store through it or anything derived from it, or a call it is passed to
+/// that may (an external callee may).
+bool Narrowing::calleeMayWrite(func::FuncOp callee, unsigned arg,
+                               unsigned depth) {
+  if (!callee || callee.isExternal() || arg >= callee.getNumArguments() ||
+      depth > 8)
+    return true;
+  auto key = std::make_pair(callee.getOperation(), arg);
+  if (auto it = calleeWrites.find(key); it != calleeWrites.end())
+    return it->second;
+  calleeWrites[key] = true; // a recursive cycle: assume it writes
+  bool writes = false;
+  SmallVector<Value> work{callee.getArgument(arg)};
+  DenseSet<Value> seen{callee.getArgument(arg)};
+  while (!work.empty() && !writes) {
+    Value v = work.pop_back_val();
+    for (OpOperand &use : v.getUses()) {
+      Operation *user = use.getOwner();
+      if (isa<Memref2PointerOp, Pointer2MemrefOp, LLVM::GEPOp,
+              ViewLikeOpInterface>(user)) {
+        for (Value r : user->getResults())
+          if (seen.insert(r).second)
+            work.push_back(r);
+        continue;
+      }
+      if (auto call = dyn_cast<func::CallOp>(user)) {
+        func::FuncOp inner = symbols.lookup<func::FuncOp>(call.getCallee());
+        if (calleeMayWrite(inner, use.getOperandNumber(), depth + 1))
+          writes = true;
+        continue;
+      }
+      if (isa<LLVM::LoadOp, memref::LoadOp, affine::AffineLoadOp>(user))
+        continue;
+      if (auto eff = dyn_cast<MemoryEffectOpInterface>(user)) {
+        SmallVector<MemoryEffects::EffectInstance> effects;
+        eff.getEffects(effects);
+        for (auto &e : effects)
+          if (isa<MemoryEffects::Write>(e.getEffect()))
+            writes = true;
+        continue;
+      }
+      if (!isMemoryEffectFree(user))
+        writes = true;
+    }
+  }
+  calleeWrites[key] = writes;
+  return writes;
+}
+
+/// The (root, byte offset) a pointer addresses when every getelementptr on
+/// the way has compile-time indices over a scalar element type.
+std::optional<std::pair<Value, int64_t>>
+Narrowing::pointerLocation(Value ptr) {
+  int64_t offset = 0;
+  for (unsigned i = 0; i < 64; ++i) {
+    Operation *def = ptr.getDefiningOp();
+    if (auto gep = dyn_cast_or_null<LLVM::GEPOp>(def)) {
+      Type elt = gep.getElemType();
+      std::optional<int64_t> bits = llvmStorageBits(elt);
+      if (!bits || *bits % 8 || gep.getIndices().size() != 1 ||
+          !elt.isIntOrFloat())
+        return std::nullopt;
+      auto idx = gep.getIndices()[0];
+      int64_t k = 0;
+      if (auto attr = llvm::dyn_cast_if_present<IntegerAttr>(idx)) {
+        k = attr.getInt();
+      } else if (Value dyn = llvm::dyn_cast_if_present<Value>(idx)) {
+        std::optional<APInt> c = constantOf(dyn);
+        if (!c || c->getSignificantBits() > 32)
+          return std::nullopt;
+        k = c->getSExtValue();
+      } else {
+        return std::nullopt;
+      }
+      offset += k * (*bits / 8);
+      ptr = gep.getBase();
+      continue;
+    }
+    if (isa_and_nonnull<Memref2PointerOp>(def))
+      return std::make_pair(rootOf(ptr), offset);
+    return std::nullopt;
+  }
+  return std::nullopt;
+}
+
+const SmallVector<Operation *, 2> &
+Narrowing::reachingStoreExact(Operation *load) {
+  auto it = reachingStoresExact.find(load);
+  if (it == reachingStoresExact.end())
+    it = reachingStoresExact
+             .try_emplace(load, findReachingStore(load, /*exactOnly=*/true))
+             .first;
+  return it->second;
+}
+
+/// The roots of every memory `op` (a region op) may write, through stores,
+/// calls it passes them to and declared write effects; `unknown` when an op
+/// inside may write without saying what.
+const Narrowing::RegionWrites &Narrowing::regionWrites(Operation *op) {
+  std::unique_ptr<RegionWrites> &slot = regionWriteCache[op];
+  if (slot)
+    return *slot;
+  auto rw = std::make_unique<RegionWrites>();
+  op->walk([&](Operation *inner) {
+    if (inner == op || rw->unknown)
+      return;
+    if (auto st = dyn_cast<LLVM::StoreOp>(inner)) {
+      rw->roots.insert(rootOf(st.getAddr()));
+      return;
+    }
+    if (std::optional<Access> acc = asAccess(inner)) {
+      if (acc->stored)
+        rw->roots.insert(rootOf(acc->memref));
+      return;
+    }
+    if (isa<CallOpInterface>(inner)) {
+      for (Value o : inner->getOperands())
+        if (isa<BaseMemRefType, LLVM::LLVMPointerType>(o.getType()))
+          rw->roots.insert(rootOf(o));
+      return;
+    }
+    if (inner->getNumRegions())
+      return; // its ops are visited by the walk
+    if (auto eff = dyn_cast<MemoryEffectOpInterface>(inner)) {
+      SmallVector<MemoryEffects::EffectInstance> effects;
+      eff.getEffects(effects);
+      for (auto &e : effects)
+        if (isa<MemoryEffects::Write>(e.getEffect())) {
+          if (e.getValue())
+            rw->roots.insert(rootOf(e.getValue()));
+          else
+            rw->unknown = true;
+        }
+      return;
+    }
+    if (!inner->hasTrait<OpTrait::HasRecursiveMemoryEffects>() &&
+        !isMemoryEffectFree(inner))
+      rw->unknown = true;
+  });
+  slot = std::move(rw);
+  return *slot;
+}
+
+/// The writers of each root among the ops of `block` (an op is listed under
+/// every root it may write; region ops through regionWrites).
+const Narrowing::BlockWriters &Narrowing::blockWriters(Block *block) {
+  std::unique_ptr<BlockWriters> &slot = blockWriterCache[block];
+  if (slot)
+    return *slot;
+  auto bw = std::make_unique<BlockWriters>();
+  for (Operation &op : *block) {
+    DenseSet<Value> roots;
+    bool unknown = false;
+    if (auto st = dyn_cast<LLVM::StoreOp>(op)) {
+      roots.insert(rootOf(st.getAddr()));
+    } else if (std::optional<Access> acc = asAccess(&op)) {
+      if (acc->stored)
+        roots.insert(rootOf(acc->memref));
+    } else if (isa<CallOpInterface>(op)) {
+      for (Value o : op.getOperands())
+        if (isa<BaseMemRefType, LLVM::LLVMPointerType>(o.getType()))
+          roots.insert(rootOf(o));
+    } else if (op.getNumRegions()) {
+      const RegionWrites &rw = regionWrites(&op);
+      roots.insert(rw.roots.begin(), rw.roots.end());
+      unknown = rw.unknown;
+    } else if (auto eff = dyn_cast<MemoryEffectOpInterface>(op)) {
+      SmallVector<MemoryEffects::EffectInstance> effects;
+      eff.getEffects(effects);
+      for (auto &e : effects)
+        if (isa<MemoryEffects::Write>(e.getEffect())) {
+          if (e.getValue())
+            roots.insert(rootOf(e.getValue()));
+          else
+            unknown = true;
+        }
+    } else if (!op.hasTrait<OpTrait::HasRecursiveMemoryEffects>() &&
+               !isMemoryEffectFree(&op)) {
+      unknown = true;
+    }
+    if (unknown)
+      bw->unknown.push_back(&op);
+    else
+      for (Value r : roots)
+        bw->byRoot[r].push_back(&op);
+  }
+  slot = std::move(bw);
+  return *slot;
+}
+
+const SmallVector<Operation *, 2> &Narrowing::reachingStore(Operation *load) {
+  auto it = reachingStores.find(load);
+  if (it == reachingStores.end())
+    it = reachingStores.try_emplace(load, findReachingStore(load)).first;
+  return it->second;
+}
+
+/// tool.hls.narrowing.reaching_store_ranges (VITIS_NOTES N151 (c)): the store
+/// earlier in `load`'s block that writes exactly the element it reads, with
+/// nothing in between that may write it, or the stores of both arms of an if
+/// in between (one per arm; an arm without one takes the store before the
+/// if); empty when there is none (the load then has its array's range). Only
+/// for loads of a struct field through cgeist's pointer (constant
+/// getelementptr offsets) and of a completely partitioned memref at constant
+/// subscripts.
+SmallVector<Operation *, 2> Narrowing::findReachingStore(Operation *load,
+                                                         bool exactOnly,
+                                                         Operation *from) {
+  Value root;
+  // The exact address of a memref access: a store with the same memref and
+  // the same subscript operands (and map) writes the same element whatever
+  // the array's partitioning (plain store-to-load forwarding;
+  // tool.hls.narrowing.accumulation_ranges, N159: `acc[i] = 0` then the
+  // accumulation loop's first load of acc[i]).
+  Value loadMem;
+  AffineMap loadMap;
+  SmallVector<Value> loadOperands;
+  auto addressOf = [](Operation *op, Value &mem, AffineMap &map,
+                      SmallVectorImpl<Value> &operands) {
+    if (auto ld = dyn_cast<memref::LoadOp>(op)) {
+      mem = ld.getMemRef();
+      operands.assign(ld.getIndices().begin(), ld.getIndices().end());
+    } else if (auto st = dyn_cast<memref::StoreOp>(op)) {
+      mem = st.getMemRef();
+      operands.assign(st.getIndices().begin(), st.getIndices().end());
+    } else if (auto ld = dyn_cast<affine::AffineLoadOp>(op)) {
+      mem = ld.getMemRef();
+      map = ld.getAffineMap();
+      operands.assign(ld.getMapOperands().begin(), ld.getMapOperands().end());
+    } else if (auto st = dyn_cast<affine::AffineStoreOp>(op)) {
+      mem = st.getMemRef();
+      map = st.getAffineMap();
+      operands.assign(st.getMapOperands().begin(), st.getMapOperands().end());
+    } else {
+      return false;
+    }
+    return true;
+  };
+  bool exactAddress = accumulationRanges &&
+                      addressOf(load, loadMem, loadMap, loadOperands);
+  std::optional<int64_t> offset;
+  SmallVector<int64_t> subscripts;
+  unsigned loadBits = bitWidthOf(load->getResult(0).getType());
+  auto constantSubscripts = [&](Operation *op,
+                                SmallVectorImpl<int64_t> &out) -> bool {
+    SmallVector<Value> idx;
+    if (auto ld = dyn_cast<memref::LoadOp>(op))
+      idx.assign(ld.getIndices().begin(), ld.getIndices().end());
+    else if (auto st = dyn_cast<memref::StoreOp>(op))
+      idx.assign(st.getIndices().begin(), st.getIndices().end());
+    else if (isa<affine::AffineLoadOp, affine::AffineStoreOp>(op)) {
+      AffineMap map;
+      SmallVector<Value> operands;
+      if (auto ld = dyn_cast<affine::AffineLoadOp>(op)) {
+        map = ld.getAffineMap();
+        operands.assign(ld.getMapOperands().begin(),
+                        ld.getMapOperands().end());
+      } else {
+        auto st = cast<affine::AffineStoreOp>(op);
+        map = st.getAffineMap();
+        operands.assign(st.getMapOperands().begin(),
+                        st.getMapOperands().end());
+      }
+      ValueRange all(operands);
+      for (AffineExpr e : map.getResults()) {
+        auto r = affineRange(e, all.take_front(map.getNumDims()),
+                             all.drop_front(map.getNumDims()));
+        if (!r || r->first != r->second)
+          return false;
+        out.push_back(r->first);
+      }
+      return true;
+    } else
+      return false;
+    for (Value v : idx) {
+      std::optional<APInt> c = constantOf(v);
+      if (!c || c->getSignificantBits() > 62)
+        return false;
+      out.push_back(c->getSExtValue());
+    }
+    return true;
+  };
+  if (auto ld = dyn_cast<LLVM::LoadOp>(load)) {
+    auto loc = pointerLocation(ld.getAddr());
+    if (!loc)
+      return {};
+    root = loc->first;
+    offset = loc->second;
+  } else if (std::optional<Access> acc = asAccess(load)) {
+    root = rootOf(acc->memref);
+    std::optional<SmallVector<bool>> complete =
+        exactOnly ? std::nullopt : completeDims(acc->memref);
+    // Every dimension is split into registers: completely partitioned, or
+    // of extent 1 (the leading dimension cgeist gives a struct member).
+    auto type = dyn_cast<MemRefType>(acc->memref.getType());
+    bool registers =
+        complete && type &&
+        llvm::all_of(llvm::enumerate(*complete), [&](auto dim) {
+          return dim.value() || type.getDimSize(dim.index()) == 1;
+        });
+    bool constantElement = registers && constantSubscripts(load, subscripts);
+    if (!constantElement) {
+      subscripts.clear();
+      if (!exactAddress)
+        return {};
+    }
+  } else {
+    return {};
+  }
+  // What `op` does to the element.
+  enum class Effect { None, Clobber, Reaches };
+  std::function<Effect(Operation *)> effectOf = [&](Operation *op) -> Effect {
+    if (auto st = dyn_cast<LLVM::StoreOp>(op)) {
+      if (rootOf(st.getAddr()) != root)
+        return Effect::None;
+      auto loc = pointerLocation(st.getAddr());
+      std::optional<int64_t> bits = llvmStorageBits(st.getValue().getType());
+      if (!offset || !loc || !bits || *bits % 8)
+        return Effect::Clobber;
+      int64_t lo = loc->second, hi = lo + *bits / 8;
+      int64_t mlo = *offset, mhi = mlo + loadBits / 8;
+      if (hi <= mlo || mhi <= lo)
+        return Effect::None;
+      if (lo == mlo && hi == mhi && st.getValue().getType().isInteger() &&
+          bitWidthOf(st.getValue().getType()) == loadBits)
+        return Effect::Reaches;
+      return Effect::Clobber;
+    }
+    if (std::optional<Access> acc = asAccess(op)) {
+      if (!acc->stored || rootOf(acc->memref) != root)
+        return Effect::None;
+      if (exactAddress && !offset && !isa<StoreEnableOp>(op)) {
+        Value mem;
+        AffineMap map;
+        SmallVector<Value> operands;
+        if (addressOf(op, mem, map, operands) && mem == loadMem &&
+            map == loadMap && operands == loadOperands)
+          return bitWidthOf(acc->stored.getType()) == loadBits
+                     ? Effect::Reaches
+                     : Effect::Clobber;
+      }
+      SmallVector<int64_t> sub;
+      if (offset || subscripts.empty() || !constantSubscripts(op, sub) ||
+          isa<StoreEnableOp>(op))
+        return Effect::Clobber;
+      if (sub != subscripts)
+        return Effect::None;
+      return bitWidthOf(acc->stored.getType()) == loadBits ? Effect::Reaches
+                                                           : Effect::Clobber;
+    }
+    if (isa<CallOpInterface>(op)) {
+      auto call = dyn_cast<func::CallOp>(op);
+      func::FuncOp callee =
+          call ? symbols.lookup<func::FuncOp>(call.getCallee()) : nullptr;
+      for (OpOperand &o : op->getOpOperands())
+        if (isa<BaseMemRefType, LLVM::LLVMPointerType>(o.get().getType()) &&
+            rootOf(o.get()) == root &&
+            calleeMayWrite(callee, o.getOperandNumber()))
+          return Effect::Clobber;
+      return Effect::None;
+    }
+    if (op->getNumRegions()) {
+      // Most region ops (unrolled loops, ifs) write other arrays: a cached
+      // summary answers them without a walk.
+      const RegionWrites &rw = regionWrites(op);
+      if (!rw.unknown && !rw.roots.contains(root))
+        return Effect::None;
+      bool clobber = false;
+      op->walk([&](Operation *inner) {
+        if (inner != op && effectOf(inner) != Effect::None)
+          clobber = true;
+      });
+      return clobber ? Effect::Clobber : Effect::None;
+    }
+    if (auto eff = dyn_cast<MemoryEffectOpInterface>(op)) {
+      SmallVector<MemoryEffects::EffectInstance> effects;
+      eff.getEffects(effects);
+      for (auto &e : effects)
+        if (isa<MemoryEffects::Write>(e.getEffect()) &&
+            (!e.getValue() || rootOf(e.getValue()) == root))
+          return Effect::Clobber;
+      return Effect::None;
+    }
+    return op->hasTrait<OpTrait::HasRecursiveMemoryEffects>() ||
+                   isMemoryEffectFree(op)
+               ? Effect::None
+               : Effect::Clobber;
+  };
+  // Search backwards from `from` (exclusive) in its block: the stores that
+  // reach (Found), nothing that writes the element (NotFound), or something
+  // that may write it otherwise (Clobber).
+  enum class Search { Found, NotFound, Clobber };
+  SmallVector<Operation *, 2> found;
+  std::function<Search(Operation *, Block *)> search =
+      [&](Operation *from, Block *block) -> Search {
+    // Only the ops of the block that may write the root (blockWriters)
+    // can be anything but Effect::None: visit those, latest first.
+    const BlockWriters &bw = blockWriters(block);
+    ArrayRef<Operation *> byRoot, unknown = bw.unknown;
+    if (auto it = bw.byRoot.find(root); it != bw.byRoot.end())
+      byRoot = it->second;
+    auto beforeFrom = [&](ArrayRef<Operation *> ops) {
+      if (!from)
+        return ops;
+      return ops.take_front(llvm::partition_point(
+                                ops, [&](Operation *o) {
+                                  return o->isBeforeInBlock(from);
+                                }) -
+                            ops.begin());
+    };
+    byRoot = beforeFrom(byRoot);
+    unknown = beforeFrom(unknown);
+    while (!byRoot.empty() || !unknown.empty()) {
+      Operation *op;
+      if (unknown.empty() ||
+          (!byRoot.empty() && unknown.back()->isBeforeInBlock(byRoot.back()))) {
+        op = byRoot.back();
+        byRoot = byRoot.drop_back();
+      } else {
+        op = unknown.back();
+        unknown = unknown.drop_back();
+      }
+      bool isIf = isa<scf::IfOp, affine::AffineIfOp>(op) &&
+                  op->getNumRegions() == 2 && !op->getRegion(1).empty();
+      if (isIf) {
+        Search arms[2];
+        for (unsigned r = 0; r < 2; ++r) {
+          Block &armBlock = op->getRegion(r).front();
+          arms[r] = search(armBlock.getTerminator(), &armBlock);
+          if (arms[r] == Search::Clobber)
+            return Search::Clobber;
+        }
+        if (arms[0] == Search::Found && arms[1] == Search::Found)
+          return Search::Found;
+        if (arms[0] == Search::NotFound && arms[1] == Search::NotFound)
+          continue;
+        // One arm writes the element: the other one keeps the value from
+        // before the if.
+        return search(op, block) == Search::Found ? Search::Found
+                                                  : Search::Clobber;
+      }
+      switch (effectOf(op)) {
+      case Effect::None:
+        continue;
+      case Effect::Reaches:
+        found.push_back(op);
+        return Search::Found;
+      case Effect::Clobber:
+        return Search::Clobber;
+      }
+    }
+    return Search::NotFound;
+  };
+  // `from`: search before that op (an enclosing loop) instead of the load.
+  Operation *start = from ? from : load;
+  if (search(start, start->getBlock()) != Search::Found)
+    return {};
+  return found;
+}
+
+/// The trip count of an affine.for / scf.for with constant bounds (1 ..
+/// 2^30), else nullopt.
+static std::optional<int64_t> constantTripCount(Operation *loop) {
+  std::optional<int64_t> trips;
+  if (auto f = dyn_cast<affine::AffineForOp>(loop)) {
+    if (std::optional<uint64_t> t = affine::getConstantTripCount(f))
+      trips = static_cast<int64_t>(*t);
+  } else if (auto f = dyn_cast<scf::ForOp>(loop)) {
+    std::optional<int64_t> lb = getConstantIntValue(f.getLowerBound());
+    std::optional<int64_t> ub = getConstantIntValue(f.getUpperBound());
+    std::optional<int64_t> st = getConstantIntValue(f.getStep());
+    if (lb && ub && st && *st > 0)
+      trips = *ub > *lb ? (*ub - *lb + *st - 1) / *st : 0;
+  }
+  if (!trips || *trips <= 0 || *trips > (int64_t(1) << 30))
+    return std::nullopt;
+  return trips;
+}
+
+/// [init.min + n * min(step.min, 0), init.max + n * max(step.max, 0)] in the
+/// type of `like`; its full range when that does not fit.
+static IntegerValueRange accumulatedRange(const ConstantIntRanges &init,
+                                          const APInt &stepLo,
+                                          const APInt &stepHi, int64_t n,
+                                          Value like) {
+  unsigned w = bitWidthOf(like.getType());
+  APInt t(128, n), l = init.smin().sext(128), h = init.smax().sext(128);
+  if (stepLo.isNegative())
+    l += t * stepLo;
+  if (stepHi.isStrictlyPositive())
+    h += t * stepHi;
+  if (l.getSignificantBits() > w || h.getSignificantBits() > w)
+    return IntegerValueRange::getMaxRange(like);
+  return IntegerValueRange(
+      ConstantIntRanges::fromSigned(l.trunc(w), h.trunc(w)));
+}
+
+/// The memory form of N159 (tool.hls.narrowing.accumulation_ranges): `load`
+/// reads a[x] in the body of a loop of T trips whose only write to a is
+/// `a[x] = load + s1 + ...` later in the same block (x the same subscripts,
+/// defined outside the loop; the addends not computed from the load), and
+/// `a[x] = init` reaches the loop: the load ranges over init + (T - 1) x
+/// the step, the store over init + T x the step (kernels w9r21p_j1_accT8 /
+/// j2_accT64; Analog-CIM optimized output_buf).
+const std::optional<Narrowing::MemAccumulation> &
+Narrowing::memAccumulationOf(Operation *load) {
+  auto it = memAccumulations.find(load);
+  if (it != memAccumulations.end())
+    return it->second;
+  std::optional<MemAccumulation> out;
+  auto record = [&]() -> const std::optional<MemAccumulation> & {
+    if (out)
+      memAccumulationLoadOf[out->store] = load;
+    return memAccumulations[load] = out;
+  };
+  if (!accumulationRanges || load->getNumResults() != 1 ||
+      !bitWidthOf(load->getResult(0).getType()) ||
+      !isa<affine::AffineLoadOp, memref::LoadOp>(load))
+    return record();
+  Operation *loop = load->getParentOp();
+  if (!loop || !isa<affine::AffineForOp, scf::ForOp>(loop))
+    return record();
+  std::optional<int64_t> trips = constantTripCount(loop);
+  if (!trips)
+    return record();
+  auto addressOf = [](Operation *op, Value &mem, AffineMap &map,
+                      SmallVectorImpl<Value> &operands) {
+    if (auto ld = dyn_cast<memref::LoadOp>(op)) {
+      mem = ld.getMemRef();
+      operands.assign(ld.getIndices().begin(), ld.getIndices().end());
+    } else if (auto st = dyn_cast<memref::StoreOp>(op)) {
+      mem = st.getMemRef();
+      operands.assign(st.getIndices().begin(), st.getIndices().end());
+    } else if (auto ld = dyn_cast<affine::AffineLoadOp>(op)) {
+      mem = ld.getMemRef();
+      map = ld.getAffineMap();
+      operands.assign(ld.getMapOperands().begin(), ld.getMapOperands().end());
+    } else if (auto st = dyn_cast<affine::AffineStoreOp>(op)) {
+      mem = st.getMemRef();
+      map = st.getAffineMap();
+      operands.assign(st.getMapOperands().begin(), st.getMapOperands().end());
+    } else {
+      return false;
+    }
+    return true;
+  };
+  Value mem;
+  AffineMap map;
+  SmallVector<Value> operands;
+  addressOf(load, mem, map, operands);
+  Region &body = loop->getRegion(0);
+  if (llvm::any_of(operands, [&](Value v) {
+        return body.isAncestor(v.getParentRegion());
+      }))
+    return record();
+  // The loop's writes to the array: one store of the same address.
+  Value root = rootOf(mem);
+  Operation *store = nullptr;
+  bool other = false;
+  loop->walk([&](Operation *op) {
+    if (std::optional<Access> acc = asAccess(op)) {
+      if (acc->stored && rootOf(acc->memref) == root) {
+        Value m;
+        AffineMap mp;
+        SmallVector<Value> ops;
+        if (store || isa<StoreEnableOp>(op) || !addressOf(op, m, mp, ops) ||
+            m != mem || mp != map || ops != operands)
+          other = true;
+        else
+          store = op;
+      }
+      return;
+    }
+    if (isa<CallOpInterface>(op))
+      for (Value o : op->getOperands())
+        if (isa<BaseMemRefType, LLVM::LLVMPointerType>(o.getType()) &&
+            rootOf(o) == root)
+          other = true;
+  });
+  if (other || !store || store->getBlock() != load->getBlock() ||
+      !load->isBeforeInBlock(store))
+    return record();
+  // The stored value as the load plus addends not computed from it.
+  Value word = load->getResult(0);
+  DenseSet<Value> derived{word};
+  for (Operation *op = load->getNextNode(); op && op != store;
+       op = op->getNextNode()) {
+    bool uses = false;
+    op->walk([&](Operation *inner) {
+      for (Value v : inner->getOperands())
+        uses |= derived.contains(v);
+    });
+    if (uses)
+      for (Value r : op->getResults())
+        derived.insert(r);
+  }
+  MemAccumulation acc;
+  Value cur = store->getOperand(0);
+  for (unsigned steps = 0; cur != word; ++steps) {
+    auto add = cur.getDefiningOp<arith::AddIOp>();
+    if (!add || add->getBlock() != load->getBlock() || steps > 4096)
+      return record();
+    Value a = add.getLhs(), b = add.getRhs();
+    if (derived.contains(b)) {
+      if (derived.contains(a))
+        return record();
+      std::swap(a, b);
+    }
+    if (derived.contains(b))
+      return record();
+    acc.steps.push_back(b);
+    cur = a;
+  }
+  if (acc.steps.empty())
+    return record();
+  acc.inits = findReachingStore(load, /*exactOnly=*/true, /*from=*/loop);
+  if (acc.inits.empty() ||
+      llvm::any_of(acc.inits, [](Operation *st) {
+        return !isa<affine::AffineStoreOp, memref::StoreOp>(st);
+      }))
+    return record();
+  acc.store = store;
+  acc.trips = *trips;
+  out = std::move(acc);
+  return record();
+}
+
+/// tool.hls.narrowing.accumulation_ranges (VITIS_NOTES N159): an iter_arg
+/// of a loop with a constant trip count T whose yielded value is the iter_arg
+/// plus addends that do not depend on it (`s += x` after register
+/// promotion, a chain of unrolled `+=` included) ranges over
+/// [init.min + (T - 1) * min(step.min, 0), init.max + (T - 1) *
+/// max(step.max, 0)] at the start of an iteration, and the loop's result
+/// with T for T - 1; nullopt for any other iter_arg (full range, as
+/// before).
+const std::optional<Narrowing::Accumulation> &
+Narrowing::accumulationOf(BlockArgument arg) {
+  auto it = accumulations.find(arg);
+  if (it != accumulations.end())
+    return it->second;
+  std::optional<Accumulation> out;
+  auto record = [&]() -> const std::optional<Accumulation> & {
+    return accumulations[arg] = out;
+  };
+  if (!accumulationRanges || !bitWidthOf(arg.getType()))
+    return record();
+  auto loop = dyn_cast<LoopLikeOpInterface>(arg.getOwner()->getParentOp());
+  if (!loop || !isa<affine::AffineForOp, scf::ForOp>(loop.getOperation()))
+    return record();
+  auto iterArgs = loop.getRegionIterArgs();
+  auto found = llvm::find(iterArgs, arg);
+  if (found == iterArgs.end())
+    return record();
+  unsigned k = found - iterArgs.begin();
+  std::optional<int64_t> trips = constantTripCount(loop.getOperation());
+  if (!trips)
+    return record();
+  Block *body = arg.getOwner();
+  Operation *yield = body->getTerminator();
+  if (k >= yield->getNumOperands())
+    return record();
+  // Everything in the body computed from the iter_arg.
+  DenseSet<Value> derived{arg};
+  for (Operation &op : body->without_terminator()) {
+    bool uses = false;
+    op.walk([&](Operation *inner) {
+      for (Value v : inner->getOperands())
+        uses |= derived.contains(v);
+    });
+    if (uses)
+      for (Value r : op.getResults())
+        derived.insert(r);
+  }
+  // The yielded value as the iter_arg plus independent addends.
+  Accumulation acc;
+  Value cur = yield->getOperand(k);
+  for (unsigned steps = 0; cur != arg; ++steps) {
+    auto add = cur.getDefiningOp<arith::AddIOp>();
+    if (!add || add->getBlock() != body || steps > 4096)
+      return record();
+    Value a = add.getLhs(), b = add.getRhs();
+    if (derived.contains(b)) {
+      if (derived.contains(a))
+        return record();
+      std::swap(a, b);
+    }
+    if (derived.contains(b))
+      return record();
+    acc.steps.push_back(b);
+    cur = a;
+  }
+  if (acc.steps.empty())
+    return record();
+  acc.init = loop.getInits()[k];
+  acc.trips = *trips;
+  out = std::move(acc);
+  return record();
+}
+
+/// Recomputes the ranges of the accumulations a loop's yield closes; the
+/// next round's iter_args (and the loop's results) read them.
+void Narrowing::updateAccumulations(Operation *yield) {
+  auto loop = dyn_cast<LoopLikeOpInterface>(yield->getParentOp());
+  if (!loop)
+    return;
+  for (auto [k, a] : llvm::enumerate(loop.getRegionIterArgs())) {
+    const std::optional<Accumulation> &acc = accumulationOf(a);
+    if (!acc)
+      continue;
+    IntegerValueRange init = rangeOf(acc->init);
+    if (init.isUninitialized())
+      continue;
+    APInt stepLo(128, 0), stepHi(128, 0);
+    bool known = true;
+    for (Value s : acc->steps) {
+      IntegerValueRange r = rangeOf(s);
+      if (r.isUninitialized()) {
+        known = false;
+        break;
+      }
+      stepLo += r.getValue().smin().sext(128);
+      stepHi += r.getValue().smax().sext(128);
+    }
+    if (!known)
+      continue;
+    auto rangeAfter = [&](int64_t n) {
+      return accumulatedRange(init.getValue(), stepLo, stepHi, n, a);
+    };
+    IntegerValueRange &cur = accumulationRange[a];
+    IntegerValueRange joined =
+        IntegerValueRange::join(cur, rangeAfter(acc->trips - 1));
+    IntegerValueRange &res = accumulationResult[a];
+    IntegerValueRange joinedRes =
+        IntegerValueRange::join(res, rangeAfter(acc->trips));
+    if (joined == cur && joinedRes == res)
+      continue;
+    if (++accumulationChanges[a] > kWidenAfterRounds) {
+      joined = IntegerValueRange::getMaxRange(a);
+      joinedRes = IntegerValueRange::getMaxRange(a);
+    }
+    cur = joined;
+    res = joinedRes;
+    rangesChanged = true;
+  }
+}
+
 void Narrowing::forwardOp(Operation *op) {
   auto setMax = [&]() {
-    for (Value resultValue : op->getResults())
-      if (bitWidthOf(resultValue.getType()))
-        ranges[resultValue] = IntegerValueRange::getMaxRange(resultValue);
+    for (Value r : op->getResults())
+      if (bitWidthOf(r.getType()))
+        ranges[r] = IntegerValueRange::getMaxRange(r);
   };
-
-  if (std::optional<Access> acc = asAccess(op)) {
-    MemClass *candidateValue = classOf(acc->memref);
-    if (acc->stored) {
-      if (candidateValue && !candidateValue->fixed &&
-          !candidateValue->rangePinned && bitWidthOf(acc->stored.getType())) {
-        IntegerValueRange resultValue = operandRange(op->getOpOperand(0));
-        candidateValue->unknownStore |= resultValue.isUninitialized();
-        if (!resultValue.isUninitialized()) {
-          IntegerValueRange joined =
-              IntegerValueRange::join(candidateValue->stored, resultValue);
-          if (!(joined == candidateValue->stored)) {
-            rangesChanged = true;
-            candidateValue->grewThisRound = true;
-            candidateValue->stored = joined;
+  // N159: a loop's accumulations (their iter_args read accumulationRange
+  // through blockArgRange; the results take the same range).
+  if (accumulationRanges && rangesOn) {
+    if (isa<affine::AffineYieldOp, scf::YieldOp>(op)) {
+      updateAccumulations(op);
+      return;
+    }
+    if (auto loop = dyn_cast<LoopLikeOpInterface>(op);
+        loop && isa<affine::AffineForOp, scf::ForOp>(op)) {
+      setMax();
+      for (auto [k, a] : llvm::enumerate(loop.getRegionIterArgs()))
+        if (accumulationOf(a) && k < op->getNumResults()) {
+          auto it = accumulationResult.find(a);
+          ranges[op->getResult(k)] = it == accumulationResult.end()
+                                          ? IntegerValueRange()
+                                          : it->second;
+        }
+      return;
+    }
+  }
+  // N159, memory form: an accumulating load ranges over init + (T - 1) x
+  // the step its read-modify-write store recorded (memAccumulationStep).
+  if (accumulationRanges && rangesOn &&
+      isa<affine::AffineLoadOp, memref::LoadOp>(op))
+    if (std::optional<MemAccumulation> ma = memAccumulationOf(op)) {
+      MemClass *c = classOf(asAccess(op)->memref);
+      if (c && !c->opaque && !c->fixed && !c->rangePinned) {
+        Value res = op->getResult(0);
+        IntegerValueRange init;
+        bool known = true;
+        for (Operation *st : ma->inits) {
+          IntegerValueRange r = operandRange(st->getOpOperand(0));
+          if (r.isUninitialized()) {
+            known = false;
+            break;
           }
-          unsigned bits = bitsForRange(resultValue.getValue());
-          if (!candidateValue->widestStore ||
-              bits > candidateValue->widestBits) {
-            candidateValue->widestStore = op;
-            candidateValue->widestBits = bits;
+          init = IntegerValueRange::join(init, r);
+        }
+        auto step = memAccumulationStep.find(op);
+        if (!known || step == memAccumulationStep.end() ||
+            step->second.isUninitialized()) {
+          ranges[res] = IntegerValueRange();
+          return;
+        }
+        ranges[res] = accumulatedRange(
+            init.getValue(), step->second.getValue().smin(),
+            step->second.getValue().smax(), ma->trips - 1, res);
+        return;
+      }
+    }
+  // Its store records the step's range for the next round.
+  if (accumulationRanges && rangesOn)
+    if (Operation *ld = memAccumulationLoadOf.lookup(op)) {
+      SmallVector<Value, 4> steps = (*memAccumulations[ld]).steps;
+      APInt lo(128, 0), hi(128, 0);
+      bool known = true;
+      for (Value st : steps) {
+        IntegerValueRange r = rangeOf(st);
+        if (r.isUninitialized()) {
+          known = false;
+          break;
+        }
+        lo += r.getValue().smin().sext(128);
+        hi += r.getValue().smax().sext(128);
+      }
+      if (known) {
+        IntegerValueRange &cur = memAccumulationStep[ld];
+        IntegerValueRange joined = IntegerValueRange::join(
+            cur, IntegerValueRange(ConstantIntRanges::fromSigned(lo, hi)));
+        if (!(joined == cur)) {
+          if (++memAccumulationStepChanges[ld] > kWidenAfterRounds)
+            joined = IntegerValueRange(
+                ConstantIntRanges::maxRange(/*bitwidth=*/128));
+          cur = joined;
+          rangesChanged = true;
+        }
+      }
+    }
+  // Accesses: a load has the range of what its class stores; a store adds to
+  // it.
+  // N151 (c): a load reached by a store of the same element in its block
+  // has that store's range.
+  if (reachingStoreRanges && rangesOn && op->getNumResults() == 1 &&
+      bitWidthOf(op->getResult(0).getType()) &&
+      (isa<LLVM::LoadOp>(op) || (asAccess(op) && !asAccess(op)->stored))) {
+    MemClass *c = isa<LLVM::LoadOp>(op) ? nullptr
+                                         : classOf(asAccess(op)->memref);
+    if (!c || (!c->opaque && !c->fixed))
+      if (const SmallVector<Operation *, 2> &sts = reachingStore(op);
+          !sts.empty()) {
+        IntegerValueRange joined;
+        for (Operation *st : sts) {
+          OpOperand &value = isa<LLVM::StoreOp>(st)
+                                 ? cast<LLVM::StoreOp>(st).getValueMutable()
+                                 : st->getOpOperand(0);
+          IntegerValueRange r = operandRange(value);
+          if (r.isUninitialized()) {
+            joined = r;
+            break;
+          }
+          joined = IntegerValueRange::join(joined, r);
+        }
+        ranges[op->getResult(0)] = joined;
+        return;
+      }
+  }
+  if (std::optional<Access> acc = asAccess(op)) {
+    MemClass *c = classOf(acc->memref);
+    if (acc->stored) {
+      if (c && !c->fixed && !c->rangePinned &&
+          bitWidthOf(acc->stored.getType())) {
+        IntegerValueRange r = operandRange(op->getOpOperand(0));
+        c->unknownStore |= r.isUninitialized();
+        if (!r.isUninitialized()) {
+          IntegerValueRange joined = IntegerValueRange::join(c->stored, r);
+          if (!(joined == c->stored)) {
+            rangesChanged = true;
+            c->grewThisRound = true;
+            c->stored = joined;
+          }
+          unsigned bits = bitsForRange(r.getValue());
+          if (!c->widestStore || bits > c->widestBits) {
+            c->widestStore = op;
+            c->widestBits = bits;
           }
         }
       }
@@ -1065,37 +2112,35 @@ void Narrowing::forwardOp(Operation *op) {
     }
     if (op->getNumResults() != 1)
       return setMax();
-    Value passResult = op->getResult(0);
-    if (!bitWidthOf(passResult.getType()))
+    Value res = op->getResult(0);
+    if (!bitWidthOf(res.getType()))
       return;
-    if (!rangesOn || !candidateValue || candidateValue->opaque ||
-        candidateValue->rangePinned || candidateValue->cyclic) {
-      ranges[passResult] = IntegerValueRange::getMaxRange(passResult);
-      return;
-    }
-    if (candidateValue->fixed) {
-      ranges[passResult] = candidateValue->initRange
-                               ? IntegerValueRange(*candidateValue->initRange)
-                               : IntegerValueRange::getMaxRange(passResult);
+    if (!rangesOn || !c || c->opaque || c->rangePinned || c->cyclic) {
+      ranges[res] = IntegerValueRange::getMaxRange(res);
       return;
     }
-    ranges[passResult] = candidateValue->stored;
+    if (c->fixed) { // a ROM: its values are its initial values
+      ranges[res] = c->initRange ? IntegerValueRange(*c->initRange)
+                                 : IntegerValueRange::getMaxRange(res);
+      return;
+    }
+    ranges[res] = c->stored;
     return;
   }
-  if (auto callSite = dyn_cast<func::CallOp>(op)) {
-    if (func::FuncOp callee = internalCallee(callSite))
-      for (OpOperand &operand : callSite->getOpOperands())
+  if (auto call = dyn_cast<func::CallOp>(op)) {
+    if (func::FuncOp callee = internalCallee(call))
+      for (OpOperand &operand : call->getOpOperands())
         if (bitWidthOf(operand.get().getType())) {
-          Value portValue = callee.getArgument(operand.getOperandNumber());
-          if (paramRangePinned.count(portValue))
+          Value p = callee.getArgument(operand.getOperandNumber());
+          if (paramRangePinned.count(p))
             continue;
-          IntegerValueRange &cur = paramRange[portValue];
+          IntegerValueRange &cur = paramRange[p];
           IntegerValueRange joined =
               IntegerValueRange::join(cur, operandRange(operand));
           if (joined == cur)
             continue;
           rangesChanged = true;
-          paramGrewThisRound.insert(portValue);
+          paramGrewThisRound.insert(p);
           cur = joined;
         }
     return setMax();
@@ -1103,57 +2148,60 @@ void Narrowing::forwardOp(Operation *op) {
   if (auto apply = dyn_cast<affine::AffineApplyOp>(op)) {
     AffineMap map = apply.getAffineMap();
     auto ops = apply.getMapOperands();
-    auto resultValue = affineRange(
-        map.getResult(0), ValueRange(ops).take_front(map.getNumDims()),
-        ValueRange(ops).drop_front(map.getNumDims()));
-    if (!resultValue)
+    auto r = affineRange(map.getResult(0),
+                         ValueRange(ops).take_front(map.getNumDims()),
+                         ValueRange(ops).drop_front(map.getNumDims()));
+    if (!r)
       return setMax();
-    unsigned widthValue = bitWidthOf(apply.getType());
+    unsigned w = bitWidthOf(apply.getType());
     ranges[apply.getResult()] = IntegerValueRange(ConstantIntRanges::fromSigned(
-        APInt(widthValue, resultValue->first, true),
-        APInt(widthValue, resultValue->second, true)));
+        APInt(w, r->first, true), APInt(w, r->second, true)));
     return;
   }
   if (isa<scf::IfOp, affine::AffineIfOp>(op) && op->getNumResults()) {
     SmallVector<IntegerValueRange> joined(op->getNumResults());
     for (Region &region : op->getRegions())
-      for (Block &buildPoint : region)
-        if (Operation *term = buildPoint.getTerminator())
-          for (OpOperand &valueHandle : term->getOpOperands())
-            if (valueHandle.getOperandNumber() < joined.size() &&
-                bitWidthOf(valueHandle.get().getType()))
-              joined[valueHandle.getOperandNumber()] = IntegerValueRange::join(
-                  joined[valueHandle.getOperandNumber()],
-                  operandRange(valueHandle));
-    for (auto [loopIndex, resultValue] : llvm::enumerate(op->getResults()))
-      if (bitWidthOf(resultValue.getType()))
-        ranges[resultValue] = joined[loopIndex];
+      for (Block &b : region)
+        if (Operation *term = b.getTerminator())
+          for (OpOperand &v : term->getOpOperands())
+            if (v.getOperandNumber() < joined.size() &&
+                bitWidthOf(v.get().getType()) && !isUndefined(v.get()))
+              joined[v.getOperandNumber()] = IntegerValueRange::join(
+                  joined[v.getOperandNumber()], operandRange(v));
+    for (auto [i, r] : llvm::enumerate(op->getResults()))
+      if (bitWidthOf(r.getType()))
+        ranges[r] = joined[i];
     return;
   }
   if (auto sel = dyn_cast<arith::SelectOp>(op);
       sel && bitWidthOf(sel.getType())) {
-
-    IntegerValueRange typeValue = operandRange(op->getOpOperand(1));
-    IntegerValueRange fieldValue = operandRange(op->getOpOperand(2));
-    auto refine = [&](IntegerValueRange resultValue, Value arm, bool holds) {
-      if (resultValue.isUninitialized())
-        return resultValue;
-      if (std::optional<ConstantIntRanges> buildPoint =
+    // Each arm under its side of the condition (`x > 0 ? x : 0` is
+    // non-negative).
+    IntegerValueRange t = operandRange(op->getOpOperand(1));
+    IntegerValueRange f = operandRange(op->getOpOperand(2));
+    auto refine = [&](IntegerValueRange r, Value arm, bool holds) {
+      if (r.isUninitialized())
+        return r;
+      if (std::optional<ConstantIntRanges> b =
               conditionBound(arm, sel.getCondition(), holds)) {
-        ConstantIntRanges exprValue =
-            resultValue.getValue().intersection(*buildPoint);
-        if (exprValue.smin().sle(exprValue.smax()) &&
-            exprValue.umin().ule(exprValue.umax()))
-          return IntegerValueRange(exprValue);
+        ConstantIntRanges x = r.getValue().intersection(*b);
+        if (x.smin().sle(x.smax()) && x.umin().ule(x.umax()))
+          return IntegerValueRange(x);
       }
-      return resultValue;
+      return r;
     };
-    typeValue = refine(typeValue, sel.getTrueValue(), true);
-    fieldValue = refine(fieldValue, sel.getFalseValue(), false);
+    t = refine(t, sel.getTrueValue(), true);
+    f = refine(f, sel.getFalseValue(), false);
+    // N151 (b): an undefined arm contributes nothing.
+    if (isUndefined(sel.getTrueValue()) && !isUndefined(sel.getFalseValue()))
+      t = f;
+    else if (isUndefined(sel.getFalseValue()) &&
+             !isUndefined(sel.getTrueValue()))
+      f = t;
     ranges[sel.getResult()] =
-        typeValue.isUninitialized() || fieldValue.isUninitialized()
+        t.isUninitialized() || f.isUninitialized()
             ? IntegerValueRange()
-            : IntegerValueRange::join(typeValue, fieldValue);
+            : IntegerValueRange::join(t, f);
     return;
   }
   auto infer = dyn_cast<InferIntRangeInterface>(op);
@@ -1166,20 +2214,20 @@ void Narrowing::forwardOp(Operation *op) {
   for (OpOperand &operand : op->getOpOperands()) {
     if (!bitWidthOf(operand.get().getType()))
       return setMax();
-    IntegerValueRange resultValue = operandRange(operand);
-    bottom |= resultValue.isUninitialized();
-    args.push_back(resultValue);
+    IntegerValueRange r = operandRange(operand);
+    bottom |= r.isUninitialized();
+    args.push_back(r);
   }
   if (bottom) {
-    for (Value resultValue : op->getResults())
-      ranges[resultValue] = IntegerValueRange();
+    for (Value r : op->getResults())
+      ranges[r] = IntegerValueRange();
     return;
   }
   setMax();
   infer.inferResultRangesFromOptional(
-      args, [&](Value valueHandle, const IntegerValueRange &resultValue) {
-        if (!resultValue.isUninitialized())
-          ranges[valueHandle] = resultValue;
+      args, [&](Value v, const IntegerValueRange &r) {
+        if (!r.isUninitialized())
+          ranges[v] = r;
       });
 }
 
@@ -1187,40 +2235,63 @@ void Narrowing::forwardOp(Operation *op) {
 /// and the call sites of an internal function's parameter; not through loop
 /// iter_args, which are full range anyway).
 const SmallVector<unsigned, 2> &Narrowing::loadClassesOf(Value root) {
-
+  // Iterative post-order: an unrolled expression can be thousands deep.
   SmallVector<std::pair<Value, bool>> stack{{root, false}};
   DenseSet<Value> onStack;
   while (!stack.empty()) {
-    auto [valueHandle, expanded] = stack.pop_back_val();
-    if (loadClasses.count(valueHandle))
+    auto [v, expanded] = stack.pop_back_val();
+    if (loadClasses.count(v))
       continue;
     SmallVector<Value> inputs;
     std::optional<unsigned> own;
-    if (auto arg = dyn_cast<BlockArgument>(valueHandle)) {
-      if (auto fieldValue =
-              dyn_cast<func::FuncOp>(arg.getOwner()->getParentOp()))
-        if (isInternalFunction(fieldValue))
-          for (func::CallOp callSite : callSites.lookup(fieldValue))
-            inputs.push_back(callSite.getOperand(arg.getArgNumber()));
-    } else if (Operation *def = valueHandle.getDefiningOp()) {
-      if (std::optional<Access> acc = asAccess(def)) {
-        if (MemClass *candidateValue = classOf(acc->memref))
-          own = static_cast<unsigned>(candidateValue - classes.data());
+    if (auto arg = dyn_cast<BlockArgument>(v)) {
+      if (auto f = dyn_cast<func::FuncOp>(arg.getOwner()->getParentOp()))
+        if (isInternalFunction(f))
+          for (func::CallOp call : callSites.lookup(f))
+            inputs.push_back(call.getOperand(arg.getArgNumber()));
+      // N159: an accumulation's value comes from its init and its addends.
+      if (isa<affine::AffineForOp, scf::ForOp>(arg.getOwner()->getParentOp()) &&
+          arg.getArgNumber() > 0)
+        if (const std::optional<Accumulation> &acc = accumulationOf(arg)) {
+          inputs.push_back(acc->init);
+          inputs.append(acc->steps.begin(), acc->steps.end());
+        }
+    } else if (Operation *def = v.getDefiningOp()) {
+      std::optional<Access> acc = asAccess(def);
+      SmallVector<Operation *, 2> forwarded;
+      if (acc && !acc->stored && accumulationRanges)
+        forwarded = reachingStoreExact(def);
+      std::optional<MemAccumulation> memAcc;
+      if (acc && !acc->stored && accumulationRanges)
+        memAcc = memAccumulationOf(def);
+      if (memAcc) {
+        // An accumulating load: its init values and its addends.
+        for (Operation *st : memAcc->inits)
+          inputs.push_back(st->getOperand(0));
+        inputs.append(memAcc->steps.begin(), memAcc->steps.end());
+      } else if (!forwarded.empty()) {
+        // A load forwarded from a store of the same address: the stored
+        // values, not the array.
+        for (Operation *st : forwarded)
+          inputs.push_back(st->getOperand(0));
+      } else if (acc) {
+        if (MemClass *c = classOf(acc->memref))
+          own = static_cast<unsigned>(c - classes.data());
       } else {
         inputs.append(def->operand_begin(), def->operand_end());
         if (isa<scf::IfOp, affine::AffineIfOp>(def))
           for (Region &region : def->getRegions())
-            for (Block &buildPoint : region)
-              if (Operation *term = buildPoint.getTerminator())
+            for (Block &b : region)
+              if (Operation *term = b.getTerminator())
                 inputs.append(term->operand_begin(), term->operand_end());
       }
     }
     if (!expanded) {
-      if (!onStack.insert(valueHandle).second) {
-        loadClasses[valueHandle];
+      if (!onStack.insert(v).second) {
+        loadClasses[v]; // a cycle in the IR: cut it here
         continue;
       }
-      stack.push_back({valueHandle, true});
+      stack.push_back({v, true});
       for (Value in : inputs)
         if (!loadClasses.count(in))
           stack.push_back({in, false});
@@ -1236,9 +2307,19 @@ const SmallVector<unsigned, 2> &Narrowing::loadClassesOf(Value root) {
     }
     llvm::sort(set);
     set.erase(std::unique(set.begin(), set.end()), set.end());
-    loadClasses[valueHandle] = std::move(set);
+    loadClasses[v] = std::move(set);
   }
   return loadClasses[root];
+}
+
+/// Whether `v` is a plain copy of a loaded element: a load (VITIS_NOTES N167:
+/// std::swap of two elements). A select of loads is not: a compare-exchange
+/// written with selects keeps the full width in Vitis (W9 round 22 review
+/// kernels w9r22rv_k21_minmax_swap / k22_minmax_swap_iota: 32 bits, 2 BRAM;
+/// the std::swap control k23_swap_mask: 10 bits, 1).
+static bool isPlainLoadedCopy(Value v) {
+  Operation *def = v.getDefiningOp();
+  return def && isa<affine::AffineLoadOp, memref::LoadOp, LLVM::LoadOp>(def);
 }
 
 /// Vitis computes an array's stored range once, from the ranges of the
@@ -1248,22 +2329,34 @@ const SmallVector<unsigned, 2> &Narrowing::loadClassesOf(Value root) {
 /// w9i_noself). Loads of an array on a cycle of this dependence are full
 /// range; masks after them still bound what is stored (w9i_selfadd: 8).
 void Narrowing::markCyclicClasses() {
-  unsigned elementCount = classes.size();
-  std::vector<SmallVector<unsigned, 4>> succ(elementCount);
-  for (auto [ci, candidateValue] : llvm::enumerate(classes))
-    if (!candidateValue.fixed)
-      for (Operation *st : candidateValue.stores)
-        if (bitWidthOf(asAccess(st)->stored.getType()))
-          for (unsigned dimensionIndex : loadClassesOf(asAccess(st)->stored))
-            if (dimensionIndex != ci ||
-                feedsBackIntoSameBank(asAccess(st)->stored, dimensionIndex, st))
-              succ[dimensionIndex].push_back(static_cast<unsigned>(ci));
-
-  std::vector<int> index(elementCount, -1), low(elementCount, 0);
-  std::vector<bool> onStack(elementCount, false);
+  unsigned n = classes.size();
+  std::vector<SmallVector<unsigned, 4>> succ(n); // D -> C: C stores from D
+  // A plain copy of the array's own loaded elements makes no cycle: Vitis
+  // closes the range over swaps (N167).
+  const bool copiesClose =
+      circt::hlsest::Config::get().tool.hls.narrowing.copiesCloseRanges;
+  for (auto [ci, c] : llvm::enumerate(classes))
+    if (!c.fixed)
+      for (Operation *st : c.stores)
+        if (bitWidthOf(asAccess(st)->stored.getType())) {
+          // A copy of the array's own elements (a swap) closes; a copy
+          // through another array does not (held-out beam_search `paths` /
+          // `temp_paths`: Vitis keeps 32 bits).
+          bool selfCopy = copiesClose && isPlainLoadedCopy(asAccess(st)->stored);
+          for (unsigned d : loadClassesOf(asAccess(st)->stored)) {
+            if (selfCopy && d == ci)
+              continue;
+            if (d != ci ||
+                feedsBackIntoSameBank(asAccess(st)->stored, d, st))
+              succ[d].push_back(static_cast<unsigned>(ci));
+          }
+        }
+  // Tarjan's strongly connected components, iteratively.
+  std::vector<int> index(n, -1), low(n, 0);
+  std::vector<bool> onStack(n, false);
   SmallVector<unsigned> sccStack;
   int counter = 0;
-  for (unsigned start = 0; start < elementCount; ++start) {
+  for (unsigned start = 0; start < n; ++start) {
     if (index[start] >= 0)
       continue;
     SmallVector<std::pair<unsigned, unsigned>> work{{start, 0}};
@@ -1271,37 +2364,37 @@ void Narrowing::markCyclicClasses() {
     sccStack.push_back(start);
     onStack[start] = true;
     while (!work.empty()) {
-      auto &[valueHandle, next] = work.back();
-      if (next < succ[valueHandle].size()) {
-        unsigned widthValue = succ[valueHandle][next++];
-        if (index[widthValue] < 0) {
-          index[widthValue] = low[widthValue] = counter++;
-          sccStack.push_back(widthValue);
-          onStack[widthValue] = true;
-          work.push_back({widthValue, 0});
-        } else if (onStack[widthValue]) {
-          low[valueHandle] = std::min(low[valueHandle], index[widthValue]);
+      auto &[v, next] = work.back();
+      if (next < succ[v].size()) {
+        unsigned w = succ[v][next++];
+        if (index[w] < 0) {
+          index[w] = low[w] = counter++;
+          sccStack.push_back(w);
+          onStack[w] = true;
+          work.push_back({w, 0});
+        } else if (onStack[w]) {
+          low[v] = std::min(low[v], index[w]);
         }
         continue;
       }
-      unsigned done = valueHandle;
+      unsigned done = v;
       work.pop_back();
       if (!work.empty())
         low[work.back().first] = std::min(low[work.back().first], low[done]);
       if (low[done] != index[done])
         continue;
       SmallVector<unsigned> scc;
-      unsigned widthValue;
+      unsigned w;
       do {
-        widthValue = sccStack.pop_back_val();
-        onStack[widthValue] = false;
-        scc.push_back(widthValue);
-      } while (widthValue != done);
+        w = sccStack.pop_back_val();
+        onStack[w] = false;
+        scc.push_back(w);
+      } while (w != done);
       bool selfLoop = llvm::is_contained(succ[done], done);
       if (scc.size() > 1 || selfLoop)
-        for (unsigned memoryOp : scc) {
-          classes[memoryOp].cyclic = true;
-          classes[memoryOp].scc = static_cast<int>(done);
+        for (unsigned m : scc) {
+          classes[m].cyclic = true;
+          classes[m].scc = static_cast<int>(done);
         }
     }
   }
@@ -1311,60 +2404,86 @@ void Narrowing::markCyclicClasses() {
 /// more than kWidenAfterRounds rounds to the full range (pinning changes the
 /// loads' ranges, so it asks for one more round).
 void Narrowing::endRound() {
-  for (MemClass &candidateValue : classes) {
-    if (!candidateValue.grewThisRound)
+  for (MemClass &c : classes) {
+    if (!c.grewThisRound)
       continue;
-    candidateValue.grewThisRound = false;
-    if (++candidateValue.rangeChanges > kWidenAfterRounds &&
-        !candidateValue.rangePinned) {
-      candidateValue.rangePinned = true;
-      candidateValue.pinReason = "still growing after " +
-                                 std::to_string(kWidenAfterRounds) + " rounds";
+    c.grewThisRound = false;
+    if (++c.rangeChanges > kWidenAfterRounds && !c.rangePinned) {
+      c.rangePinned = true;
+      c.pinReason = "still growing after " +
+                    std::to_string(kWidenAfterRounds) + " rounds";
       rangesChanged = true;
     }
   }
-  for (Value portValue : paramGrewThisRound)
-    if (++paramRangeChanges[portValue] > kWidenAfterRounds &&
-        paramRangePinned.insert(portValue).second)
+  for (Value p : paramGrewThisRound)
+    if (++paramRangeChanges[p] > kWidenAfterRounds &&
+        paramRangePinned.insert(p).second)
       rangesChanged = true;
   paramGrewThisRound.clear();
 }
 
 void Narrowing::solveRanges() {
   markCyclicClasses();
-  for (MemClass &candidateValue : classes) {
-    if (candidateValue.fixed)
+  for (MemClass &c : classes) {
+    if (c.fixed)
       continue;
-    if (candidateValue.copiedIn) {
-      candidateValue.rangePinned = true;
-      candidateValue.pinReason = "filled by a memcpy copy-in";
-    } else if (candidateValue.initRange)
-      candidateValue.stored = IntegerValueRange(*candidateValue.initRange);
-    else if (candidateValue.stores.empty()) {
-      candidateValue.rangePinned = true;
-      candidateValue.pinReason = "never written";
+    if (c.copiedIn) {
+      c.rangePinned = true; // the copied values are unknown
+      c.pinReason = "filled by a memcpy copy-in";
+    } else if (c.initRange)
+      c.stored = IntegerValueRange(*c.initRange);
+    else if (c.stores.empty()) {
+      c.rangePinned = true; // read, never written: nothing is known
+      c.pinReason = "never written";
+    }
+    // VITIS_NOTES N162: Vitis does not narrow an array whose element a
+    // function it keeps as a call writes through a scalar reference
+    // parameter (gnnbuilder pna_qm9
+    // `min_incremental_data::one_sample_processed`, set to 0 in the caller
+    // and to 1 only in the `INLINE off` min_incremental_update through its
+    // `min_incremental_data &` parameter: 32 bits in all five 128-deep rows;
+    // inlined, the same field of the max aggregation is 1 bit; kernels
+    // w9r21rev_r10a_flagcall (struct member) and w9r21fx_x1_plainref (`int
+    // &seen`): 128 x 32; r10b_flaginl (inlined): 128 x 1). An array passed
+    // whole and indexed by the callee is narrowed (w9r21fx_x2_plainarr: 128
+    // x 1; barry_walker lab2 `attention`, written in the dataflow process
+    // softmax_HLS: 8 bits).
+    if (calleeParamStoresFullRange && !c.rangePinned &&
+        llvm::any_of(c.stores, [&](Operation *st) {
+          return writesCalleeParameter(st);
+        })) {
+      c.rangePinned = true;
+      c.pinReason =
+          "written through a scalar reference parameter of a called function";
     }
   }
-
+  // Stores join into their array's range in place, so a copy later in
+  // program order sees it in the same round. An array that still has a
+  // store without a range at the fixpoint is set to the full range, and the
+  // arrays that copy from it are recomputed.
   for (bool again = true; again;) {
     do {
       rangesChanged = false;
       ranges.clear();
-      for (MemClass &candidateValue : classes)
-        candidateValue.unknownStore = false;
+      for (MemClass &c : classes)
+        c.unknownStore = false;
       for (Operation *op : ops)
         forwardOp(op);
       endRound();
     } while (rangesChanged);
     again = false;
-    for (MemClass &candidateValue : classes)
-      if (candidateValue.unknownStore && !candidateValue.rangePinned) {
-        candidateValue.rangePinned = true;
-        candidateValue.pinReason = "a stored value has no known range";
+    for (MemClass &c : classes)
+      if (c.unknownStore && !c.rangePinned) {
+        c.rangePinned = true;
+        c.pinReason = "a stored value has no known range";
         again = true;
       }
   }
 }
+
+//===----------------------------------------------------------------------===//
+// Demanded bits.
+//===----------------------------------------------------------------------===//
 
 /// The low bits of a subscript at `dim` of `memref` that reach the address:
 /// the bits of the flattened address of the array (without the dimensions a
@@ -1374,24 +2493,24 @@ void Narrowing::solveRanges() {
 /// Which dimensions of `memref` a complete partition splits into separate
 /// memories (from the partition of the arrays of its class); nullopt when
 /// the class's arrays have another shape.
-std::optional<SmallVector<bool>> Narrowing::completeDims(Value memref) const {
-  MemClass *candidateValue = classOf(memref);
+std::optional<SmallVector<bool>>
+Narrowing::completeDims(Value memref) const {
+  MemClass *c = classOf(memref);
   auto type = dyn_cast<MemRefType>(memref.getType());
-  if (!candidateValue || !type)
+  if (!c || !type)
     return std::nullopt;
   SmallVector<bool> complete(type.getRank(), false);
-  for (Operation *root : candidateValue->roots)
-    if (std::optional<BankLayout> lowerIndex = partitions.layoutOf(root)) {
+  for (Operation *root : c->roots)
+    if (std::optional<BankLayout> l = partitions.layoutOf(root)) {
       MemRefType rootType =
           isa<memref::GlobalOp>(root)
               ? cast<memref::GlobalOp>(root).getType()
               : cast<MemRefType>(root->getResult(0).getType());
       if (rootType.getShape() != type.getShape())
         return std::nullopt;
-      for (const DimPartition &portValue : lowerIndex->dims)
-        if (portValue.kind == PartitionSpec::Complete &&
-            portValue.dim < complete.size())
-          complete[portValue.dim] = true;
+      for (const DimPartition &p : l->dims)
+        if (p.kind == PartitionSpec::Complete && p.dim < complete.size())
+          complete[p.dim] = true;
     }
   return complete;
 }
@@ -1399,15 +2518,13 @@ std::optional<SmallVector<bool>> Narrowing::completeDims(Value memref) const {
 /// The values the subscript at `dim` of an access can take.
 std::optional<std::pair<int64_t, int64_t>>
 Narrowing::subscriptRange(Operation *access, unsigned dim) {
-  auto ofValue =
-      [&](Value valueHandle) -> std::optional<std::pair<int64_t, int64_t>> {
-    IntegerValueRange resultValue = rangeOf(valueHandle);
-    if (resultValue.isUninitialized() ||
-        resultValue.getValue().smin().getSignificantBits() > 62 ||
-        resultValue.getValue().smax().getSignificantBits() > 62)
+  auto ofValue = [&](Value v) -> std::optional<std::pair<int64_t, int64_t>> {
+    IntegerValueRange r = rangeOf(v);
+    if (r.isUninitialized() || r.getValue().smin().getSignificantBits() > 62 ||
+        r.getValue().smax().getSignificantBits() > 62)
       return std::nullopt;
-    return std::make_pair(resultValue.getValue().smin().getSExtValue(),
-                          resultValue.getValue().smax().getSExtValue());
+    return std::make_pair(r.getValue().smin().getSExtValue(),
+                          r.getValue().smax().getSExtValue());
   };
   for (unsigned no = 0; no < access->getNumOperands(); ++no)
     if (plainSubscriptPosition(access, no) == dim)
@@ -1433,16 +2550,15 @@ Narrowing::subscriptRange(Operation *access, unsigned dim) {
 /// Whether two accesses of one array reach different memories of a complete
 /// partition (`t[0][k]` and `t[i][k]` with i in [1, 7]): after the split,
 /// which comes before the narrowing in Vitis, they are two arrays.
-bool Narrowing::differentBanks(Operation *arrayValue, Operation *buildPoint) {
-  Value memref = asAccess(arrayValue)->memref;
+bool Narrowing::differentBanks(Operation *a, Operation *b) {
+  Value memref = asAccess(a)->memref;
   std::optional<SmallVector<bool>> complete = completeDims(memref);
-  if (!complete || asAccess(buildPoint)->memref.getType() != memref.getType())
+  if (!complete || asAccess(b)->memref.getType() != memref.getType())
     return false;
-  for (auto [dimensionIndex, split] : llvm::enumerate(*complete)) {
+  for (auto [d, split] : llvm::enumerate(*complete)) {
     if (!split)
       continue;
-    auto ra = subscriptRange(arrayValue, dimensionIndex),
-         rb = subscriptRange(buildPoint, dimensionIndex);
+    auto ra = subscriptRange(a, d), rb = subscriptRange(b, d);
     if (ra && rb && (ra->second < rb->first || rb->second < ra->first))
       return true;
   }
@@ -1451,31 +2567,29 @@ bool Narrowing::differentBanks(Operation *arrayValue, Operation *buildPoint) {
 
 /// Whether some load of class `cls` that `v` is computed from may read the
 /// memory `store` writes (see differentBanks).
-bool Narrowing::feedsBackIntoSameBank(Value valueHandle, unsigned cls,
+bool Narrowing::feedsBackIntoSameBank(Value v, unsigned cls,
                                       Operation *store) {
-  SmallVector<Value> work{valueHandle};
+  SmallVector<Value> work{v};
   DenseSet<Value> seen;
   while (!work.empty()) {
-    Value exprValue = work.pop_back_val();
-    if (!seen.insert(exprValue).second)
+    Value x = work.pop_back_val();
+    if (!seen.insert(x).second)
       continue;
-    auto it = loadClasses.find(exprValue);
+    auto it = loadClasses.find(x);
     if (it != loadClasses.end() && !llvm::is_contained(it->second, cls))
       continue;
-    if (auto arg = dyn_cast<BlockArgument>(exprValue)) {
-      if (auto fieldValue =
-              dyn_cast<func::FuncOp>(arg.getOwner()->getParentOp()))
-        for (func::CallOp callSite : callSites.lookup(fieldValue))
-          work.push_back(callSite.getOperand(arg.getArgNumber()));
+    if (auto arg = dyn_cast<BlockArgument>(x)) {
+      if (auto f = dyn_cast<func::FuncOp>(arg.getOwner()->getParentOp()))
+        for (func::CallOp call : callSites.lookup(f))
+          work.push_back(call.getOperand(arg.getArgNumber()));
       continue;
     }
-    Operation *def = exprValue.getDefiningOp();
+    Operation *def = x.getDefiningOp();
     if (!def)
       continue;
     if (std::optional<Access> acc = asAccess(def)) {
-      MemClass *candidateValue = classOf(acc->memref);
-      if (candidateValue &&
-          static_cast<unsigned>(candidateValue - classes.data()) == cls &&
+      MemClass *c = classOf(acc->memref);
+      if (c && static_cast<unsigned>(c - classes.data()) == cls &&
           !differentBanks(def, store))
         return true;
       continue;
@@ -1483,8 +2597,8 @@ bool Narrowing::feedsBackIntoSameBank(Value valueHandle, unsigned cls,
     work.append(def->operand_begin(), def->operand_end());
     if (isa<scf::IfOp, affine::AffineIfOp>(def))
       for (Region &region : def->getRegions())
-        for (Block &buildPoint : region)
-          if (Operation *term = buildPoint.getTerminator())
+        for (Block &b : region)
+          if (Operation *term = b.getTerminator())
             work.append(term->operand_begin(), term->operand_end());
   }
   return false;
@@ -1492,35 +2606,44 @@ bool Narrowing::feedsBackIntoSameBank(Value valueHandle, unsigned cls,
 
 std::optional<unsigned> Narrowing::subscriptBits(Value memref, unsigned dim,
                                                  bool isRead) const {
-  MemClass *candidateValue = classOf(memref);
+  MemClass *c = classOf(memref);
   auto type = dyn_cast<MemRefType>(memref.getType());
-  if (!candidateValue || candidateValue->addressOpaque || !type ||
-      !type.hasStaticShape() || dim >= type.getRank())
+  if (!c || c->addressOpaque || !type || !type.hasStaticShape() ||
+      dim >= type.getRank())
     return std::nullopt;
   std::optional<SmallVector<bool>> completeOpt = completeDims(memref);
   if (!completeOpt)
     return std::nullopt;
   SmallVector<bool> &complete = *completeOpt;
-
+  // A subscript of a completely partitioned dimension selects one of its S
+  // banks. For a read Vitis keeps ceil(log2 S) bits of it (the selector of
+  // `_ssdm_op_SparseMux`, whose out-of-range default is undef: kernels
+  // w9r12p_nw_p16r1 / p64r1 / p65r1 give 4 / 6 / 7 bits, VITIS_NOTES N91); a
+  // write is a compare chain whose out-of-range case writes nothing, so all
+  // bits stay demanded (w9r12p_nw_wr64 / nw_wrst: 32 bits).
   if (complete[dim])
     return isRead && completeReadSelector
                ? std::optional<unsigned>(llvm::Log2_64_Ceil(
                      static_cast<uint64_t>(type.getDimSize(dim))))
                : std::nullopt;
   uint64_t words = 1, stride = 1;
-  for (unsigned dimensionIndex = 0; dimensionIndex < type.getRank();
-       ++dimensionIndex) {
-    if (complete[dimensionIndex])
+  for (unsigned d = 0; d < type.getRank(); ++d) {
+    if (complete[d])
       continue;
-    words *= static_cast<uint64_t>(type.getDimSize(dimensionIndex));
-    if (dimensionIndex > dim)
-      stride *= static_cast<uint64_t>(type.getDimSize(dimensionIndex));
+    words *= static_cast<uint64_t>(type.getDimSize(d));
+    if (d > dim)
+      stride *= static_cast<uint64_t>(type.getDimSize(d));
   }
   unsigned addrBits = llvm::Log2_64_Ceil(words);
-
+  // The outermost dimension that is still addressed needs only its own
+  // bits, whatever the stride below it: Vitis gives the row index of an
+  // A[100][10] array 7 bits, not the 10 of the linear address (VITIS_NOTES
+  // N41, kernels w9rv_n41_2d and w9rv_n41_2dloc). For an inner dimension
+  // with a stride that is not a power of two the whole address is kept
+  // (unconfirmed).
   bool outermost = true;
-  for (unsigned dimensionIndex = 0; dimensionIndex < dim; ++dimensionIndex)
-    if (!complete[dimensionIndex])
+  for (unsigned d = 0; d < dim; ++d)
+    if (!complete[d])
       outermost = false;
   if (outermost)
     return llvm::Log2_64_Ceil(static_cast<uint64_t>(type.getDimSize(dim)));
@@ -1530,7 +2653,7 @@ std::optional<unsigned> Narrowing::subscriptBits(Value memref, unsigned dim,
 }
 
 unsigned Narrowing::affineAccessDemand(Operation *op, OpOperand &use,
-                                       unsigned widthValue) {
+                                       unsigned w) {
   AffineMap map;
   OperandRange mapOps = op->getOperands().take_front(0);
   Value memref;
@@ -1543,146 +2666,147 @@ unsigned Narrowing::affineAccessDemand(Operation *op, OpOperand &use,
     mapOps = wr.getMapOperands();
     memref = wr.getMemRef();
   } else {
-    return widthValue;
+    return w;
   }
   unsigned no = use.getOperandNumber();
   unsigned begin = mapOps.getBeginOperandIndex();
   if (no < begin || no >= begin + mapOps.size())
-    return widthValue;
-  unsigned innerIndex = no - begin;
+    return w; // e.g. the condition operands of hls.affine.store_enable
+  unsigned j = no - begin;
   bool isRead = isa<affine::AffineReadOpInterface>(op);
   unsigned need = 0;
-  for (auto [dimensionIndex, entryValue] : llvm::enumerate(map.getResults())) {
-    if (!usesOperand(entryValue, map, innerIndex))
+  for (auto [d, e] : llvm::enumerate(map.getResults())) {
+    if (!usesOperand(e, map, j))
       continue;
-    if (hasDivOrMod(entryValue))
-      return widthValue;
-    std::optional<unsigned> bits =
-        subscriptBits(memref, dimensionIndex, isRead);
+    if (hasDivOrMod(e))
+      return w;
+    std::optional<unsigned> bits = subscriptBits(memref, d, isRead);
     if (!bits)
-      return widthValue;
+      return w;
     need = std::max(need, *bits);
   }
-  return std::min(need, widthValue);
+  return std::min(need, w);
 }
 
 unsigned Narrowing::useDemand(OpOperand &use) {
-  Value valueHandle = use.get();
-  unsigned widthValue = bitWidthOf(valueHandle.getType());
-  if (!widthValue)
+  Value v = use.get();
+  unsigned w = bitWidthOf(v.getType());
+  if (!w)
     return 0;
   Operation *user = use.getOwner();
   unsigned no = use.getOperandNumber();
-  auto capped = [&](uint64_t exprValue) {
-    return static_cast<unsigned>(std::min<uint64_t>(exprValue, widthValue));
+  auto capped = [&](uint64_t x) {
+    return static_cast<unsigned>(std::min<uint64_t>(x, w));
   };
-  auto operandRangeAt = [&](unsigned loopIndex) {
-    return loopIndex < user->getNumOperands()
-               ? smallUnsignedRange(user->getOperand(loopIndex))
+  auto operandRangeAt = [&](unsigned i) {
+    return i < user->getNumOperands()
+               ? smallUnsignedRange(user->getOperand(i))
                : std::nullopt;
   };
-  auto constOperand = [&](unsigned loopIndex) -> std::optional<APInt> {
-    return loopIndex < user->getNumOperands()
-               ? constantOf(user->getOperand(loopIndex))
-               : std::nullopt;
+  auto constOperand = [&](unsigned i) -> std::optional<APInt> {
+    return i < user->getNumOperands() ? constantOf(user->getOperand(i))
+                                      : std::nullopt;
   };
 
   if (std::optional<Access> acc = asAccess(user)) {
-    if (acc->stored && no == 0 && acc->stored == valueHandle) {
-      MemClass *candidateValue = classOf(acc->memref);
-      if (!candidateValue || candidateValue->fixed ||
-          candidateValue->demandPinned)
-        return widthValue;
-
-      if (candidateValue->cyclic) {
-        unsigned own = static_cast<unsigned>(candidateValue - classes.data());
-        for (unsigned dimensionIndex : loadClassesOf(valueHandle))
-          if (classes[dimensionIndex].scc == candidateValue->scc &&
-              (dimensionIndex != own ||
-               feedsBackIntoSameBank(valueHandle, dimensionIndex, user)))
-            return widthValue;
+    if (acc->stored && no == 0 && acc->stored == v) {
+      MemClass *c = classOf(acc->memref);
+      if (!c || c->fixed || c->demandPinned)
+        return w;
+      // Around a cycle of arrays Vitis does not iterate: a value stored back
+      // into its own array (or one of its cycle) keeps every bit (a
+      // histogram `t[x] = t[x] + 1` stays 32 bits although t[x] also
+      // indexes a 600-word table: corpus gnnbuilder
+      // neightbor_table_offsets_temp).
+      if (c->cyclic) {
+        unsigned own = static_cast<unsigned>(c - classes.data());
+        for (unsigned d : loadClassesOf(v))
+          if (classes[d].scc == c->scc &&
+              (d != own || feedsBackIntoSameBank(v, d, user)))
+            return w;
       }
-      return capped(candidateValue->demand);
+      return capped(c->demand);
     }
     if (std::optional<unsigned> pos = plainSubscriptPosition(user, no)) {
       std::optional<unsigned> bits =
-          subscriptBits(acc->memref, *pos, !acc->stored);
-      return bits ? capped(*bits) : widthValue;
+          subscriptBits(acc->memref, *pos, /*isRead=*/!acc->stored);
+      return bits ? capped(*bits) : w;
     }
-    return affineAccessDemand(user, use, widthValue);
+    return affineAccessDemand(user, use, w);
   }
   if (auto apply = dyn_cast<affine::AffineApplyOp>(user)) {
     AffineMap map = apply.getAffineMap();
     if (hasDivOrMod(map.getResult(0)))
-      return widthValue;
+      return w;
     return capped(resultDemand(apply.getResult()));
   }
-  if (auto callSite = dyn_cast<func::CallOp>(user)) {
-    func::FuncOp callee = internalCallee(callSite);
+  if (auto call = dyn_cast<func::CallOp>(user)) {
+    func::FuncOp callee = internalCallee(call);
     if (!callee)
-      return widthValue;
-    Value portValue = callee.getArgument(no);
-    if (paramDemandPinned.count(portValue))
-      return widthValue;
-    return capped(paramDemand.lookup(portValue));
+      return w;
+    Value p = callee.getArgument(no);
+    if (paramDemandPinned.count(p))
+      return w;
+    return capped(paramDemand.lookup(p));
   }
   if (isa<scf::YieldOp, affine::AffineYieldOp>(user)) {
     Operation *parent = user->getParentOp();
     if (isa<scf::IfOp, affine::AffineIfOp>(parent) &&
         no < parent->getNumResults())
       return capped(resultDemand(parent->getResult(no)));
-    return widthValue;
+    return w; // a loop-carried value
   }
   if (user->getNumResults() != 1)
-    return widthValue;
+    return w;
   unsigned rd = resultDemand(user->getResult(0));
   return llvm::TypeSwitch<Operation *, unsigned>(user)
       .Case<arith::AddIOp, arith::SubIOp, arith::MulIOp, arith::OrIOp,
             arith::XOrIOp>([&](auto) { return capped(rd); })
       .Case<arith::AndIOp>([&](auto) {
-        if (auto memoryOp = operandRangeAt(1 - no))
-          return capped(
-              std::min<unsigned>(rd, 64 - llvm::countl_zero(memoryOp->second)));
+        // The other operand's highest possible bit bounds what passes.
+        if (auto m = operandRangeAt(1 - no))
+          return capped(std::min<unsigned>(
+              rd, 64 - llvm::countl_zero(m->second)));
         return capped(rd);
       })
       .Case<arith::ShLIOp>([&](auto) {
-        auto stringValue = operandRangeAt(1);
-        if (no != 0 || !stringValue)
-          return widthValue;
-        return capped(rd > stringValue->first ? rd - stringValue->first : 0);
+        auto s = operandRangeAt(1);
+        if (no != 0 || !s)
+          return w;
+        return capped(rd > s->first ? rd - s->first : 0);
       })
       .Case<arith::ShRUIOp, arith::ShRSIOp>([&](auto) {
-        auto stringValue = operandRangeAt(1);
-        if (no != 0 || !stringValue)
-          return widthValue;
-        return rd ? capped(uint64_t(rd) + stringValue->second) : 0u;
+        auto s = operandRangeAt(1);
+        if (no != 0 || !s)
+          return w;
+        return rd ? capped(uint64_t(rd) + s->second) : 0u;
       })
       .Case<arith::RemUIOp>([&](auto) {
-        std::optional<APInt> candidateValue = constOperand(1);
-        if (no != 0 || !candidateValue || !candidateValue->isPowerOf2())
-          return widthValue;
-        return capped(std::min<unsigned>(rd, candidateValue->logBase2()));
+        std::optional<APInt> c = constOperand(1);
+        if (no != 0 || !c || !c->isPowerOf2())
+          return w;
+        return capped(std::min<unsigned>(rd, c->logBase2()));
       })
       .Case<arith::DivUIOp>([&](auto) {
-        std::optional<APInt> candidateValue = constOperand(1);
-        if (no != 0 || !candidateValue || !candidateValue->isPowerOf2())
-          return widthValue;
-        return rd ? capped(uint64_t(rd) + candidateValue->logBase2()) : 0u;
+        std::optional<APInt> c = constOperand(1);
+        if (no != 0 || !c || !c->isPowerOf2())
+          return w;
+        return rd ? capped(uint64_t(rd) + c->logBase2()) : 0u;
       })
-      .Case<arith::TruncIOp, arith::ExtUIOp, arith::ExtSIOp, arith::IndexCastOp,
-            arith::IndexCastUIOp>([&](auto) { return capped(rd); })
-      .Case<arith::SelectOp>(
-          [&](auto) { return no == 0 ? widthValue : capped(rd); })
-      .Default([&](Operation *) { return widthValue; });
+      .Case<arith::TruncIOp, arith::ExtUIOp, arith::ExtSIOp,
+            arith::IndexCastOp, arith::IndexCastUIOp>(
+          [&](auto) { return capped(rd); })
+      .Case<arith::SelectOp>([&](auto) { return no == 0 ? w : capped(rd); })
+      .Default([&](Operation *) { return w; });
 }
 
-std::pair<unsigned, Operation *> Narrowing::valueDemand(Value valueHandle) {
+std::pair<unsigned, Operation *> Narrowing::valueDemand(Value v) {
   unsigned best = 0;
   Operation *by = nullptr;
-  for (OpOperand &use : valueHandle.getUses()) {
-    unsigned dimensionIndex = useDemand(use);
-    if (dimensionIndex > best || !by) {
-      best = std::max(best, dimensionIndex);
+  for (OpOperand &use : v.getUses()) {
+    unsigned d = useDemand(use);
+    if (d > best || !by) {
+      best = std::max(best, d);
       by = use.getOwner();
     }
   }
@@ -1696,75 +2820,77 @@ void Narrowing::solveDemand() {
     std::vector<unsigned> newDemand(classes.size(), 0);
     std::vector<Operation *> newDeciding(classes.size(), nullptr);
     for (Operation *op : llvm::reverse(ops)) {
-      for (Value resultValue : op->getResults()) {
-        if (!bitWidthOf(resultValue.getType()))
+      for (Value r : op->getResults()) {
+        if (!bitWidthOf(r.getType()))
           continue;
-        auto [dimensionIndex, by] = valueDemand(resultValue);
-        demand[resultValue] = dimensionIndex;
-        demandUser[resultValue] = by;
+        auto [d, by] = valueDemand(r);
+        demand[r] = d;
+        demandUser[r] = by;
       }
       std::optional<Access> acc = asAccess(op);
       if (!acc || acc->stored || op->getNumResults() != 1)
         continue;
-      MemClass *candidateValue = classOf(acc->memref);
-      if (!candidateValue || candidateValue->fixed)
+      MemClass *c = classOf(acc->memref);
+      if (!c || c->fixed)
         continue;
-      unsigned indexValue =
-          static_cast<unsigned>(candidateValue - classes.data());
-      unsigned dimensionIndex = demand.lookup(op->getResult(0));
-      if (!newDeciding[indexValue] || dimensionIndex > newDemand[indexValue]) {
-        newDemand[indexValue] = std::max(newDemand[indexValue], dimensionIndex);
-        newDeciding[indexValue] = op;
+      unsigned idx = static_cast<unsigned>(c - classes.data());
+      unsigned d = demand.lookup(op->getResult(0));
+      if (!newDeciding[idx] || d > newDemand[idx]) {
+        newDemand[idx] = std::max(newDemand[idx], d);
+        newDeciding[idx] = op;
       }
     }
     DenseMap<Value, unsigned> newParam;
-    for (auto fieldValue : module.getOps<func::FuncOp>())
-      if (isInternalFunction(fieldValue))
-        for (BlockArgument arrayValue : fieldValue.getArguments())
-          if (bitWidthOf(arrayValue.getType()))
-            newParam[arrayValue] = valueDemand(arrayValue).first;
+    for (auto f : module.getOps<func::FuncOp>())
+      if (isInternalFunction(f))
+        for (BlockArgument a : f.getArguments())
+          if (bitWidthOf(a.getType()))
+            newParam[a] = valueDemand(a).first;
     bool changed = false;
-    for (auto [loopIndex, candidateValue] : llvm::enumerate(classes)) {
-      if (candidateValue.fixed || candidateValue.demandPinned)
+    for (auto [i, c] : llvm::enumerate(classes)) {
+      if (c.fixed || c.demandPinned)
         continue;
-      candidateValue.decidingLoad = newDeciding[loopIndex];
-      if (newDemand[loopIndex] == candidateValue.demand)
+      c.decidingLoad = newDeciding[i];
+      if (newDemand[i] == c.demand)
         continue;
       changed = true;
       if (round >= kMaxDemandRounds)
-        candidateValue.demandPinned = true;
+        c.demandPinned = true;
       else
-        candidateValue.demand = newDemand[loopIndex];
+        c.demand = newDemand[i];
     }
-    for (auto &[portValue, dimensionIndex] : newParam) {
-      if (paramDemandPinned.count(portValue) ||
-          paramDemand.lookup(portValue) == dimensionIndex)
+    for (auto &[p, d] : newParam) {
+      if (paramDemandPinned.count(p) || paramDemand.lookup(p) == d)
         continue;
       changed = true;
       if (round >= kMaxDemandRounds)
-        paramDemandPinned.insert(portValue);
+        paramDemandPinned.insert(p);
       else
-        paramDemand[portValue] = dimensionIndex;
+        paramDemand[p] = d;
     }
     if (!changed)
       break;
   }
 }
 
+//===----------------------------------------------------------------------===//
+// Result.
+//===----------------------------------------------------------------------===//
+
 /// "load (k.cpp:9:40) -> arith.index_cast -> subscript of 'tbl' (64 words)".
 std::string Narrowing::demandChain(Operation *load) const {
-  std::string stringValue;
-  llvm::raw_string_ostream os(stringValue);
+  std::string s;
+  llvm::raw_string_ostream os(s);
   os << load->getName().getStringRef() << " (" << shortLoc(load->getLoc())
      << ")";
-  Value valueHandle = load->getResult(0);
+  Value v = load->getResult(0);
   for (unsigned step = 0; step < kMaxChainSteps; ++step) {
-    Operation *user = demandUser.lookup(valueHandle);
+    Operation *user = demandUser.lookup(v);
     if (!user)
       return os.str() + " (unused)";
     os << " -> ";
     if (std::optional<Access> acc = asAccess(user)) {
-      if (acc->stored == valueHandle)
+      if (acc->stored == v)
         os << "store to '" << nameOf(acc->memref) << "' ("
            << shortLoc(user->getLoc()) << ")";
       else
@@ -1773,14 +2899,14 @@ std::string Narrowing::demandChain(Operation *load) const {
       return os.str();
     }
     os << user->getName().getStringRef();
-    if (auto callSite = dyn_cast<func::CallOp>(user)) {
-      os << " @" << callSite.getCallee();
+    if (auto call = dyn_cast<func::CallOp>(user)) {
+      os << " @" << call.getCallee();
       return os.str();
     }
     if (user->getNumResults() != 1 ||
         isa<scf::YieldOp, affine::AffineYieldOp>(user))
       return os.str();
-    valueHandle = user->getResult(0);
+    v = user->getResult(0);
   }
   return os.str() + " -> ...";
 }
@@ -1793,63 +2919,59 @@ std::string Narrowing::demandChain(Operation *load) const {
 /// rosetta 3d-rendering frame_buffer {0, 100} -> 6). nullopt when a store's
 /// value is not a constant, the array has an initial value or the rule is
 /// off (tool.hls.narrowing.constant_set_reinterpretation).
-std::optional<unsigned>
-Narrowing::constantSetBits(const MemClass &candidateValue) {
+std::optional<unsigned> Narrowing::constantSetBits(const MemClass &c) {
   if (!circt::hlsest::Config::get()
            .tool.hls.narrowing.constantSetReinterpretation ||
-      candidateValue.initRange || candidateValue.stores.empty() ||
-      !candidateValue.declaredBits || candidateValue.declaredBits > 64)
+      c.initRange || c.stores.empty() || !c.declaredBits ||
+      c.declaredBits > 64)
     return std::nullopt;
   SmallVector<APInt> vals;
-  for (Operation *st : candidateValue.stores) {
-    std::optional<Access> arrayValue = asAccess(st);
-    std::optional<APInt> keyValue = arrayValue && arrayValue->stored
-                                        ? constantOf(arrayValue->stored)
-                                        : std::nullopt;
-    if (!keyValue)
+  for (Operation *st : c.stores) {
+    std::optional<Access> a = asAccess(st);
+    std::optional<APInt> k =
+        a && a->stored ? constantOf(a->stored) : std::nullopt;
+    if (!k)
       return std::nullopt;
-    vals.push_back(keyValue->sextOrTrunc(candidateValue.declaredBits));
+    vals.push_back(k->sextOrTrunc(c.declaredBits));
   }
-  bool anyNegative = llvm::any_of(
-      vals, [](const APInt &valueHandle) { return valueHandle.isNegative(); });
+  bool anyNegative =
+      llvm::any_of(vals, [](const APInt &v) { return v.isNegative(); });
   unsigned width = 0;
   if (anyNegative) {
-    for (const APInt &valueHandle : vals)
-      width = std::max(width, valueHandle.getSignificantBits());
+    for (const APInt &v : vals)
+      width = std::max(width, v.getSignificantBits());
     return width;
   }
-  unsigned arrayValue = 0;
-  for (const APInt &valueHandle : vals)
-    arrayValue = std::max(arrayValue, valueHandle.getActiveBits());
-  if (arrayValue == 0)
-    return std::nullopt;
-  for (const APInt &valueHandle : vals)
-    width = std::max(width, valueHandle.trunc(arrayValue).getSignificantBits());
+  unsigned a = 0;
+  for (const APInt &v : vals)
+    a = std::max(a, v.getActiveBits());
+  if (a == 0)
+    return std::nullopt; // all zero: dead-memory elimination's
+  for (const APInt &v : vals)
+    width = std::max(width, v.trunc(a).getSignificantBits());
   return width;
 }
 
 void Narrowing::annotate() {
-  for (MemClass &candidateValue : classes) {
-    if (remarksOn && candidateValue.fixed)
-      for (Operation *root : candidateValue.roots)
+  for (MemClass &c : classes) {
+    if (remarksOn && c.fixed)
+      for (Operation *root : c.roots)
         root->emitRemark() << "narrow-ram-widths: not narrowed: "
-                           << candidateValue.fixedReason;
-    if (candidateValue.fixed || candidateValue.roots.empty() ||
-        !candidateValue.declaredBits)
+                           << c.fixedReason;
+    if (c.fixed || c.roots.empty() || !c.declaredBits)
       continue;
-    unsigned width = candidateValue.declaredBits;
+    unsigned width = c.declaredBits;
     std::string wr = "stored values: none reach it";
     if (rangesOn) {
-      if (candidateValue.rangePinned) {
-        wr = "stored values: full range (" + candidateValue.pinReason + ")";
-      } else if (!candidateValue.stored.isUninitialized()) {
-        unsigned bits = bitsForRange(candidateValue.stored.getValue());
-        wr = "stored values " + rangeText(candidateValue.stored.getValue()) +
-             " need " + std::to_string(bits) + " bits";
-        if (candidateValue.widestStore)
-          wr += " (widest store at " +
-                shortLoc(candidateValue.widestStore->getLoc()) + ")";
-        if (std::optional<unsigned> setBits = constantSetBits(candidateValue);
+      if (c.rangePinned) {
+        wr = "stored values: full range (" + c.pinReason + ")";
+      } else if (!c.stored.isUninitialized()) {
+        unsigned bits = bitsForRange(c.stored.getValue());
+        wr = "stored values " + rangeText(c.stored.getValue()) + " need " +
+             std::to_string(bits) + " bits";
+        if (c.widestStore)
+          wr += " (widest store at " + shortLoc(c.widestStore->getLoc()) + ")";
+        if (std::optional<unsigned> setBits = constantSetBits(c);
             setBits && *setBits < bits) {
           bits = std::max(1u, *setBits);
           wr += "; every stored value a constant: " + std::to_string(bits) +
@@ -1862,37 +2984,34 @@ void Narrowing::annotate() {
     }
     std::string wd = "loads: none used";
     if (demandOn) {
-      if (candidateValue.demandPinned) {
+      if (c.demandPinned) {
         wd = "loads demand every bit (no fixpoint after " +
              std::to_string(kMaxDemandRounds) + " rounds)";
-      } else if (candidateValue.decidingLoad && candidateValue.demand > 0) {
-        wd = "loads demand " + std::to_string(candidateValue.demand) +
-             " bits: " + demandChain(candidateValue.decidingLoad);
-        width = std::min(width, candidateValue.demand);
+      } else if (c.decidingLoad && c.demand > 0) {
+        wd = "loads demand " + std::to_string(c.demand) + " bits: " +
+             demandChain(c.decidingLoad);
+        width = std::min(width, c.demand);
       }
     } else {
       wd = "load demand off";
     }
     if (remarksOn)
-      for (Operation *root : candidateValue.roots)
+      for (Operation *root : c.roots)
         root->emitRemark() << "narrow-ram-widths: " << width << " of "
-                           << candidateValue.declaredBits << " bits; " << wr
-                           << "; " << wd
-                           << (candidateValue.cyclic ? "; on a cycle of arrays"
-                                                     : "")
-                           << "; " << candidateValue.stores.size()
-                           << " store(s), " << candidateValue.loads.size()
-                           << " load(s)";
-    if (width >= candidateValue.declaredBits)
+                           << c.declaredBits << " bits; " << wr << "; " << wd
+                           << (c.cyclic ? "; on a cycle of arrays" : "")
+                           << "; " << c.stores.size() << " store(s), "
+                           << c.loads.size() << " load(s)";
+    if (width >= c.declaredBits)
       continue;
     std::string reason = std::to_string(width) + " of " +
-                         std::to_string(candidateValue.declaredBits) +
-                         " bits: " + wr + "; " + wd;
-    Builder buildPoint(module.getContext());
-    for (Operation *root : candidateValue.roots) {
+                         std::to_string(c.declaredBits) + " bits: " + wr +
+                         "; " + wd;
+    Builder b(module.getContext());
+    for (Operation *root : c.roots) {
       root->setAttr(kNarrowBitsAttrName,
-                    buildPoint.getI32IntegerAttr(static_cast<int32_t>(width)));
-      root->setAttr(kNarrowReasonAttrName, buildPoint.getStringAttr(reason));
+                    b.getI32IntegerAttr(static_cast<int32_t>(width)));
+      root->setAttr(kNarrowReasonAttrName, b.getStringAttr(reason));
     }
   }
 }
@@ -1942,11 +3061,11 @@ struct NarrowRamWidthsPass
            "min(bits the stored values need, low bits the loads' users "
            "demand) as hls.narrow_bits (run before --memory-banking-bram)";
   }
-  void getDependentDialects(DialectRegistry &targetRegistry) const override {
-    targetRegistry.insert<arith::ArithDialect, memref::MemRefDialect>();
+  void getDependentDialects(DialectRegistry &registry) const override {
+    registry.insert<arith::ArithDialect, memref::MemRefDialect>();
   }
   void runOnOperation() override {
-
+    // An option given explicitly, else tool.hls.narrowing.*.
     const circt::hlsest::NarrowingConfig &nc =
         circt::hlsest::Config::get().tool.hls.narrowing;
     circt::hlsest::applyConfigured(storedRanges, nc.storedRanges);
@@ -1954,7 +3073,9 @@ struct NarrowRamWidthsPass
     circt::hlsest::applyConfigured(completeReadSelector,
                                    nc.completeReadSelector);
     Narrowing(getOperation(), storedRanges, loadDemand, remarks,
-              nc.fullAddressInterfaceModes, completeReadSelector)
+              nc.fullAddressInterfaceModes, completeReadSelector,
+              nc.undefContributesNothing, nc.reachingStoreRanges,
+              nc.accumulationRanges, nc.calleeParamStoresFullRange)
         .run();
   }
 };

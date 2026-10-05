@@ -30,6 +30,8 @@ import csv
 import json
 from pathlib import Path
 
+from make_compare_csv import BAND_OVER   # the one definition of the DoD-5 goal band
+
 HERE = Path(__file__).resolve().parent
 VITIS_COLUMNS = ("BRAM", "DSP", "FF", "LUT", "BRAM_util_pct", "DSP_util_pct", "FF_util_pct",
                  "LUT_util_pct")
@@ -96,7 +98,7 @@ def main():
     diff = HEADER.index("Diff")
     diffs = [int(r[diff]) for r in rows if r[diff] != ""]
     vitis_bram = [int(r[2]) for r in rows if r[diff] != ""]
-    in_goal = sum(0 <= d <= 0.15 * v for d, v in zip(diffs, vitis_bram))
+    in_goal = sum(0 <= d <= BAND_OVER * v for d, v in zip(diffs, vitis_bram))
     print(f"{args.out}: {len(rows)} designs, {len(diffs)} compared, "
           f"{sum(d == 0 for d in diffs)} exact, {in_goal} in goal, |err| {sum(map(abs, diffs))}")
 

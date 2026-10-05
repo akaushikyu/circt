@@ -42,13 +42,6 @@ enum class AddrRelation { Same, Disjoint, Unknown };
 /// memref.store is Unknown.
 AddrRelation compareAddresses(mlir::Operation *a, mlir::Operation *b);
 
-/// One memory effect of an op.
-struct MemTouch {
-  const void *key = nullptr; ///< the storage; null: any storage
-  mlir::Value memref;        ///< the memref the effect is on, if any
-  bool write = false;
-};
-
 /// What `op` reads and writes. An op without MemoryEffectOpInterface, a call,
 /// and an effect on no memref value may write any storage. An if has no
 /// effects of its own: its arms are ops of the stretch themselves.

@@ -136,7 +136,7 @@ The contributions answer the three research questions.
      {{sem_equal}} of the {{sem_checked}} designs that could be checked are bit-exact.
 4. **An evaluation on the full catalogue (in-sample).** Counting each distinct source once and leaving out
    zero-BRAM designs, {{ev_distinct_nonzero_exact}} of {{ev_distinct_nonzero_compared}} designs are exact
-   and {{ev_distinct_nonzero_in_band}} are exact or over by at most 15 %. Over all {{compared}} compared
+   and {{ev_distinct_nonzero_in_band}} are exact or over by at most {{band_over_pct}} %. Over all {{compared}} compared
    designs, the figures are {{exact}} ({{exact_pct}} %) and {{in_goal}} ({{in_goal_pct}} %). A naive
    declared-size baseline is exact on {{ev_b0_exact}}. Every remaining out-of-band design is attributed per
    array to a cause class (Chapter 6).
@@ -162,7 +162,8 @@ The ground truth is one tool version, one device and one clock ({{vitis_versions
 {{vitis_clocks}}), with `syn.array_partition.throughput_driven=off`, the configuration of the original
 project. Only BRAM is modelled. DSP, FF and LUT estimation (Phase 6) depend on Vitis' schedule and binding
 and are future work. The success criterion was fixed at the start of the project: for every design with
-ground truth, hls-est equals Vitis or over-counts by at most 15 %. An under-count is always out of band,
+ground truth, hls-est equals Vitis or over-counts by at most 15 %; on 2026-10-24 the band was narrowed to
+{{band_over_pct}} %, the band every number of this thesis uses. An under-count is always out of band,
 because an estimate that promises a design fits when it does not is worse than a pessimistic one.
 
 ## 1.6 Authorship and use of AI assistance

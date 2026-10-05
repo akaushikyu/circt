@@ -92,6 +92,29 @@ def dataset_table(entries: dict, catalogue_keys: list[str] | None) -> str:
     return "\n".join(rows)
 
 
+def check_heldout_parity(src: str, into: str):
+    """Held-out ground truth never shares a file with the training one, nor one held-out set's with another's
+    (hls-doc/heldout.md, heldout2.md): both files' names name the same held-out set ('heldout', 'heldout2'), or
+    neither names one (the rule of common.heldout_out_path).  Returns that set, or None for training files."""
+    hs, hi = C.heldout_set_of_name(Path(src).name), C.heldout_set_of_name(Path(into).name)
+    if hs != hi or hs == "?":
+        raise SystemExit(f"refusing to merge {repr(hs) + ' held-out' if hs else 'training'} results {src} into "
+                         f"{repr(hi) + ' held-out' if hi else 'training'} file {into}: held-out and training "
+                         "results, and the results of different held-out sets, are kept in separate files "
+                         "(hls-doc/heldout.md)")
+    return hs
+
+
+def check_heldout_keys(entries: dict, path: str, heldout):
+    """Every entry of a held-out file is a design of its held-out set (dataset heldout-* / heldout2-*) and no
+    entry of a training file is a held-out one; refuses a file that mixes them."""
+    wrong = sorted(k for k in entries if not k.startswith("_") and C.heldout_set_of_key(k) != (heldout or None))
+    if wrong:
+        raise SystemExit(f"{path}: {len(wrong)} entries of another set in a "
+                         f"{repr(heldout) + ' held-out' if heldout else 'training'} file (e.g. {wrong[0]}); "
+                         "refusing to merge (hls-doc/heldout.md)")
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--from", dest="src", required=True, help="summary JSON to merge in")
@@ -100,10 +123,13 @@ def main(argv=None) -> int:
     ap.add_argument("--no-catalog", action="store_true",
                     help="do not load the design catalogue for the per-dataset table")
     a = ap.parse_args(argv)
+    heldout = check_heldout_parity(a.src, a.into)
     import run_vitis as RV               # noqa: E402  (its summary lock)
     with RV.file_lock(a.into + ".lock"):
         into = C.load_json(a.into, {}) or {}
         src = C.load_json(a.src, {}) or {}
+        check_heldout_keys(src, a.src, heldout)
+        check_heldout_keys(into, a.into, heldout)
         merged, added, same, conflicts = merge(into, src)
         if not a.dry_run:
             C.dump_json(merged, a.into)
@@ -116,7 +142,8 @@ def main(argv=None) -> int:
     catalogue_keys = None
     if not a.no_catalog:
         import designs as D              # noqa: E402
-        catalogue_keys = [C.design_key(d) for d in D.load_designs() if d.get("sources")]
+        catalogue_keys = [C.design_key(d) for d in D.load_designs(catalog=heldout or None)
+                          if d.get("sources")]
         stale = sorted(k for k in merged if k not in set(catalogue_keys))
         if stale:
             print(f"entries for designs the catalogue does not have ({len(stale)}): {', '.join(stale)}")

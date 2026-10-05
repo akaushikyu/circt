@@ -18,7 +18,7 @@
 // CHECK: affine.store %{{.*}}, %[[MA]][%{{.*}}] {hls.merged_member_stores = 4 : i64} : memref<400xi58>
 // CHECK: affine.load %[[MC]][%{{.*}}] {hls.read_modify_write} : memref<400xi58>
 // CHECK: affine.store %{{.*}}, %[[MC]][%{{.*}}] {hls.merged_member_stores = 2 : i64} : memref<400xi58>
-// CHECK: affine.load %[[MC]][%{{.*}}] {hls.read_modify_write} : memref<400xi58>
+// CHECK: affine.load %[[MC]][%{{.*}}] {hls.dynamic_lane, hls.read_modify_write} : memref<400xi58>
 // BRAM-DAG: struct variable aggregated (AGGREGATE pragma): 400 words x 58 bits
 // BRAM-DAG: Total BRAM: 6
 // OFF-DAG: polygeist.varname = "ma_0"} : memref<400xi32>

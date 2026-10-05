@@ -18,3 +18,9 @@
 # Polygeist W9r5-impl, adopted in W9r12-impl: only the three
 # MultiHeadSelfAttention1 opt5 designs change, 2304 -> 2880 against Vitis 2688, bit-exact).
 --hls-trip-one-pipeline-unroll
+# Vitis' automatic inlining measures a function in loop-rotated form (VITIS_NOTES N131, OPEN_ISSUES O175;
+# adopted in W9r17-impl: machsuite sort_merge 8 -> 4 = Vitis, N18 kernels 127 -> 130 of 132 decisions),
+# and keeps an `inline off` call whatever its array argument's size (N123, O167; adopted in W9r17-impl:
+# forgebench attn_breakdown_module / op2 22 -> 17 = Vitis). Both need Polygeist w9r17-cgeist.
+--hls-auto-inline-rotated-size
+--hls-keep-misfit-inline-off

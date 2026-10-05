@@ -312,7 +312,10 @@ def compile_entry(e, shim):
 # ------------------------------------------------------------------------------- hls-est ----
 
 def defined_public_functions(text):
-    return re.findall(r"^\s*func\.func\s+@([A-Za-z0-9_$.]+)\(", text, flags=re.M)
+    """The public functions a test defines, without cgeist's dynamic global initialization functions
+    (`__hls_global_init.<name>`, which check_semantics runs before the top and which are never a top)."""
+    return [f for f in re.findall(r"^\s*func\.func\s+@([A-Za-z0-9_$.]+)\(", text, flags=re.M)
+            if not f.startswith(RH.GLOBAL_INIT_PREFIX)]
 
 
 def hlsest_args(top):
@@ -392,10 +395,11 @@ def check_lines(stdout):
     return out
 
 
-def recheck_existing(path, timeout):
+def recheck_existing(path, timeout, accept_totals=False):
     """--recheck: re-runs hls-est on a checked-in Mirror file (its RUN line's arguments) and rewrites
     only its CHECK block; the header, the RUN line and the MLIR body stay byte for byte. Returns
-    (path, outcome). An XFAIL test is left as it is."""
+    (path, outcome). An XFAIL test is left as it is. A changed total is not rewritten unless
+    accept_totals (--recheck-accept-totals: an estimator change whose CHANGELOG entry names it)."""
     text = path.read_text()
     if "// XFAIL:" in text:
         return path, "xfail (unchanged)"
@@ -413,7 +417,10 @@ def recheck_existing(path, timeout):
     old_total = re.search(r"^// CHECK: Total BRAM: (\S+?)\{\{\$\}\}$", text, re.M)
     total, _ = RH.parse_hlsest_output(p.stdout)
     if not old_total or old_total.group(1) != str(total):
-        return path, f"total changed {old_total and old_total.group(1)} -> {total}: not rewritten"
+        if not accept_totals:
+            return path, f"total changed {old_total and old_total.group(1)} -> {total}: not rewritten"
+        path.write_text(new_text)
+        return path, f"rewritten (total {old_total and old_total.group(1)} -> {total})"
     path.write_text(new_text)
     return path, "rewritten"
 
@@ -635,6 +642,9 @@ def main():
     ap.add_argument("--recheck", action="store_true",
                     help="no cgeist: re-run hls-est on every checked-in Mirror test (its own RUN line) and "
                          "rewrite only the CHECK block in the current format; the manifest is not rewritten")
+    ap.add_argument("--recheck-accept-totals", action="store_true",
+                    help="with --recheck: also rewrite a test whose Total BRAM changed (name the cause in "
+                         "the CHANGELOG entry; the outcome lists old and new totals)")
     ap.add_argument("--mlir-from", default=None,
                     help="an earlier run_hlsest.py result JSON: reuse its MLIR files where they carry "
                          "the cache key of the current inputs (same cgeist md5, shim and flags)")
@@ -655,7 +665,8 @@ def main():
         files = sorted(p for p in MIRROR.rglob("*.mlir") if args.only in str(p))
         from collections import Counter
         with cf.ThreadPoolExecutor(args.j) as ex:
-            res = list(ex.map(lambda p: recheck_existing(p, args.long_timeout), files))
+            res = list(ex.map(lambda p: recheck_existing(p, args.long_timeout,
+                                                             args.recheck_accept_totals), files))
         for p, o in res:
             if o not in ("rewritten", "xfail (unchanged)"):
                 log(f"[recheck] {shown(p)}: {o}")

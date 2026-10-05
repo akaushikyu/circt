@@ -1862,10 +1862,11 @@ def _entry_record(rel, ddir, script, t, config, flows, cfg, extra_includes=(), n
     }
 
 
-def discover(root: str, problems: list[str]) -> tuple[list[dict], list[dict]]:
+def discover(root: str, problems: list[str], src_root: str | None = None) -> tuple[list[dict], list[dict]]:
     """All v2 designs (records pointing at the HLSFactory_v2 tree) and the skipped entries
-    [{rel, reason}]."""
-    src_root = _sources_root(root)
+    [{rel, reason}].  src_root: the directory holding the <dataset>/<design> tree (default
+    <root>/hlsfactory/hls_dataset_sources; the held-out catalogue passes its catalog/ directory)."""
+    src_root = src_root or _sources_root(root)
     if not _isdir(src_root):
         problems.append(f"{src_root}: HLSFactory dataset directory not found")
         return [], []

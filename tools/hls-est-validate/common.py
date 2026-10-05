@@ -93,6 +93,65 @@ RESULTS_DIR = HERE / "results"                        # small JSON/CSV summaries
 DEFAULT_HLSFACTORY_ROOT = "/mnt/d/HLSFactory_v2/HLSFactory"
 HLSFACTORY_ROOT = os.environ.get("HLSFACTORY_ROOT") or DEFAULT_HLSFACTORY_ROOT
 DEFAULT_CATALOG = os.environ.get("HLS_EST_CATALOG") or "v2"
+# The HELD-OUT evaluation catalogue (hls-doc/heldout.md; catalogue 'heldout', never a default): designs
+# hls-est was never tuned on, scored once with frozen tools.  Its ground truth and results are kept apart
+# from the training files (results/*-heldout.*), and its 'locked' split is refused by every scoring tool
+# unless HELDOUT_LOCKED_RELEASE_ENV is set to HELDOUT_LOCKED_RELEASE_VALUE (Peter's release).
+DEFAULT_HELDOUT_ROOT = "/mnt/d/HLS_heldout"
+HELDOUT_ROOT = os.environ.get("HLS_HELDOUT_ROOT") or DEFAULT_HELDOUT_ROOT
+HELDOUT_SPLIT_COPY = HERE / "heldout" / "split.json"     # the committed copy of <root>/split.json
+HELDOUT_LOCKED_RELEASE_ENV = "HLS_EST_HELDOUT_RELEASE_LOCKED"
+HELDOUT_LOCKED_RELEASE_VALUE = "peter-approved"
+# The second held-out set (hls-doc/heldout2.md; catalogue 'heldout2'): hls4ml, FINN-hlslib and Rodinia-HLS
+# designs.  Same rules, its own root, split, release variable and result files (results/*-heldout2.*).
+DEFAULT_HELDOUT2_ROOT = "/mnt/d/HLS_heldout2"
+HELDOUT2_LOCKED_RELEASE_ENV = "HLS_EST_HELDOUT2_RELEASE_LOCKED"
+
+# Every held-out catalogue by name: its root (default and environment override), the committed copy of its
+# split, the variable that releases its locked split (Peter's release, per set), the prefix of its dataset
+# names and its document.  A result file belongs to the set whose name it contains (heldout_set_of_name).
+HELDOUT_SETS = {
+    "heldout": {"default_root": DEFAULT_HELDOUT_ROOT, "root_env": "HLS_HELDOUT_ROOT",
+                "split_copy": HELDOUT_SPLIT_COPY, "release_env": HELDOUT_LOCKED_RELEASE_ENV,
+                "release_value": HELDOUT_LOCKED_RELEASE_VALUE, "dataset_prefix": "heldout-",
+                "doc": "hls-doc/heldout.md"},
+    "heldout2": {"default_root": DEFAULT_HELDOUT2_ROOT, "root_env": "HLS_HELDOUT2_ROOT",
+                 "split_copy": HERE / "heldout2" / "split.json", "release_env": HELDOUT2_LOCKED_RELEASE_ENV,
+                 "release_value": HELDOUT_LOCKED_RELEASE_VALUE, "dataset_prefix": "heldout2-",
+                 "doc": "hls-doc/heldout2.md"},
+}
+_HELDOUT_TAG = re.compile(r"heldout\d*")
+
+
+def heldout_set_of_name(name: str):
+    """The held-out set a file name belongs to: the one tag 'heldout', 'heldout2', ... it contains, None when
+    it contains none (a training file), '?' when it names several sets (refused by every caller)."""
+    tags = set(_HELDOUT_TAG.findall(name))
+    if not tags:
+        return None
+    return tags.pop() if len(tags) == 1 else "?"
+
+
+def heldout_set_of_key(key: str):
+    """The held-out set of a result key '<dataset>/<benchmark>' (by its dataset prefix), or None."""
+    for name, s in HELDOUT_SETS.items():
+        if key.startswith(s["dataset_prefix"]):
+            return name
+    return None
+
+
+def heldout_out_path(out, catalog, stem):
+    """The summary path: results/<stem>.json, or results/<stem>-<set>.json for a held-out catalogue
+    (results/<stem>-heldout.json, results/<stem>-heldout2.json).  Held-out results never go into a training
+    file, training results never into a held-out file, and one set's results never into another set's file."""
+    hs = catalog if catalog in HELDOUT_SETS else None
+    if out is None:
+        return str(RESULTS_DIR / (f"{stem}-{hs}.json" if hs else f"{stem}.json"))
+    if heldout_set_of_name(Path(out).name) != hs:
+        raise SystemExit(f"--out {out}: {'held-out ' + repr(hs) if hs else 'training'} results go to a file whose "
+                         f"name {'contains ' + repr(hs) + ' (and no other held-out set)' if hs else 'does not contain heldout'}"
+                         f" ({HELDOUT_SETS[hs]['doc'] if hs else 'hls-doc/heldout.md'})")
+    return out
 
 # ---- frontend ----------------------------------------------------------------------
 # CGEIST_BIN overrides the frontend binary (a private build under test, or a frozen copy, so that
@@ -207,13 +266,14 @@ def win_backslash(p):
     return wsl_to_win(p).replace("/", "\\")
 
 
-def sha256_of_files(paths, extra=""):
+def sha256_of_files(paths, extra="", read=None):
+    """sha256 over the files' names and contents (`read(path)` gives a file's bytes; default its own)."""
     h = hashlib.sha256()
     for p in sorted(paths):
         p = Path(p)
         h.update(str(p.name).encode())
         h.update(b"\0")
-        h.update(p.read_bytes())
+        h.update(read(p) if read else p.read_bytes())
         h.update(b"\0")
     h.update(extra.encode())
     return h.hexdigest()
@@ -257,6 +317,19 @@ def hls_est_identity(binary=None):
         if words:
             return words[0], sha
     return f"unknown (HLS_EST_BIN={binary})", sha
+
+
+def cgeist_git(binary=None):
+    """The Polygeist commit a cgeist binary was built from: a `<binary>.git` sidecar's first word (a frozen
+    copy, e.g. ~/hls-est-work/heldout/frozen/cgeist.git), else the HEAD of the repository the binary sits in
+    (<repo>/Polygeist/build/bin/cgeist)."""
+    binary = str(binary or CGEIST)
+    side = Path(binary + ".git")
+    if side.exists():
+        words = side.read_text().split()
+        if words:
+            return words[0]
+    return git_hash(Path(binary).resolve().parents[2])
 
 
 def load_json(p, default=None):

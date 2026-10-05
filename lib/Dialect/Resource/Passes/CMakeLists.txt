@@ -10,6 +10,7 @@ add_mlir_library(HLSPasses
         AffineUnroll.cpp
         InferVitisSplitArray.cpp
         VitisFold.cpp
+        ConstantCallEval.cpp
         PromoteGlobalsToAllocas.cpp
         DeadMemoryElimination.cpp
         CallInstances.cpp
@@ -27,6 +28,8 @@ add_mlir_library(HLSPasses
         DoWhileFlatten.cpp
         MemoryRecurrences.cpp
         IterationPrivateBanks.cpp
+        PreBankForwarding.cpp
+        FunctionPipelines.cpp
         ../Plugins/Builtin/MAxiBuffers.cpp
         ../Plugins/Builtin/Mappers.cpp
         ../Plugins/Builtin/MemoryArchitecture.cpp

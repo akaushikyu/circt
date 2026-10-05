@@ -8,11 +8,13 @@
 // (tool.hls.partitioning.known_residue_banks): 32 reads per bank at II 2, 15
 // copies, also with N115's full copies for steered reads on
 // (tool.hls.memory_architecture.replication.rotating_reads_full_copies, OFF1).
-// Off2 run: both keys flipped: the bank is chosen at run time and the steered reads
-// get 16 copies (272).
+// Off2 run: both keys flipped: the bank is chosen at run time, but the in-bank address
+// is the same on every candidate bank (the base n & ~7 is a multiple of 8, residuesOf),
+// so N125 gives the steered reads no extra copy (256; 272 before the W9r16 review fixes,
+// when an unknown residue counted as a varying address).
 // CHECK: Total BRAM: 256
 // OFF1: Total BRAM: 256
-// OFF2: Total BRAM: 272
+// OFF2: Total BRAM: 256
 
 module {
   func.func @_Z3topPiS_S_(%arg0: memref<256xi32>, %arg1: memref<256xi32>, %arg2: memref<256xi32>) attributes {hls.orig_name = "top", llvm.linkage = #llvm.linkage<external>} {

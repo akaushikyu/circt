@@ -1,5 +1,12 @@
 // RUN: hls-est %s --symbol-privatize=exclude=_Z3topPA256_fS0_S0_S0_S0_ --symbol-dce --lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --memory-banking-bram --convert-affine-to-loopschedule '--bram-analysis=top=_Z3topPA256_fS0_S0_S0_S0_ math-costs=%S/../../../../tools/hls-est-validate/math_costs.json' -o /dev/null | FileCheck %s
 // CHECK: Total BRAM: 259{{$}}
+// (203 before W9r22-impl: VITIS_NOTES N166 (a), tool.hls.pipeline_decision.promoted_store_cleanup:
+// this legacy MLIR's Q / K / V accumulators (an init store, then a store in every k iteration)
+// are promoted before the flatten decision, so their arrays store once per element and become
+// replicable (the reading loop's II here gives 15 copies); the catalogue design under the real
+// headers is unchanged.)
+// (259 before W9r18-impl: the change comes from N129's promote_nest_invariant_only, on by
+// default since then; the catalogue design under the real headers is unchanged.)
 // Vitis 2025.1 td=off: 73 (results/vitis.json forgebench/tiled_attn_p1; compared by the harness, not by lit)
 
 module {

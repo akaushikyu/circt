@@ -22,7 +22,10 @@
 //
 // @copies: three reductions over different arrays of the same type (identical
 // problems; the second and third reuse the first's schedule) and one over an
-// f64 array (other operator types and an II of 5: solved on its own). Each
+// f64 array (other operator types and an II of 8: solved on its own, and placed again by the
+// greedy scheduler with its floating-point unit limits, VITIS_NOTES N135, at the II of its
+// chained dadd latency 7 + 1: the accumulated value comes from a dmul, N160 (b), kernel
+// w9r21rev_r2d_scalar1, Vitis II 8; W9 round 21 review fixes). Each
 // array is read once per cycle: RAM_1P, 1024 x 32 bits = 2 BRAM_18K, and
 // 1024 x 64 bits = 4.
 
@@ -31,7 +34,7 @@
 // REUSE: pipeline @ {{.*}}:[[L0:[0-9]+]]:{{[0-9]+}} in @copies: ii=1 {{.*}} scheduler=simplex{{$}}
 // REUSE: pipeline @ {{.*}} in @copies: ii=1 {{.*}} scheduler=simplex (reused from {{.*}}:[[L0]]:{{[0-9]+}}){{$}}
 // REUSE: pipeline @ {{.*}} in @copies: ii=1 {{.*}} scheduler=simplex (reused from {{.*}}:[[L0]]:{{[0-9]+}}){{$}}
-// REUSE: pipeline @ {{.*}} in @copies: ii=5 {{.*}} scheduler=simplex{{$}}
+// REUSE: pipeline @ {{.*}} in @copies: ii=8 {{.*}} scheduler=greedy (floating-point units at the simplex II) memory_recurrence=N160 ii>=8 {{.*}}
 // REUSE: AffineToLoopSchedule
 // REUSE: (S) 2 schedules-reused
 // REUSE-NEXT: (S) 2 schedules-solved

@@ -36,6 +36,14 @@ are added as in the Polygeist catalogue.  catalog="polygeist" / --catalog
 polygeist (or HLS_EST_CATALOG=polygeist in the environment) selects the older
 catalogue built from the Polygeist lit copies described above.
 
+Held-out catalogue: catalog="heldout" / --catalog heldout reads the held-out evaluation designs
+(hls-doc/heldout.md; common.DEFAULT_HELDOUT_ROOT = /mnt/d/HLS_heldout, or $HLS_HELDOUT_ROOT) from
+<root>/catalog/<dataset>/<design>/hlsfactory.toml with the same rules, and nothing else (no
+polybench_pragmas or basic).  Each record carries its frozen split ('eval' / 'locked', split.json);
+heldout_select() refuses the locked split until Peter releases it.  catalog="heldout2" reads the second
+held-out set (hls-doc/heldout2.md; /mnt/d/HLS_heldout2 or $HLS_HELDOUT2_ROOT) the same way; each set has its
+own split and its own release variable (common.HELDOUT_SETS), and its records carry 'heldout_set'.
+
 Python 3.10, stdlib only.  Paths are stored in WSL spelling ('dir') and in
 Windows spelling ('win_dir'); the module runs from either side.
 """
@@ -419,7 +427,9 @@ def load_basic(circt_wsl: str, problems: list[str]) -> list[dict]:
 # --------------------------------------------------------------------------
 # HLSFactory v2: the HLSFactory 1.1.0 tree itself (opt-in; hlsfactory_v2.py)
 # --------------------------------------------------------------------------
-CATALOGS = ("polygeist", "v2")
+CATALOGS = ("polygeist", "v2", "heldout", "heldout2")
+HELDOUT_CATALOGS = ("heldout", "heldout2")             # the keys of common.HELDOUT_SETS
+HELDOUT_SPLITS = ("eval", "locked", "all")
 
 
 def _common():
@@ -469,6 +479,135 @@ def load_hlsfactory_v2(root: str | None = None, test_hls_dir: str = DEFAULT_TEST
 
 
 # --------------------------------------------------------------------------
+# held-out evaluation catalogue (hls-doc/heldout.md)
+# --------------------------------------------------------------------------
+def _heldout_set(name: str) -> dict:
+    sets = _common().HELDOUT_SETS
+    if name not in sets:
+        raise ValueError(f"unknown held-out set {name!r} (one of {', '.join(sets)})")
+    return sets[name]
+
+
+def heldout_root(name: str = "heldout") -> str:
+    s = _heldout_set(name)
+    return to_wsl(os.environ.get(s["root_env"]) or s["default_root"]).rstrip("/")
+
+
+def load_heldout_split(root: str | None = None, name: str = "heldout") -> dict:
+    """<root>/split.json, checked against the committed copy (tools/hls-est-validate/<set>/split.json):
+    the split was frozen before any result existed, so the two must be identical."""
+    root = root or heldout_root(name)
+    path = Path(local(posixpath.join(root, "split.json")))
+    split = json.loads(path.read_text(encoding="utf-8"))
+    copy = _heldout_set(name)["split_copy"]
+    if not copy.is_file() or json.loads(copy.read_text(encoding="utf-8")) != split:
+        raise DesignParseError(f"{path} differs from the committed copy {copy}: the held-out split is "
+                               f"frozen ({_heldout_set(name)['doc']}); restore one from the other")
+    return split
+
+
+def load_heldout(root: str | None = None, problems: list[str] | None = None,
+                 info: dict | None = None, name: str = "heldout") -> list[dict]:
+    """One record per design of the held-out set `name` under <root>/catalog/<dataset>/<design>/hlsfactory.toml
+    (the HLSFactory 1.1 layout; rules: hlsfactory_v2.discover).  Records have the v2 shape with origin
+    `name` ('heldout' / 'heldout2'), mode 'heldout', 'heldout_set' = `name` and 'heldout' = {split, family}
+    from split.json."""
+    here = str(Path(__file__).resolve().parent)
+    if here not in sys.path:
+        sys.path.insert(0, here)
+    import hlsfactory_v2 as V2               # noqa: E402  (harness module)
+    own = problems is None
+    problems = [] if own else problems
+    root = to_wsl(root).rstrip("/") if root else heldout_root(name)
+    V2.LOCAL = local if os.name == "nt" else None
+    recs, skipped = V2.discover(root, problems, src_root=posixpath.join(root, "catalog"))
+    split = load_heldout_split(root, name)
+    assign = split["designs"]
+    out = []
+    for r in recs:
+        key = f"{r['dataset']}/{r['benchmark']}"
+        r.update(origin=name, mode="heldout", win_dir=to_win(r["dir"]), v2_win_dir=to_win(r["dir"]))
+        if name != "heldout":
+            r["heldout_set"] = name
+        if key not in assign:
+            problems.append(f"{key}: held-out design without a split entry (split.json)")
+            continue
+        r["heldout"] = dict(assign[key])
+        out.append(r)
+    missing = set(assign) - {f"{r['dataset']}/{r['benchmark']}" for r in out}
+    for key in sorted(missing):
+        problems.append(f"{key}: in split.json but not in the catalogue")
+    if info is not None:
+        info.update({"skipped": skipped, "root": root, "split_seed": split.get("seed")})
+    if own and problems:
+        raise DesignParseError("\n".join(problems))
+    return out
+
+
+def heldout_set_of(d: dict) -> str:
+    """The held-out set of a held-out design record ('heldout' for the records of the first set)."""
+    return d.get("heldout_set") or "heldout"
+
+
+def heldout_locked_released(name: str = "heldout") -> bool:
+    s = _heldout_set(name)
+    return os.environ.get(s["release_env"]) == s["release_value"]
+
+
+def heldout_select(designs: list[dict], split: str = "eval", name: str | None = None) -> list[dict]:
+    """The held-out designs of `split` ('eval', 'locked' or 'all'; other records pass through).  The
+    'locked' designs are refused (SystemExit) until Peter releases them (hls-doc/heldout.md, heldout2.md),
+    per set: the sets of the held-out records in `designs`, and `name` when given (with no records and no
+    `name`: the first set).  Every tool that runs hls-est on held-out designs or scores them calls this first."""
+    if split not in HELDOUT_SPLITS:
+        raise ValueError(f"held-out split {split!r} is not one of {', '.join(HELDOUT_SPLITS)}")
+    sets = {heldout_set_of(d) for d in designs if "heldout" in d} | ({name} if name else set())
+    if split != "eval":
+        for s in sorted(sets or {"heldout"}):
+            if not heldout_locked_released(s):
+                hs = _heldout_set(s)
+                raise SystemExit(f"the {s!r} 'locked' split is not released ({hs['doc']}); Peter releases "
+                                 f"it by setting {hs['release_env']}={hs['release_value']}")
+    return [d for d in designs
+            if "heldout" not in d or split == "all" or d["heldout"]["split"] == split]
+
+
+def heldout_visible(designs: list[dict]) -> list[dict]:
+    """`designs` without the locked held-out designs of every set that is not released (for tools that list or
+    digest designs without choosing a split, e.g. run_hlsest.select_designs under HLS_EST_CATALOG=heldout2)."""
+    return [d for d in designs if not ("heldout" in d and d["heldout"]["split"] == "locked"
+                                      and not heldout_locked_released(heldout_set_of(d)))]
+
+
+def heldout_refuse_locked_key(key_or_path: str):
+    """SystemExit when `key_or_path` names a locked design of an unreleased held-out set: a results key
+    '<dataset>/<benchmark>', or a path under a Vitis cache directory .../vitis-cache/<dataset>/<benchmark>/...
+    (align_arrays.py, vitis_trace.py, rtl_memories.py read reports and RTL of one design by key or path)."""
+    c = _common()
+    s = str(key_or_path).replace("\\", "/")
+    parts = s.split("/")
+    key = None
+    if "vitis-cache" in parts and len(parts) > parts.index("vitis-cache") + 2:
+        i = parts.index("vitis-cache")
+        key = f"{parts[i + 1]}/{parts[i + 2]}"
+    elif not s.startswith("/") and s.count("/") >= 1:
+        key = s
+    name = c.heldout_set_of_key(key) if key else None
+    if name is None or heldout_locked_released(name):
+        return
+    if key in heldout_locked_keys(name=name):
+        hs = _heldout_set(name)
+        raise SystemExit(f"{key}: a locked design of the held-out set {name!r} ({hs['doc']}); it is not inspected "
+                         f"until Peter releases it ({hs['release_env']})")
+
+
+def heldout_locked_keys(root: str | None = None, name: str = "heldout") -> set[str]:
+    """Keys of the locked held-out designs (for filtering result files without loading the catalogue)."""
+    split = load_heldout_split(root, name)
+    return {k for k, v in split["designs"].items() if v["split"] == "locked"}
+
+
+# --------------------------------------------------------------------------
 # public API
 # --------------------------------------------------------------------------
 def default_circt_dir() -> str:
@@ -503,13 +642,24 @@ def load_designs(test_hls_dir: str = DEFAULT_TEST_HLS_DIR,
                  info: dict | None = None) -> list[dict]:
     """All designs as dicts (see module docstring).  Parse/verification
     problems are appended to `problems` (or raised if it is None).
-    catalog: 'polygeist' (the HLSFactory designs from the Polygeist lit copies) or
-    'v2' (load_hlsfactory_v2); None = default_catalog()."""
+    catalog: 'polygeist' (the HLSFactory designs from the Polygeist lit copies),
+    'v2' (load_hlsfactory_v2) or 'heldout' (load_heldout: the held-out designs only, every split;
+    scoring tools narrow it with heldout_select); None = default_catalog()."""
     own = problems is None
     problems = [] if own else problems
     test_hls_wsl = to_wsl(test_hls_dir).rstrip("/")
     circt_wsl = to_wsl(circt_dir).rstrip("/") if circt_dir else default_circt_dir()
     catalog = catalog or default_catalog()
+    if catalog in HELDOUT_CATALOGS:
+        designs = load_heldout(problems=problems, info=info, name=catalog)
+        if datasets:
+            designs = [d for d in designs if d["dataset"] in set(datasets)]
+        if verify:
+            for d in designs:
+                problems.extend(verify_design(d))
+        if own and problems:
+            raise DesignParseError("\n".join(problems))
+        return designs
     if catalog == "v2":
         hlsf = load_hlsfactory_v2(hlsfactory_root_dir, test_hls_wsl, problems, info)
     elif catalog == "polygeist":
@@ -571,8 +721,10 @@ def main(argv=None) -> int:
     ap.add_argument("--list", action="store_true",
                     help="also print one line per design")
     ap.add_argument("--catalog", choices=CATALOGS, default=None,
-                    help="HLSFactory designs from the HLSFactory 1.1.0 tree ('v2', the default) or from "
-                         "the Polygeist lit copies ('polygeist'); $HLS_EST_CATALOG changes the default")
+                    help="HLSFactory designs from the HLSFactory 1.1.0 tree ('v2', the default), from "
+                         "the Polygeist lit copies ('polygeist'), or the held-out evaluation catalogue "
+                         "('heldout', hls-doc/heldout.md; 'heldout2', hls-doc/heldout2.md); $HLS_EST_CATALOG changes "
+                         "the default")
     ap.add_argument("--hlsfactory-root", default=None,
                     help=f"HLSFactory tree for --catalog v2 (default $HLSFACTORY_ROOT or "
                          f"{_common().DEFAULT_HLSFACTORY_ROOT})")

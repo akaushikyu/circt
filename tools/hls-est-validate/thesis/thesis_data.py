@@ -8,7 +8,7 @@ Scoring follows compare.py exactly for the totals (`compare_one`): a design is *
 Vitis has status ok and a BRAM total, hls-est has status ok, and (when the run records them) the
 design's Vitis cache key is one of the run's `vitis_keys`; otherwise the row is "vitis missing",
 "hls-est missing" or "sources differ".  The goal band is make_compare_csv.band (exact, or an
-over-count of at most 15 % of the Vitis value).  Every run is re-scored against the *current*
+over-count of at most make_compare_csv.BAND_OVER of the Vitis value: 5 % since 2026-10-24, MEMOS #95).  Every run is re-scored against the *current*
 ground truth so that rows of different dates share one reference; `check_against_cmp` verifies
 that the re-scoring reproduces a run's own compare.py summary.
 """
@@ -33,7 +33,8 @@ import make_compare_csv  # noqa: E402  (the one definition of the goal band)
 
 band, BAND_OVER = make_compare_csv.band, make_compare_csv.BAND_OVER
 
-IN_BAND = ("exact", "over<=15%")
+IN_BAND = make_compare_csv.IN_BAND
+BAND_PCT, BAND_TEXT = make_compare_csv.BAND_PCT, make_compare_csv.BAND_TEXT
 
 
 def expand(path):
@@ -119,8 +120,8 @@ def summarize(rows):
     exact = sum(r["band"] == "exact" for r in comp)
     inb = sum(r["band"] in IN_BAND for r in comp)
     under = sum(r["band"] == "under" for r in comp)
-    over_le = sum(r["band"] == "over<=15%" for r in comp)
-    over_gt = sum(r["band"] == "over>15%" for r in comp)
+    over_le = sum(r["band"] == make_compare_csv.BAND_IN_LABEL for r in comp)
+    over_gt = sum(r["band"] == make_compare_csv.BAND_OUT_LABEL for r in comp)
     abs_err = sum(abs(r["diff"]) for r in comp)
     vit_total = sum(r["vitis"] for r in comp)
     rel = [r["diff"] / r["vitis"] for r in comp if r["vitis"] > 0]
@@ -134,8 +135,8 @@ def summarize(rows):
         "exact": exact,
         "in_band": inb,
         "under": under,
-        "over_le15": over_le,
-        "over_gt15": over_gt,
+        "over_le_band": over_le,
+        "over_gt_band": over_gt,
         "out_of_band": n - inb,
         "abs_err": abs_err,
         "vitis_bram_total": vit_total,

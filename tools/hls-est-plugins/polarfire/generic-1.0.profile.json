@@ -134,6 +134,9 @@
       "globals": {
         "attribute_accesses": false
       },
+      "interfaces": {
+        "axi_lite_array_memories": false
+      },
       "grouping": {
         "plugin": "identity"
       },
@@ -197,6 +200,8 @@
       "fast_ops_threshold": 16384,
       "max_ii_bumps": 4096,
       "recurrence_repair_rounds": 0,
+      "height_priority": false,
+      "fp_unit_limits": false,
       "user_ii_target": true
     },
     "sequential": {

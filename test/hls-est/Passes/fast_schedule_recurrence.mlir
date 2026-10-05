@@ -1,6 +1,9 @@
-// RUN: hls-est %s --affine-loop-normalize --memory-banking-bram --convert-affine-to-loopschedule=fast-threshold=0 -o - | FileCheck %s
-// RUN: hls-est %s --affine-loop-normalize --memory-banking-bram --convert-affine-to-loopschedule -o - | FileCheck %s
-// RUN: hls-est %s --affine-loop-normalize --memory-banking-bram --convert-affine-to-loopschedule=fast-ops-threshold=1 -o - | FileCheck %s
+// RUN: hls-est %s --config-set scheduling.dependences.register_recurrence_latencies=false --affine-loop-normalize --memory-banking-bram --convert-affine-to-loopschedule=fast-threshold=0 -o - | FileCheck %s
+// RUN: hls-est %s --config-set scheduling.dependences.register_recurrence_latencies=false --affine-loop-normalize --memory-banking-bram --convert-affine-to-loopschedule -o - | FileCheck %s
+// RUN: hls-est %s --config-set scheduling.dependences.register_recurrence_latencies=false --affine-loop-normalize --memory-banking-bram --convert-affine-to-loopschedule=fast-ops-threshold=1 -o - | FileCheck %s
+// (The RUN lines keep the operator latencies on the recurrences:
+// scheduling.dependences.register_recurrence_latencies, on since W9r18-impl, would use N83's
+// recurrence values; this test is about the II search.)
 //
 // Recurrences through iter_args whose latency sum is far above ResMinII (one
 // read per iteration through one port: ResMinII 1). The greedy scheduler

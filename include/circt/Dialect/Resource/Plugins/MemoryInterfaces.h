@@ -63,6 +63,7 @@ struct MemoryRequest {
   std::optional<std::string> rdw;         ///< reserved
   bool needsEcc = false;                  ///< reserved
   std::optional<std::string> pragmaImpl;  ///< bind_storage impl, when parsed
+  std::optional<std::string> pragmaType;  ///< bind_storage type, when parsed
 
   int64_t bits() const { return words * static_cast<int64_t>(writeWidth); }
 };
@@ -76,6 +77,9 @@ struct BankStaticProfile {
   bool replicable = true;
   /// Completely partitioned: no memory.
   bool registers = false;
+  /// A user bind_storage of a plain RAM type that pins the kind (lower case:
+  /// ram_1p, ram_2p, ram_t2p, ram_s2p; VITIS_NOTES N173); empty otherwise.
+  std::string pinnedType;
 };
 
 /// What a selector knows besides the request (it runs before scheduling, so
@@ -238,9 +242,13 @@ struct ImplicitBuffer {
   std::string bundle;
   llvm::SmallVector<std::string> ports;
   unsigned busBits = 32;
+  /// The widest element of the bundle's ports, not padded to the bus minimum
+  /// (the write buffer's width, VITIS_NOTES N158).
+  unsigned elementBits = 0;
   int64_t readBurst = 16, readOutstanding = 16;
   int64_t writeBurst = 16, writeOutstanding = 16;
   bool hasRead = false, hasWrite = false;
+  bool cachedRead = false; ///< a reading port under #pragma HLS cache
   bool passedToCall = false;   ///< an argument reaches a call
   bool unresolvedCall = false; ///< ... whose body is unknown
   int64_t readDepth = 0;

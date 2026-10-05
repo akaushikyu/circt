@@ -40,6 +40,11 @@ struct PartitionEntry {
   int64_t factor = 1;
   mlir::Attribute source; // the entry's `source` field ("pragma" if absent)
   std::string from;       // the callee parameter that carries it ("" = own)
+  /// The first-dimension extent of the callee parameter whose pragma this is,
+  /// when cgeist carried it to a caller's parameter at inline time (`rows`):
+  /// the pragma applies only to a root array with at most that many rows
+  /// (VITIS_NOTES N123, Vitis HLS 214-253). Unset: no limit.
+  std::optional<int64_t> rows;
 };
 
 /// How one dimension is split.

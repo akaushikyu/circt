@@ -10,7 +10,7 @@
 // (n37i_lanes): v 256x128 8 BRAM_18K, the read loop at II 1 = hls-est.
 
 // CHECK: %[[V:.*]] = memref.alloca() {{.*}}polygeist.varname = "v"} : memref<256xi128>
-// CHECK: memref.load %[[V]][%{{.*}}] {hls.read_modify_write} : memref<256xi128>
+// CHECK: memref.load %[[V]][%{{.*}}] {hls.dynamic_lane, hls.read_modify_write} : memref<256xi128>
 // CHECK: memref.store %{{.*}}, %[[V]][%{{.*}}] : memref<256xi128>
 // CHECK: affine.for
 // CHECK: %[[W:.*]] = memref.load %[[V]][%{{.*}}] : memref<256xi128>

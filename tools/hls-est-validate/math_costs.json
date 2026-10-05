@@ -1332,6 +1332,109 @@
     {"run": "w2fx_abs_f64_std", "result": "~/hls-est-work/exp-src/mathcost/w2i/w2fx_abs_f64_std.json", "vitis_dir": "~/hls-est-work/experiments/w2fx_abs_f64_std/7be060eb8250"}
    ],
    "corpus_designs": []
+  },
+  {
+   "function": "log2",
+   "type": "double",
+   "spellings": ["std::log2", "log2"],
+   "arguments": "any",
+   "core": ["log_generic_double_s"],
+   "core_kind": "library_module",
+   "bram_18k": 21,
+   "instancing": "per_concurrent_call",
+   "tables": [
+    {"name": "log0_lut_table_ap_fixed_double_0_5_64_array", "module": "log_generic_double_s", "words": 64, "bits": 90, "storage": "auto", "bram_18k": 3},
+    {"name": "log_inverse_lut_table_0_5_64_array", "module": "log_generic_double_s", "words": 64, "bits": 6, "storage": "auto", "bram_18k": 0},
+    {"name": "log_lut_table_ap_fixed_102_12_ap_q_mode_5_ap_o_mode_3_0_4_4_16_array", "module": "log_generic_double_s", "words": 16, "bits": 86, "storage": "auto", "bram_18k": 3},
+    {"name": "log_lut_table_ap_fixed_102_12_ap_q_mode_5_ap_o_mode_3_0_7_6_64_array", "module": "log_generic_double_s", "words": 64, "bits": 83, "storage": "auto", "bram_18k": 3},
+    {"name": "log_lut_table_ap_fixed_12_6_64_array", "module": "log_generic_double_s", "words": 64, "bits": 78, "storage": "auto", "bram_18k": 3},
+    {"name": "log_lut_table_ap_fixed_17_6_64_array", "module": "log_generic_double_s", "words": 64, "bits": 73, "storage": "auto", "bram_18k": 3},
+    {"name": "log_lut_table_ap_fixed_22_6_64_array", "module": "log_generic_double_s", "words": 64, "bits": 68, "storage": "auto", "bram_18k": 2},
+    {"name": "log_lut_table_ap_fixed_27_6_64_array", "module": "log_generic_double_s", "words": 64, "bits": 63, "storage": "auto", "bram_18k": 2},
+    {"name": "log_lut_table_ap_fixed_32_6_64_array", "module": "log_generic_double_s", "words": 64, "bits": 58, "storage": "auto", "bram_18k": 2}
+   ],
+   "evidence": [
+    {"run": "w9r22p_d7_log2", "vitis_dir": "~/hls-est-work/experiments/w9r22p_d7_log2/f33d5323d45b", "source": "~/hls-est-work/exp-src/w9r22p/d7_log2.cpp", "notes": "VITIS_NOTES N170 (W9r22-prove)"}
+   ],
+   "corpus_designs": []
+  },
+  {
+   "function": "cosh",
+   "type": "double",
+   "spellings": ["std::cosh", "cosh"],
+   "arguments": "any",
+   "core": ["sinh_cosh_range_redux_cordic_double", "hyperb_range_redux_double_s"],
+   "core_kind": "library_module",
+   "bram_18k": 8,
+   "instancing": "per_concurrent_call",
+   "tables": [
+    {"name": "cordic_hyperb_table_128", "module": "sinh_cosh_range_redux_cordic_double_Pipeline_1", "words": 128, "bits": 124, "storage": "auto", "bram_18k": 4},
+    {"name": "pp", "module": "hyperb_range_redux_double_s", "words": 36, "bits": 34, "storage": "ram_1wnr", "bram_18k": 2},
+    {"name": "pp_1", "module": "hyperb_range_redux_double_s", "words": 49, "bits": 34, "storage": "ram_1wnr", "bram_18k": 2},
+    {"name": "pps", "module": "hyperb_range_redux_double_s", "words": 12, "bits": 17, "storage": "auto", "bram_18k": 0},
+    {"name": "pps_1", "module": "hyperb_range_redux_double_s", "words": 14, "bits": 17, "storage": "auto", "bram_18k": 0}
+   ],
+   "evidence": [
+    {"run": "w9r22p_d8_cosh", "vitis_dir": "~/hls-est-work/experiments/w9r22p_d8_cosh/0253f8095852", "source": "~/hls-est-work/exp-src/w9r22p/d8_cosh.cpp", "notes": "VITIS_NOTES N170 (W9r22-prove)"}
+   ],
+   "corpus_designs": []
+  },
+  {
+   "function": "round",
+   "type": "double",
+   "spellings": ["std::round", "round"],
+   "arguments": "any",
+   "core": "(inlined into the caller)",
+   "core_kind": "inline",
+   "bram_18k": 4,
+   "instancing": "per_concurrent_call",
+   "tables": [
+    {"name": "mask_table", "module": "(caller)", "words": 64, "bits": 52, "storage": "auto", "bram_18k": 2},
+    {"name": "one_half_table", "module": "(caller)", "words": 64, "bits": 53, "storage": "auto", "bram_18k": 2}
+   ],
+   "note": "generic_round is inlined: its two ROMs belong to the caller; counted like per_concurrent_call (how several calls of one module share the tables is unconfirmed)",
+   "evidence": [
+    {"run": "w9r22p_d9_round", "vitis_dir": "~/hls-est-work/experiments/w9r22p_d9_round/4df3a5942bac", "source": "~/hls-est-work/exp-src/w9r22p/d9_round.cpp", "notes": "VITIS_NOTES N170 (W9r22-prove)"}
+   ],
+   "corpus_designs": []
+  },
+  {
+   "function": "log2",
+   "type": "float",
+   "spellings": ["std::log2", "log2f"],
+   "arguments": "any",
+   "core": ["log_generic_float_s"],
+   "core_kind": "library_module",
+   "bram_18k": 6,
+   "instancing": "per_concurrent_call",
+   "tables": [
+    {"name": "log0_lut_table_ap_fixed_float_0_5_64_array", "module": "log_generic_float_s", "words": 64, "bits": 49, "storage": "auto", "bram_18k": 2},
+    {"name": "log_inverse_lut_table_0_5_64_array", "module": "log_generic_float_s", "words": 64, "bits": 6, "storage": "auto", "bram_18k": 0},
+    {"name": "log_lut_table_ap_fixed_58_9_ap_q_mode_5_ap_o_mode_3_0_12_6_64_array", "module": "log_generic_float_s", "words": 64, "bits": 37, "storage": "auto", "bram_18k": 2},
+    {"name": "log_lut_table_ap_fixed_58_9_ap_q_mode_5_ap_o_mode_3_0_4_4_16_array", "module": "log_generic_float_s", "words": 16, "bits": 45, "storage": "auto", "bram_18k": 0},
+    {"name": "log_lut_table_ap_fixed_58_9_ap_q_mode_5_ap_o_mode_3_0_7_6_64_array", "module": "log_generic_float_s", "words": 64, "bits": 42, "storage": "auto", "bram_18k": 2}
+   ],
+   "evidence": [
+    {"run": "w9r22rv_k19_log2f", "vitis_dir": "~/hls-est-work/experiments/w9r22rv_k19_log2f/92ad61f41078", "source": "~/hls-est-work/exp-src/w9r22rv/k19_log2f.cpp", "notes": "VITIS_NOTES N170 (W9 round 22 review, D8): the loop around the call is pipelined"}
+   ],
+   "corpus_designs": []
+  },
+  {
+   "function": "atan2",
+   "type": "double",
+   "spellings": ["std::atan2", "atan2"],
+   "arguments": "any",
+   "core": ["atan2_cordic_double_s", "atan2_generic_double_s"],
+   "core_kind": "library_module",
+   "bram_18k": 4,
+   "instancing": "per_concurrent_call",
+   "tables": [
+    {"name": "cordic_ctab_table_128", "module": "atan2_generic_double_Pipeline_1", "words": 128, "bits": 126, "storage": "auto", "bram_18k": 4}
+   ],
+   "evidence": [
+    {"run": "w9r22rv_k3_atan2_loop", "vitis_dir": "~/hls-est-work/experiments/w9r22rv_k3_atan2_loop/d3f09e70c8f4", "source": "~/hls-est-work/exp-src/w9r22rv/k3_atan2_loop.cpp", "notes": "VITIS_NOTES N170 (W9 round 22 review, D8): the core has a loop (atan2_generic_double_Pipeline_1), the calling loop is not pipelined (N169)"}
+   ],
+   "corpus_designs": []
   }
  ]
 }

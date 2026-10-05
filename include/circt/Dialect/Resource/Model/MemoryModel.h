@@ -62,6 +62,9 @@ struct ReplicationLoopRecord {
   /// reaches the bank through its argument: its accesses go through the
   /// module's ports, copies 1 whatever `need` (the II rises instead).
   bool portBound = false;
+  /// Every read is a steered read whose in-bank address varies with the
+  /// bank: ceil(R / II) copies (VITIS_NOTES N115 / N125).
+  bool fullCopies = false;
 };
 
 struct ReplicationRecord {
@@ -73,6 +76,13 @@ struct ReplicationRecord {
   std::optional<std::string> limitingLoop; ///< scope that set `copies`
   /// A port-bound loop needs more than two port-cycles per II.
   bool portBoundLimited = false;
+};
+
+/// One memory effect of an op (memTouches, AccessOrder.h).
+struct MemTouch {
+  const void *key = nullptr; ///< the storage; null: any storage
+  mlir::Value memref;        ///< the memref the effect is on, if any
+  bool write = false;
 };
 
 /// Straight-line stretches of one sequential scope, built once per scope:
@@ -92,6 +102,17 @@ public:
     /// Per stretch, the cycle each op starts in (filled on first use by the
     /// port model's read placement; empty until then).
     mutable std::vector<std::vector<int64_t>> startCycles;
+    /// Per stretch, filled on first use by the port model's same-state search
+    /// (empty until then): each op's OpInfo, the ordinals of the ops of the
+    /// stretch that define its operands and, for an if, the values its arms
+    /// yield, and its memory effects (a cache: looking them up per bank was
+    /// the most time of a fully unrolled filter window).
+    struct StretchOperands {
+      std::vector<const OpInfo *> infos;
+      std::vector<llvm::SmallVector<unsigned, 4>> defs;
+      std::vector<llvm::SmallVector<MemTouch, 2>> touches;
+    };
+    mutable std::vector<StretchOperands> operands;
   };
 
   const Scope &get(mlir::Operation *scope) {

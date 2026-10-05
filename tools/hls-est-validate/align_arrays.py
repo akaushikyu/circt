@@ -835,6 +835,8 @@ def fmt_form(e):
 
 
 def align(key, vitis_json=RESULTS_VITIS, hlsest_json=None, rtl_dir=None, no_args=False):
+    import designs as D                  # noqa: E402  (harness module: the held-out lock)
+    D.heldout_refuse_locked_key(key)
     ds, bench = key.split("/", 1)
     res = json.load(open(vitis_json))
     entry = res.get(key)

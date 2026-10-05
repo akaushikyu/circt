@@ -1,17 +1,20 @@
-// RUN: hls-est %s --affine-loop-normalize --auto-pipeline-unroll --infer-vitis-split-array=td=off --memory-banking-bram --config-set tool.hls.partitioning.constant_index.non_affine_arrays=false --config-set tool.hls.partitioning.constant_index.after_user_partition=false | FileCheck %s --check-prefix=IR
+// RUN: hls-est %s --config-set=tool.hls.partitioning.drop_unread_banks=false --affine-loop-normalize --auto-pipeline-unroll --infer-vitis-split-array=td=off --memory-banking-bram --config-set tool.hls.partitioning.constant_index.non_affine_arrays=false --config-set tool.hls.partitioning.constant_index.after_user_partition=false | FileCheck %s --check-prefix=IR
 // The RUN lines pin the rule (b) of before W9r7-impl 5/10 (no rule (b) on
 // non-affine arrays or after a user partition); the new rule is tested in
 // w9r7_partition_{after_user,non_affine}.mlir.
-// RUN: hls-est %s --affine-loop-normalize --auto-pipeline-unroll --infer-vitis-split-array=td=off --memory-banking-bram --convert-affine-to-loopschedule --bram-analysis --bram-debug --config-set tool.hls.partitioning.constant_index.non_affine_arrays=false --config-set tool.hls.partitioning.constant_index.after_user_partition=false > %t.out 2> %t.err
+// RUN: hls-est %s --config-set=tool.hls.partitioning.drop_unread_banks=false --affine-loop-normalize --auto-pipeline-unroll --infer-vitis-split-array=td=off --memory-banking-bram --convert-affine-to-loopschedule --bram-analysis --bram-debug --config-set tool.hls.partitioning.constant_index.non_affine_arrays=false --config-set tool.hls.partitioning.constant_index.after_user_partition=false > %t.out 2> %t.err
 // RUN: FileCheck %s --input-file=%t.out --check-prefix=REPORT
 // The defaults bank @memref_only too (rule (b) on an array without an affine
 // access, VITIS_NOTES N57; banking rewrites its memref.load / store):
-// RUN: hls-est %s --affine-loop-normalize --auto-pipeline-unroll --infer-vitis-split-array=td=off --memory-banking-bram | FileCheck %s --check-prefix=DEF
+// RUN: hls-est %s --config-set=tool.hls.partitioning.drop_unread_banks=false --affine-loop-normalize --auto-pipeline-unroll --infer-vitis-split-array=td=off --memory-banking-bram | FileCheck %s --check-prefix=DEF
 // DEF-LABEL: func.func @memref_only
 // DEF-COUNT-8: memref.alloca() {{.*}}hls.bank_of = "A"{{.*}}source = "constant-index"{{.*}} : memref<64x1xi32>
 // DEF: return
 // RUN: FileCheck %s --input-file=%t.err
 // RUN: FileCheck %s --input-file=%t.err --check-prefix=RAM
+// W9r21: the RUN lines pin tool.hls.partitioning.drop_unread_banks off (VITIS_NOTES
+// N157 would remove the banks these kernels write and never read); this test is
+// about the banking of constant indices.
 
 // td=off rule (b) and memory banking must agree on what a constant index is
 // (ConstantIndex.h). Each kernel copies int in[64][8] into A[64][8] with the

@@ -234,6 +234,8 @@ def _capture(fn):
 
 
 def build(key, vitis_json, hlsest_json, rtl_dir, out_root, write=True, run_id=None):
+    import designs as D                  # noqa: E402  (harness module: the held-out lock)
+    D.heldout_refuse_locked_key(key)
     ds, bench = key.split("/", 1)
     res = json.load(open(vitis_json))
     entry = res.get(key)

@@ -25,7 +25,9 @@ compared byte for byte (a NaN counts as the one quiet NaN of its format: its sig
 unspecified), for every value mode (`small`: integers 0..7 in arrays, 0..8 as scalars, floats in
 [-1, 1); `wide`: integers over their full width in arrays, 0..1023 as scalars, floats in
 [-1000, 1000); `pos`: integers 1..8, floats in [0.5, 2), for designs that divide by an input) and every
-seed.
+seed.  A design with no verdict is retried once in an input-domain mode (INPUT_RETRIES: `diag`, `align`,
+`index`) and, when its top takes a graph (an edge list and a count), in the `graph-*` modes, which write
+valid graphs (GRAPH_INDEX_BITS, graph_retry).
 
 The reference (--ref, default `real`): `real` builds the sources with g++ / gcc against the real Vitis
 2025.1 headers (an ext4 mirror of C.VITIS_INCLUDE_WSL) in C-simulation mode, which is Vitis' own C
@@ -50,9 +52,17 @@ an argument type the driver cannot fill, the native build does not compile, no v
     python3 check_semantics.py --page-from <result json> --md <page>
     python3 check_semantics.py --self-test
 
+Vitis' math library (MEMOS #94, --vitis-mathlib auto|off, default auto): a build whose link lacks symbols of
+libhlsmc++ (the cordic / log tables, hls::powf, hls::atan(double), ...) gets them compiled from the install's
+bitcode at check time (vitis_mathlib.py); nothing of the install is copied into the repositories, and the
+temporary files and the executables that hold library code are deleted after the run.
+
 hls::stream: every stream argument of the top gets STREAM_TOKENS tokens per call (filled like an array
-element); the dump holds the tokens left in it after the call.  A read of an empty stream ends the run
-(exit 88; Vitis' C simulation blocks and aborts): the run does not count.
+element); the dump holds the tokens left in it after the call.  A blocking read of an empty stream ends the run
+at that read (Vitis' C simulation blocks there; its deadlock detector aborts): the driver writes the dump of
+the call in progress and exits 88 (the real reference's C-simulation hls::stream is watched by a thread
+that applies the detector's test).  A run in which both sides stop at a blocking read compares those
+dumps; a run in which only the reference stops there does not count.
 
 Layouts: one element layout serves both sides; it was measured with this clang / LLVM (iN and
 _BitInt(N): 1/2/4/8 bytes up to 64 bits, then ceil(N/64) * 8 bytes with alignment 8 on both sides).
@@ -76,6 +86,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import common as C                         # noqa: E402
+import vitis_mathlib                       # noqa: E402
 
 # Executing the candidate: the MLIR of cgeist (LLVM 18 syntax) is read, lowered and translated by
 # CIRCT's MLIR build (the parser hls-est reads it with; RelWithDebInfo on ext4) and compiled by its llc.
@@ -484,6 +495,7 @@ def cxx_name_of(top_fn, top):
 # ------------------------------------------------------------------------------- cgeist command --
 
 _CATALOGUE = None
+CATALOG = None          # designs.load_designs catalogue for complete_record (None = the default; --catalog)
 
 
 def complete_record(key, rec):
@@ -496,7 +508,7 @@ def complete_record(key, rec):
     if "dir" not in rec:
         if _CATALOGUE is None:
             import designs as D
-            _CATALOGUE = {f"{d['dataset']}/{d['benchmark']}": d for d in D.load_designs()}
+            _CATALOGUE = {f"{d['dataset']}/{d['benchmark']}": d for d in D.load_designs(catalog=CATALOG)}
         d = _CATALOGUE.get(key)
         if d:
             rec.setdefault("dir", d["dir"])
@@ -582,6 +594,18 @@ static inline uint64_t cs_mix(uint64_t x) {
 static unsigned char *cs_base[CS_NARGS + 1];
 static unsigned char *cs_obj[CS_NARGS + 1];   // the storage a top-level hls::stream argument points to
 static FILE *cs_out;
+static int cs_cur_call;   // the call in progress (the dump written at a blocking read names it)
+// Set by the real reference's thunk while the top runs: copies the arguments' state back into the
+// driver's buffers and FIFOs (cs_back), so a dump written at a blocking read sees it.
+extern "C" { void (*cs_block_hook)(void) = 0; }
+// The FIFO key of stream i of stream entry a: object i of the argument's storage, or for a member
+// stream of an aggregate of streams (a TAPA async_mmap, OPEN_ISSUES O157) the member's offset in its
+// parent argument's object.
+static unsigned char *cs_stream_key(int a, uint32_t i) {
+  const CsArg &A = cs_args[a];
+  if (A.parent >= 0) return cs_obj[A.parent] + A.key_off;
+  return cs_obj[a] + (uint64_t)i * A.stream_stride;
+}
 
 // ---- token FIFOs of hls::stream objects, keyed by the object's address.  The candidate's stream
 // methods (generated from cgeist's declarations), the shim reference's and the real reference's
@@ -607,9 +631,8 @@ extern "C" void cs_dump_and_exit(int code);
 extern "C" void cs_fifo_pop(const void *k, void *d, uint32_t n) {
   if (cs_fifo_try_pop(k, d, n)) return;
   // a blocking read of an empty stream: Vitis' C simulation blocks and its deadlock detector aborts
-  // (hls_stream.h); here the run ends with a distinct exit code and the run does not count
-  fprintf(stderr, "cs-stream: read of an empty hls::stream\n");
-  cs_dump_and_exit(88);
+  // (hls_stream.h); here the run ends at that read with the call's dump and a distinct exit code
+  cs_stop_at_blocking_read();
 }
 extern "C" uint64_t cs_fifo_size(const void *k) {
   std::map<const void *, CsFifo>::iterator it = cs_fifos.find(k);
@@ -620,7 +643,56 @@ static void cs_put_int(unsigned char *p, int bits, const uint64_t *limb) {
   int nb = (bits + 7) / 8;
   for (int b = 0; b < nb; ++b) p[b] = (unsigned char)(limb[b / 8] >> (8 * (b % 8)));
 }
+// ---- mode `graph-*` (GRAPH_MODES): valid graphs in the argument shapes graph_role recognises.  Graph g
+// has cs_gc(g) nodes, an even number in 2..8, and as many edges: a random perfect matching listed by source
+// (j, partner(j)), j = 0 .. cs_gc(g) - 1, so the edge list is symmetric, every node has one out-edge and one
+// in-edge (no degree is 0) and every endpoint is below its graph's node count.  Graphs are concatenated in
+// every edge list (graph g's edges start after the cs_gc(0) + ... + cs_gc(g - 1) edges of the graphs before
+// it); a count array holds cs_gc(i) at position i (nodes, edges and the per-graph counts of a batch), a
+// count scalar holds cs_gc(0) (the node and edge count of a single graph, and the number of graphs of a
+// batch).
+static uint64_t cs_gseed;
+static std::vector<uint32_t> cs_gedge;     // cs_gedge[2q], cs_gedge[2q + 1]: endpoints of edge q
+static uint32_t cs_gc(uint64_t g) { return 2 * (1 + (uint32_t)(cs_mix(cs_gseed + 1 + g) % 4)); }
+static void cs_graph_edges(uint64_t need) {
+  cs_gedge.clear();
+  for (uint64_t g = 0; cs_gedge.size() / 2 < need; ++g) {
+    uint32_t n = cs_gc(g), perm[8], partner[8];
+    for (uint32_t j = 0; j < n; ++j) perm[j] = j;
+    for (uint32_t j = n - 1; j > 0; --j) {
+      uint32_t k = (uint32_t)(cs_mix(cs_gseed * 31ULL + g * 8ULL + j) % (j + 1));
+      uint32_t t = perm[j]; perm[j] = perm[k]; perm[k] = t;
+    }
+    for (uint32_t j = 0; j < n; j += 2) { partner[perm[j]] = perm[j + 1]; partner[perm[j + 1]] = perm[j]; }
+    for (uint32_t j = 0; j < n; ++j) { cs_gedge.push_back(j); cs_gedge.push_back(partner[j]); }
+  }
+}
+// The value of graph lane `lane` (0 or 1 for an edge endpoint) of element `idx` of argument A, or -1 when
+// the lane keeps its mode's fill.
+static int64_t cs_graph_value(const CsArg &A, uint64_t idx, int lane, uint64_t v) {
+  switch (A.graph_role) {
+  case 1: return A.is_scalar ? cs_gc(0) : cs_gc(idx);                       // a count
+  case 2: return cs_gedge[2 * (idx / 2) + idx % 2];                          // edge list: last dimension 2
+  case 3: return lane < 2 ? (int64_t)cs_gedge[2 * idx + lane] : -1;          // edge list: two lanes an element
+  case 4: return (int64_t)(v % 2);                                           // another index lane: 0 or 1
+  }
+  return -1;
+}
 static void cs_fill(int mode, uint64_t seed, int call) {
+  // modes 6, 7, 8: `graph-small`, `graph-wide`, `graph-pos`: the graph lanes above, every other lane as in
+  // mode 0, 1, 2
+  bool graph = mode >= 6;
+  if (graph) {
+    mode -= 6;
+    cs_gseed = cs_mix(seed * 1000003ULL + (uint64_t)call * 7919ULL + 0x6772617068ULL);
+    uint64_t need = 0;
+    for (int a = 0; a < CS_NARGS; ++a)
+      if (cs_args[a].graph_role == 2 || cs_args[a].graph_role == 3) {
+        uint64_t q = cs_args[a].graph_role == 2 ? cs_args[a].elems / 2 : cs_args[a].elems;
+        if (q > need) need = q;
+      }
+    cs_graph_edges(need);
+  }
   for (int a = 0; a < CS_NARGS; ++a) {
     const CsArg &A = cs_args[a];
     unsigned char *base = cs_base[a];
@@ -630,16 +702,45 @@ static void cs_fill(int mode, uint64_t seed, int call) {
     uint64_t st = cs_mix(seed * 1000003ULL + (uint64_t)call * 7919ULL + (uint64_t)a * 104729ULL + 1);
     for (uint64_t e = 0; e < total; ++e) {
       unsigned char *el = base + e * A.esize;
+      int lane = 0;                 // the element's integer lanes of at least GRAPH_INDEX_BITS, in order
       for (int r = 0; r < A.nruns; ++r) {
         const CsRun &R = A.runs[r];
         for (uint32_t c = 0; c < R.count; ++c) {
           unsigned char *p = el + R.off + (uint64_t)c * R.stride;
           uint64_t v = cs_mix(st++);
+          if (graph && A.graph_role && R.kind == 0 && R.bits >= CS_GRAPH_INDEX_BITS && e >= A.guard &&
+              e < A.guard + A.elems) {
+            int64_t g = cs_graph_value(A, e - A.guard, lane++, v);
+            if (g >= 0) {
+              uint64_t limb[64] = {(uint64_t)g};
+              int sz = R.bits <= 32 ? 4 : R.bits <= 64 ? 8 : (R.bits + 63) / 64 * 8;
+              unsigned char tmp[512] = {0};
+              cs_put_int(tmp, R.bits, limb);
+              memcpy(p, tmp, sz);
+              continue;
+            }
+          }
+          // mode 3 (`diag`): as `pos`, but the diagonal of a square matrix argument is large (an
+          // integer or fixed-point element: a quarter of its range, whatever its fraction width; a
+          // float: cols + 1), so the matrix is diagonally dominant (pivots of a decomposition are not
+          // 0); mode 4 (`align`): as `pos`, but a scalar integer is a multiple of 64 in 64..256;
+          // mode 5 (`index`): as `pos`, but an integer lane of an array or aggregate argument is its
+          // own position in the argument (0, 1, 2, ...): every index array is monotone and in range
+          // (a CSR row pointer, its column indices, the `end = ptr[n]` count they imply)
+          bool diag = false;
+          if (mode == 3 && A.sq_rows && e >= A.guard && e < A.guard + A.elems) {
+            uint64_t idx = e - A.guard;
+            diag = (idx / A.sq_cols) % A.sq_rows == idx % A.sq_cols;
+          }
           if (R.kind == 0) {
             uint64_t limb[64] = {0};
             int nl = (R.bits + 63) / 64;
             if (mode == 0) limb[0] = A.is_scalar ? v % 9 : v % 8;
-            else if (mode == 2) limb[0] = 1 + v % 8;
+            else if (diag && R.bits >= 3) limb[(R.bits - 2) / 64] = 1ULL << ((R.bits - 2) % 64);
+            else if (mode == 4 && A.is_scalar) limb[0] = 64 * (1 + v % 4);
+            else if (mode == 5 && (A.elems > 1 || R.count > 1))  // an array, or an aggregate by value
+              limb[0] = e >= A.guard && e < A.guard + A.elems ? (e - A.guard) * R.count + c : 0;
+            else if (mode >= 2) limb[0] = 1 + v % 8;
             else if (A.is_scalar) limb[0] = v % 1024;
             else { limb[0] = v; for (int l = 1; l < nl && l < 64; ++l) limb[l] = cs_mix(st++); }
             if (R.bits < 64 * nl) limb[nl - 1] &= (~0ULL) >> (64 * nl - R.bits);
@@ -652,7 +753,8 @@ static void cs_fill(int mode, uint64_t seed, int call) {
           } else {
             double d = (double)(v >> 11) * (1.0 / 9007199254740992.0) * 2.0 - 1.0;
             if (mode == 1) d *= 1000.0;
-            else if (mode == 2) d = 1.25 + 0.75 * d;
+            else if (diag) d = (double)A.sq_cols + 1.0;
+            else if (mode >= 2) d = 1.25 + 0.75 * d;
             if (R.kind == 1) { _Float16 h = (_Float16)d; memcpy(p, &h, 2); }
             else if (R.kind == 2) { float f = (float)d; memcpy(p, &f, 4); }
             else if (R.kind == 3) { memcpy(p, &d, 8); }
@@ -700,14 +802,16 @@ static void cs_dump(int call) {
   for (int a = 0; a < CS_NARGS; ++a) {
     const CsArg &A = cs_args[a];
     if (!A.is_stream) continue;
-    CsFifo &f = cs_fifos[cs_obj[a]];
-    uint64_t n = f.q.size();
-    fwrite(&n, sizeof n, 1, cs_out);
-    std::vector<unsigned char> tok(A.esize + 64);
-    for (size_t t = 0; t < f.q.size(); ++t) {
-      memset(tok.data(), 0, tok.size());
-      memcpy(tok.data(), f.q[t].data(), f.q[t].size() < A.esize ? f.q[t].size() : A.esize);
-      cs_dump_elem(A, tok.data());
+    for (uint32_t i = 0; i < A.stream_count; ++i) {
+      CsFifo &f = cs_fifos[cs_stream_key(a, i)];
+      uint64_t n = f.q.size();
+      fwrite(&n, sizeof n, 1, cs_out);
+      std::vector<unsigned char> tok(A.esize + 64);
+      for (size_t t = 0; t < f.q.size(); ++t) {
+        memset(tok.data(), 0, tok.size());
+        memcpy(tok.data(), f.q[t].data(), f.q[t].size() < A.esize ? f.q[t].size() : A.esize);
+        cs_dump_elem(A, tok.data());
+      }
     }
   }
   fflush(cs_out);
@@ -716,6 +820,16 @@ extern "C" void cs_dump_and_exit(int code) {   // for runtime hooks that must st
   fflush(stderr);
   if (cs_out) { fflush(cs_out); fclose(cs_out); }
   _Exit(code);
+}
+// A blocking read of an empty stream (the candidate's or the shim reference's token FIFO, or the real
+// reference's C-simulation hls::stream, seen by its watcher): no input can arrive any more, so the run
+// ends here with the dump of the call in progress and exit 88; a run in which both sides stop this way
+// compares those dumps (W9 round 20 review defect 2: dual_interface_FIFO_receive).
+extern "C" void cs_stop_at_blocking_read(void) {
+  fprintf(stderr, "cs-stream: read of an empty hls::stream\n");
+  if (cs_block_hook) cs_block_hook();
+  if (cs_out) cs_dump(cs_cur_call);
+  cs_dump_and_exit(88);
 }
 int main(int argc, char **argv) {
   if (argc < 5) { fprintf(stderr, "usage: %s mode seed calls out\n", argv[0]); return 2; }
@@ -729,8 +843,9 @@ int main(int argc, char **argv) {
     cs_base[a] = (unsigned char *)aligned_alloc(64, (bytes + 63) / 64 * 64 + 64);
     if (!cs_base[a]) return 4;
     if (cs_args[a].is_stream) {
-      cs_obj[a] = (unsigned char *)aligned_alloc(64, 256);
-      memset(cs_obj[a], 0, 256);
+      uint64_t ob = ((uint64_t)cs_args[a].stream_count * cs_args[a].stream_stride + 256 + 63) / 64 * 64;
+      cs_obj[a] = (unsigned char *)aligned_alloc(64, ob);
+      memset(cs_obj[a], 0, ob);
     }
   }
   for (int c = 0; c < calls; ++c) {
@@ -739,15 +854,22 @@ int main(int argc, char **argv) {
     for (int a = 0; a < CS_NARGS; ++a) {
       const CsArg &A = cs_args[a];
       if (A.is_stream) {
-        // the tokens of this call: every element of the token buffer, in order
+        // the tokens of this call: every element of the token buffer, in order (an array of N
+        // streams: the i-th N-th of them to stream i)
+        // (an aggregate of member streams has stream_count 0: its members are entries of their own)
         p[a] = cs_obj[a];
-        cs_fifo_reset(cs_obj[a]);
-        for (uint64_t e = 0; e < A.elems; ++e) cs_fifo_push(cs_obj[a], cs_base[a] + e * A.esize, A.esize);
+        uint64_t per = A.stream_count ? A.elems / A.stream_count : 0;
+        for (uint32_t i = 0; i < A.stream_count; ++i) {
+          unsigned char *k = cs_stream_key(a, i);
+          cs_fifo_reset(k);
+          for (uint64_t e = i * per; e < (i + 1) * per; ++e) cs_fifo_push(k, cs_base[a] + e * A.esize, A.esize);
+        }
       } else {
         p[a] = cs_base[a] + A.guard * A.esize;
       }
     }
     p[CS_NARGS] = 0;
+    cs_cur_call = c;
     cs_call(p);
     cs_dump(c);
   }
@@ -763,12 +885,15 @@ SPEC_HEAD = r'''
 #include <cstdint>
 struct CsRun { uint32_t off; int bits; int kind; uint32_t count; uint32_t stride; };
 struct CsArg { uint64_t elems; uint32_t esize; uint32_t guard; int is_scalar; int is_ret; int nruns; const CsRun *runs;
-               int is_stream; };
+               int is_stream; uint32_t stream_count; uint32_t stream_stride; uint64_t sq_rows; uint64_t sq_cols;
+               int parent; uint32_t key_off; int first_member; int nmembers; int graph_role; };
 extern "C" void cs_fifo_reset(const void *k);
 extern "C" void cs_fifo_push(const void *k, const void *d, uint32_t n);
 extern "C" int cs_fifo_try_pop(const void *k, void *d, uint32_t n);
 extern "C" void cs_fifo_pop(const void *k, void *d, uint32_t n);
 extern "C" uint64_t cs_fifo_size(const void *k);
+extern "C" void (*cs_block_hook)(void);
+extern "C" void cs_stop_at_blocking_read(void);
 '''
 
 # The thunks share a translation unit with the design's top source, included at THUNK_MARK: their
@@ -960,22 +1085,37 @@ template <class CsB> struct CsBuf {   // the native copy of one memref argument,
   // auto_ntt) needs only a default constructor this way (W9r14-impl).
   std::unique_ptr<CsB[]> cs_v;
   uint64_t cs_size = 0;
+  // MLIR elements per native element: cgeist flattens an array of a struct of m equal scalars into a
+  // trailing dimension of m (flowgnn `edge_t *` -> memref<?x2xi32>); the bytes agree element group by
+  // element group (W9r15-impl). 1 for every other element.
+  static uint32_t cs_group(int cs_a) {
+    const CsArg &cs_arg = cs_args[cs_a];
+    if (CsAp<CsB>::cs_w != 0 || CsAp<CsB>::cs_is_stream || cs_arg.esize == 0 ||
+        sizeof(CsB) <= cs_arg.esize || sizeof(CsB) % cs_arg.esize)
+      return 1;
+    uint32_t cs_m = (uint32_t)(sizeof(CsB) / cs_arg.esize);
+    if (cs_arg.elems % cs_m || cs_arg.guard % cs_m)
+      return 1;
+    return cs_m;
+  }
   void cs_fill(int cs_a, void *cs_p) {
     const CsArg &cs_arg = cs_args[cs_a];
-    uint64_t cs_n = cs_arg.elems + 2 * (uint64_t)cs_arg.guard;
+    const uint32_t cs_m = cs_group(cs_a), cs_es = cs_arg.esize * cs_m;
+    uint64_t cs_n = (cs_arg.elems + 2 * (uint64_t)cs_arg.guard) / cs_m;
     cs_v.reset(new CsB[cs_n]());
     cs_size = cs_n;
     const unsigned char *cs_base = (const unsigned char *)cs_p - (uint64_t)cs_arg.guard * cs_arg.esize;
     for (uint64_t cs_e = 0; cs_e < cs_n; ++cs_e)
-      CsElem<CsB>::cs_in(cs_a, &cs_v[cs_e], cs_base + cs_e * cs_arg.esize, cs_arg.esize);
+      CsElem<CsB>::cs_in(cs_a, &cs_v[cs_e], cs_base + cs_e * cs_es, cs_es);
   }
   void cs_back(int cs_a, void *cs_p) {
     const CsArg &cs_arg = cs_args[cs_a];
+    const uint32_t cs_es = cs_arg.esize * cs_group(cs_a);
     unsigned char *cs_base = (unsigned char *)cs_p - (uint64_t)cs_arg.guard * cs_arg.esize;
     for (uint64_t cs_e = 0; cs_e < cs_size; ++cs_e)
-      CsElem<CsB>::cs_out(cs_a, cs_base + cs_e * cs_arg.esize, &cs_v[cs_e], cs_arg.esize);
+      CsElem<CsB>::cs_out(cs_a, cs_base + cs_e * cs_es, &cs_v[cs_e], cs_es);
   }
-  CsB *cs_first(int cs_a) { return cs_v.get() + cs_args[cs_a].guard; }
+  CsB *cs_first(int cs_a) { return cs_v.get() + cs_args[cs_a].guard / cs_group(cs_a); }
 };
 template <class CsT> struct CsBase {
   typedef typename std::remove_cv<typename std::remove_all_extents<CsT>::type>::type cs_type;
@@ -1060,27 +1200,76 @@ template <class CsT> inline uint64_t cs_tapa_bits(const CsT &cs_v, std::false_ty
 }
 template <class CsT> inline void cs_tapa_check(int cs_a) {
   const CsArg &cs_arg = cs_args[cs_a];
-  if (cs_arg.nruns != 2 || cs_arg.runs[0].kind != 0 || cs_arg.runs[0].bits > 64 ||
-      (CsAp<CsT>::cs_w && CsAp<CsT>::cs_w != cs_arg.runs[0].bits))
-    cs_layout_fail(cs_a, "a TAPA token that is not {iN val, i8 eot} of the element's width");
+  // a value wider than 64 bits only as an ap type (an ap_uint<512> data port, auto_ntt's async_mmap)
+  // a float / double value is {f32 / f64 val, i8 eot} (W9 round 20 review defect 6)
+  const bool cs_fp = std::is_floating_point<CsT>::value;
+  const int cs_kind = !cs_fp ? 0 : (sizeof(CsT) == 4 ? 2 : (sizeof(CsT) == 8 ? 3 : -1));
+  if (cs_arg.nruns != 2 || cs_arg.runs[0].kind != cs_kind || (cs_arg.runs[0].bits > 64 && CsAp<CsT>::cs_w <= 64) ||
+      (CsAp<CsT>::cs_w && CsAp<CsT>::cs_w != cs_arg.runs[0].bits) ||
+      (cs_fp && cs_arg.runs[0].bits != (int)(8 * sizeof(CsT))))
+    cs_layout_fail(cs_a, "a TAPA token that is not {iN / f32 / f64 val, i8 eot} of the element's width");
 }
+// The value of a token: up to 64 bits one little-endian limb, wider (an ap type only) limb by limb as
+// CsElem does for an array element.
+template <class CsT> inline void cs_tapa_val_in(CsT &cs_d, const unsigned char *cs_s, int cs_bits,
+                                                std::false_type) {
+  if (std::is_floating_point<CsT>::value) {   // the IEEE bits as they are
+    std::memcpy((void *)&cs_d, cs_s, sizeof(CsT));
+    return;
+  }
+  uint64_t cs_limb = 0;
+  std::memcpy(&cs_limb, cs_s, (cs_bits + 7) / 8);
+  cs_d = (CsT)cs_limb;
+}
+template <class CsT> inline void cs_tapa_val_out(unsigned char *cs_d, const CsT &cs_s, int cs_bits,
+                                                 std::false_type) {
+  if (std::is_floating_point<CsT>::value) {
+    std::memcpy(cs_d, (const void *)&cs_s, sizeof(CsT));
+    return;
+  }
+  uint64_t cs_limb = cs_tapa_bits(cs_s, std::integral_constant<bool, (CsAp<CsT>::cs_w > 0)>());
+  std::memcpy(cs_d, &cs_limb, (cs_bits + 7) / 8);
+}
+#ifdef __AP_COMMON_H__
+template <class CsT> inline void cs_tapa_val_in(CsT &cs_d, const unsigned char *cs_s, int cs_bits,
+                                                std::true_type) {
+  enum { CsW = CsAp<CsT>::cs_w };
+  const uint32_t cs_vb = (uint32_t)(cs_bits + 7) / 8;
+  ap_int_base<CsW, false> cs_u = 0;
+  for (int cs_l = (CsW + 63) / 64 - 1; cs_l >= 0; --cs_l) {
+    uint64_t cs_limb = 0;
+    std::memcpy(&cs_limb, cs_s + 8 * cs_l, cs_limb_bytes(cs_vb, cs_l));
+    cs_u = (cs_u << 64) | ap_int_base<CsW, false>((unsigned long long)cs_limb);
+  }
+  ap_int_base<CsW, (bool)CsAp<CsT>::cs_s> cs_v = cs_u;
+  cs_d.V = cs_v.V;
+}
+template <class CsT> inline void cs_tapa_val_out(unsigned char *cs_d, const CsT &cs_s, int cs_bits,
+                                                 std::true_type) {
+  enum { CsW = CsAp<CsT>::cs_w };
+  const uint32_t cs_vb = (uint32_t)(cs_bits + 7) / 8;
+  ap_int_base<CsW, (bool)CsAp<CsT>::cs_s> cs_v;
+  cs_v.V = cs_s.V;
+  ap_int_base<CsW, false> cs_u = cs_v;
+  for (int cs_l = 0; cs_l < (CsW + 63) / 64; ++cs_l) {
+    uint64_t cs_limb = ap_int_base<64, false>(cs_u >> (64 * cs_l)).to_uint64();
+    std::memcpy(cs_d + 8 * cs_l, &cs_limb, cs_limb_bytes(cs_vb, cs_l));
+  }
+}
+#endif
 template <class CsT> inline void cs_tapa_in(int cs_a, tapa::internal::elem_t<CsT> *cs_d,
                                             const unsigned char *cs_s) {
   cs_tapa_check<CsT>(cs_a);
   const CsArg &cs_arg = cs_args[cs_a];
-  uint64_t cs_limb = 0;
-  std::memcpy(&cs_limb, cs_s, (cs_arg.runs[0].bits + 7) / 8);
-  cs_d->val = (CsT)cs_limb;
+  cs_tapa_val_in(cs_d->val, cs_s, cs_arg.runs[0].bits, std::integral_constant<bool, (CsAp<CsT>::cs_w > 64)>());
   cs_d->eot = (cs_s[cs_arg.runs[1].off] & 1) != 0;
 }
 template <class CsT> inline void cs_tapa_out(int cs_a, unsigned char *cs_d,
                                              const tapa::internal::elem_t<CsT> *cs_s) {
   cs_tapa_check<CsT>(cs_a);
   const CsArg &cs_arg = cs_args[cs_a];
-  uint64_t cs_limb =
-      cs_tapa_bits(cs_s->val, std::integral_constant<bool, (CsAp<CsT>::cs_w > 0)>());
   std::memset(cs_d, 0, cs_arg.esize);
-  std::memcpy(cs_d, &cs_limb, (cs_arg.runs[0].bits + 7) / 8);
+  cs_tapa_val_out(cs_d, cs_s->val, cs_arg.runs[0].bits, std::integral_constant<bool, (CsAp<CsT>::cs_w > 64)>());
   cs_d[cs_arg.runs[1].off] = cs_s->eot ? 1 : 0;
 }
 template <class CsS, class CsT> struct CsTapaConv {
@@ -1105,6 +1294,97 @@ template <class CsS, class CsT> struct CsTapaConv {
     }
   }
 };
+// An array of TAPA streams, `tapa::istream<T> (&)[N]` (OPEN_ISSUES O157): stream i's tokens are keyed
+// by the address of the MLIR's object i (cs_args' stream_stride apart).
+template <class CsS, class CsT, std::size_t CsN> struct CsTapaArrayConv {
+  int cs_a;
+  CsS cs_s[CsN];
+  explicit CsTapaArrayConv(int a) : cs_a(a) {
+    if (cs_args[a].stream_count != CsN) cs_layout_fail(a, "an array of TAPA streams of another length");
+  }
+  void *cs_key(void *cs_p, std::size_t cs_i) {
+    return (unsigned char *)cs_p + cs_i * cs_args[cs_a].stream_stride;
+  }
+  CsS (&cs_get(void *cs_p))[CsN] {
+    std::vector<unsigned char> cs_raw(cs_args[cs_a].esize + 64, 0);
+    for (std::size_t cs_i = 0; cs_i < CsN; ++cs_i)
+      while (cs_fifo_try_pop(cs_key(cs_p, cs_i), cs_raw.data(), cs_args[cs_a].esize)) {
+        tapa::internal::elem_t<CsT> cs_v;
+        cs_tapa_in<CsT>(cs_a, &cs_v, cs_raw.data());
+        cs_s[cs_i]._.write(cs_v);
+      }
+    return cs_s;
+  }
+  void cs_back(void *cs_p) {
+    std::vector<unsigned char> cs_raw(cs_args[cs_a].esize + 64, 0);
+    for (std::size_t cs_i = 0; cs_i < CsN; ++cs_i)
+      while (!cs_s[cs_i]._.empty()) {
+        tapa::internal::elem_t<CsT> cs_v = cs_s[cs_i]._.read();
+        cs_tapa_out<CsT>(cs_a, cs_raw.data(), &cs_v);
+        cs_fifo_push(cs_key(cs_p, cs_i), cs_raw.data(), cs_args[cs_a].esize);
+      }
+  }
+};
+template <class CsT, std::size_t CsN> struct CsConv<tapa::istream<CsT> (&)[CsN]>
+    : CsTapaArrayConv<tapa::istream<CsT>, CsT, CsN> {
+  explicit CsConv(int a) : CsTapaArrayConv<tapa::istream<CsT>, CsT, CsN>(a) {}
+};
+template <class CsT, std::size_t CsN> struct CsConv<tapa::ostream<CsT> (&)[CsN]>
+    : CsTapaArrayConv<tapa::ostream<CsT>, CsT, CsN> {
+  explicit CsConv(int a) : CsTapaArrayConv<tapa::ostream<CsT>, CsT, CsN>(a) {}
+};
+#ifdef TAPA_XILINX_HLS_MMAP_H_
+// A TAPA memory port, `tapa::async_mmap<T>&` (OPEN_ISSUES O157): five member streams (read_addr,
+// read_data, write_addr, write_data, write_resp) with three token types.  Each member is a driver
+// entry of its own (cs_args' first_member + i), keyed by the member's offset in the MLIR struct; the
+// driver fills every member with tokens like any stream argument (read_data's tokens are the memory's
+// responses whatever the request addresses) and dumps what is left in each after the call.
+template <class CsT> struct CsConv<tapa::async_mmap<CsT> &> {
+  typedef typename tapa::async_mmap<CsT>::addr_t CsAddr;
+  typedef typename tapa::async_mmap<CsT>::resp_t CsResp;
+  int cs_a;
+  tapa::async_mmap<CsT> cs_m;
+  explicit CsConv(int a) : cs_a(a) {
+    if (cs_args[a].nmembers != 5) cs_layout_fail(a, "a TAPA async_mmap that is not five member streams");
+  }
+  void *cs_key(void *cs_p, int cs_i) {
+    return (unsigned char *)cs_p + cs_args[cs_args[cs_a].first_member + cs_i].key_off;
+  }
+  template <class CsE, class CsS> void cs_in1(void *cs_p, int cs_i, CsS &cs_s) {
+    int cs_m1 = cs_args[cs_a].first_member + cs_i;
+    std::vector<unsigned char> cs_raw(cs_args[cs_m1].esize + 64, 0);
+    while (cs_fifo_try_pop(cs_key(cs_p, cs_i), cs_raw.data(), cs_args[cs_m1].esize)) {
+      tapa::internal::elem_t<CsE> cs_v;
+      cs_tapa_in<CsE>(cs_m1, &cs_v, cs_raw.data());
+      cs_s._.write(cs_v);
+    }
+  }
+  template <class CsE, class CsS> void cs_out1(void *cs_p, int cs_i, CsS &cs_s) {
+    int cs_m1 = cs_args[cs_a].first_member + cs_i;
+    std::vector<unsigned char> cs_raw(cs_args[cs_m1].esize + 64, 0);
+    while (!cs_s._.empty()) {
+      tapa::internal::elem_t<CsE> cs_v = cs_s._.read();
+      cs_tapa_out<CsE>(cs_m1, cs_raw.data(), &cs_v);
+      cs_fifo_push(cs_key(cs_p, cs_i), cs_raw.data(), cs_args[cs_m1].esize);
+    }
+  }
+  tapa::async_mmap<CsT> &cs_get(void *cs_p) {
+    cs_in1<CsAddr>(cs_p, 0, cs_m.read_addr);
+    cs_in1<CsT>(cs_p, 1, cs_m.read_data);
+    cs_in1<CsAddr>(cs_p, 2, cs_m.write_addr);
+    cs_in1<CsT>(cs_p, 3, cs_m.write_data);
+    cs_in1<CsResp>(cs_p, 4, cs_m.write_resp);
+    return cs_m;
+  }
+  void cs_back(void *cs_p) {
+    cs_out1<CsAddr>(cs_p, 0, cs_m.read_addr);
+    cs_out1<CsT>(cs_p, 1, cs_m.read_data);
+    cs_out1<CsAddr>(cs_p, 2, cs_m.write_addr);
+    cs_out1<CsT>(cs_p, 3, cs_m.write_data);
+    cs_out1<CsResp>(cs_p, 4, cs_m.write_resp);
+  }
+};
+#endif
 template <class CsT> struct CsConv<tapa::istream<CsT> &> : CsTapaConv<tapa::istream<CsT>, CsT> {
   explicit CsConv(int a) : CsTapaConv<tapa::istream<CsT>, CsT>(a) {}
 };
@@ -1127,10 +1407,58 @@ template <> struct CsRet<void> {
     cs_f(static_cast<CsX &&>(cs_x)...);
   }
 };
+#ifdef X_HLS_STREAM_SIM_H
+// A read of an empty C-simulation hls::stream blocks for ever (Vitis' own deadlock detector runs only
+// under __HLS_COSIM__).  A watcher thread applies that detector's test, more blocked reads than running
+// hls::tasks (hls_stream.h, stream_globals::check_deadlock), held for half a second, and ends the run
+// at the read like the candidate's token FIFO does (cs_stop_at_blocking_read).  The counters are
+// private: an explicit instantiation may name private members, which yields their addresses.
+template <class CsTag, typename CsTag::cs_type CsM> struct CsRob {
+  friend typename CsTag::cs_type cs_rob(CsTag) { return CsM; }
+};
+struct CsBlockedTag { typedef std::atomic<int> &(*cs_type)(); friend cs_type cs_rob(CsBlockedTag); };
+struct CsTasksTag { typedef std::atomic<int> &(*cs_type)(); friend cs_type cs_rob(CsTasksTag); };
+template struct CsRob<CsBlockedTag, &hls::stream_globals<false>::get_blocked_counter>;
+template struct CsRob<CsTasksTag, &hls::stream_globals<false>::get_task_counter>;
+inline void cs_block_watch() {
+  int cs_n = 0;
+  for (;;) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    if (cs_rob(CsBlockedTag())().load() > cs_rob(CsTasksTag())().load()) {
+      if (++cs_n >= 10) cs_stop_at_blocking_read();
+    } else {
+      cs_n = 0;
+    }
+  }
+}
+inline void cs_start_block_watch() {
+  static bool cs_started = false;
+  if (cs_started) return;
+  cs_started = true;
+  std::thread(cs_block_watch).detach();
+}
+#else
+inline void cs_start_block_watch() {}
+#endif
 template <class CsR, class... CsA, std::size_t... CsI>
 void cs_call_seq(CsR (*cs_f)(CsA...), void **cs_p, CsSeq<CsI...>) {
   std::tuple<CsConv<CsA>...> cs_conv(((int)CsI)...);   // in place: a stream cannot be copied
+  // a blocking read ends the run inside the call: the dump written there needs every argument's state
+  // copied back first (cs_block_hook, called by cs_stop_at_blocking_read)
+  static std::tuple<CsConv<CsA>...> *cs_tp;
+  static void **cs_pp;
+  cs_tp = &cs_conv;
+  cs_pp = cs_p;
+  struct CsHook {
+    static void cs_run() {
+      int cs_d[] = {0, (std::get<CsI>(*cs_tp).cs_back(cs_pp[CsI]), 0)...};
+      (void)cs_d;
+    }
+  };
+  cs_block_hook = &CsHook::cs_run;
+  cs_start_block_watch();
   CsRet<CsR>::cs_run((int)sizeof...(CsA), cs_p[sizeof...(CsA)], cs_f, std::get<CsI>(cs_conv).cs_get(cs_p[CsI])...);
+  cs_block_hook = 0;
   int cs_done[] = {0, (std::get<CsI>(cs_conv).cs_back(cs_p[CsI]), 0)...};
   (void)cs_done;
 }
@@ -1235,6 +1563,26 @@ def stream_token_types(methods):
 TAPA_TOKEN = "tapa:"   # prefix of a TAPA stream's token type in top_stream_args' result
 
 
+TAPA_MMAP = "tapa_mmap"   # key of a TAPA async_mmap argument's member token types in top_stream_args' result
+# The members of TAPA's kernel-side async_mmap<T> (tapa/xilinx/hls/mmap.h), in declaration order, with
+# the token MLIR type of the address and response members (elem_t<int64_t> {i64 val; bool eot},
+# elem_t<uint8_t> {i8 val; bool eot}); None: a data member, whose token is elem_t<T>.
+TAPA_MMAP_MEMBERS = (("read_addr", "!llvm.struct<(i64, i8)>"), ("read_data", None),
+                     ("write_addr", "!llvm.struct<(i64, i8)>"), ("write_data", None),
+                     ("write_resp", "!llvm.struct<(i8, i8)>"))
+
+
+def tapa_mmap_tokens(elem, nospace):
+    """The token MLIR types of the five member streams of a `tapa::async_mmap<elem>&` argument
+    (OPEN_ISSUES O157): an address or response member's fixed type, a data member's from the declared
+    methods of hls::stream<tapa::internal::elem_t<elem>, 0> (None when there is none: the design never
+    moves data tokens, so the driver gives those members none).  The fixed types are used even when a
+    method is declared: cgeist flattens the homogeneous elem_t<uint8_t> {i8, i8} into memref<?x2xi8>,
+    whose element (i8) is not the token (auto_ntt fwd_* write_resp.read_nb); the bytes are the same."""
+    data = nospace.get(re.sub(r"\s+", "", f"hls::stream<tapa::internal::elem_t<{elem}>,0>"))
+    return [fixed or data for _, fixed in TAPA_MMAP_MEMBERS]
+
+
 def top_stream_args(top_fn, methods):
     """{argument index: token MLIR type} for the top's hls::stream parameters; ValueError when a stream
     parameter's token type is unknown (no declared method moves its tokens) or is an array of streams.
@@ -1252,6 +1600,23 @@ def top_stream_args(top_fn, methods):
         base = re.sub(r"^const\s+", "", base)
         if base.startswith("tapa::istreams<") or base.startswith("tapa::ostreams<"):
             raise ValueError(f"argument {k}: an array of TAPA streams ({prm})")
+        mm = re.fullmatch(r"tapa::async_mmap<(.*)>", base)
+        if mm:
+            if not prm.rstrip().endswith("&"):
+                raise ValueError(f"argument {k}: a TAPA async_mmap not by reference ({prm})")
+            out[k] = {TAPA_MMAP: tapa_mmap_tokens(mm.group(1), nospace)}
+            continue
+        # A reference to an array of TAPA streams, `tapa::istream<T> (&) [N]` (TAPA's kernel-side
+        # istreams<T, N>; auto_ntt shuffler_*, OPEN_ISSUES O157): N streams, the MLIR argument a
+        # memref of N stream objects; its token type carries the count (TAPA_TOKEN[N]).
+        ma = re.fullmatch(r"(tapa::[io]stream<.*>)\s*\(&\)\s*\[(\d+)\]", prm.strip())
+        if ma:
+            inner = re.fullmatch(r"tapa::[io]stream<(.*)>", ma.group(1).strip())
+            cls = re.sub(r"\s+", "", f"hls::stream<tapa::internal::elem_t<{inner.group(1)}>,0>")
+            if cls not in nospace:
+                raise ValueError(f"argument {k}: {ma.group(1)} with no token-moving method declared")
+            out[k] = f"{TAPA_TOKEN[:-1]}[{ma.group(2)}]:" + nospace[cls]
+            continue
         m = re.fullmatch(r"tapa::[io]stream<(.*)>", base)
         if m:
             if prm.rstrip().endswith("*") or re.search(r"\[\d*\]|\(\*\)", prm):
@@ -1279,6 +1644,61 @@ def bool_params(top_fn):
             if re.sub(r"^const\s+", "", p.strip()) == "bool"}
 
 
+def tapa_token_runs(k, tt):
+    """The runs of a TAPA token {iN val; i8 eot} (or {f32 / f64 val; i8 eot}: a float / double stream,
+    W9 round 20 review defect 6); the eot byte holds 0 or 1 (C++'s bool).  N may exceed 64 (the thunk
+    accepts that for an ap type only: an ap_uint<512> data port)."""
+    runs = leaf_runs(tt)
+    if (len(runs) != 2 or runs[0][2] not in (0, KIND["f32"], KIND["f64"]) or runs[1][2] != 0
+            or runs[1][1] != 8):
+        raise ValueError(f"argument {k}: TAPA token {tt} is not {{iN, i8}} or {{f32 / f64, i8}}")
+    runs[1][1] = 1
+    return runs
+
+
+def struct_field_offsets(t):
+    """Byte offsets of the fields of an LLVM struct type (the layout of size_align)."""
+    off, out = 0, []
+    for f in t.fields:
+        sz, al = size_align(f)
+        if not t.packed:
+            off = (off + al - 1) // al * al
+        out.append(off)
+        off += sz
+    return out
+
+
+def tapa_mmap_entry(k, s, t, toks):
+    """The plan entry of a `tapa::async_mmap<T>&` argument (OPEN_ISSUES O157): a stream entry with no
+    streams of its own (count 0) whose object is the MLIR struct of five stream objects, and one member
+    stream entry per struct field, keyed by the field's offset (spec_entries places them after the
+    plan).  A member with no known token type gets no tokens."""
+    if t.k != "memref" or t.elem.k != "struct" or len(t.elem.fields) != len(TAPA_MMAP_MEMBERS):
+        raise ValueError(f"argument {k}: a TAPA async_mmap as {s}")
+    members = []
+    for (name, _), off, tok in zip(TAPA_MMAP_MEMBERS, struct_field_offsets(t.elem), toks):
+        tt = parse_type(tok or "!llvm.struct<(i8, i8)>")
+        esize, _ = size_align(tt)
+        members.append(dict(kind="stream", type=f"{s}.{name}", ty=tt, dims=[1], esize=esize,
+                            runs=tapa_token_runs(k, tt), elems=STREAM_TOKENS if tok else 0, guard=0,
+                            scalar=False, ret=False, count=1, stride=0, key_off=off))
+    return dict(kind="stream", type=s, ty=t.elem, dims=[1] * len(t.dims), esize=1, runs=[[0, 8, 0, 1, 0]],
+                elems=0, guard=0, scalar=False, ret=False, count=0, stride=size_align(t.elem)[0],
+                members=members)
+
+
+def spec_entries(plan):
+    """The driver's argument entries: the plan (one per wrapper argument, the result last), then the
+    member streams of every aggregate of streams with their parent's index."""
+    out = [dict(p) for p in plan]
+    for a, p in enumerate(plan):
+        if p.get("members"):
+            out[a]["first_member"] = len(out)
+            for m in p["members"]:
+                out.append(dict(m, parent=a))
+    return out
+
+
 def plan_args(arg_types, res_types, streams=None, dyn_scale=1, bools=()):
     """The driver's view of the top: one entry per wrapper argument.  streams: {argument index: token
     MLIR type} of the top's hls::stream arguments (top_stream_args).  dyn_scale multiplies the leading
@@ -1287,20 +1707,38 @@ def plan_args(arg_types, res_types, streams=None, dyn_scale=1, bools=()):
     plan = []
     for k, s in enumerate(arg_types):
         t = parse_type(s)
-        if k in streams:
+        if k in streams and isinstance(streams[k], dict):
+            plan.append(tapa_mmap_entry(k, s, t, streams[k][TAPA_MMAP]))
+        elif k in streams:
             if t.k != "memref":
                 raise ValueError(f"argument {k}: hls::stream as {s}")
-            tapa = streams[k].startswith(TAPA_TOKEN)
-            tt = parse_type(streams[k][len(TAPA_TOKEN):] if tapa else streams[k])
+            mcount = re.match(r"tapa\[(\d+)\]:", streams[k])
+            count = int(mcount.group(1)) if mcount else 1
+            tapa = streams[k].startswith(TAPA_TOKEN) or bool(mcount)
+            tok_s = streams[k][mcount.end():] if mcount else (streams[k][len(TAPA_TOKEN):] if tapa else streams[k])
+            tt = parse_type(tok_s)
             esize, _ = size_align(tt)
             runs = leaf_runs(tt)
             if tapa:
                 # {T val; bool eot}: the eot byte holds 0 or 1 (C++'s bool, the i1 a load truncates to)
-                if len(runs) != 2 or runs[0][2] != 0 or runs[0][1] > 64 or runs[1][2] != 0 or runs[1][1] != 8:
-                    raise ValueError(f"argument {k}: TAPA token {tt} is not {{iN, i8}}")
+                if (len(runs) != 2 or runs[0][2] not in (0, KIND["f32"], KIND["f64"]) or runs[0][1] > 64
+                        or runs[1][2] != 0 or runs[1][1] != 8):
+                    raise ValueError(f"argument {k}: TAPA token {tt} is not {{iN, i8}} or {{f32 / f64, i8}}")
                 runs[1][1] = 1
-            plan.append(dict(kind="stream", type=s, ty=tt, dims=[1] * len(t.dims), esize=esize,
-                             runs=runs, elems=STREAM_TOKENS, guard=0, scalar=False, ret=False))
+            dims, stride = [1] * len(t.dims), 0
+            if count > 1:
+                # an array of N stream objects: the memref's own shape; stream i is keyed by the address
+                # of object i (its first member, `_`), `stride` bytes after object i - 1
+                if not t.dims or t.dims[0] != count or any(d is None for d in t.dims):
+                    raise ValueError(f"argument {k}: {count} TAPA streams as {s}")
+                dims = list(t.dims)
+                inner = 1
+                for d in dims[1:]:
+                    inner *= d
+                stride = size_align(t.elem)[0] * inner
+            plan.append(dict(kind="stream", type=s, ty=tt, dims=dims, esize=esize, runs=runs,
+                             elems=STREAM_TOKENS * count, guard=0, scalar=False, ret=False,
+                             count=count, stride=stride))
         elif t.k == "memref":
             if t.layout and not re.fullmatch(r"strided<\[(\?, )*1\](, offset: \?)?>|strided<\[1\]>", t.layout):
                 raise ValueError(f"argument {k}: memref layout {t.layout}")
@@ -1345,23 +1783,115 @@ def plan_args(arg_types, res_types, streams=None, dyn_scale=1, bools=()):
     return plan
 
 
+def square_dims(p):
+    """(rows, cols) of an array argument whose last two dimensions are equal (a square matrix, or a
+    batch of them), else (0, 0): the driver's `diag` mode fills its diagonal."""
+    dims = p.get("dims") or []
+    if p.get("kind") == "stream" or p.get("scalar") or len(dims) < 2:
+        return 0, 0
+    r, c = dims[-2], dims[-1]
+    if not isinstance(r, int) or not isinstance(c, int) or r != c or r < 2:
+        return 0, 0
+    return r, c
+
+
+# Valid-graph inputs (mode `graph-*`, the input-domain retry `graph`; W9r21 review finding 1-3).  Graph
+# designs (GNN inference over a batch of molecules, message passing, graph analytics) take a graph as a
+# COO edge list, an array of (source, destination) integer pairs, together with integer node and edge
+# counts: a scalar for one graph, or one count per graph in an array for a batch, with the graphs'
+# edges concatenated.  The source requires that every endpoint is below its graph's node count, that the
+# counts stay within the arrays, and often that no node has degree 0 (a mean or a log-degree scaler divides
+# by it) and that the list is symmetric (an undirected graph).  Random integers break all of these, so the
+# reference indexes past its tables or divides by zero on every run, and the design gets no verdict.
+# graph_role recognises the shapes from the argument types alone, no names:
+#   1  count: an integer scalar, or a rank-1 array of one integer lane per element;
+#   2  edge list: an array whose last dimension is 2, of one integer lane per element (`int e[N][2]`);
+#   3  edge list: an array whose element holds exactly two integer lanes (`struct {int u, v;}`,
+#      `std::array<int, 2>`);
+#   4  index: the integer lanes of any other array (a node's categorical features, which index embedding
+#      tables): 0 or 1, in range of any table with two or more rows;
+# where an integer lane is one of at least GRAPH_INDEX_BITS bits: C's int, long and size_t, the types of
+# every count and index argument in the catalogue's graph designs; narrower lanes (ap_fixed<16, 6> weights
+# and features, char flags, bools) are data and keep their mode's fill.  The driver then writes graphs
+# that satisfy every requirement above at once (cs_graph_edges).  The recognition need not be right for
+# every design: the mode is only a retry for a design with no verdict under the random fill, a run counts
+# only when the reference is free of sanitizer reports and returns, and any such input is evidence of
+# bit-exactness. Not covered: an edge list as two separate arrays of sources and destinations (they look like
+# count arrays) and CSR (its monotone row pointer is the `index` mode's domain).
+GRAPH_INDEX_BITS = 32
+GRAPH_MODES = ("graph-small", "graph-wide", "graph-pos")
+
+
+def graph_role(p):
+    """The argument's role in the `graph-*` modes (see GRAPH_INDEX_BITS): 0 none, 1 count, 2 edge list
+    (last dimension 2), 3 edge list (two lanes an element), 4 other index lanes."""
+    if p.get("kind") == "stream" or p.get("ret"):
+        return 0
+    runs = p["runs"]
+    lanes = sum(r[3] for r in runs)
+    index = [r for r in runs if r[2] == 0 and r[1] >= GRAPH_INDEX_BITS]
+    if not index:
+        return 0
+    only_index = len(index) == len(runs)
+    if p.get("scalar"):
+        return 1 if only_index and lanes == 1 else 0
+    dims = p.get("dims") or []
+    if only_index and lanes == 1 and len(dims) == 1:
+        return 1
+    if only_index and lanes == 1 and len(dims) >= 2 and dims[-1] == 2:
+        return 2
+    if only_index and lanes == 2:
+        return 3
+    return 4
+
+
+def graph_shaped(plan):
+    """Whether the plan has an edge list and a count (the `graph` retry applies)."""
+    roles = {graph_role(p) for p in plan}
+    return 1 in roles and bool(roles & {2, 3})
+
+
 def spec_header(plan):
     out = [SPEC_HEAD]
+    plan = spec_entries(plan)
     for a, p in enumerate(plan):
         runs = ", ".join("{%d, %d, %d, %d, %d}" % tuple(r) for r in p["runs"])
         out.append(f"static const CsRun cs_runs{a}[] = {{{runs}}};")
     out.append(f"#define CS_NARGS {len(plan)}")
-    rows = ", ".join("{%dULL, %d, %d, %d, %d, %d, cs_runs%d, %d}" % (
+    out.append(f"#define CS_GRAPH_INDEX_BITS {GRAPH_INDEX_BITS}")
+    rows = ", ".join("{%dULL, %d, %d, %d, %d, %d, cs_runs%d, %d, %d, %d, %dULL, %dULL, %d, %d, %d, %d, %d}" % (
         p["elems"], p["esize"], p["guard"], int(p["scalar"]), int(p["ret"]), len(p["runs"]), a,
-        int(p["kind"] == "stream"))
+        int(p["kind"] == "stream"), p.get("count", 1), p.get("stride", 0), *square_dims(p),
+        p.get("parent", -1), p.get("key_off", 0), p.get("first_member", -1), len(p.get("members", ())),
+        graph_role(p))
         for a, p in enumerate(plan))
     out.append(f"static const CsArg cs_args[CS_NARGS] = {{{rows}}};")
     return "\n".join(out) + "\n"
 
 
-def wrapper_mlir(top_fn, plan):
-    """func.func @cs_entry: every argument a memref; scalars / the result go through memref<1xT>."""
+GLOBAL_INIT = re.compile(r"func\.func @([\w.$-]+)\(\) attributes \{[^\n]*?hls\.global_init = (-?\d+)")
+
+
+def global_inits(text):
+    """The dynamic-initialization functions cgeist emitted (`hls.global_init`, a global whose initializer
+    is not a constant and did not fold), in declaration order: C++ runs them before main."""
+    return [f for f, _ in sorted(GLOBAL_INIT.findall(text), key=lambda m: int(m[1]))]
+
+
+def wrapper_mlir(top_fn, plan, inits=()):
+    """func.func @cs_entry: every argument a memref; scalars / the result go through memref<1xT>.  The
+    dynamic-initialization functions `inits` run once, before the first call."""
     params, call_args, call_types, body = [], [], [], ["    %cs_c0 = arith.constant 0 : index"]
+    pre = ""
+    if inits:
+        pre = '  memref.global "private" @cs_inited : memref<1xi1> = dense<false>\n'
+        body += ["    %cs_ig = memref.get_global @cs_inited : memref<1xi1>",
+                 "    %cs_iv = memref.load %cs_ig[%cs_c0] : memref<1xi1>",
+                 "    %cs_true = arith.constant true",
+                 "    %cs_in = arith.xori %cs_iv, %cs_true : i1",
+                 "    scf.if %cs_in {"]
+        body += [f"      func.call @{f}() : () -> ()" for f in inits]
+        body += ["      memref.store %cs_true, %cs_ig[%cs_c0] : memref<1xi1>", "    }"]
     ret = None
     for a, p in enumerate(plan):
         if p["kind"] in ("memref", "stream"):
@@ -1382,7 +1912,7 @@ def wrapper_mlir(top_fn, plan):
     if ret:
         body.append(f"    memref.store %cs_r, %cs{ret[0]}[%cs_c0] : memref<1x{ret[1]}>")
     body.append("    return")
-    return ("  func.func @cs_entry(" + ", ".join(params) + ") {\n" + "\n".join(body) + "\n  }\n")
+    return pre + ("  func.func @cs_entry(" + ", ".join(params) + ") {\n" + "\n".join(body) + "\n  }\n")
 
 
 def cand_thunk(plan, abi="descriptor"):
@@ -1443,7 +1973,15 @@ def cand_stream_runtime(text, ll_text):
                 es, _ = size_align(t.elem)
                 body.append(f"  %o{gi} = mul i64 %p{k + 2}, {es}")
                 body.append(f"  %a{gi} = getelementptr i8, ptr %p{k + 1}, i64 %o{gi}")
-                addrs.append((f"%a{gi}", es))
+                # a token is one row of the memref: cgeist passes a struct token of N equal members as
+                # memref<?xNxT> (flowgnn gat's stream<node_t>, node_t = {int nd; int degree;}: memref<?x2xi32>,
+                # 8 bytes, not 4; W9r21-graph)
+                row = es
+                for d in t.dims[1:]:
+                    if d is None:
+                        raise ValueError(f"{name}: token memref {s} with a dynamic inner dimension")
+                    row *= d
+                addrs.append((f"%a{gi}", row))
             else:
                 addrs.append((f"%p{k}", 0))
             k += g
@@ -1597,6 +2135,16 @@ def token_bytes(p):
     return b
 
 
+def differing_bytes(a, b, chunk=4096):
+    """The positions at which two byte strings of one length differ (compared a chunk at a time, so that
+    long equal stretches cost one comparison each)."""
+    out = []
+    for lo in range(0, len(a), chunk):
+        if a[lo:lo + chunk] != b[lo:lo + chunk]:
+            out.extend(i for i in range(lo, min(lo + chunk, len(a))) if a[i] != b[i])
+    return out
+
+
 def first_diff(a, b, plan):
     """Where two dumps first differ: call, argument, element (negative: in the front guard) and the
     bytes of that element, or for a stream argument the token counts and the first differing token."""
@@ -1621,19 +2169,23 @@ def first_diff(a, b, plan):
                             lengths=[len(a), len(b)])
             pa += ln
             pb += ln
-        for ai, p in enumerate(plan):
+        for ai, p in enumerate(spec_entries(plan)):
             if p["kind"] != "stream":
                 continue
-            na = int.from_bytes(a[pa:pa + 8], "little")
-            nb = int.from_bytes(b[pb:pb + 8], "little")
-            eb = token_bytes(p)
-            ta, tb = a[pa + 8:pa + 8 + na * eb], b[pb + 8:pb + 8 + nb * eb]
-            if na != nb or ta != tb:
-                t = next((i // eb for i in range(min(len(ta), len(tb))) if ta[i] != tb[i]), min(na, nb))
-                return dict(call=call, arg=ai, where="stream", arg_type=p["type"], tokens=[na, nb], token=t,
-                            ref=ta[t * eb:(t + 1) * eb].hex(), cand=tb[t * eb:(t + 1) * eb].hex())
-            pa += 8 + na * eb
-            pb += 8 + nb * eb
+            for si in range(p.get("count", 1)):
+                na = int.from_bytes(a[pa:pa + 8], "little")
+                nb = int.from_bytes(b[pb:pb + 8], "little")
+                eb = token_bytes(p)
+                ta, tb = a[pa + 8:pa + 8 + na * eb], b[pb + 8:pb + 8 + nb * eb]
+                if na != nb or ta != tb:
+                    t = next((i // eb for i in range(min(len(ta), len(tb))) if ta[i] != tb[i]), min(na, nb))
+                    d = dict(call=call, arg=ai, where="stream", arg_type=p["type"], tokens=[na, nb], token=t,
+                             ref=ta[t * eb:(t + 1) * eb].hex(), cand=tb[t * eb:(t + 1) * eb].hex())
+                    if p.get("count", 1) > 1:
+                        d["stream"] = si
+                    return d
+                pa += 8 + na * eb
+                pb += 8 + nb * eb
         call += 1
     return dict(call=call, lengths=[len(a), len(b)])
 
@@ -1687,9 +2239,35 @@ def nan_lane_only_diff(a, b, plan):
     return True
 
 
+def input_retry(runs, valid, done, modes):
+    """The input-domain retry mode (INPUT_RETRIES) for a reference with no valid run whose every run
+    failed for that retry's reason, or None (one retry per design)."""
+    if valid or done is not None or not runs:
+        return None
+    whys = [r.get("why", "") for r in runs]
+    for mode, key in INPUT_RETRIES:
+        if mode not in modes.split(",") and all(key in w for w in whys):
+            return mode
+    return None
+
+
+STUB_CALLED = re.compile(r"cs-stub: (\S+) called")
 ASAN_ENV = {"ASAN_OPTIONS": "detect_leaks=0:exitcode=86:detect_stack_use_after_return=0"}
 LAYOUT_EXIT = 87            # REF_THUNK_REAL's exit code when an argument cannot be converted
-MODE_INDEX = {"small": 0, "wide": 1, "pos": 2}
+BLOCKED_READ_EXIT = 88      # the driver's exit code at a blocking read of an empty stream (cs_stop_at_blocking_read)
+MODE_INDEX = {"small": 0, "wide": 1, "pos": 2, "diag": 3, "align": 4, "index": 5,
+              "graph-small": 6, "graph-wide": 7, "graph-pos": 8}
+# Input-domain retries (OPEN_ISSUES O142): when no run of the default modes is valid because the
+# reference divides by zero on every input (`diag`: a diagonally dominant square matrix, the domain of
+# a decomposition such as polybench cholesky in fixed point) or aborts on an assertion of the source
+# (`align`: scalar integers that are multiples of 64, the usual `size % N == 0` precondition), the runs
+# are repeated once in that mode; the verdict's reason names the retry. A reference whose every run
+# makes an out-of-bounds access, or times out (twice, the limit of one design), is retried in mode
+# `index` (integer arrays hold their own positions: monotone, in-range index arrays such as a CSR row
+# pointer and its column indices; class_ece8893 connor_talley / max_beaulieu lab 3, whose random row
+# pointers index past their rows or loop over unbounded ranges, OPEN_ISSUES O142).
+INPUT_RETRIES = (("diag", "AddressSanitizer: FPE"), ("align", "assertion"),
+                 ("index", "AddressSanitizer"), ("index", "reference exit timeout"))
 
 
 # The exactclass shim's math-core markers (shim/exactclass/cgeist_flags): with this macro its
@@ -1734,8 +2312,10 @@ def undefined_symbol_stubs(names, ll_text):
         else:
             return None
     ll = (types + "\n" + "\n".join(globs) + "\n") if globs else ""
-    c = ("#include <stdlib.h>\n" + "".join(f"__attribute__((weak)) void {f}(void) {{ abort(); }}\n"
-                                           for f in funcs)) if funcs else ""
+    # a stub names itself on stderr before it aborts, so a run that reaches it says why (STUB_CALLED)
+    c = ("#include <stdio.h>\n#include <stdlib.h>\n" + "".join(
+        f'__attribute__((weak)) void {f}(void) {{ fputs("cs-stub: {f} called\\n", stderr); abort(); }}\n'
+        for f in funcs)) if funcs else ""
     return ll, c
 
 
@@ -1898,6 +2478,33 @@ class Checker:
             if k not in REF_KINDS:
                 raise SystemExit(f"--ref: unknown reference kind {k!r} (known: {', '.join(REF_KINDS)})")
         self.vitis_inc, self.vitis_inc_md5 = (vitis_include_dir() if "real" in self.refs else (None, None))
+        # Vitis' math library (MEMOS #94): linked only when a build lacks symbols it defines
+        self.vml = None
+        if getattr(args, "vitis_mathlib", "auto") != "off":
+            self.vml = vitis_mathlib.Mathlib(GXX, self.vitis_inc or vitis_include_dir()[0])
+        self.vml_used = {}
+
+    def undefined_mangled(self, link):
+        """The undefined symbols (mangled) of a failing link command ending in `-lm -o <exe>`."""
+        _, _, se, _ = run(link[:-3] + ["-Wl,--no-demangle"] + link[-3:])
+        return sorted(set(re.findall(r"undefined reference to [`']([^'`]+)'", se)))
+
+    def mathlib_objects(self, wd, side, und):
+        """Objects of Vitis' math library defining the symbols of `und` it has: None when it has none (or
+        --vitis-mathlib off, or the install has no library), a reason string when they cannot be built, else
+        vitis_mathlib.Mathlib.build's (objects, {table: private name}, {table: (count, width)})."""
+        if self.vml is None or not und or not self.vml.prepare():
+            return None
+        syms = [u for u in und if self.vml.defines(u)]
+        if not syms:
+            return None
+        try:
+            got = self.vml.build(syms)
+        except ValueError as e:
+            return f"Vitis math library: {e}"[:300]
+        with self.lock:
+            self.vml_used.setdefault(str(wd), {})[side] = syms
+        return got
 
     def check(self, key, rec):
         out = dict(key=key, mlir=rec.get("mlir"), top_fn=rec.get("top_fn"), status="", reason="")
@@ -1985,7 +2592,9 @@ class Checker:
         if use != self.refs[0]:
             out["reason"] = (f"{prim['reason']} [{use} reference; {self.refs[0]}: "
                              f"{out['refs'][self.refs[0]]['reason'][:160]}]")
-        uninit = [k for k in out["refs"] if "uninitialised" in out["refs"][k].get("reason", "")]
+        # (an n/a of its own: a `graph` retry's verdict quotes the default modes' reason, which may say it)
+        uninit = [k for k in out["refs"] if out["refs"][k]["status"] == "n/a"
+                  and "uninitialised" in out["refs"][k].get("reason", "")]
         if out["status"] == "mismatch" and uninit:
             # one reference showed that the design's outputs depend on uninitialised memory: the C program
             # has no defined result, so a difference says nothing about the frontend
@@ -2003,6 +2612,26 @@ class Checker:
         if not self.a.keep:
             for f in wd.glob("cand.*.bin"):
                 f.unlink(missing_ok=True)
+        used = self.vml_used.get(str(wd))
+        if used:
+            # the record names what was linked; the executables hold library code and are not kept (MEMOS #94)
+            out["vitis_mathlib"] = {side: syms for side, syms in sorted(used.items())}
+            # The scope of a verdict (W9r21 review finding 4): a library function only the reference links was
+            # computed by something else on the candidate's side (cgeist lowers hls::cos(double) & co. to LLVM's
+            # math intrinsics, glibc at run time), so equal outputs do not show the two agree on it.
+            cand = {demangle(x) for x in used.get("cand", [])}
+            # every build of the deciding reference kind (`real`, `real_nosan` of the timeout fallback, ...)
+            ref_syms = {x for side, syms in used.items() if side == use or side.startswith(use + "_") for x in syms}
+            ref_only = sorted({demangle(x) for x in ref_syms} - cand)
+            funcs = [d for d in ref_only if re.search(r"\)( const)?$", d)]
+            if funcs:
+                out["vitis_mathlib_reference_only"] = funcs
+                if out["status"] == "equal":
+                    out["reason"] += ("; scope: the reference calls " + ", ".join(funcs) + " from Vitis' math "
+                                      "library, the candidate computes them with LLVM math intrinsics (glibc), "
+                                      "so this does not check those functions")
+            for f in wd.glob("*.exe"):
+                f.unlink(missing_ok=True)
         return out
 
     def build_candidate(self, wd, text, top_fn, plan):
@@ -2015,7 +2644,7 @@ class Checker:
         body = renamed.rstrip()
         if not body.endswith("}"):
             return "MLIR does not end with the module's closing brace"
-        wrapped = body[:-1] + wrapper_mlir(top_fn, plan) + "}\n"
+        wrapped = body[:-1] + wrapper_mlir(top_fn, plan, global_inits(text)) + "}\n"
         (wd / "cand.mlir").write_text(wrapped)
         if used_polygeist:
             if not os.path.exists(POLYGEIST_OPT):
@@ -2080,6 +2709,18 @@ class Checker:
                 "-o", str(wd / "cand.exe")]
         rc, so, se, _ = run(link)
         if rc != 0:
+            # Symbols Vitis' math library defines (the cordic / log tables, hls::powf, hls::atan(double),
+            # ...): link the library from the install (MEMOS #94; vitis_mathlib.py).  The candidate was
+            # compiled with the synthesis headers, so it reads the library's own table layout.
+            und = self.undefined_mangled(link)
+            got = self.mathlib_objects(wd, "cand", und)
+            if isinstance(got, str):
+                return got
+            if got:
+                objs, raw, _ = got
+                link = link[:-3] + objs + vitis_mathlib.defsym_flags(raw) + link[-3:]
+                rc, so, se, _ = run(link)
+        if rc != 0:
             # Symbols the MLIR declares but no file cgeist compiled defines (W9r14-impl, DoD 1): a design
             # global defined in another source of the design without an initialiser (flowgnn gcn / gin
             # `edge_attrs` in globals.cc) is zero-initialised there, so a zero-initialised definition is the
@@ -2114,25 +2755,49 @@ class Checker:
         return None
 
     # ------------------------------------------------------------------------------- reference --
-    def compare(self, kind, wd, ddir, flags, srcs, top_fn, rec, plan):
-        """Build the `kind` reference and compare it with cand.exe on every mode and seed."""
+    def compare(self, kind, wd, ddir, flags, srcs, top_fn, rec, plan, sanitize=True, graph=False):
+        """Build the `kind` reference and compare it with cand.exe on every mode and seed.  A reference
+        that times out under AddressSanitizer on every run is built and run again without it (the
+        AddressSanitizer build of class_ece8893 Ray-tracing HLS runs over 1800 s, the plain one in about
+        130 s; OPEN_ISSUES O165): its verdict says so in the reason.  graph: run the GRAPH_MODES only (the
+        input-domain retry `graph`, graph_retry)."""
         a = self.a
         res = dict(status="", reason="")
         rflags = ref_flags(kind, flags, rec, self.vitis_inc)
         if kind == "real":
             rflags = rflags + tapa_kernel_flags(rflags, self.work, ddir)
         res["flags"] = rflags
-        san = ["-fsanitize=address", "-fno-omit-frame-pointer"]
-        refb = self.build_ref(kind, wd, ddir, rflags, srcs, top_fn, rec, plan, res, tag=f"{kind}", extra=san)
+        san = ["-fsanitize=address", "-fno-omit-frame-pointer"] if sanitize else []
+        refb = self.build_ref(kind, wd, ddir, rflags, srcs, top_fn, rec, plan, res,
+                              tag=f"{kind}" if sanitize else f"{kind}_nosan", extra=san)
         if refb is None:
             return res
         runs, valid, bad, timeouts = [], 0, None, 0
-        plan_runs = [(mode, int(seed)) for mode in a.modes.split(",") if mode
-                     for seed in a.seeds.split(",") if seed]
-        for mode, seed in plan_runs:
+        modes = GRAPH_MODES if graph else [m for m in a.modes.split(",") if m]
+        plan_runs = [(mode, int(seed)) for mode in modes for seed in a.seeds.split(",") if seed]
+        retry, k = ("graph" if graph else None), 0
+        while True:
+            if k >= len(plan_runs):
+                retry = input_retry(runs, valid, retry, a.modes)
+                if retry is None:
+                    break
+                res["input_retry"] = retry
+                plan_runs += [(retry, int(seed)) for seed in a.seeds.split(",") if seed]
+                continue
             # one mismatch is enough to analyse; a reference that times out twice will not finish later
-            if bad is not None or timeouts >= 2:
+            # in the same mode (it may in an input-domain retry: `index`)
+            if bad is not None:
                 break
+            if timeouts >= 2:
+                retry = input_retry(runs, valid, retry, a.modes)
+                if retry is None:
+                    break
+                res["input_retry"] = retry
+                timeouts = 0
+                plan_runs = plan_runs[:k] + [(retry, int(seed)) for seed in a.seeds.split(",") if seed]
+                continue
+            mode, seed = plan_runs[k]
+            k += 1
             mi = MODE_INDEX[mode]
             ro, co = wd / f"{kind}.{mode}.{seed}.bin", wd / f"cand.{mode}.{seed}.bin"
             rrc, rerr, rt = run_exe(refb, mi, seed, a.calls, ro, a.timeout, ASAN_ENV)
@@ -2141,13 +2806,18 @@ class Checker:
                 m = re.search(r"cs-layout: (.*)", rerr)
                 res["status"], res["reason"] = "n/a", "argument layout: " + (m.group(1) if m else "?")
                 return res
-            if rrc != 0:
+            # exit 88: the reference stopped at a blocking read of an empty stream, with the dump of the
+            # call in progress; it is compared when the candidate stops at the same read (below)
+            ref_blocked = rrc == BLOCKED_READ_EXIT
+            if rrc != 0 and not ref_blocked:
                 m = re.search(r"ERROR: AddressSanitizer: ([\w-]+)", rerr)
                 r["valid"] = False
                 if rrc == 86:
                     r["why"] = "AddressSanitizer: " + (m.group(1) if m else "?")
-                elif rrc == 88 or (rrc == -6 and "hls::stream is read while empty" in rerr):
+                elif rrc == -6 and "hls::stream is read while empty" in rerr:
                     r["why"] = "reads an empty hls::stream"
+                elif rrc == -6 and re.search(r"Assertion .* failed", rerr):
+                    r["why"] = "aborts on an assertion of the source"
                 else:
                     r["why"] = f"reference exit {rrc}"
                 timeouts += rrc == "timeout"
@@ -2157,8 +2827,12 @@ class Checker:
             if not co.exists():
                 crc, cerr, ct = run_exe(wd / "cand.exe", mi, seed, a.calls, co, a.timeout)
                 (wd / f"cand.{mode}.{seed}.rc").write_text(str(crc))
+                stub = re.search(STUB_CALLED, cerr or "")
+                (wd / f"cand.{mode}.{seed}.stub").write_text(stub.group(1) if stub else "")
             else:
                 crc, ct = (wd / f"cand.{mode}.{seed}.rc").read_text().strip(), 0.0
+                sf = wd / f"cand.{mode}.{seed}.stub"
+                cerr = f"cs-stub: {sf.read_text()} called" if sf.exists() and sf.read_text() else ""
                 crc = int(crc) if crc.lstrip("-").isdigit() else crc
             if crc == -8 and self.reference_divides_by_zero(kind, wd, ddir, rflags, srcs, top_fn, rec, plan,
                                                              res, mi, seed):
@@ -2174,13 +2848,26 @@ class Checker:
                 runs.append(r)
                 ro.unlink(missing_ok=True)
                 continue
+            if ref_blocked and crc != BLOCKED_READ_EXIT:
+                r.update(cand_rc=crc, cand_s=round(ct, 2), valid=False,
+                         why="reads an empty hls::stream (the reference blocks; the candidate does not stop there)")
+                runs.append(r)
+                ro.unlink(missing_ok=True)
+                continue
             r.update(cand_rc=crc, cand_s=round(ct, 2), valid=True)
+            if ref_blocked:
+                r["note"] = "both stop at a blocking read of an empty hls::stream; the dumps there are compared"
             valid += 1
             ra = ro.read_bytes()
+            r["ref_sha1"] = hashlib.sha1(ra).hexdigest()[:16]
             cb = co.read_bytes() if co.exists() else b""
-            if crc != 0:
+            if crc != 0 and not ref_blocked:
                 r["equal"] = False
                 r["why"] = f"candidate exit {crc}"
+                stub = re.search(STUB_CALLED, cerr or "")
+                if stub:
+                    r["why"] += (f" (it calls {stub.group(1)}, which the MLIR declares and nothing defines: "
+                                 "the driver's stub aborts)")
             elif ra == cb:
                 r["equal"] = True
             elif nan_lane_only_diff(ra, cb, plan):
@@ -2195,12 +2882,26 @@ class Checker:
             elif not r["equal"] and bad is None:
                 bad = r
         res["runs"] = runs
+        if not valid and sanitize and timeouts and all(r.get("ref_rc") == "timeout" for r in runs):
+            plain = self.compare(kind, wd, ddir, flags, srcs, top_fn, rec, plan, sanitize=False, graph=graph)
+            plain["reason"] = ("reference without AddressSanitizer (it times out under it): "
+                               + str(plain.get("reason") or ""))
+            plain["sanitizer_runs"] = runs
+            return plain
+        retried = (f" (input-domain retry `{res['input_retry']}`: every run of the default modes "
+                   "was invalid)") if res.get("input_retry") else ""
         if not valid:
             whys = sorted({r.get("why", "") for r in runs})
-            res["status"], res["reason"] = "n/a", "no valid run (" + "; ".join(whys)[:200] + ")"
-            return res
+            res["status"], res["reason"] = "n/a", "no valid run (" + "; ".join(whys)[:200] + ")" + retried
+            return self.graph_retry(kind, wd, ddir, flags, srcs, top_fn, rec, plan, sanitize, graph, res)
         if bad is None:
-            res["status"], res["reason"] = "equal", f"{valid} valid runs"
+            # Seeds need not give distinct inputs: mode `index` fills every integer lane with its position,
+            # so a design whose arguments are all integer lanes gets one input whatever the seed (W9 round 19
+            # review defect 7). Count the distinct reference outputs, so the reason does not claim more
+            # independent evidence than the runs gave.
+            distinct = len({r["ref_sha1"] for r in runs if r.get("valid")})
+            outputs = (f", {distinct} distinct reference output(s)" if distinct < valid else "")
+            res["status"], res["reason"] = "equal", f"{valid} valid runs{outputs}" + retried
             return res
         # a mismatch: does the reference read uninitialised memory?  does it run into UB?
         mi = MODE_INDEX[bad["mode"]]
@@ -2211,6 +2912,7 @@ class Checker:
         # -O1 =pattern 0x0000; forgebench mult_op_module_dot, W11-adopt review D3); the -O1 pair stays because
         # it sees reads the -O0 pair does not (kamya_hari lab_3: -O1 pair differs, -O0 pair equal).
         res["mismatch_run"] = bad
+        init_exes = {}
         for opt in ([], ["-O0"]):
             dumps = []
             for init in ("pattern", "zero"):
@@ -2219,6 +2921,7 @@ class Checker:
                                      extra=[*opt, f"-ftrivial-auto-var-init={init}"])
                 if exe is None:
                     return res
+                init_exes[tag] = exe
                 o = wd / f"{tag}.bin"
                 rc, _, _ = run_exe(exe, mi, bad["seed"], a.calls, o, a.timeout)
                 dumps.append(o.read_bytes() if (rc == 0 and o.exists()) else None)
@@ -2226,7 +2929,14 @@ class Checker:
                 res["status"] = "n/a"
                 res["reason"] = ("reads uninitialised memory (native outputs depend on -ftrivial-auto-var-init"
                                  + (" at -O0)" if opt else ")"))
-                return res
+                if dumps[0] is not None and dumps[1] is not None:
+                    masked = self.masked_compare(wd, kind, init_exes, runs, opt, a)
+                    if masked is not None and masked["status"] == "equal":
+                        res.update(masked)
+                        return res
+                    if masked is not None:
+                        res["reason"] = masked["reason"]
+                return self.graph_retry(kind, wd, ddir, flags, srcs, top_fn, rec, plan, sanitize, graph, res)
         exe = self.build_ref(kind, wd, ddir, rflags, srcs, top_fn, rec, plan, res, tag=f"{kind}_ubsan",
                              extra=["-fsanitize=undefined"])
         if exe is not None:
@@ -2242,6 +2952,90 @@ class Checker:
                 res["ubsan"] = ub[:3]
         res["status"] = "mismatch"
         res["reason"] = (f"{bad['mode']} seed {bad['seed']}: " + (bad.get("why") or json.dumps(bad.get("diff"))))[:400]
+        return res
+
+    def masked_compare(self, wd, kind, init_exes, runs, opt, a):
+        """The verdict on the bytes that do not depend on uninitialised memory (W9 round 23 review D7): the
+        reference reads uninitialised memory (its outputs differ between -ftrivial-auto-var-init=pattern and
+        =zero), but the bytes on which every build of the reference agrees (its own build, =pattern and
+        =zero at its optimisation level and at -O0) are defined by the program, and the candidate must give
+        them. Every mismatching valid run is checked this way; the result (a status and a reason) is
+        "equal" when the candidate agrees on every such byte of every run, an n/a that names the first byte
+        where it does not (the uninitialised value may come from storage the auto-var-init does not cover,
+        the same in every reference build), or None when a dump has another length or no byte is
+        init-independent (the n/a stands)."""
+        checked = unstable_total = 0
+        for r in runs:
+            if not r.get("valid") or r.get("equal", True) or r.get("why"):
+                continue
+            mode, seed = r["mode"], r["seed"]
+            ro, co = wd / f"{kind}.{mode}.{seed}.bin", wd / f"cand.{mode}.{seed}.bin"
+            if not ro.exists() or not co.exists():
+                return None
+            ref, cand = ro.read_bytes(), co.read_bytes()
+            dumps = [ref]
+            for tag, exe in init_exes.items():
+                o = wd / f"{tag}.{mode}.{seed}.bin"
+                rc, _, _ = run_exe(exe, MODE_INDEX[mode], seed, a.calls, o, a.timeout)
+                if rc != 0 or not o.exists():
+                    return None
+                dumps.append(o.read_bytes())
+            if any(len(d) != len(ref) for d in dumps) or len(cand) != len(ref):
+                return None
+            unstable = set()
+            for d in dumps[1:]:
+                unstable.update(differing_bytes(ref, d))
+            if len(unstable) == len(ref):
+                return None
+            unstable_total += len(unstable)
+            for i in differing_bytes(ref, cand):
+                if i not in unstable:
+                    # Not a verdict: an uninitialised value can also come from storage that
+                    # -ftrivial-auto-var-init does not cover (heap, statics, reads past a buffer), the
+                    # same in every build of the reference and another one in the candidate (soda
+                    # contrast / denoise2d / denoise3d: 0x00 in every reference build).
+                    return {"status": "n/a", "masked": True,
+                            "reason": ("reads uninitialised memory (native outputs depend on "
+                                       "-ftrivial-auto-var-init); the masked comparison is not decidable: "
+                                       f"{mode} seed {seed}: byte {i} of the output dump differs (candidate "
+                                       f"{cand[i]:#04x}, reference {ref[i]:#04x}) where no build of the "
+                                       "reference changes")[:400]}
+            checked += 1
+        if not checked:
+            return None
+        return {"status": "equal", "masked": True,
+                "reason": (f"equal on the init-independent bytes of {checked} mismatching run(s) (the reference "
+                           f"reads uninitialised memory: {unstable_total} byte(s) depend on "
+                           "-ftrivial-auto-var-init and are not compared)")}
+
+    # why-strings of a run that failed on its input: an out-of-bounds access, a division by zero (FPE) or
+    # a loop over an unbounded count (timeout)
+    GRAPH_RETRY_WHYS = ("AddressSanitizer", "reference exit timeout", "aborts on an assertion of the source")
+
+    def graph_retry(self, kind, wd, ddir, flags, srcs, top_fn, rec, plan, sanitize, graph, res):
+        """The input-domain retry `graph` (GRAPH_INDEX_BITS): for a design with an edge list and a count
+        whose verdict under the default modes is n/a (no valid run, or reads uninitialised memory) and
+        some of whose runs failed on their input, the runs are repeated in the GRAPH_MODES.  Their result
+        decides when they give a verdict (equal, mismatch, or reads uninitialised memory on valid graphs);
+        otherwise the default modes' n/a and its reason stand, with the retry's result under `graph_retry`.
+        Both are recorded.  (The trigger counts an assertion of the source too: `assert(u < n)` is graph
+        code's usual guard.)"""
+        if graph or not graph_shaped(plan):
+            return res
+        if not any(w in r.get("why", "") for r in res.get("runs", []) for w in self.GRAPH_RETRY_WHYS):
+            return res
+        g = self.compare(kind, wd, ddir, flags, srcs, top_fn, rec, plan, sanitize=sanitize, graph=True)
+        g["input_retry"] = "graph"
+        g["default_modes"] = {k: res.get(k) for k in ("status", "reason", "runs", "mismatch_run", "ubsan",
+                                                      "input_retry") if k in res}
+        if g.get("status") in ("equal", "mismatch") or (g.get("status") == "n/a" and "reads uninitialised memory"
+                                                         in str(g.get("reason", ""))):
+            g["reason"] = (f"{g.get('reason', '')} (input-domain retry `graph`: valid graphs; the default modes "
+                           f"gave n/a: {str(res.get('reason', ''))[:160]})")
+            return g
+        # the default modes' reason stays the record's reason: make_done_exclusions / make_dod_status classify an
+        # n/a by it, and the graph runs' failures come from inputs the driver chose (review of b06d1bd51, item 1)
+        res["graph_retry"] = {k: g.get(k) for k in ("status", "reason", "runs") if k in g}
         return res
 
     def reference_divides_by_zero(self, kind, wd, ddir, rflags, srcs, top_fn, rec, plan, res, mi, seed):
@@ -2332,6 +3126,10 @@ class Checker:
                                                                   tag, extra)
         cdir = REF_CACHE / key if key else None
         if cdir is not None:
+            if self.vml is not None and (cdir / "failed.json").exists() and \
+                    "does not link" in (cdir / "failed.json").read_text():
+                cdir = None      # a link failure cached before the math library was linked (MEMOS #94)
+        if cdir is not None:
             if (cdir / "ref.exe").exists():
                 shutil.copy2(cdir / "ref.exe", exe)
                 res.setdefault("ref_cache_hits", []).append(tag)
@@ -2341,6 +3139,8 @@ class Checker:
                 res.setdefault("ref_cache_hits", []).append(tag)
                 return None
         got = self.build_ref_uncached(kind, wd, ddir, flags, srcs, top_fn, rec, plan, res, tag, extra)
+        if tag in self.vml_used.get(str(wd), {}):
+            cdir = None          # nothing derived from Vitis' math library is kept after the run (MEMOS #94)
         if cdir is not None:
             tmp = cdir.with_name(cdir.name + f".tmp{os.getpid()}.{threading.get_ident()}")
             tmp.mkdir(parents=True, exist_ok=True)
@@ -2456,13 +3256,13 @@ class Checker:
             link = [SAN_LINKER if san else CLANGXX, *san, str(wd / "cs_main.o"), *map(str, objs), "-lm", "-o",
                     str(exe)]
         rc, so, se, _ = run(link)
+        added = []
         if rc != 0:
             # A function the design's own sources define in a file the cgeist command does not name (a
             # testbench helper main.cpp calls: GNN-virtual-node gin_vn_base's fetch_one_graph /
             # load_weights in load_weights_graph.cpp; W9r14-impl, DoD 1): compile that file too.
             und = sorted(set(re.findall(r"undefined reference to [`']([^'`(]+)", se)))
             extra_srcs = design_sources_defining(ddir, srcs, und) if und else []
-            added = []
             for s2 in extra_srcs:
                 o2 = compile_one(s2)
                 if o2 is None:
@@ -2470,6 +3270,38 @@ class Checker:
                 added.append(str(o2))
             if added:
                 rc, so, se, _ = run(link[:-3] + added + link[-3:])
+        if rc != 0:
+            # Symbols of Vitis' math library (MEMOS #94; vitis_mathlib.py): its functions as they are; its
+            # tables, which the real reference reads as C-simulation ap_int / ap_fixed objects, as a C++
+            # definition copied element by element from the library's (synthesis-layout) copy.  The shim
+            # reference reads the synthesis layout, like the candidate.
+            relink = link[:-3] + added + link[-3:]
+            got = self.mathlib_objects(wd, tag, self.undefined_mangled(relink))
+            if isinstance(got, str):
+                self._na(res, got)
+                return None
+            if got:
+                vobjs, raw, info = got
+                more = list(vobjs)
+                if raw and kind == "real":
+                    tsrc = wd / f"{tag}_vml_tables.cpp"
+                    try:
+                        tsrc.write_text(vitis_mathlib.table_source(info, demangle))
+                    except ValueError as e:
+                        self._na(res, f"Vitis math library: {e}"[:300])
+                        return None
+                    to = wd / f"{tag}_vml_tables.o"
+                    rc2, _, se2, _ = run([cxx, "-c", opt, "-w", *base, *flags, str(tsrc), "-o", str(to)],
+                                         cwd=str(ddir))
+                    if rc2 != 0:
+                        (wd / f"{tag}_vml_tables.err").write_text(se2)
+                        self._na(res, "Vitis math library tables do not compile: " + first_err(se2))
+                        return None
+                    more.append(str(to))
+                elif raw:
+                    more += vitis_mathlib.defsym_flags(raw)
+                res["vitis_mathlib"] = self.vml_used.get(str(wd), {}).get(tag, [])
+                rc, so, se, _ = run(link[:-3] + added + more + link[-3:])
         if rc != 0:
             (wd / f"{tag}.link.err").write_text(se)
             und = re.findall(r"undefined reference to [`']([^'`]+)'", se)
@@ -2620,6 +3452,53 @@ def self_test():
     b = (0).to_bytes(4, "little") + bytes(fixed) + (2).to_bytes(8, "little") + bytes(4) + b"\x01\0\0\0"
     d = first_diff(a, b, plan)
     assert d["where"] == "stream" and d["token"] == 1 and d["tokens"] == [2, 2], d
+    # an array of TAPA streams (O157): N streams of one memref of N objects, keyed object_stride apart
+    plan = plan_args(["memref<3x!llvm.struct<(i32, i32)>>"], [], {0: "tapa[3]:!llvm.struct<(i32, i8)>"})
+    assert plan[0]["count"] == 3 and plan[0]["stride"] == 8 and plan[0]["dims"] == [3], plan[0]
+    assert plan[0]["elems"] == 3 * STREAM_TOKENS
+    tok = (1).to_bytes(8, "little") + bytes(5)
+    a = (0).to_bytes(4, "little") + tok + tok + tok
+    b = (0).to_bytes(4, "little") + tok + tok + (1).to_bytes(8, "little") + b"\x02" + bytes(4)
+    d = first_diff(a, b, plan)
+    assert d["where"] == "stream" and d.get("stream") == 2, d
+    # a TAPA async_mmap<int>& (O157): no streams of its own, five member streams keyed by field offset
+    mm_ty = ("memref<?x!llvm.struct<(struct<(i32)>, struct<(i32, i32)>, struct<(i32)>, struct<(i32)>,"
+             " struct<(i32, i32)>)>>")
+    nos = {"hls::stream<tapa::internal::elem_t<int>,0>": "!llvm.struct<(i32, i8)>"}
+    toks = tapa_mmap_tokens("int", nos)
+    assert toks[1] == toks[3] == "!llvm.struct<(i32, i8)>" and toks[4] == "!llvm.struct<(i8, i8)>", toks
+    assert tapa_mmap_tokens("float", nos)[1] is None
+    plan = plan_args([mm_ty, "memref<4xi32>"], [], {0: {TAPA_MMAP: toks}})
+    ents = spec_entries(plan)
+    assert len(plan) == 2 and len(ents) == 7 and plan[0]["count"] == 0 and ents[0]["first_member"] == 2, ents
+    assert [e["key_off"] for e in ents[2:]] == [0, 4, 12, 16, 20], ents
+    assert all(e["parent"] == 0 for e in ents[2:]) and ents[2]["esize"] == 16 and ents[6]["esize"] == 2
+    assert "cs_runs6" in spec_header(plan)
+    # a struct token passed as a memref row (flowgnn gat's stream<node_t>, memref<?x2xi32>) moves 8 bytes
+    nm = "_ZN3hls6streamI6node_tLi0EElsERKS1_"
+    srt = cand_stream_runtime(f"func.func private @{nm}(memref<?xi32>, memref<?x2xi32>)\n",
+                              f"declare void @{nm}(ptr, ptr, i64, i64, i64, ptr, ptr, i64, i64, i64, i64, i64)\n")
+    assert "call void @cs_fifo_push(ptr %a0, ptr %a1, i32 8)" in srt, srt
+    # graph_role (the `graph-*` modes): a batch of graphs as flowgnn passes it, and one graph as gnnbuilder does
+    gp = plan_args(["i32", "memref<?xi32>", "memref<?x1xi16>", "memref<?x!llvm.struct<(array<9 x i32>)>>",
+                    "memref<?x2xi32>", "memref<?x173x80xi16>", "memref<?xi16>", "memref<8x!llvm.struct<(i32, i32)>>",
+                    "memref<4x!llvm.struct<(i32, f32)>>", "i8", "memref<600x3xi64>"], [])
+    assert [graph_role(x) for x in gp] == [1, 1, 0, 4, 2, 0, 0, 3, 4, 0, 4], [graph_role(x) for x in gp]
+    assert graph_shaped(gp) and not graph_shaped(gp[:4]) and not graph_shaped(gp[4:5])
+    assert spec_header(gp).count(", 2}") >= 1 and "#define CS_GRAPH_INDEX_BITS 32" in spec_header(gp)
+    tk = (1).to_bytes(4, "little") + b"\x01"
+    a = (0).to_bytes(4, "little") + bytes((4 + 2 * plan[1]["guard"]) * 4)
+    a += b"".join((0).to_bytes(8, "little") for _ in range(5))
+    b2 = a[:-16] + (1).to_bytes(8, "little") + tk + (0).to_bytes(8, "little")
+    d = first_diff(a + bytes(0), b2, plan)
+    assert d["where"] == "stream" and d["arg"] == 5 and d["arg_type"].endswith(".write_data"), d
+    # a float TAPA token {f32 val, i8 eot} (W9 round 20 review defect 6): the value is a float run
+    assert tapa_token_runs(0, parse_type("!llvm.struct<(f32, i8)>")) == [[0, 32, 2, 1, 0], [4, 1, 0, 1, 0]]
+    plan = plan_args(["memref<?x!llvm.struct<(i32, i32)>>"], [], {0: "tapa:!llvm.struct<(f64, i8)>"})
+    assert plan[0]["kind"] == "stream" and plan[0]["esize"] == 16, plan[0]
+    # a blocking read of an empty stream ends the run with the call's dump (W9 round 20 review defect 2)
+    assert "cs_dump(cs_cur_call)" in DRIVER_MAIN and "cs_stop_at_blocking_read();" in DRIVER_MAIN
+    assert "cs_block_hook = &CsHook::cs_run;" in REF_THUNK_REAL and BLOCKED_READ_EXIT == 88
     # NaN lanes of a packed integer (ap_uint<64> holding two floats): payloads differ, both NaN
     plan = plan_args(["memref<2xi64>", "memref<2xi32>"], [])
     lay = sum(dump_layout(plan))
@@ -2637,6 +3516,15 @@ def self_test():
     d2[off32:off32 + 4] = (0x7FE87AD9).to_bytes(4, "little")
     assert not nan_lane_only_diff(bytes(d1), bytes(d2), plan)   # an i32 leaf is an integer
     assert defines_function.__name__
+    # the masked comparison's byte positions (W9 round 23 review D7)
+    x = bytes(range(256)) * 40
+    y = bytearray(x); y[5] ^= 1; y[9000] ^= 0x80
+    assert differing_bytes(x, bytes(y)) == [5, 9000] and differing_bytes(x, x) == []
+    # Vitis' math library (MEMOS #94): the intrinsic definitions, and a library build when the install has one
+    import tempfile
+    with tempfile.TemporaryDirectory(prefix="vml-selftest-", dir=str(WORK_DEFAULT.parent)) as td:
+        for note in vitis_mathlib.self_test(GXX, LLC, vitis_include_dir()[0], td):
+            print("  " + note)
     print("self-test ok")
 
 
@@ -2658,7 +3546,13 @@ def main():
     ap.add_argument("--calls", type=int, default=2)
     ap.add_argument("--timeout", type=int, default=120)
     ap.add_argument("--work", default=str(WORK_DEFAULT))
-    ap.add_argument("--out", default=str(C.RESULTS_DIR / "semantics.json"))
+    ap.add_argument("--out", default=None,
+                    help="result JSON (default results/semantics.json; results/semantics-<set>.json for a "
+                         "held-out run: semantics-heldout.json, semantics-heldout2.json)")
+    ap.add_argument("--catalog", choices=("polygeist", "v2", "heldout", "heldout2"), default=None,
+                    help="the catalogue of the --from run (default: from its _meta.catalog, else the harness "
+                         "default).  For 'heldout' the locked split's designs are left out until Peter "
+                         "releases them (hls-doc/heldout.md; 'heldout2' likewise, hls-doc/heldout2.md)")
     ap.add_argument("--keep", action="store_true", help="keep the dumps of equal runs")
     ap.add_argument("--top-fn", default="", help="check this MLIR function instead of each record's top "
                     "(to bisect a mismatch inside one design)")
@@ -2669,7 +3563,17 @@ def main():
     ap.add_argument("--md", default="", help="also write the hls-doc page (e.g. ../../hls-doc/semantics.md)")
     ap.add_argument("--page-from", default="", help="only write the --md page from this result json")
     ap.add_argument("--self-test", action="store_true")
+    ap.add_argument("--vitis-mathlib", choices=("auto", "off"), default="auto",
+                    help="link Vitis' installed math library libhlsmc++ (its tables and functions, compiled from "
+                         "the install's bitcode at check time; MEMOS #94) into a build whose link lacks symbols "
+                         "it defines (auto, the default), or never (off)")
+    ap.add_argument("--max-buffer-gib", type=float, default=1.0,
+                    help="largest total of argument buffers the driver allocates (GiB; default 1). Each run "
+                         "holds them twice in the comparison: raise it only for a few designs at -j 1, "
+                         "under the 12 GB cap of the resource rules (MEMOS #65)")
     a = ap.parse_args()
+    global MAX_BUFFER_BYTES
+    MAX_BUFFER_BYTES = int(a.max_buffer_gib * (1 << 30))
     if a.self_test:
         self_test()
         return
@@ -2683,6 +3587,35 @@ def main():
     src = json.loads(Path(a.src).read_text()) if a.src else {"_meta": {"probe": a.probe}}
     recs = src.get("designs", src) if isinstance(src.get("designs"), dict) else src
     keys = [k for k in recs if not k.startswith("_")]
+    global CATALOG
+    # the run's catalogue: the first word of its _meta.catalog ('v2 (<root>)', 'heldout (<root>; split ...)',
+    # 'polygeist'); a --catalog that contradicts it is refused (it would load the wrong designs, and a held-out
+    # run must keep its locked designs out)
+    run_catalog = (str((src.get("_meta") or {}).get("catalog") or "").split() or [None])[0]
+    if run_catalog not in (None, "polygeist", "v2", *C.HELDOUT_SETS):
+        run_catalog = None
+    if a.catalog and run_catalog and a.catalog != run_catalog:
+        ap.error(f"--catalog {a.catalog} contradicts the run's _meta.catalog ({run_catalog}) in {a.src}")
+    CATALOG = a.catalog or (run_catalog if run_catalog in C.HELDOUT_SETS else None)
+    heldout = CATALOG if CATALOG in C.HELDOUT_SETS else None       # the held-out set, or None
+    wrong = sorted(k for k in keys if C.heldout_set_of_key(k) != heldout)
+    if heldout and wrong:
+        ap.error(f"{a.src} holds designs that are not of the held-out set {heldout!r} (e.g. {wrong[0]})")
+    if not heldout and wrong:
+        ap.error(f"{a.src} holds held-out designs but the catalogue is not a held-out one (hls-doc/heldout.md)")
+    if a.out is None:
+        a.out = str(C.RESULTS_DIR / (f"semantics-{heldout}.json" if heldout else "semantics.json"))
+    elif C.heldout_set_of_name(Path(a.out).name) != heldout:
+        ap.error(f"--out {a.out}: held-out results go to a file whose name contains their set ('heldout', "
+                 "'heldout2'), others not")
+    if heldout:
+        import designs as D                  # noqa: E402  (harness module)
+        if not D.heldout_locked_released(heldout):
+            locked = D.heldout_locked_keys(name=heldout)
+            n = len(keys)
+            keys = [k for k in keys if k not in locked]
+            if n != len(keys):
+                print(f"held-out: {n - len(keys)} locked designs left out (hls-doc/heldout.md)")
     if a.datasets:
         ds = set(a.datasets.split(","))
         keys = [k for k in keys if k.split("/", 1)[0] in ds]
@@ -2706,18 +3639,27 @@ def main():
     chk = Checker(a)
     results = {}
     t0 = time.time()
-    with cf.ThreadPoolExecutor(max_workers=a.j) as ex:
-        futs = {ex.submit(chk.check, k, recs[k]): k for k in keys}
-        for n, f in enumerate(cf.as_completed(futs), 1):
-            k = futs[f]
-            r = f.result()
-            results[k] = r
-            print(f"[{n}/{len(keys)}] {k}: {r['status']} {r['reason'][:150]}", flush=True)
+    try:
+        with cf.ThreadPoolExecutor(max_workers=a.j) as ex:
+            futs = {ex.submit(chk.check, k, recs[k]): k for k in keys}
+            for n, f in enumerate(cf.as_completed(futs), 1):
+                k = futs[f]
+                r = f.result()
+                results[k] = r
+                print(f"[{n}/{len(keys)}] {k}: {r['status']} {r['reason'][:150]}", flush=True)
+    finally:
+        if chk.vml is not None:
+            chk.vml.cleanup()        # the library's temporary files (MEMOS #94)
     meta = dict(source=str(Path(a.src).resolve()) if a.src else None, source_meta=src.get("_meta", {}),
                 probe=a.probe or None, cgeist=C.CGEIST if a.probe else None, seeds=a.seeds,
                 modes=a.modes, calls=a.calls, timeout=a.timeout, mlir_bin=MLIR_BIN, clang18=CLANG, ref=a.ref,
                 gcc=GXX, vitis_include=VITIS_INCLUDE_SRC, vitis_include_md5=chk.vitis_inc_md5,
                 polygeist_opt=POLYGEIST_OPT if os.path.exists(POLYGEIST_OPT) else None,
+                # the binary matters: a polygeist-opt older than Polygeist 6b7c55d6 lowers a same-rank
+                # polygeist.subindex by elements, not rows (flowgnn's &edge_list_in[offset], W9r21-graph)
+                polygeist_opt_md5=C.md5_of_file(POLYGEIST_OPT) if os.path.exists(POLYGEIST_OPT) else None,
+                vitis_mathlib=dict(mode=a.vitis_mathlib, **(chk.vml.describe() if chk.vml is not None else {}),
+                                   used_by=sorted(k for k, r in results.items() if r.get("vitis_mathlib"))),
                 circt_head=C.git_hash(), elapsed_s=round(time.time() - t0, 1),
                 finished=time.strftime("%Y-%m-%d %H:%M:%S"))
     results["_meta"] = meta

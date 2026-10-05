@@ -869,10 +869,23 @@ void fillTool(const json::Object &t, ToolProfile &tool) {
       boolean(rep, "rotating_reads_full_copies", false);
   m.replication.userRam1wnrReplicable =
       boolean(rep, "user_ram_1wnr_replicable", false);
+  m.replication.exclusiveSteeredReadsShareSlot =
+      boolean(rep, "exclusive_steered_reads_share_slot", false);
+  m.replication.selectOfLoadsReload =
+      boolean(rep, "select_of_loads_reload", false);
+  m.replication.sequentialStateReads =
+      boolean(rep, "sequential_state_reads", false);
+  m.replication.userPlainRamPinsKind =
+      boolean(rep, "user_plain_ram_pins_kind", false);
   const json::Object &rom = obj(ma, "rom");
   m.rom.sdpMaxReads = integer(rom, "sdp_max_reads");
   m.rom.copies = str(rom, "copies");
   m.rom.sequentialStateReads = boolean(rom, "sequential_state_reads", true);
+  m.rom.functionPipelineReads =
+      boolean(rom, "function_pipeline_reads", true);
+  m.rom.moduleCopies = boolean(rom, "module_copies", true);
+  m.rom.moduleCopiesParentReads =
+      boolean(rom, "module_copies_parent_reads", false);
   m.sequentialScopeModel = str(obj(ma, "sequential_scope"), "model");
   m.sequentialLoadsBeforeConsumer =
       boolean(obj(ma, "sequential_scope"), "loads_before_consumer", true);
@@ -913,10 +926,14 @@ void fillTool(const json::Object &t, ToolProfile &tool) {
     ib.readFifoPerChannel = boolean(rf, "per_channel", true);
     ib.readFifoCastLoadWidth = boolean(rf, "cast_load_width", true);
     ib.readFifoPowerOfTwoWidth = boolean(rf, "power_of_two_width", true);
+    ib.readFifoStrobedPartWrites = boolean(rf, "strobed_part_writes", true);
+    ib.readCacheBram = integer(rf, "cache_bram", 0);
     const json::Object &wb = obj(b, "write_buffer");
     ib.writeBufferFreeMaxBurst = integer(wb, "free_max_burst", 16);
     ib.writeBufferPortWidthBits = integer(wb, "port_width_bits", 18);
     ib.writeBufferConfirmedMinBurst = integer(wb, "confirmed_min_burst", 32);
+    ib.writeBufferMinBramBits = integer(wb, "min_bram_bits", 1024);
+    ib.writeBufferElementWidth = boolean(wb, "element_width", true);
     ib.unresolvedCall = str(b, "unresolved_call", "rw");
     const json::Object &br = obj(b, "bus_requests");
     ib.readRequestsPerCycle = integer(br, "read_per_cycle", 1);
@@ -938,7 +955,11 @@ void fillTool(const json::Object &t, ToolProfile &tool) {
       boolean(st, "distinct_element_instances", true);
   h.streams.declaredElementBits =
       boolean(st, "declared_element_bits", true);
+  h.streams.staticStructStorageBits =
+      boolean(st, "static_struct_storage_bits", true);
   h.streams.streamPragmaArrays = boolean(st, "stream_pragma_arrays", true);
+  h.streams.elementDepthPragmas =
+      boolean(st, "element_depth_pragmas", false);
   const json::Object &dc = obj(hls, "dataflow_channels");
   h.dataflowChannels.enabled = boolean(dc, "enabled");
   h.dataflowChannels.defaultBlocks = integer(dc, "default_blocks");
@@ -960,12 +981,30 @@ void fillTool(const json::Object &t, ToolProfile &tool) {
       boolean(pd, "sink_parent_trailing_stores", false);
   h.pipelineDecision.foldUnrolledGuards =
       boolean(pd, "fold_unrolled_guards", true);
+  h.pipelineDecision.foldUnrolledZeroProducts =
+      boolean(pd, "fold_unrolled_zero_products", false);
   h.pipelineDecision.foldNestedConstantGuards =
       boolean(pd, "fold_nested_constant_guards", true);
+  h.pipelineDecision.foldDomainTrueGuards =
+      boolean(pd, "fold_domain_true_guards", false);
+  h.pipelineDecision.hoistCommonArmLoads =
+      boolean(pd, "hoist_common_arm_loads", false);
+  h.pipelineDecision.promoteNestInvariantOnly =
+      boolean(pd, "promote_nest_invariant_only", false);
+  h.pipelineDecision.promotedStoreCleanup =
+      boolean(pd, "promoted_store_cleanup", false);
+  h.pipelineDecision.promoteConditionalAccesses =
+      boolean(pd, "promote_conditional_accesses", false);
+  h.pipelineDecision.flattenNestInvariantBounds =
+      boolean(pd, "flatten_nest_invariant_bounds", false);
   h.pipelineDecision.pipelineOffSequential =
       boolean(pd, "pipeline_off_sequential", true);
   h.pipelineDecision.doWhileFlattenRefusal =
       boolean(pd, "do_while_flatten_refusal", true);
+  h.pipelineDecision.libraryCallsWithLoops =
+      strings(pd, "library_calls_with_loops");
+  h.pipelineDecision.pipelinedLibraryCalls =
+      strings(pd, "pipelined_library_calls");
   h.pipelineDecision.doWhileMinSubLoopTrip =
       integer(pd, "do_while_min_subloop_trip", 3);
   h.pipelineDecision.partialUnrollRuntimeLoops =
@@ -1007,6 +1046,12 @@ void fillTool(const json::Object &t, ToolProfile &tool) {
       boolean(pa, "complete_partition_registers", true);
   h.partitioning.knownResidueBanks =
       boolean(pa, "known_residue_banks", true);
+  h.partitioning.banksFromValueRange =
+      boolean(pa, "banks_from_value_range", false);
+  h.partitioning.reshapedCalleeParameters =
+      boolean(pa, "reshaped_callee_parameters", false);
+  h.partitioning.sharedAddressBankReads =
+      boolean(pa, "shared_address_bank_reads", false);
   const json::Object &inf = obj(pa, "inference");
   PartitionInferenceConfig &pi = h.partitioning.inference;
   pi.targetII = integer(inf, "target_ii");
@@ -1021,6 +1066,9 @@ void fillTool(const json::Object &t, ToolProfile &tool) {
   h.partitioning.steerAffineLoads = boolean(pa, "steer_affine_loads");
   h.partitioning.steerWindowGroups =
       boolean(pa, "steer_window_groups", true);
+  h.partitioning.steerThroughGuards =
+      boolean(pa, "steer_through_guards", true);
+  h.partitioning.dropUnreadBanks = boolean(pa, "drop_unread_banks", true);
   h.partitioning.inductionResidueBanks =
       boolean(pa, "induction_residue_banks", true);
 
@@ -1029,7 +1077,18 @@ void fillTool(const json::Object &t, ToolProfile &tool) {
   h.folding.canonicalize = boolean(fo, "canonicalize");
   h.folding.storageAddressNotNull =
       boolean(fo, "storage_address_not_null", true);
+  h.folding.dropAsserts = boolean(fo, "drop_asserts", false);
+  h.folding.evaluateConstantCalls =
+      boolean(fo, "evaluate_constant_calls", true);
+  h.folding.constantCallMaxSteps =
+      integer(fo, "constant_call_max_steps", 1000000);
   h.folding.maxRounds = integer(fo, "max_rounds");
+  h.folding.constantGlobalLoadsAfterUnroll =
+      boolean(fo, "constant_global_loads_after_unroll", false);
+  h.folding.evaluateConstantFills =
+      boolean(fo, "evaluate_constant_fills", false);
+  h.folding.constantFillMaxElements =
+      integer(fo, "constant_fill_max_elements", 4096);
 
   const json::Object &me = obj(hls, "middle_end");
   MiddleEndConfig &mid = h.middleEnd;
@@ -1041,6 +1100,7 @@ void fillTool(const json::Object &t, ToolProfile &tool) {
   mid.mergeIfElseAccesses = boolean(me, "merge_if_else_accesses");
   mid.gvnLoads = boolean(me, "gvn_loads");
   mid.gvnMemrefLoads = boolean(me, "gvn_memref_loads", true);
+  mid.forwardBeforeBanking = boolean(me, "forward_before_banking", false);
   mid.gvnConditionalLoads = boolean(me, "gvn_conditional_loads", true);
   mid.trackGlobals = boolean(me, "globals", true);
   mid.dseGuardedStores = boolean(me, "dse_guarded_stores", true);
@@ -1062,6 +1122,8 @@ void fillTool(const json::Object &t, ToolProfile &tool) {
       boolean(dm, "unread_register_elements", true);
 
   h.honourInlineOff = boolean(obj(hls, "inlining"), "honour_inline_off");
+  h.clonePerArgumentType =
+      boolean(obj(hls, "inlining"), "clone_per_argument_type", false);
   const json::Object &sc = obj(hls, "structs");
   h.structs.aggregate = boolean(sc, "aggregate");
   h.structs.globals = boolean(sc, "globals");
@@ -1072,10 +1134,19 @@ void fillTool(const json::Object &t, ToolProfile &tool) {
   h.structs.memberPartitions = boolean(sc, "member_partitions", true);
   h.structs.specializeSplitCasts =
       boolean(sc, "specialize_split_casts", true);
+  h.structs.topPointerScalar = boolean(sc, "top_pointer_scalar", true);
   const json::Object &na = obj(hls, "narrowing");
   h.narrowing.storedRanges = boolean(na, "stored_ranges");
   h.narrowing.constantSetReinterpretation =
       boolean(na, "constant_set_reinterpretation", true);
+  h.narrowing.undefContributesNothing =
+      boolean(na, "undef_contributes_nothing", true);
+  h.narrowing.reachingStoreRanges = boolean(na, "reaching_store_ranges", true);
+  h.narrowing.accumulationRanges = boolean(na, "accumulation_ranges", true);
+  h.narrowing.calleeParamStoresFullRange =
+      boolean(na, "callee_param_stores_full_range", true);
+  h.narrowing.copiesCloseRanges =
+      boolean(na, "copies_close_ranges", false);
   h.narrowing.loadDemand = boolean(na, "load_demand");
   h.narrowing.fullAddressInterfaceModes =
       strings(na, "full_address_interface_modes");
@@ -1091,6 +1162,12 @@ void fillTool(const json::Object &t, ToolProfile &tool) {
       obj(hls, "math_library"), "fixed_exp_tables_when_unlisted", true);
   h.inlinedTablesInPipelines = boolean(
       obj(hls, "math_library"), "inlined_tables_in_pipelines", true);
+  h.sharedLibraryModules = boolean(obj(hls, "math_library"),
+                                   "shared_library_modules", false);
+  h.sequentialCoreSharing = boolean(obj(hls, "math_library"),
+                                    "sequential_core_sharing", false);
+  h.axiLiteArrayMemories =
+      boolean(obj(hls, "interfaces"), "axi_lite_array_memories", false);
 
   const json::Object &be = obj(t, "backend");
   tool.backend.id = str(be, "id");
@@ -1102,6 +1179,7 @@ void fillTool(const json::Object &t, ToolProfile &tool) {
   sel.block = str(ss, "block");
   sel.below = str(ss, "below");
   sel.forcingImpl = str(ss, "forcing_impl", "bram");
+  sel.distributedImpl = str(ss, "distributed_impl", "");
   const json::Object &mm = obj(be, "memory_mapper");
   MemoryMapperConfig &map = tool.backend.memoryMapper;
   map.plugin = str(mm, "plugin");
@@ -1141,6 +1219,18 @@ void fillScheduling(const json::Object &s, SchedulingConfig &sc) {
   sc.dependenceModel = str(de, "model");
   sc.memoryRecurrences = boolean(de, "memory_recurrences", true);
   sc.unknownAddressMinII = integer(de, "unknown_address_min_ii", 2);
+  sc.userInterIndependence = boolean(de, "user_inter_independence", true);
+  sc.enclosingIvSampleSteps = integer(de, "enclosing_iv_sample_steps", 0);
+  sc.bankStoreRecurrences = boolean(de, "bank_store_recurrences", false);
+  sc.registerRecurrenceLatencies =
+      boolean(de, "register_recurrence_latencies", false);
+  sc.promotedElementRegisterCycle =
+      boolean(de, "promoted_element_register_cycle", true);
+  sc.f64RegisterCycle = boolean(de, "f64_register_cycle", true);
+  sc.laneRmwOnePort = boolean(de, "lane_rmw_one_port", true);
+  sc.promotedElementSearchBudget =
+      integer(de, "promoted_element_search_budget", 1000000);
+  sc.dynamicLaneRmw = boolean(de, "dynamic_lane_rmw", true);
   for (const auto &kv : obj(de, "recurrence_latencies"))
     if (std::optional<int64_t> i = kv.second.getAsInteger())
       sc.recurrenceLatencies[kv.first.str()] = *i;
@@ -1154,6 +1244,8 @@ void fillScheduling(const json::Object &s, SchedulingConfig &sc) {
   sc.calleeGlobalRecurrence =
       boolean(mo, "callee_global_recurrence", true);
   sc.recurrenceRepairRounds = integer(mo, "recurrence_repair_rounds");
+  sc.heightPriority = boolean(mo, "height_priority");
+  sc.fpUnitLimits = boolean(mo, "fp_unit_limits", false);
   sc.userIITarget = boolean(mo, "user_ii_target");
   sc.sequentialModel = str(obj(s, "sequential"), "model");
   sc.bindingModel = str(obj(s, "binding"), "model");
@@ -1170,6 +1262,13 @@ void fillScheduling(const json::Object &s, SchedulingConfig &sc) {
   c.portsPerMemory = integer(cd, "ports_per_memory");
   c.staggeredCallsShareInstance =
       boolean(cd, "staggered_calls_share_instance", true);
+  c.inOrderCallStarts = boolean(cd, "in_order_call_starts", true);
+  c.outlinedPipelineArrayInstances =
+      boolean(cd, "outlined_pipeline_array_instances", true);
+  c.sequentialLoopsShareInstance =
+      boolean(cd, "sequential_loops_share_instance", true);
+  c.outlinedLoopsOwnAllocation =
+      boolean(cd, "outlined_loops_own_allocation", true);
   c.indexBits = integer(cd, "index_bits");
   eachObject(cd, "carry_chain_ns", [&](const json::Object &b) {
     c.carryChainNs.push_back({optInteger(b, "max_bits"), number(b, "ns")});
@@ -1365,9 +1464,11 @@ void crossCheck(const Config &c, ConfigDiagnostics &diag) {
     if (lat < 0 && lat != -1)
       err("scheduling.timing.operator_latencies." + cls,
           "out of range: " + std::to_string(lat) + " < minimum -1");
-    else if (lat == -1 && cls != "call" && cls != "kept_call")
+    else if (lat == -1 && cls != "call" && cls != "kept_call" &&
+             cls != "libm_call")
       err("scheduling.timing.operator_latencies." + cls,
-          "-1 (stay sequential) is allowed only for call and kept_call");
+          "-1 (stay sequential) is allowed only for call, kept_call and "
+          "libm_call");
 }
 
 /// The math-core table's own `vitis` block names the configuration its

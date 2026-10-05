@@ -27,7 +27,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import ch34_lib as L  # noqa: E402
 import common as C  # noqa: E402
 from compare import compare_one  # noqa: E402
-from make_compare_csv import band  # noqa: E402
+from make_compare_csv import band, BAND_PCT, IN_BAND  # noqa: E402
 
 SCRATCH = L.WORK / "coord" / "scratch"
 OUT = L.THESIS / "03-methodology.md"
@@ -75,7 +75,7 @@ def recompare(path, V):
     rows = [compare_one(k, V.get(k), H.get(k)) for k in sorted(set(V) | set(H))]
     cmp_ = [r for r in rows if r["status"] == "compared"]
     ex = sum(1 for r in cmp_ if r["exact"])
-    inb = sum(1 for r in cmp_ if band(r["vitis_bram"], r["hlsest_bram"]) in ("exact", "over<=15%"))
+    inb = sum(1 for r in cmp_ if band(r["vitis_bram"], r["hlsest_bram"]) in IN_BAND)
     err = sum(abs(r["diff"]) for r in cmp_)
     sub = [r for r in cmp_ if r["dataset"] in SUBSET]
     shim = Path(str(meta.get("shim", ""))).name or "?"
@@ -178,6 +178,7 @@ def main():
     V = C.load_json(str(L.RESULTS / "vitis.json"), {})
     st = collections.Counter(e.get("status") for e in V.values())
     ok = [e for e in V.values() if e.get("status") == "ok"]
+    v["band_over_pct"] = BAND_PCT   # make_compare_csv.BAND_OVER, the DoD-5 band (MEMOS #95)
     v["gt_designs"], v["gt_ok"] = len(V), st["ok"]
     v["gt_failed"], v["gt_timeout"] = st["vitis failed"], st["vitis timeout"]
     v["gt_mem_rows"] = sum(len(e.get("memories") or []) for e in ok)

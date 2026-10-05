@@ -52,6 +52,38 @@ inline std::optional<std::string> bindStorageImpl(mlir::Operation *op) {
   return std::nullopt;
 }
 
+/// The `type` of the first `hls.bind_storage` dictionary on the storage op
+/// (lower case) that binds memory (not `fifo`); nullopt without one. A
+/// memref.get_global is resolved to its memref.global.
+inline std::optional<std::string> bindStorageType(mlir::Operation *op) {
+  if (!op)
+    return std::nullopt;
+  if (auto get = llvm::dyn_cast<mlir::memref::GetGlobalOp>(op))
+    op = mlir::SymbolTable::lookupNearestSymbolFrom(op, get.getNameAttr());
+  if (!op)
+    return std::nullopt;
+  auto arr = op->getAttrOfType<mlir::ArrayAttr>(kBindStorageAttr);
+  if (!arr)
+    return std::nullopt;
+  for (mlir::Attribute a : arr)
+    if (auto d = llvm::dyn_cast<mlir::DictionaryAttr>(a))
+      if (auto type = d.getAs<mlir::StringAttr>("type")) {
+        if (type.getValue().equals_insensitive("fifo"))
+          continue;
+        return type.getValue().lower();
+      }
+  return std::nullopt;
+}
+
+/// Whether `type` (a lower-case bind_storage type) is a plain RAM kind a
+/// user binding pins: ram_1p, ram_2p, ram_t2p or ram_s2p (VITIS_NOTES N173:
+/// no RAM_1WNR copies; the II absorbs the extra accesses). ram_1wnr and the
+/// ROM types are not.
+inline bool isPinnedRamType(llvm::StringRef type) {
+  return type == "ram_1p" || type == "ram_2p" || type == "ram_t2p" ||
+         type == "ram_s2p";
+}
+
 } // namespace circt::hls_analysis
 
 #endif // CIRCT_DIALECT_RESOURCE_PASSES_STORAGEPRAGMAS_H

@@ -16,16 +16,21 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/Resource/Passes/MemoryRecurrences.h"
+#include "circt/Dialect/Resource/Config/Config.h"
+#include "circt/Dialect/Resource/HLS/HLSOps.h"
+#include "mlir/IR/IntegerSet.h"
 
 #include "mlir/Dialect/Affine/Analysis/LoopAnalysis.h"
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/Dialect/Utils/StaticValueUtils.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/Hashing.h"
+#include "llvm/ADT/StringSet.h"
 #include "llvm/ADT/TypeSwitch.h"
 
 using namespace mlir;
@@ -46,6 +51,13 @@ struct Access {
   unsigned pos = 0;     ///< post-order position in the body
   bool known = true;    ///< every address can be evaluated
   SmallVector<uint64_t> addr; ///< address hash per evaluated iteration
+  /// The access happens only where this set holds over predOperands (the
+  /// enable of a bank's store; a run-time-bank load takes the enable of
+  /// the store of its bank and address): elsewhere its address is a
+  /// per-iteration sentinel no address of another iteration equals.
+  IntegerSet pred;
+  bool hasPred = false;
+  SmallVector<Value, 4> predOperands;
 };
 
 /// The loop's induction variable, its iteration values and its body.
@@ -214,16 +226,44 @@ private:
     return r && shape.loop->isAncestor(r->getParentOp());
   }
 
+  /// An enclosing loop's induction variable: its lower bound plus
+  /// `steps` steps (scheduling.dependences.enclosing_iv_sample_steps),
+  /// clamped to its last iteration when the trip count is constant. At the
+  /// lower bound a nest whose inner bounds are that counter (`for (iter = 1;
+  /// ..)` around `for (i < iter) for (j < iter) for (k < iter)`,
+  /// GP_selection) is one iteration long and a recurrence of the flattened
+  /// loop is missed (OPEN_ISSUES O170 (b), kernel w9r16fx_gp_ffo).
+  static int64_t enclosingSample(int64_t lb, int64_t step,
+                                 std::optional<uint64_t> trip) {
+    int64_t k =
+        circt::hlsest::Config::get().scheduling.enclosingIvSampleSteps;
+    if (trip)
+      k = std::min<int64_t>(k, *trip > 0 ? static_cast<int64_t>(*trip) - 1
+                                         : 0);
+    return lb + k * step;
+  }
+
   int64_t outsideSample(Value v) {
     if (auto arg = dyn_cast<BlockArgument>(v)) {
       if (auto outer = dyn_cast<AffineForOp>(arg.getOwner()->getParentOp()))
         if (arg == outer.getInductionVar() && outer.hasConstantLowerBound())
-          return outer.getConstantLowerBound();
+          return enclosingSample(outer.getConstantLowerBound(),
+                                 outer.getStepAsInt(),
+                                 getConstantTripCount(outer));
       if (auto outer = dyn_cast<scf::ForOp>(arg.getOwner()->getParentOp()))
         if (arg == outer.getInductionVar())
           if (std::optional<int64_t> lb =
-                  getConstantIntValue(outer.getLowerBound()))
-            return *lb;
+                  getConstantIntValue(outer.getLowerBound())) {
+            std::optional<int64_t> st = getConstantIntValue(outer.getStep());
+            std::optional<int64_t> ub =
+                getConstantIntValue(outer.getUpperBound());
+            std::optional<uint64_t> trip;
+            if (st && *st > 0 && ub)
+              trip = *ub > *lb
+                         ? static_cast<uint64_t>((*ub - *lb + *st - 1) / *st)
+                         : 0;
+            return enclosingSample(*lb, st && *st > 0 ? *st : 1, trip);
+          }
     }
     auto [it, inserted] = samples.try_emplace(
         v, kOutsideSampleBase +
@@ -292,6 +332,22 @@ std::optional<Access> accessOf(Operation *op) {
     a.isStore = true;
     a.value = s.getValueToStore();
     identity(s.getIndices());
+  } else if (auto s = dyn_cast<circt::hls_analysis::AffineStoreEnableOp>(op);
+             s && circt::hlsest::Config::get()
+                      .scheduling.bankStoreRecurrences) {
+    // The store of one bank of a partitioned array whose bank is chosen at
+    // run time (--memory-banking-bram), enabled where its bank is the one
+    // chosen: the array's store before banking, so the array's loop-carried
+    // recurrence stays visible (OPEN_ISSUES O170 (a): polybench_pragmas
+    // k2mm `tmp1[i][j] +=` with tmp1 cyclic 4 on j; Vitis II 8).
+    a.mem = s.getMemref();
+    a.isStore = true;
+    a.value = s.getValue();
+    composed(s.getMap(), s.getMapOperands());
+    a.pred = s.getCondition();
+    a.hasPred = true;
+    a.predOperands.assign(s.getSetOperands().begin(),
+                          s.getSetOperands().end());
   } else {
     return std::nullopt;
   }
@@ -301,6 +357,8 @@ std::optional<Access> accessOf(Operation *op) {
 /// The same map over the same operand values: the same address in every
 /// iteration, whether or not it can be evaluated.
 bool identicalAddress(const Access &x, const Access &y) {
+  if (x.hasPred || y.hasPred)
+    return false; // the same address, but maybe not in the same iterations
   return x.map == y.map && x.operands == y.operands;
 }
 
@@ -331,6 +389,36 @@ void evaluate(Access &a, const LoopShape &shape, AddressEvaluator &eval,
         return;
       }
       coords.push_back(*x);
+    }
+    if (a.hasPred) {
+      SmallVector<int64_t, 4> pv;
+      for (Value v : a.predOperands) {
+        std::optional<int64_t> x = eval.value(v, ivValue);
+        if (!x) {
+          a.known = false;
+          a.addr.clear();
+          return;
+        }
+        pv.push_back(*x);
+      }
+      bool holds = true;
+      for (unsigned c = 0; c < a.pred.getNumConstraints() && holds; ++c) {
+        std::optional<int64_t> x = AddressEvaluator::expr(
+            a.pred.getConstraint(c), pv, a.pred.getNumDims());
+        if (!x) {
+          a.known = false;
+          a.addr.clear();
+          return;
+        }
+        holds = a.pred.isEq(c) ? *x == 0 : *x >= 0;
+      }
+      if (!holds) {
+        // Disabled in this iteration: a sentinel of the iteration (equal
+        // for two accesses disabled in the same iteration, so an element
+        // they both touch whenever enabled stays "the same address").
+        a.addr.push_back(llvm::hash_combine(0x5e471e1, k));
+        continue;
+      }
     }
     a.addr.push_back(llvm::hash_combine_range(coords.begin(), coords.end()));
   }
@@ -604,6 +692,62 @@ static void forwardToGuardedLoads(Block *body, ArrayRef<Access> accesses,
   }
 }
 
+/// The name the user gives a memory in a pragma's `variable=`: the alloca's
+/// source name, the array a bank belongs to, the global a promoted alloca or
+/// a get_global comes from. None for an unnamed memory (a callee parameter
+/// after inlining).
+static std::optional<StringRef> userNameOf(Value mem) {
+  while (Operation *def = mem.getDefiningOp()) {
+    if (auto cast = dyn_cast<memref::CastOp>(def)) {
+      mem = cast.getSource();
+      continue;
+    }
+    if (auto v = def->getAttrOfType<StringAttr>("polygeist.varname"))
+      return v.getValue();
+    if (auto b = def->getAttrOfType<StringAttr>("hls.bank_of"))
+      return b.getValue();
+    if (auto g = def->getAttrOfType<StringAttr>("hls.from_global"))
+      return g.getValue();
+    if (auto g = dyn_cast<memref::GetGlobalOp>(def))
+      return g.getName();
+    return std::nullopt;
+  }
+  return std::nullopt;
+}
+
+/// The variables a `#pragma HLS dependence variable=<v> inter false` (with no
+/// direction, or RAW) declares free of loop-carried read-after-write
+/// dependences, on `loop` or a loop around it: Vitis then schedules a
+/// read-modify-write of <v> as if the next iteration never read what this
+/// one wrote (VITIS_NOTES N122: kernel w9r15rev_rmw_dep, h[in[i]]++ at II 1
+/// with the pragma, II 2 without it (N117)). A pragma on an enclosing loop
+/// is assumed to cover the pipelined loop inside it (unconfirmed).
+static llvm::StringSet<> userInterIndependent(Operation *loop) {
+  llvm::StringSet<> names;
+  for (Operation *op = loop; op && !isa<func::FuncOp>(op);
+       op = op->getParentOp()) {
+    auto arr = op->getAttrOfType<ArrayAttr>("hls.dependence");
+    if (!arr)
+      continue;
+    for (Attribute a : arr) {
+      auto d = dyn_cast<DictionaryAttr>(a);
+      if (!d)
+        continue;
+      auto type = d.getAs<StringAttr>("type");
+      auto dependent = d.getAs<BoolAttr>("dependent");
+      auto variable = d.getAs<StringAttr>("variable");
+      auto direction = d.getAs<StringAttr>("direction");
+      if (!type || type.getValue() != "inter" || !dependent ||
+          dependent.getValue() || !variable)
+        continue;
+      if (direction && !direction.getValue().equals_insensitive("RAW"))
+        continue;
+      names.insert(variable.getValue());
+    }
+  }
+  return names;
+}
+
 MemoryRecurrences circt::hls_analysis::findMemoryRecurrences(
     Operation *loop, llvm::function_ref<int64_t(Operation *)> recurrenceLatency,
     const MemoryRecurrenceOptions &options, unsigned window) {
@@ -623,6 +767,21 @@ MemoryRecurrences circt::hls_analysis::findMemoryRecurrences(
       ++pos;
     });
 
+  // A run-time-bank load takes the enable of its bank's store of the same
+  // address (the bank select of the array's read before banking).
+  for (Access &l : accesses) {
+    if (l.isStore || !l.op->hasAttr("hls.runtime_bank"))
+      continue;
+    for (const Access &st : accesses)
+      if (st.isStore && st.hasPred && st.mem == l.mem && st.map == l.map &&
+          st.operands == l.operands) {
+        l.pred = st.pred;
+        l.hasPred = true;
+        l.predOperands = st.predOperands;
+        break;
+      }
+  }
+
   // Memories both read and written in the body.
   llvm::MapVector<Value, SmallVector<unsigned>> byMem;
   for (auto [i, a] : llvm::enumerate(accesses))
@@ -637,6 +796,7 @@ MemoryRecurrences circt::hls_analysis::findMemoryRecurrences(
   }
   if (candidates.empty())
     return {};
+  llvm::StringSet<> independent = userInterIndependent(loop);
 
   MemoryRecurrences result;
   AddressEvaluator eval(*shape);
@@ -711,10 +871,18 @@ MemoryRecurrences circt::hls_analysis::findMemoryRecurrences(
       forwardToGuardedLoads(shape->body, accesses, idx, result);
     if (!options.recurrences)
       continue;
+    std::optional<StringRef> memName = userNameOf(mem);
+    bool userIndependent = options.userInterIndependence && memName &&
+                           independent.contains(*memName);
 
     ChainSources chains(loop, accesses, loadIndexOf, forwardedFrom,
                         recurrenceLatency);
     DenseMap<unsigned, AddressIndex> loadIndexes;
+    // N154: whether an access of the memref is a lane chosen at run time.
+    const bool dynamicLane =
+        options.dynamicLaneRmw && llvm::any_of(idx, [&](unsigned i) {
+          return accesses[i].op->hasAttr("hls.dynamic_lane");
+        });
     for (unsigned si : stores) {
       const Access &store = accesses[si];
       for (auto [li, chain] : chains.of(store.value)) {
@@ -760,6 +928,21 @@ MemoryRecurrences circt::hls_analysis::findMemoryRecurrences(
                      : sameAddressInIteration(store, load) ? "R1"
                      : alwaysPreviousIteration(store, load) ? "R3"
                                                              : "R2";
+          // N154: a read-modify-write of a lane chosen at run time in an
+          // aggregated word (hls.dynamic_lane, SplitStructMemrefs) is no
+          // promoted element: Vitis addresses the lane, not the word, and
+          // keeps the word in memory; the load waits for the previous
+          // iteration's store, and the lane insert takes one more state
+          // (kernel w9r21p_e1_vecrmw: II 3, one port).
+          // Only at a word address the loop keeps (C[i][j] += x in the j
+          // loop): a lane write that walks the words (p[i >> 3][i & 7] = v,
+          // lit struct_through_calls, Vitis RAM_2P) stays R1.
+          auto invariant = [](const Access &a) {
+            return a.known && !a.addr.empty() && llvm::all_equal(a.addr);
+          };
+          if (dynamicLane && rec.rule == "R1" && invariant(store) &&
+              invariant(load))
+            rec.rule = "N154";
         }
         if (rec.rule == "R1")
           promoteElement();
@@ -767,10 +950,16 @@ MemoryRecurrences circt::hls_analysis::findMemoryRecurrences(
           result.rule[load.op] = "R3";
           ++result.standsFor[store.op];
         }
-        bool throughRegister = rec.rule != "R2";
+        if (userIndependent)
+          continue; // the user's dependence pragma: no carried RAW bound
+        bool throughRegister = rec.rule != "R2" && rec.rule != "N154";
         int64_t ii = throughRegister
                          ? chain
                          : (2 + chain + rec.distance - 1) / rec.distance;
+        if (rec.rule == "N154") {
+          ii += 1; // the lane insert
+          result.laneRecurrences.push_back({store.op, load.op});
+        }
         rec.ii = static_cast<unsigned>(std::max<int64_t>(1, ii));
         if (rec.ii > 1 && (!result.bound || rec.ii > result.bound->ii))
           result.bound = rec;

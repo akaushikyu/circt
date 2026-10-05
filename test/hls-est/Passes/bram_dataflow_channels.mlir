@@ -209,7 +209,11 @@ module {
 
   // OFF: kind=RAM_1P  bram=2
   // OFF: kind=RAM_2P  bram=2
-  // OFF: Total BRAM: 20
+  // OFF: Total BRAM: 17
+  // (20 before W9r22-impl: `lut`'s impl=lutram now makes it distributed RAM
+  // also without the dataflow channel model, VITIS_NOTES N171; 18 before
+  // W9r23-impl: the ram_s2p-bound bank read twice in one state is now one
+  // RAM_S2P at x36, 1 instead of RAM_2P 2, VITIS_NOTES N173.)
 
   // DBG: dataflow ping-pong channel of function @top
   // DBG-NEXT: process {{[0-9]+}} (writes): call @prod @

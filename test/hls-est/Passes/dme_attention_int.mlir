@@ -1,11 +1,18 @@
 // RUN: hls-est %s --symbol-privatize=exclude=attn --symbol-dce --inline --symbol-dce --vitis-fold --canonicalize --sccp --dead-memory-elimination | FileCheck %s --check-prefix=IR
 // RUN: hls-est %s --symbol-privatize=exclude=attn_ctrl --symbol-dce --inline --symbol-dce --vitis-fold --canonicalize --sccp --dead-memory-elimination | FileCheck %s --check-prefix=CTRL
-// RUN: hls-est %s --symbol-privatize=exclude=attn --symbol-dce --inline --symbol-dce --vitis-fold --canonicalize --sccp --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --memory-banking-bram --convert-affine-to-loopschedule=forward-stores=false --bram-analysis --bram-debug --bram-debug-json=%t.json -o /dev/null > %t.out 2> %t.err
+// RUN: hls-est %s --symbol-privatize=exclude=attn --symbol-dce --inline --symbol-dce --vitis-fold --canonicalize --sccp --dead-memory-elimination --config-set tool.hls.pipeline_decision.promote_nest_invariant_only=false --config-set tool.hls.pipeline_decision.promoted_store_cleanup=false --affine-loop-normalize --auto-pipeline-unroll --memory-banking-bram --convert-affine-to-loopschedule=forward-stores=false --bram-analysis --bram-debug --bram-debug-json=%t.json -o /dev/null > %t.out 2> %t.err
 // RUN: FileCheck %s --input-file=%t.err --check-prefix=DBG
 // RUN: FileCheck %s --input-file=%t.json --check-prefix=JSON
-// RUN: hls-est %s --symbol-privatize=exclude=attn_ctrl --symbol-dce --inline --symbol-dce --vitis-fold --canonicalize --sccp --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --memory-banking-bram --convert-affine-to-loopschedule=forward-stores=false --bram-analysis -o /dev/null | FileCheck %s --check-prefix=CTRLBRAM
+// RUN: hls-est %s --symbol-privatize=exclude=attn_ctrl --symbol-dce --inline --symbol-dce --vitis-fold --canonicalize --sccp --dead-memory-elimination --config-set tool.hls.pipeline_decision.promote_nest_invariant_only=false --config-set tool.hls.pipeline_decision.promoted_store_cleanup=false --affine-loop-normalize --auto-pipeline-unroll --memory-banking-bram --convert-affine-to-loopschedule=forward-stores=false --bram-analysis -o /dev/null | FileCheck %s --check-prefix=CTRLBRAM
 
-// The two BRAM RUN lines pin --convert-affine-to-loopschedule=forward-stores=false
+// The two BRAM RUN lines pin promoted_store_cleanup=false (W9r22-impl, VITIS_NOTES N166 (a):
+// with it this reduced kernel, which has no softmax, keeps one store of scores per element and
+// scores becomes RAM_1WNR, 7 copies; the softmax's stores keep the real kernel's scores non-
+// replicable) and promote_nest_invariant_only=false (on by default since W9r18-impl):
+// with it this hand-reduced form keeps V's init store outside the flattened k pipeline, so V
+// looks replicable (7 copies, 14 BRAM), while Vitis' run of the same V shape compiled from C
+// (w9r18i_attv: i, j, k flattened, init store inside, V 2 BRAM) and hls-est on cgeist's form of
+// that C agree on 2 (OPEN_ISSUES O184). They also pin --convert-affine-to-loopschedule=forward-stores=false
 // (the default since W1c, MEMOS.md M6 decision #5): this reduced kernel has no
 // softmax, whose 8 stores of scores[i][j] per row keep scores non-replicable
 // (attention_op_p1: the context loop at II 4 in Vitis and hls-est, V 2 BRAM, not

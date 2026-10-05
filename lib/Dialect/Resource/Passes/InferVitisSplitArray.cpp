@@ -1,16 +1,82 @@
-
-
+//===- InferVitisSplitArray.cpp - array partitions from port pressure -----===//
+//
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
-
-#include "circt/Dialect/Resource/Passes/InferVitisSplitArray.h"
+//
+//===----------------------------------------------------------------------===//
+//
+// Models Vitis HLS' "Inferring pragma 'array_partition ...' due to pipeline
+// pragma". For every pipelined loop it counts, per array, the distinct
+// addresses one iteration reads and writes, compares that with what one memory
+// can serve at the target II, and - when the memory's ports are the
+// bottleneck - attaches the `hls.array_partition` spec that splits the array
+// until they are not. MemoryBankingPassModified consumes the attribute; no
+// memref type is rewritten here.
+//
+//   int a[64][64];
+//   for (i = 0; i < 64; i++)            // pipelined, target II = 1
+//     ... a[i][0] ... a[i][1] ... a[i][63] ...   // inner j loop was unrolled
+//
+//   64 reads per iteration against 1 read port per bank at II = 1
+//     -> factor = max(reads, writes) / II = 64 on the dimension the unrolled
+//        index walks -> `complete dim=2` (factor == extent), like Vitis.
+//
+// The factor is not just that ratio, though: a split only helps if it sends
+// the contending accesses to *different* banks. Every access is reduced to a
+// linear form per dimension, and a candidate (dim, factor) is scored by the
+// worst number of accesses that can land in one bank during one iteration.
+// The smallest factor that meets the target II wins; if none does, the one
+// that gets closest.
+//
+// Position in the pipeline - the pass counts accesses as they stand in the
+// loop body, so whatever Vitis would unroll must be unrolled already:
+//   auto-pipeline-unroll
+//   -> [cse / affine-scalrep / affine-loop-invariant-code-motion, optional]
+//   -> infer-vitis-split-array
+//   -> memory banking -> scheduling / BRAM estimation
+// At that point every innermost loop left is a pipelined loop (see
+// getPipelineII). A loop tagged `hls.flattened_parents = N` by
+// auto-pipeline-unroll is flattened by Vitis with its N enclosing loops: their
+// induction variables are loop-variant for the pipeline, so a load indexed by
+// them is not hoisted and counts (LoopPragmas.h, getFlattenedRoot).
+//
+// Two modes, after Vitis' `syn.array_partition.throughput_driven` (option
+// `td`):
+//   td=auto (default)  the port-pressure inference above. With
+//                      `auto-partitions` it also applies the three rules of
+//                      td=off first (Vitis does them in either mode); off by
+//                      default, so the default output is what it always was.
+//   td=off             no port-pressure partitions at all - Vitis replicates
+//                      instead (RAM_1WNR, priced by --bram-analysis) - only
+//                      the automatic partitions Vitis still makes
+//                      (VITIS_NOTES.md N7, exp-notes/partition.md R5):
+//     (a) [HLS 214-421] an array of at most `complete-threshold` (4) elements
+//         in total, any width or rank -> registers;
+//     (b) [HLS 214-449] a dimension that EVERY access of the array indexes
+//         with a constant (in every loop, pipelined or not, after the
+//         unrolling auto-pipeline-unroll did) -> `complete` on that dimension,
+//         one bank per index (source = "constant-index"); only for an array
+//         with at least one affine access, the ones memory banking splits.
+//         "Constant" is ConstantIndex.h, which banking shares, so every such
+//         access then reads a single bank;
+//     (c) an array that every access indexes with constants in every
+//         dimension -> scalarised (registers).
+//   "Registers" is the unit attribute `hls.registers` on the alloca:
+//   --bram-analysis counts 0 BRAM (status "registers") and the scheduler puts
+//   no port limit on it. Everything else stays one memory, and an array a
+//   user pragma already describes is left alone.
+//
+//===----------------------------------------------------------------------===//
 #include "../Plugins/Builtin/Builtins.h"
+#include "circt/Dialect/Resource/Plugins/PassPolicies.h"
+#include "circt/Dialect/Resource/Plugins/Registry.h"
+#include "circt/Dialect/Resource/Passes/InferVitisSplitArray.h"
 #include "circt/Dialect/Resource/Config/ConfigUtils.h"
 #include "circt/Dialect/Resource/Passes/CallInstances.h"
 #include "circt/Dialect/Resource/Passes/ConstantIndex.h"
 #include "circt/Dialect/Resource/Passes/LoopPragmas.h"
 #include "circt/Dialect/Resource/Passes/PolygeistCompat.h"
-#include "circt/Dialect/Resource/Plugins/PassPolicies.h"
-#include "circt/Dialect/Resource/Plugins/Registry.h"
 #include "mlir/Dialect/Affine/Analysis/LoopAnalysis.h"
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
@@ -32,12 +98,12 @@
 #include "llvm/Support/MathExtras.h"
 #include "llvm/Support/raw_ostream.h"
 
-#include "circt/Dialect/Resource/Interfaces/MemoryDS.h"
 #include <algorithm>
-#include <circt/Dialect/Resource/Interfaces/MemoryOpInterface.h.inc>
 #include <optional>
 #include <set>
 #include <string>
+#include "circt/Dialect/Resource/Interfaces/MemoryDS.h"
+#include <circt/Dialect/Resource/Interfaces/MemoryOpInterface.h.inc>
 
 #define DEBUG_TYPE "infer-vitis-split-array"
 
@@ -52,6 +118,9 @@ using namespace circt::hls_analysis;
 
 namespace {
 
+// Attribute spellings. `hls.array_partition` is the one the Polygeist fork
+// emits and MemoryResourceOpInterface::getPartitionSpec() parses:
+//   [{dim = 1 : i32, factor = 2 : i32, kind = "cyclic", variable = "buf"}]
 constexpr StringLiteral kPartitionAttr = "hls.array_partition";
 constexpr StringLiteral kPressureAttr = "hls.port_pressure";
 /// Why a partition was inferred, for the --bram-debug report (string; memory
@@ -66,14 +135,25 @@ constexpr StringLiteral kSourcePressure = "infer-from-design";
 constexpr StringLiteral kSourceConstantIndex = "constant-index";
 /// Pragmas that already decide how an array is stored; such an array is left
 /// to them by the automatic partitions (a)-(c).
+// The attributes by which the user decided an array's storage
+// (frontend.user_storage_pragmas: hls.array_partition, hls.array_reshape,
+// hls.bind_storage, hls.stream).
+
+// Factors above tool.hls.partitioning.inference.max_scanned_factor (65536)
+// are never scanned one by one. Purely a guard against degenerate inputs
+// (a[i] next to a[i + 2^40]); real factors are tiny.
+
+//===----------------------------------------------------------------------===//
+// Access model
+//===----------------------------------------------------------------------===//
 
 /// Names SSA values with small ids so linear forms built from different
 /// accesses (each with its own map operand list) are directly comparable.
 class TermTable {
 public:
-  unsigned idFor(Value valueHandle) {
+  unsigned idFor(Value v) {
     unsigned next = ids.size();
-    return ids.try_emplace(valueHandle, next).first->second;
+    return ids.try_emplace(v, next).first->second;
   }
 
 private:
@@ -84,16 +164,16 @@ private:
 ///     sum_k coeff_k * term_k + constant
 /// A term is a loop iteration counter, a symbol, or any other index value.
 struct LinearIndex {
-
+  // (term id, coefficient), sorted by id, no zero coefficients.
   SmallVector<std::pair<unsigned, int64_t>, 2> terms;
   int64_t constant = 0;
-  bool opaque = false;
+  bool opaque = false; // mod / floordiv / ...: nothing is known
 };
 
 struct Access {
   Operation *op = nullptr;
   bool isWrite = false;
-  SmallVector<LinearIndex, 3> index;
+  SmallVector<LinearIndex, 3> index; // one entry per memref dimension
 };
 
 /// What one pipelined loop asks of one memory in a single iteration: distinct
@@ -145,7 +225,7 @@ static LinearIndex makeLinearIndex(AffineExpr expr, unsigned numDims,
                                    ValueRange operands, TermTable &terms) {
   LinearIndex li;
   SmallVector<int64_t, 8> coeffs(operands.size(), 0);
-  if (!accumulateLinear(expr, 1, numDims, coeffs, li.constant)) {
+  if (!accumulateLinear(expr, /*scale=*/1, numDims, coeffs, li.constant)) {
     li = LinearIndex();
     li.opaque = true;
     return li;
@@ -155,22 +235,25 @@ static LinearIndex makeLinearIndex(AffineExpr expr, unsigned numDims,
     int64_t coeff = rawCoeff;
     if (coeff == 0)
       continue;
-    Value valueHandle = operands[pos];
-    if (std::optional<int64_t> cst = getConstantIntValue(valueHandle)) {
+    Value v = operands[pos];
+    if (std::optional<int64_t> cst = getConstantIntValue(v)) {
       li.constant += coeff * *cst;
       continue;
     }
-
-    if (isAffineForInductionVar(valueHandle)) {
-      AffineForOp owner = getForInductionVarOwner(valueHandle);
+    // iv = lb + step * t. Express the index in the iteration counter t so that
+    // `for i = 0 to N step 4 { a[i], a[i+1], ... }` is seen to pin a[i + c] to
+    // bank (c mod 4) rather than rotating through the banks.
+    if (isAffineForInductionVar(v)) {
+      AffineForOp owner = getForInductionVarOwner(v);
       if (owner.hasConstantLowerBound()) {
         li.constant += coeff * owner.getConstantLowerBound();
         coeff *= owner.getStepAsInt();
       }
     }
-    li.terms.emplace_back(terms.idFor(valueHandle), coeff);
+    li.terms.emplace_back(terms.idFor(v), coeff);
   }
 
+  // Canonical form: sorted by term, duplicates merged, zeros dropped.
   llvm::sort(li.terms);
   SmallVector<std::pair<unsigned, int64_t>, 2> merged;
   for (auto [id, coeff] : li.terms) {
@@ -190,15 +273,15 @@ static void analyzeAddress(AffineMap map, ValueRange mapOperands,
                            AffineForOp loop, TermTable &terms, Access &access,
                            bool &loopInvariant) {
   SmallVector<Value, 8> operands(mapOperands.begin(), mapOperands.end());
-
+  // Look through affine.apply producers (e.g. the 2*j left by loop
+  // normalization) so coefficients are those of the real loop counters.
   fullyComposeAffineMapAndOperands(&map, &operands);
   canonicalizeMapAndOperands(&map, &operands);
   map = simplifyAffineMap(map);
 
   LoopLikeOpInterface root = getFlattenedRoot(loop);
-  loopInvariant = llvm::all_of(operands, [&](Value valueHandle) {
-    return root.isDefinedOutsideOfLoop(valueHandle);
-  });
+  loopInvariant = llvm::all_of(
+      operands, [&](Value v) { return root.isDefinedOutsideOfLoop(v); });
   for (AffineExpr expr : map.getResults())
     access.index.push_back(
         makeLinearIndex(expr, map.getNumDims(), operands, terms));
@@ -241,8 +324,8 @@ static bool isWrittenInFlattenedParents(Value mem, AffineForOp loop) {
     }
     SmallVector<MemoryEffects::EffectInstance> effects;
     eff.getEffectsOnValue(mem, effects);
-    for (auto &entryValue : effects)
-      if (!isa<MemoryEffects::Read>(entryValue.getEffect())) {
+    for (auto &e : effects)
+      if (!isa<MemoryEffects::Read>(e.getEffect())) {
         written = true;
         return WalkResult::interrupt();
       }
@@ -269,7 +352,7 @@ collectRegions(AffineForOp loop, unsigned targetII, TermTable &terms,
     bool loopInvariant = false;
   };
   llvm::MapVector<Value, SmallVector<RawAccess, 8>> raw;
-  MLIRContext *context = loop.getContext();
+  MLIRContext *ctx = loop.getContext();
 
   loop.getBody()->walk([&](Operation *op) {
     RawAccess ra;
@@ -287,13 +370,13 @@ collectRegions(AffineForOp loop, unsigned targetII, TermTable &terms,
     } else if (auto load = dyn_cast<memref::LoadOp>(op)) {
       mem = load.getMemRef();
       analyzeAddress(
-          AffineMap::getMultiDimIdentityMap(load.getIndices().size(), context),
+          AffineMap::getMultiDimIdentityMap(load.getIndices().size(), ctx),
           load.getIndices(), loop, terms, ra.access, ra.loopInvariant);
     } else if (auto store = dyn_cast<memref::StoreOp>(op)) {
       mem = store.getMemRef();
       ra.access.isWrite = true;
       analyzeAddress(
-          AffineMap::getMultiDimIdentityMap(store.getIndices().size(), context),
+          AffineMap::getMultiDimIdentityMap(store.getIndices().size(), ctx),
           store.getIndices(), loop, terms, ra.access, ra.loopInvariant);
     } else {
       return;
@@ -325,11 +408,15 @@ collectRegions(AffineForOp loop, unsigned targetII, TermTable &terms,
   }
 }
 
+//===----------------------------------------------------------------------===//
+// Contention model
+//===----------------------------------------------------------------------===//
+
 /// What one memory bank can do in one clock cycle.
 struct PortModel {
-  unsigned ports;
-  unsigned readPorts;
-  unsigned writePorts;
+  unsigned ports;      // accesses of any kind
+  unsigned readPorts;  // reads
+  unsigned writePorts; // writes
 };
 
 /// Worst-case accesses landing in a single bank during one iteration. Each
@@ -345,23 +432,23 @@ struct BankLoad {
     total += other.total;
     return *this;
   }
-  static BankLoad max(const BankLoad &a, const BankLoad &buildPoint) {
-    BankLoad memoryOp;
-    memoryOp.reads = std::max(a.reads, buildPoint.reads);
-    memoryOp.writes = std::max(a.writes, buildPoint.writes);
-    memoryOp.total = std::max(a.total, buildPoint.total);
-    return memoryOp;
+  static BankLoad max(const BankLoad &a, const BankLoad &b) {
+    BankLoad m;
+    m.reads = std::max(a.reads, b.reads);
+    m.writes = std::max(a.writes, b.writes);
+    m.total = std::max(a.total, b.total);
+    return m;
   }
 };
 
 struct PartitionChoice {
-  unsigned dim;
-  int64_t factor;
+  unsigned dim;   // 0-based
+  int64_t factor; // number of banks along `dim`; == extent means complete
 };
 
 static int64_t floorMod(int64_t value, int64_t modulus) {
-  int64_t resultValue = value % modulus;
-  return resultValue < 0 ? resultValue + modulus : resultValue;
+  int64_t r = value % modulus;
+  return r < 0 ? r + modulus : r;
 }
 
 /// Upper bound on how many of `accesses` can hit one bank in one iteration
@@ -399,10 +486,10 @@ static BankLoad worstBankLoad(ArrayRef<const Access *> accesses,
   using Bucket = SmallVector<const Access *, 8>;
   using Signature = SmallVector<std::pair<unsigned, int64_t>, 2>;
   struct RotatingGroup {
-    Signature signature;
-    llvm::MapVector<int64_t, Bucket> classes;
+    Signature signature;                      // coefficients mod factor
+    llvm::MapVector<int64_t, Bucket> classes; // constant mod factor -> accesses
   };
-  llvm::MapVector<int64_t, Bucket> fixedBank;
+  llvm::MapVector<int64_t, Bucket> fixedBank; // known bank -> accesses
   Bucket anyBank;
   SmallVector<RotatingGroup, 2> groups;
 
@@ -442,7 +529,8 @@ static BankLoad worstBankLoad(ArrayRef<const Access *> accesses,
     bucket.append(anyBank.begin(), anyBank.end());
     load = BankLoad::max(load, worstBankLoad(bucket, rest, rotatingAware));
   }
-
+  // Different rotating groups cannot be told apart statically: assume the
+  // worst class of each meets in the same bank.
   for (RotatingGroup &group : groups) {
     BankLoad worstClass;
     for (auto &entry : group.classes)
@@ -468,7 +556,7 @@ static unsigned resourceMII(const BankLoad &load, const PortModel &pm) {
 
 /// The loop a memory's ports hold back the most.
 struct PortLimit {
-  unsigned excess = 0;
+  unsigned excess = 0; // resource MII - target II; 0: the ports keep up
   unsigned mii = 1;
   const PipelineRegion *region = nullptr;
 };
@@ -516,8 +604,8 @@ static int64_t stableFactorBound(ArrayRef<PipelineRegion> regions,
 
 struct PartitionPlan {
   SmallVector<PartitionChoice, 2> parts;
-  PortLimit before;
-  PortLimit after;
+  PortLimit before; // with the array in one piece
+  PortLimit after;  // with `parts` applied
 };
 
 /// Greedy search, one dimension per round: take the (dim, factor) that brings
@@ -539,9 +627,8 @@ static PartitionPlan inferPartition(ArrayRef<PipelineRegion> regions,
       int64_t extent = shape[dim];
       if (ShapedType::isDynamic(extent) || extent < 2)
         continue;
-      if (llvm::any_of(plan.parts, [&](const PartitionChoice &portValue) {
-            return portValue.dim == dim;
-          }))
+      if (llvm::any_of(plan.parts,
+                       [&](const PartitionChoice &p) { return p.dim == dim; }))
         continue;
 
       int64_t limit = maxFactor > 0 ? std::min(extent, maxFactor) : extent;
@@ -551,7 +638,7 @@ static PartitionPlan inferPartition(ArrayRef<PipelineRegion> regions,
         SmallVector<PartitionChoice, 2> trial(plan.parts);
         trial.push_back({dim, factor});
         PortLimit trialLimit = portLimit(regions, trial, pm, rotatingAware);
-
+        // On ties the smallest factor wins, then the lowest dimension.
         if (trialLimit.excess < bestLimit.excess ||
             (best && trialLimit.excess == bestLimit.excess &&
              factor < best->factor)) {
@@ -559,7 +646,7 @@ static PartitionPlan inferPartition(ArrayRef<PipelineRegion> regions,
           bestLimit = trialLimit;
         }
         if (trialLimit.excess == 0)
-          break;
+          break; // larger factors only cost more banks
       }
     }
 
@@ -570,6 +657,10 @@ static PartitionPlan inferPartition(ArrayRef<PipelineRegion> regions,
   }
   return plan;
 }
+
+//===----------------------------------------------------------------------===//
+// IR plumbing
+//===----------------------------------------------------------------------===//
 
 /// Target II a user asked for on this loop, if any. Accepts
 /// `hls.pipeline = {ii = N}` or `[{ii = N}]`.
@@ -618,28 +709,25 @@ static StringRef kindName(const PartitionChoice &part,
 
 /// Same encoding as a user pragma, tagged with a provenance string (`source`)
 /// so user and inferred partitions stay distinguishable.
-static ArrayAttr buildPartitionAttr(Builder &buildPoint,
-                                    ArrayRef<PartitionChoice> parts,
-                                    ArrayRef<int64_t> shape, StringAttr varName,
+static ArrayAttr buildPartitionAttr(Builder &b, ArrayRef<PartitionChoice> parts,
+                                    ArrayRef<int64_t> shape,
+                                    StringAttr varName,
                                     StringRef source = kSourcePressure) {
   SmallVector<Attribute, 2> entries;
   for (const PartitionChoice &part : parts) {
     SmallVector<NamedAttribute, 5> fields;
-
-    fields.push_back(buildPoint.getNamedAttr(
-        "dim", buildPoint.getI32IntegerAttr(part.dim + 1)));
-    fields.push_back(buildPoint.getNamedAttr(
-        "factor",
-        buildPoint.getI32IntegerAttr(static_cast<int32_t>(part.factor))));
-    fields.push_back(buildPoint.getNamedAttr(
-        "kind", buildPoint.getStringAttr(kindName(part, shape))));
+    // Vitis numbers dimensions from 1; getPartitionSpec() subtracts it again.
+    fields.push_back(b.getNamedAttr("dim", b.getI32IntegerAttr(part.dim + 1)));
+    fields.push_back(b.getNamedAttr(
+        "factor", b.getI32IntegerAttr(static_cast<int32_t>(part.factor))));
     fields.push_back(
-        buildPoint.getNamedAttr("source", buildPoint.getStringAttr(source)));
+        b.getNamedAttr("kind", b.getStringAttr(kindName(part, shape))));
+    fields.push_back(b.getNamedAttr("source", b.getStringAttr(source)));
     if (varName)
-      fields.push_back(buildPoint.getNamedAttr("variable", varName));
-    entries.push_back(buildPoint.getDictionaryAttr(fields));
+      fields.push_back(b.getNamedAttr("variable", varName));
+    entries.push_back(b.getDictionaryAttr(fields));
   }
-  return buildPoint.getArrayAttr(entries);
+  return b.getArrayAttr(entries);
 }
 
 /// One line for `hls.partition_reason`: the loop whose port demand drove the
@@ -647,8 +735,8 @@ static ArrayAttr buildPartitionAttr(Builder &buildPoint,
 static std::string describePartitionReason(const PartitionPlan &plan,
                                            const PipelineRegion &region,
                                            ArrayRef<int64_t> shape) {
-  std::string stringValue;
-  llvm::raw_string_ostream os(stringValue);
+  std::string s;
+  llvm::raw_string_ostream os(s);
   AffineForOp loop = region.loop;
   os << "pipelined loop";
   if (loop.hasConstantBounds())
@@ -672,22 +760,29 @@ static std::string describePartitionReason(const PartitionPlan &plan,
       " x ");
   os << " (port-limited II " << plan.before.mii << " -> " << plan.after.mii
      << ")";
-  return stringValue;
+  return s;
 }
 
-static ArrayAttr buildPressureAttr(Builder &buildPoint,
+static ArrayAttr buildPressureAttr(Builder &b,
                                    ArrayRef<PipelineRegion> regions) {
   SmallVector<Attribute, 2> entries;
   for (const PipelineRegion &region : regions)
-    entries.push_back(buildPoint.getDictionaryAttr(
-        {buildPoint.getNamedAttr("ii",
-                                 buildPoint.getI32IntegerAttr(region.targetII)),
-         buildPoint.getNamedAttr("reads",
-                                 buildPoint.getI32IntegerAttr(region.reads)),
-         buildPoint.getNamedAttr(
-             "writes", buildPoint.getI32IntegerAttr(region.writes))}));
-  return buildPoint.getArrayAttr(entries);
+    entries.push_back(b.getDictionaryAttr(
+        {b.getNamedAttr("ii", b.getI32IntegerAttr(region.targetII)),
+         b.getNamedAttr("reads", b.getI32IntegerAttr(region.reads)),
+         b.getNamedAttr("writes", b.getI32IntegerAttr(region.writes))}));
+  return b.getArrayAttr(entries);
 }
+
+//===----------------------------------------------------------------------===//
+// Automatic partitions independent of throughput (td=off rules (a)-(c))
+//===----------------------------------------------------------------------===//
+
+// What counts as a constant index (an integer constant, also through an index
+// cast, or the counter of a loop that runs exactly once) is defined once, in
+// ConstantIndex.h, and memory banking resolves exactly the same indices to a
+// constant bank: a dimension split here because only constants index it is
+// then read one bank at a time.
 
 /// Per memref dimension: whether the access's index is a constant. On a
 /// dimension d with blockSizes[d] = B > 1 (a user block partition), the
@@ -697,27 +792,28 @@ static SmallVector<bool>
 constantDimsOfAffine(AffineMap map, ValueRange mapOperands,
                      ArrayRef<int64_t> blockSizes = {}) {
   SmallVector<Value, 8> operands(mapOperands.begin(), mapOperands.end());
-
+  // Through affine.apply producers (unrolling leaves `apply (d0 + 1)(%c0)`).
   fullyComposeAffineMapAndOperands(&map, &operands);
   AffineMap folded = foldConstantIndexOperands(map, operands);
   SmallVector<bool> dims;
-
+  // A partially unrolled loop keeps its step (`for j = 0 to 64 step 8`,
+  // copies at j + u): its counter is lb + step * k, which the modulo below
+  // must see.
   SmallVector<AffineExpr> counters;
-  for (unsigned loopIndex = 0; loopIndex < folded.getNumDims(); ++loopIndex) {
-    AffineExpr dim = getAffineDimExpr(loopIndex, map.getContext());
-    if (loopIndex < operands.size())
-      if (AffineForOp loop = getForInductionVarOwner(operands[loopIndex]))
+  for (unsigned i = 0; i < folded.getNumDims(); ++i) {
+    AffineExpr dim = getAffineDimExpr(i, map.getContext());
+    if (i < operands.size())
+      if (AffineForOp loop = getForInductionVarOwner(operands[i]))
         if (loop.hasConstantLowerBound() && loop.getStepAsInt() > 1)
           dim = dim * loop.getStepAsInt() + loop.getConstantLowerBound();
     counters.push_back(dim);
   }
-  for (auto [dimensionIndex, expr] : llvm::enumerate(folded.getResults())) {
+  for (auto [d, expr] : llvm::enumerate(folded.getResults())) {
     bool constant = isa<AffineConstantExpr>(expr);
-    if (!constant && dimensionIndex < blockSizes.size() &&
-        blockSizes[dimensionIndex] > 1)
+    if (!constant && d < blockSizes.size() && blockSizes[d] > 1)
       constant = isa<AffineConstantExpr>(simplifyAffineExpr(
-          expr.replaceDims(counters) % blockSizes[dimensionIndex],
-          folded.getNumDims(), folded.getNumSymbols()));
+          expr.replaceDims(counters) % blockSizes[d], folded.getNumDims(),
+          folded.getNumSymbols()));
     dims.push_back(constant);
   }
   return dims;
@@ -725,33 +821,30 @@ constantDimsOfAffine(AffineMap map, ValueRange mapOperands,
 
 /// Whether a user array_partition of `def` is `complete` on every dimension
 /// of `ty` (dim=0, or one complete entry per dimension).
-static bool userCompleteEveryDim(Operation *def, MemRefType memRefType) {
+static bool userCompleteEveryDim(Operation *def, MemRefType ty) {
   auto entries = def->getAttrOfType<ArrayAttr>(kPartitionAttr);
   if (!entries)
     return false;
-  SmallVector<bool> complete(memRefType.getRank(), false);
+  SmallVector<bool> complete(ty.getRank(), false);
   for (Attribute a : entries) {
     auto entry = dyn_cast<DictionaryAttr>(a);
     auto dim = entry ? entry.getAs<IntegerAttr>("dim") : IntegerAttr();
     auto kind = entry ? entry.getAs<StringAttr>("kind") : StringAttr();
     if (!dim || !kind || kind.getValue() != "complete")
       continue;
-    for (int64_t dimensionIndex = 0; dimensionIndex < memRefType.getRank();
-         ++dimensionIndex)
-      if (dim.getInt() == dimensionIndex + 1 || dim.getInt() == 0)
-        complete[dimensionIndex] = true;
+    for (int64_t d = 0; d < ty.getRank(); ++d)
+      if (dim.getInt() == d + 1 || dim.getInt() == 0)
+        complete[d] = true;
   }
-  return llvm::all_of(complete,
-                      [](bool candidateValue) { return candidateValue; });
+  return llvm::all_of(complete, [](bool c) { return c; });
 }
 
 /// Per dimension of `def` (type `ty`): the block size of a user block
 /// array_partition on it, 0 without one (N104).
-static SmallVector<int64_t> userBlockSizes(Operation *def,
-                                           MemRefType memRefType) {
-  SmallVector<int64_t> sizes(memRefType.getRank(), 0);
+static SmallVector<int64_t> userBlockSizes(Operation *def, MemRefType ty) {
+  SmallVector<int64_t> sizes(ty.getRank(), 0);
   auto entries = def->getAttrOfType<ArrayAttr>(kPartitionAttr);
-  if (!entries || !memRefType.hasStaticShape())
+  if (!entries || !ty.hasStaticShape())
     return sizes;
   for (Attribute a : entries) {
     auto entry = dyn_cast<DictionaryAttr>(a);
@@ -761,12 +854,10 @@ static SmallVector<int64_t> userBlockSizes(Operation *def,
     if (!dim || !kind || !factor || factor.getInt() <= 1 ||
         kind.getValue() != "block")
       continue;
-    for (int64_t dimensionIndex = 0; dimensionIndex < memRefType.getRank();
-         ++dimensionIndex)
-      if (dim.getInt() == dimensionIndex + 1 || dim.getInt() == 0) {
-        int64_t extent = memRefType.getDimSize(dimensionIndex);
-        sizes[dimensionIndex] =
-            (extent + factor.getInt() - 1) / factor.getInt();
+    for (int64_t d = 0; d < ty.getRank(); ++d)
+      if (dim.getInt() == d + 1 || dim.getInt() == 0) {
+        int64_t extent = ty.getDimSize(d);
+        sizes[d] = (extent + factor.getInt() - 1) / factor.getInt();
       }
   }
   return sizes;
@@ -774,8 +865,8 @@ static SmallVector<int64_t> userBlockSizes(Operation *def,
 
 static SmallVector<bool> constantDimsOfIndices(ValueRange indices) {
   SmallVector<bool> dims;
-  for (Value indexValue : indices)
-    dims.push_back(getConstantIndexValue(indexValue).has_value());
+  for (Value idx : indices)
+    dims.push_back(getConstantIndexValue(idx).has_value());
   return dims;
 }
 
@@ -816,9 +907,9 @@ static bool isStaticInitStore(Operation *store, Value stored) {
       flag = ld.getMemRef();
     else if (auto ld = dyn_cast_or_null<memref::LoadOp>(def))
       flag = ld.getMemRef();
-    if (auto globalUse = flag ? flag.getDefiningOp<memref::GetGlobalOp>()
-                              : memref::GetGlobalOp())
-      if (globalUse.getName().ends_with("@init"))
+    if (auto gg = flag ? flag.getDefiningOp<memref::GetGlobalOp>()
+                       : memref::GetGlobalOp())
+      if (gg.getName().ends_with("@init"))
         return true;
   }
   return false;
@@ -838,7 +929,8 @@ static bool viewsFollowed() {
 /// and dataflow processes the array is passed to); otherwise, or for a
 /// callee without a body, the call stops the analysis.
 static void analyzeConstantIndexUses(Value mem, unsigned rank,
-                                     bool throughCalls, ConstantIndexInfo &info,
+                                     bool throughCalls,
+                                     ConstantIndexInfo &info,
                                      SmallPtrSetImpl<Value> &visited,
                                      ArrayRef<int64_t> blockSizes) {
   if (!visited.insert(mem).second)
@@ -846,7 +938,10 @@ static void analyzeConstantIndexUses(Value mem, unsigned rank,
   for (OpOperand &use : mem.getUses()) {
     Operation *user = use.getOwner();
     SmallVector<bool> dims;
-
+    // A view of the array taken for a reference / pointer parameter (`f(a[i])`
+    // with `T &`, or a cast to a dynamic shape): its accesses are the
+    // array's (VITIS_NOTES N94 through the view; Dehazing's vals_tmp elements
+    // passed to compare_and_swap_unit are scalars in Vitis, 214-449).
     if (throughCalls && viewsFollowed()) {
       if (auto cast = dyn_cast<memref::CastOp>(user)) {
         auto to = dyn_cast<MemRefType>(cast.getType());
@@ -868,8 +963,8 @@ static void analyzeConstantIndexUses(Value mem, unsigned rank,
         unsigned viewRank = static_cast<unsigned>(to.getRank());
         ConstantIndexInfo view;
         view.constantDim.assign(viewRank, true);
-        analyzeConstantIndexUses(sub.getResult(), viewRank, throughCalls, view,
-                                 visited, {});
+        analyzeConstantIndexUses(sub.getResult(), viewRank, throughCalls,
+                                 view, visited, {});
         if (!view.complete) {
           info.complete = false;
           return;
@@ -878,29 +973,28 @@ static void analyzeConstantIndexUses(Value mem, unsigned rank,
         info.accesses += view.accesses;
         info.affineAccesses += view.affineAccesses;
         bool indexConst = getConstantIndexValue(sub.getIndex()).has_value();
-
+        // Row select: dimension 0 is the view's index, the rest the view's
+        // dimensions. Element view: dimension 0 is index + the view's first
+        // index, the rest agree.
         bool rowSelect = sub.isRowSelect();
         if (view.accesses) {
-          for (unsigned dimensionIndex = 0; dimensionIndex < rank;
-               ++dimensionIndex) {
-            bool candidateValue;
-            if (dimensionIndex == 0)
-              candidateValue = indexConst && (rowSelect || view.constantDim[0]);
+          for (unsigned d = 0; d < rank; ++d) {
+            bool c;
+            if (d == 0)
+              c = indexConst && (rowSelect || view.constantDim[0]);
             else
-              candidateValue = view.constantDim[rowSelect ? dimensionIndex - 1
-                                                          : dimensionIndex];
-            info.constantDim[dimensionIndex] =
-                info.constantDim[dimensionIndex] && candidateValue;
+              c = view.constantDim[rowSelect ? d - 1 : d];
+            info.constantDim[d] = info.constantDim[d] && c;
           }
         }
         continue;
       }
     }
-    if (auto callSite = dyn_cast<func::CallOp>(user);
-        callSite && throughCalls) {
-      auto callee = dyn_cast_or_null<func::FuncOp>(callSite.resolveCallable());
+    if (auto call = dyn_cast<func::CallOp>(user); call && throughCalls) {
+      auto callee = dyn_cast_or_null<func::FuncOp>(call.resolveCallable());
       unsigned index = use.getOperandNumber();
-      if (!callee || callee.isExternal() || index >= callee.getNumArguments() ||
+      if (!callee || callee.isExternal() ||
+          index >= callee.getNumArguments() ||
           callee.getArgument(index).getType() != mem.getType()) {
         info.complete = false;
         return;
@@ -926,8 +1020,8 @@ static void analyzeConstantIndexUses(Value mem, unsigned rank,
     } else if (auto store = dyn_cast<AffineStoreOp>(user);
                store && store.getMemRef() == mem &&
                store.getValueToStore() != mem) {
-      dims = constantDimsOfAffine(store.getAffineMap(), store.getMapOperands(),
-                                  blockSizes);
+      dims = constantDimsOfAffine(store.getAffineMap(),
+                                  store.getMapOperands(), blockSizes);
       ++info.affineAccesses;
     } else if (auto load = dyn_cast<memref::LoadOp>(user)) {
       dims = constantDimsOfIndices(load.getIndices());
@@ -944,9 +1038,8 @@ static void analyzeConstantIndexUses(Value mem, unsigned rank,
       return;
     }
     ++info.accesses;
-    for (unsigned dimensionIndex = 0; dimensionIndex < rank; ++dimensionIndex)
-      info.constantDim[dimensionIndex] =
-          info.constantDim[dimensionIndex] && dims[dimensionIndex];
+    for (unsigned d = 0; d < rank; ++d)
+      info.constantDim[d] = info.constantDim[d] && dims[d];
   }
 }
 
@@ -963,7 +1056,7 @@ analyzeConstantIndices(Value mem, unsigned rank, bool throughCalls,
 /// The decision for one array under rules (a)-(c).
 struct AutomaticPartition {
   enum Kind { None, Registers, ConstantDims } kind = None;
-  SmallVector<PartitionChoice, 2> parts;
+  SmallVector<PartitionChoice, 2> parts; // ConstantDims: complete, per dim
   std::string reason;
   /// None although rule (b) applies: memory banking could not split the
   /// array (no affine access), so no spec is written. `reason` says why.
@@ -972,9 +1065,9 @@ struct AutomaticPartition {
 
 /// The inputs of the automatic rules (a)-(c).
 struct AutomaticRules {
-  int64_t completeThreshold = 4;            ///< (a), elements
-  int64_t constantIndexMinExtent = 2;       ///< (b), elements
-  int64_t constantIndexMaxExtent = 64;      ///< (b), elements; 0: no limit
+  int64_t completeThreshold = 4;           ///< (a), elements
+  int64_t constantIndexMinExtent = 2;      ///< (b), elements
+  int64_t constantIndexMaxExtent = 64;     ///< (b), elements; 0: no limit
   ArrayRef<std::string> userStoragePragmas; ///< arrays the user decided
   /// (b) also on an array with a user cyclic / block array_partition
   /// (VITIS_NOTES N57: 214-270 completes each part).
@@ -1017,7 +1110,8 @@ static bool hasOnlyPipoStream(Operation *def, const AutomaticRules &rules) {
 
 /// Whether the only user storage pragma on `def` is an array_partition (rule
 /// (b) may still add complete entries to it).
-static bool hasOnlyUserPartition(Operation *def, const AutomaticRules &rules) {
+static bool hasOnlyUserPartition(Operation *def,
+                                 const AutomaticRules &rules) {
   if (!def->hasAttr(kPartitionAttr))
     return false;
   for (StringRef pragma : rules.userStoragePragmas)
@@ -1032,9 +1126,8 @@ static bool hasOnlyUserPartition(Operation *def, const AutomaticRules &rules) {
 /// this: zijun_wang lab2 `K_l[N][128]` with `cyclic factor=32 dim=2` gets
 /// 128 banks in Vitis (parts of 4), while A[64][256] with a user cyclic 2 on
 /// dim 1 keeps dim 2 whole (kernel w9r7rev_ap_big; VITIS_NOTES N61).
-static int64_t partExtent(Operation *def, MemRefType memRefType,
-                          unsigned dimensionIndex) {
-  int64_t extent = memRefType.getDimSize(dimensionIndex);
+static int64_t partExtent(Operation *def, MemRefType ty, unsigned d) {
+  int64_t extent = ty.getDimSize(d);
   auto entries = def->getAttrOfType<ArrayAttr>(kPartitionAttr);
   if (!entries)
     return extent;
@@ -1045,8 +1138,7 @@ static int64_t partExtent(Operation *def, MemRefType memRefType,
     auto factor = entry ? entry.getAs<IntegerAttr>("factor") : IntegerAttr();
     if (!dim || !kind || !factor || factor.getInt() <= 1)
       continue;
-    if (dim.getInt() != static_cast<int64_t>(dimensionIndex) + 1 &&
-        dim.getInt() != 0)
+    if (dim.getInt() != static_cast<int64_t>(d) + 1 && dim.getInt() != 0)
       continue;
     if (kind.getValue() == "cyclic" || kind.getValue() == "block")
       extent = (extent + factor.getInt() - 1) / factor.getInt();
@@ -1056,16 +1148,16 @@ static int64_t partExtent(Operation *def, MemRefType memRefType,
 
 /// Whether rules (a)-(c) may look at an array `def` of type `ty` at all: a
 /// static array of words the user has not given a storage pragma.
-static bool isAutomaticCandidate(Operation *def, MemRefType memRefType,
+static bool isAutomaticCandidate(Operation *def, MemRefType ty,
                                  const AutomaticRules &rules) {
-  if (!memRefType.hasStaticShape())
+  if (!ty.hasStaticShape())
     return false;
-  Type elt = memRefType.getElementType();
+  Type elt = ty.getElementType();
   if (!elt.isIntOrFloat() && !isa<IndexType>(elt))
-    return false;
+    return false; // pointer variables, structs: not an array of words
   for (StringRef pragma : rules.userStoragePragmas)
     if (def->hasAttr(pragma))
-      return false;
+      return false; // the user decided
   return true;
 }
 
@@ -1073,11 +1165,11 @@ static bool isAutomaticCandidate(Operation *def, MemRefType memRefType,
 /// call): complete_threshold counts elements, not bits (int[4] fires, char[5]
 /// does not; partition_chk.md R5). It holds for globals and function
 /// statics as for locals (VITIS_NOTES N7 (a), kernel w9rv_r1_glob4).
-static AutomaticPartition decideSmallArray(MemRefType memRefType,
+static AutomaticPartition decideSmallArray(MemRefType ty,
                                            const AutomaticRules &rules) {
   AutomaticPartition decision;
   int64_t completeThreshold = rules.completeThreshold;
-  int64_t elements = memRefType.getNumElements();
+  int64_t elements = ty.getNumElements();
   if (elements > 0 && elements <= completeThreshold) {
     decision.kind = AutomaticPartition::Registers;
     decision.reason = std::to_string(elements) +
@@ -1094,23 +1186,27 @@ static AutomaticPartition decideSmallArray(MemRefType memRefType,
 /// global) say. `onlyB`: rule (c) is not applied, and an array indexed by
 /// constants in every dimension is left alone (unconfirmed for a PIPO stream
 /// and for globals).
-static AutomaticPartition decideFromConstantIndices(
-    Operation *def, MemRefType memRefType, const ConstantIndexInfo &info,
-    const AutomaticRules &rules, bool afterUser, bool onlyB) {
+static AutomaticPartition
+decideFromConstantIndices(Operation *def, MemRefType ty,
+                          const ConstantIndexInfo &info,
+                          const AutomaticRules &rules, bool afterUser,
+                          bool onlyB) {
   AutomaticPartition decision;
-  unsigned rank = memRefType.getRank();
+  unsigned rank = ty.getRank();
   if (!info.complete || info.accesses == 0)
+    return decision; // escapes, or nothing to look at (dead: not ours)
+  if (onlyB && llvm::all_of(info.constantDim, [](bool c) { return c; }))
     return decision;
-  if (onlyB && llvm::all_of(info.constantDim,
-                            [](bool candidateValue) { return candidateValue; }))
-    return decision;
-  bool allConstant = llvm::all_of(
-      info.constantDim, [](bool candidateValue) { return candidateValue; });
-
-  bool userComplete = afterUser && userCompleteEveryDim(def, memRefType);
+  bool allConstant = llvm::all_of(info.constantDim, [](bool c) { return c; });
+  // Accesses through element views: memory banking cannot split the array,
+  // so only registers can follow; a user complete partition of every
+  // dimension is registers as well (VITIS_NOTES N111, kernel w9r15p_rg_net:
+  // `int v[8]` complete, its elements passed by reference).
+  bool userComplete = afterUser && userCompleteEveryDim(def, ty);
   if (info.throughViews && (!allConstant || (afterUser && !userComplete)))
-    return decision;
+    return decision; // banking does not split through the views
 
+  // (c) Every access constant in every dimension: scalarised.
   if ((!afterUser || (userComplete && info.throughViews)) && allConstant) {
     decision.kind = AutomaticPartition::Registers;
     decision.reason = "every one of the " + std::to_string(info.accesses) +
@@ -1120,19 +1216,20 @@ static AutomaticPartition decideFromConstantIndices(
     return decision;
   }
 
+  // (b) Dimensions that only ever see constants, min_extent (2) <= extent <=
+  // max_extent (64): Vitis leaves a larger one whole (kernels w9r7fix_ap_e65
+  // .. e128, e65w8, e128k64 against e64r256 / e64w32; VITIS_NOTES N61).
   SmallVector<unsigned, 2> tooLarge;
-  for (unsigned dimensionIndex = 0; dimensionIndex < rank; ++dimensionIndex) {
-    if (!info.constantDim[dimensionIndex] ||
-        memRefType.getDimSize(dimensionIndex) < rules.constantIndexMinExtent)
+  for (unsigned d = 0; d < rank; ++d) {
+    if (!info.constantDim[d] || ty.getDimSize(d) < rules.constantIndexMinExtent)
       continue;
     if (rules.constantIndexMaxExtent > 0 &&
-        partExtent(def, memRefType, dimensionIndex) >
+        partExtent(def, ty, d) >
             rules.constantIndexMaxExtent) {
-      tooLarge.push_back(dimensionIndex);
+      tooLarge.push_back(d);
       continue;
     }
-    decision.parts.push_back(
-        {dimensionIndex, memRefType.getDimSize(dimensionIndex)});
+    decision.parts.push_back({d, ty.getDimSize(d)});
   }
   if (decision.parts.empty()) {
     if (!tooLarge.empty())
@@ -1140,7 +1237,8 @@ static AutomaticPartition decideFromConstantIndices(
           "dimension " + std::to_string(tooLarge.front() + 1) +
           " is indexed only by constants, but its extent (per part of a "
           "user partition) " +
-          std::to_string(partExtent(def, memRefType, tooLarge.front())) +
+          std::to_string(partExtent(def, ty,
+                                    tooLarge.front())) +
           " exceeds constant_index.max_extent " +
           std::to_string(rules.constantIndexMaxExtent) +
           ": left whole (Vitis does not partition it; VITIS_NOTES N61)";
@@ -1150,10 +1248,11 @@ static AutomaticPartition decideFromConstantIndices(
   llvm::raw_string_ostream os(dims);
   llvm::interleave(
       decision.parts, os,
-      [&](const PartitionChoice &portValue) { os << (portValue.dim + 1); },
-      ", ");
+      [&](const PartitionChoice &p) { os << (p.dim + 1); }, ", ");
   if (info.affineAccesses == 0 && !rules.nonAffineArrays) {
-
+    // Vitis would split it, but memory banking never rewrites an array
+    // without an affine access: a spec would only be priced as one memory
+    // carrying a partition nobody applied. Leave it whole, and say so.
     decision.parts.clear();
     decision.unbankable = true;
     decision.reason = "every one of the " + std::to_string(info.accesses) +
@@ -1176,40 +1275,46 @@ static AutomaticPartition decideFromConstantIndices(
   return decision;
 }
 
-static AutomaticPartition decideAutomaticPartition(memref::AllocaOp localAlloca,
+static AutomaticPartition decideAutomaticPartition(memref::AllocaOp alloca,
                                                    const AutomaticRules &rules,
                                                    bool &afterUser) {
   AutomaticPartition decision;
-  MemRefType memRefType = localAlloca.getType();
-  Operation *def = localAlloca.getOperation();
-
+  MemRefType ty = alloca.getType();
+  Operation *def = alloca.getOperation();
+  // A user cyclic / block partition: Vitis still completes each part along
+  // a dimension every access indexes with a constant after the implied
+  // unroll (N57, kernels w9r7_ap_cyc / ap_blk: 4 user banks -> 32). Only
+  // rule (b) is applied on top of the user's pragma.
   afterUser = rules.afterUserPartition &&
-              hasOnlyUserPartition(localAlloca.getOperation(), rules) &&
-              memRefType.hasStaticShape() &&
-              (memRefType.getElementType().isIntOrFloat() ||
-               isa<IndexType>(memRefType.getElementType()));
+              hasOnlyUserPartition(alloca.getOperation(), rules) &&
+              ty.hasStaticShape() &&
+              (ty.getElementType().isIntOrFloat() ||
+               isa<IndexType>(ty.getElementType()));
   bool pipo = !afterUser && hasOnlyPipoStream(def, rules) &&
-              memRefType.hasStaticShape() &&
-              (memRefType.getElementType().isIntOrFloat() ||
-               isa<IndexType>(memRefType.getElementType()));
-  if (!afterUser && !pipo && !isAutomaticCandidate(def, memRefType, rules))
+              ty.hasStaticShape() &&
+              (ty.getElementType().isIntOrFloat() ||
+               isa<IndexType>(ty.getElementType()));
+  if (!afterUser && !pipo && !isAutomaticCandidate(def, ty, rules))
     return decision;
 
+  // (a) Small arrays.
   if (!afterUser && !pipo) {
-    decision = decideSmallArray(memRefType, rules);
+    decision = decideSmallArray(ty, rules);
     if (decision.kind != AutomaticPartition::None)
       return decision;
   }
 
   SmallVector<int64_t> blockSizes;
   if (afterUser && rules.blockOffset)
-    blockSizes = userBlockSizes(def, memRefType);
-  ConstantIndexInfo info =
-      analyzeConstantIndices(localAlloca.getResult(), memRefType.getRank(),
-                             rules.throughCalls, blockSizes);
-  return decideFromConstantIndices(def, memRefType, info, rules, afterUser,
-                                   pipo);
+    blockSizes = userBlockSizes(def, ty);
+  ConstantIndexInfo info = analyzeConstantIndices(
+      alloca.getResult(), ty.getRank(), rules.throughCalls, blockSizes);
+  return decideFromConstantIndices(def, ty, info, rules, afterUser, pipo);
 }
+
+//===----------------------------------------------------------------------===//
+// Unread register elements (VITIS_NOTES N110)
+//===----------------------------------------------------------------------===//
 
 /// The constant element index of a load / store of `mem`, if every index
 /// folds (getConstantIndexValue through the composed affine map).
@@ -1219,33 +1324,32 @@ static std::optional<SmallVector<int64_t>> constantElement(Operation *op) {
     SmallVector<Value, 8> operands(mapOperands.begin(), mapOperands.end());
     fullyComposeAffineMapAndOperands(&map, &operands);
     AffineMap folded = foldConstantIndexOperands(map, operands);
-    for (AffineExpr entryValue : folded.getResults()) {
-      auto candidateValue = dyn_cast<AffineConstantExpr>(entryValue);
-      if (!candidateValue)
+    for (AffineExpr e : folded.getResults()) {
+      auto c = dyn_cast<AffineConstantExpr>(e);
+      if (!c)
         return false;
-      out.push_back(candidateValue.getValue());
+      out.push_back(c.getValue());
     }
     return true;
   };
   auto fromIndices = [&](ValueRange indices) -> bool {
-    for (Value valueHandle : indices) {
-      std::optional<int64_t> candidateValue =
-          getConstantIndexValue(valueHandle);
-      if (!candidateValue)
+    for (Value v : indices) {
+      std::optional<int64_t> c = getConstantIndexValue(v);
+      if (!c)
         return false;
-      out.push_back(*candidateValue);
+      out.push_back(*c);
     }
     return true;
   };
   bool ok = false;
-  if (auto lowerIndex = dyn_cast<AffineLoadOp>(op))
-    ok = fromAffine(lowerIndex.getAffineMap(), lowerIndex.getMapOperands());
-  else if (auto stringValue = dyn_cast<AffineStoreOp>(op))
-    ok = fromAffine(stringValue.getAffineMap(), stringValue.getMapOperands());
-  else if (auto lowerIndex = dyn_cast<memref::LoadOp>(op))
-    ok = fromIndices(lowerIndex.getIndices());
-  else if (auto stringValue = dyn_cast<memref::StoreOp>(op))
-    ok = fromIndices(stringValue.getIndices());
+  if (auto l = dyn_cast<AffineLoadOp>(op))
+    ok = fromAffine(l.getAffineMap(), l.getMapOperands());
+  else if (auto s = dyn_cast<AffineStoreOp>(op))
+    ok = fromAffine(s.getAffineMap(), s.getMapOperands());
+  else if (auto l = dyn_cast<memref::LoadOp>(op))
+    ok = fromIndices(l.getIndices());
+  else if (auto s = dyn_cast<memref::StoreOp>(op))
+    ok = fromIndices(s.getIndices());
   if (!ok)
     return std::nullopt;
   return out;
@@ -1265,38 +1369,35 @@ static bool collectReadElements(Value mem, bool own,
     Operation *user = use.getOwner();
     if (isa<AffineLoadOp, memref::LoadOp>(user)) {
       if (user->use_empty())
-        continue;
-      std::optional<SmallVector<int64_t>> entryValue = constantElement(user);
-      if (!entryValue)
+        continue; // Vitis deletes a load nothing uses
+      std::optional<SmallVector<int64_t>> e = constantElement(user);
+      if (!e)
         return false;
-      read.insert(*entryValue);
+      read.insert(*e);
       continue;
     }
-    if (auto stringValue = dyn_cast<AffineStoreOp>(user);
-        stringValue && stringValue.getMemRef() == mem) {
+    if (auto s = dyn_cast<AffineStoreOp>(user); s && s.getMemRef() == mem) {
       if (own)
         ownStores.push_back(user);
       continue;
     }
-    if (auto stringValue = dyn_cast<memref::StoreOp>(user);
-        stringValue && stringValue.getMemRef() == mem) {
+    if (auto s = dyn_cast<memref::StoreOp>(user); s && s.getMemRef() == mem) {
       if (own)
         ownStores.push_back(user);
       continue;
     }
-    if (auto callSite = dyn_cast<func::CallOp>(user)) {
-      auto callee = dyn_cast_or_null<func::FuncOp>(callSite.resolveCallable());
-      unsigned elementCount = use.getOperandNumber();
-      if (!callee || callee.isExternal() ||
-          elementCount >= callee.getNumArguments() ||
-          callee.getArgument(elementCount).getType() != mem.getType())
+    if (auto call = dyn_cast<func::CallOp>(user)) {
+      auto callee = dyn_cast_or_null<func::FuncOp>(call.resolveCallable());
+      unsigned n = use.getOperandNumber();
+      if (!callee || callee.isExternal() || n >= callee.getNumArguments() ||
+          callee.getArgument(n).getType() != mem.getType())
         return false;
-      if (!collectReadElements(callee.getArgument(elementCount), false, read,
+      if (!collectReadElements(callee.getArgument(n), /*own=*/false, read,
                                ownStores, visited))
         return false;
       continue;
     }
-    return false;
+    return false; // a view, a return, an unknown op
   }
   return true;
 }
@@ -1320,42 +1421,42 @@ static unsigned removeUnreadRegisterElements(ModuleOp module) {
     std::set<SmallVector<int64_t>> read;
     SmallVector<Operation *> stores;
     SmallPtrSet<Value, 4> visited;
-
-    if (!collectReadElements(a.getResult(), true, read, stores, visited) ||
+    // An array no load reads at all is dead-memory elimination's (the
+    // promoted accumulator whose loads became iter_args keeps its alloca).
+    if (!collectReadElements(a.getResult(), /*own=*/true, read, stores,
+                             visited) ||
         read.empty())
       continue;
     SmallVector<Operation *> worklist;
     unsigned erasedHere = 0;
     for (Operation *st : stores) {
-      std::optional<SmallVector<int64_t>> entryValue = constantElement(st);
-      if (!entryValue || read.count(*entryValue))
+      std::optional<SmallVector<int64_t>> e = constantElement(st);
+      if (!e || read.count(*e))
         continue;
       ++erasedHere;
-      for (Value valueHandle : st->getOperands())
-        if (Operation *def = valueHandle.getDefiningOp();
-            def && valueHandle != a.getResult())
+      for (Value v : st->getOperands())
+        if (Operation *def = v.getDefiningOp(); def && v != a.getResult())
           worklist.push_back(def);
       st->erase();
       ++erased;
     }
-
+    // The values only the deleted stores used.
     llvm::DenseSet<Operation *> gone;
     while (!worklist.empty()) {
       Operation *op = worklist.pop_back_val();
       if (gone.contains(op) || !isOpTriviallyDead(op))
         continue;
-      for (Value valueHandle : op->getOperands())
-        if (Operation *def = valueHandle.getDefiningOp())
+      for (Value v : op->getOperands())
+        if (Operation *def = v.getDefiningOp())
           worklist.push_back(def);
       gone.insert(op);
       op->erase();
     }
-
+    // Debug provenance: the registers reason says what was dropped.
     if (erasedHere) {
       std::string why;
-      if (auto resultValue =
-              a->getAttrOfType<StringAttr>(kRegistersReasonAttrName))
-        why = resultValue.getValue().str();
+      if (auto r = a->getAttrOfType<StringAttr>(kRegistersReasonAttrName))
+        why = r.getValue().str();
       why += "; " + std::to_string(erasedHere) +
              " store(s) into element(s) no used load reads deleted, with "
              "the values computed only for them (VITIS_NOTES N110)";
@@ -1365,6 +1466,10 @@ static unsigned removeUnreadRegisterElements(ModuleOp module) {
   }
   return erased;
 }
+
+//===----------------------------------------------------------------------===//
+// Pass
+//===----------------------------------------------------------------------===//
 
 struct InferVitisSplitArray
     : public PassWrapper<InferVitisSplitArray, OperationPass<ModuleOp>> {
@@ -1386,7 +1491,10 @@ struct InferVitisSplitArray
                      "auto-pipeline-unroll has dissolved the small inner "
                      "loops. Off: only loops carrying hls.pipeline"),
       llvm::cl::init(true)};
-
+  // Defaults are one read port and one write port per bank, which gives
+  // factor = max(reads, writes) / II and the partitions Vitis was seen to
+  // infer. read-ports=2 models both ports of a RAM_2P/RAM_T2P serving reads
+  // (half the factor); write-ports=2 a RAM_T2P.
   Option<unsigned> readPorts{*this, "read-ports",
                              llvm::cl::desc("Reads one bank serves per cycle"),
                              llvm::cl::init(1)};
@@ -1492,77 +1600,82 @@ struct InferVitisSplitArray
     rules.constantIndexMinExtent = cfgPartitioning->constantIndexMinExtent;
     rules.constantIndexMaxExtent = cfgPartitioning->constantIndexMaxExtent;
     rules.userStoragePragmas = userStoragePragmas;
-    rules.afterUserPartition = cfgPartitioning->constantIndexAfterUserPartition;
+    rules.afterUserPartition =
+        cfgPartitioning->constantIndexAfterUserPartition;
     rules.nonAffineArrays = cfgPartitioning->constantIndexNonAffineArrays;
     rules.pipoStreams = cfgPartitioning->constantIndexPipoStreams;
     rules.globals = cfgPartitioning->constantIndexGlobals;
     rules.throughCalls = cfgPartitioning->constantIndexThroughCalls;
     rules.blockOffset = cfgPartitioning->constantIndexBlockOffset;
     DenseSet<Value> decided;
-    Builder passBuilder(func.getContext());
-    func.walk([&](memref::AllocaOp localAlloca) {
-      Operation *def = localAlloca.getOperation();
+    Builder builder(func.getContext());
+    func.walk([&](memref::AllocaOp alloca) {
+      Operation *def = alloca.getOperation();
       if (def->hasAttr(kRegistersAttrName)) {
-        decided.insert(localAlloca.getResult());
+        decided.insert(alloca.getResult());
         return;
       }
       bool afterUser = false;
       AutomaticPartition decision =
-          decideAutomaticPartition(localAlloca, rules, afterUser);
+          decideAutomaticPartition(alloca, rules, afterUser);
       auto varName = def->getAttrOfType<StringAttr>(kVarNameAttr);
       std::string name =
           varName ? varName.getValue().str() : std::string("<unnamed>");
       if (decision.unbankable) {
         ++runStats.unbankable;
-        LLVM_DEBUG(llvm::dbgs()
-                   << "array '" << name << "': " << decision.reason << "\n");
+        LLVM_DEBUG(llvm::dbgs() << "array '" << name << "': "
+                                << decision.reason << "\n");
         if (emitRemarks)
-          mlir::emitRemark(localAlloca.getLoc())
+          mlir::emitRemark(alloca.getLoc())
               << "array '" << name << "' left whole: " << decision.reason;
       }
       if (decision.kind == AutomaticPartition::None) {
-
+        // A rule that matched and declined (rule (b)'s max_extent).
         if (!decision.unbankable && !decision.reason.empty() && emitRemarks)
-          mlir::emitRemark(localAlloca.getLoc())
+          mlir::emitRemark(alloca.getLoc())
               << "array '" << name << "' left whole: " << decision.reason;
         return;
       }
-      decided.insert(localAlloca.getResult());
+      decided.insert(alloca.getResult());
       if (decision.kind == AutomaticPartition::Registers) {
-        def->setAttr(kRegistersAttrName, passBuilder.getUnitAttr());
+        def->setAttr(kRegistersAttrName, builder.getUnitAttr());
         def->setAttr(kRegistersReasonAttrName,
-                     passBuilder.getStringAttr(decision.reason));
+                     builder.getStringAttr(decision.reason));
         ++runStats.registers;
-        LLVM_DEBUG(llvm::dbgs() << "array '" << name << "': registers ("
-                                << decision.reason << ")\n");
+        LLVM_DEBUG(llvm::dbgs() << "array '" << name
+                                << "': registers (" << decision.reason
+                                << ")\n");
         if (emitRemarks)
-          mlir::emitRemark(localAlloca.getLoc())
+          mlir::emitRemark(alloca.getLoc())
               << "array '" << name << "' -> registers: " << decision.reason;
         return;
       }
-      ArrayRef<int64_t> shape = localAlloca.getType().getShape();
-      ArrayAttr automatic = buildPartitionAttr(
-          passBuilder, decision.parts, shape, varName, kSourceConstantIndex);
+      ArrayRef<int64_t> shape = alloca.getType().getShape();
+      ArrayAttr automatic = buildPartitionAttr(builder, decision.parts, shape,
+                                               varName, kSourceConstantIndex);
       if (afterUser) {
-
+        // Appended to the user's entries; memory banking merges entries on
+        // one dimension by the larger factor (N17 (c)), so a complete entry
+        // on the user's own dimension makes it complete.
         SmallVector<Attribute> merged;
         if (auto user = def->getAttrOfType<ArrayAttr>(kPartitionAttr))
           llvm::append_range(merged, user.getValue());
         llvm::append_range(merged, automatic.getValue());
-        automatic = passBuilder.getArrayAttr(merged);
+        automatic = builder.getArrayAttr(merged);
       }
       def->setAttr(kPartitionAttr, automatic);
-      def->setAttr(kReasonAttr, passBuilder.getStringAttr(decision.reason));
+      def->setAttr(kReasonAttr, builder.getStringAttr(decision.reason));
       ++runStats.constantDims;
       if (decision.parts.size() > 1)
         ++runStats.multiConstantDims;
-      LLVM_DEBUG(llvm::dbgs()
-                 << "array '" << name << "': " << decision.reason << "\n");
+      LLVM_DEBUG(llvm::dbgs() << "array '" << name << "': "
+                              << decision.reason << "\n");
       if (emitRemarks)
         for (const PartitionChoice &part : decision.parts)
-          mlir::emitRemark(localAlloca.getLoc())
-              << "Automatically partitioning array '" << name << "' dimension "
-              << part.dim + 1 << " completely based on constant index";
+          mlir::emitRemark(alloca.getLoc())
+              << "Automatically partitioning array '" << name
+              << "' dimension " << part.dim + 1
+              << " completely based on constant index";
     });
     applySmallGlobals(func, rules, decided);
     applyConstantIndexGlobals(func, rules, decided);
@@ -1576,12 +1689,13 @@ struct InferVitisSplitArray
   /// (c) and an array indexed by constants in every dimension stay
   /// unconfirmed for globals and are left alone. A global decided once
   /// carries hls.partition_reason; later functions only note it.
-  void applyConstantIndexGlobals(func::FuncOp func, const AutomaticRules &rules,
+  void applyConstantIndexGlobals(func::FuncOp func,
+                                 const AutomaticRules &rules,
                                  DenseSet<Value> &decided) {
     if (!rules.globals)
       return;
     auto module = func->getParentOfType<ModuleOp>();
-    Builder passBuilder(func.getContext());
+    Builder builder(func.getContext());
     func.walk([&](memref::GetGlobalOp get) {
       auto global = SymbolTable::lookupNearestSymbolFrom<memref::GlobalOp>(
           get, get.getNameAttr());
@@ -1594,55 +1708,54 @@ struct InferVitisSplitArray
         decided.insert(get.getResult());
         return;
       }
-      MemRefType memRefType = global.getType();
-      bool wordArray = memRefType.hasStaticShape() &&
-                       (memRefType.getElementType().isIntOrFloat() ||
-                        isa<IndexType>(memRefType.getElementType()));
+      MemRefType ty = global.getType();
+      bool wordArray = ty.hasStaticShape() &&
+                       (ty.getElementType().isIntOrFloat() ||
+                        isa<IndexType>(ty.getElementType()));
       bool afterUser = rules.afterUserPartition && wordArray &&
                        hasOnlyUserPartition(def, rules);
       bool pipo = !afterUser && wordArray && hasOnlyPipoStream(def, rules);
-      if (!afterUser && !pipo && !isAutomaticCandidate(def, memRefType, rules))
+      if (!afterUser && !pipo && !isAutomaticCandidate(def, ty, rules))
         return;
-      unsigned rank = memRefType.getRank();
+      unsigned rank = ty.getRank();
       ConstantIndexInfo info;
       info.constantDim.assign(rank, true);
-      std::optional<SymbolTable::UseRange> symbolUses =
+      std::optional<SymbolTable::UseRange> uses =
           SymbolTable::getSymbolUses(def, module);
-      if (!symbolUses)
+      if (!uses)
         return;
-      for (const SymbolTable::SymbolUse &use : *symbolUses) {
-        auto globalUse = dyn_cast<memref::GetGlobalOp>(use.getUser());
-        if (!globalUse)
-          return;
+      for (const SymbolTable::SymbolUse &use : *uses) {
+        auto gg = dyn_cast<memref::GetGlobalOp>(use.getUser());
+        if (!gg)
+          return; // another kind of use: nothing is concluded
         ConstantIndexInfo gi = analyzeConstantIndices(
-            globalUse.getResult(), rank, rules.throughCalls,
-            afterUser && rules.blockOffset ? userBlockSizes(def, memRefType)
+            gg.getResult(), rank, rules.throughCalls,
+            afterUser && rules.blockOffset ? userBlockSizes(def, ty)
                                            : SmallVector<int64_t>());
         if (!gi.complete)
           return;
         info.accesses += gi.accesses;
         info.affineAccesses += gi.affineAccesses;
-        for (unsigned dimensionIndex = 0; dimensionIndex < rank;
-             ++dimensionIndex)
-          info.constantDim[dimensionIndex] = info.constantDim[dimensionIndex] &&
-                                             gi.constantDim[dimensionIndex];
+        for (unsigned d = 0; d < rank; ++d)
+          info.constantDim[d] = info.constantDim[d] && gi.constantDim[d];
       }
       AutomaticPartition decision = decideFromConstantIndices(
-          def, memRefType, info, rules, afterUser, true);
+          def, ty, info, rules, afterUser, /*onlyB=*/true);
       if (decision.kind != AutomaticPartition::ConstantDims)
         return;
-      ArrayAttr automatic = buildPartitionAttr(
-          passBuilder, decision.parts, memRefType.getShape(),
-          def->getAttrOfType<StringAttr>(kVarNameAttr), kSourceConstantIndex);
+      ArrayAttr automatic =
+          buildPartitionAttr(builder, decision.parts, ty.getShape(),
+                             def->getAttrOfType<StringAttr>(kVarNameAttr),
+                             kSourceConstantIndex);
       if (afterUser) {
         SmallVector<Attribute> merged;
         if (auto user = def->getAttrOfType<ArrayAttr>(kPartitionAttr))
           llvm::append_range(merged, user.getValue());
         llvm::append_range(merged, automatic.getValue());
-        automatic = passBuilder.getArrayAttr(merged);
+        automatic = builder.getArrayAttr(merged);
       }
       def->setAttr(kPartitionAttr, automatic);
-      def->setAttr(kReasonAttr, passBuilder.getStringAttr(decision.reason));
+      def->setAttr(kReasonAttr, builder.getStringAttr(decision.reason));
       decided.insert(get.getResult());
       ++runStats.constantDims;
       if (decision.parts.size() > 1)
@@ -1663,7 +1776,7 @@ struct InferVitisSplitArray
   /// The pass is a module pass, so writing the global from here is safe.
   void applySmallGlobals(func::FuncOp func, const AutomaticRules &rules,
                          DenseSet<Value> &decided) {
-    Builder passBuilder(func.getContext());
+    Builder builder(func.getContext());
     func.walk([&](memref::GetGlobalOp get) {
       auto global = SymbolTable::lookupNearestSymbolFrom<memref::GlobalOp>(
           get, get.getNameAttr());
@@ -1680,9 +1793,9 @@ struct InferVitisSplitArray
       if (decision.kind != AutomaticPartition::Registers)
         return;
       decided.insert(get.getResult());
-      def->setAttr(kRegistersAttrName, passBuilder.getUnitAttr());
+      def->setAttr(kRegistersAttrName, builder.getUnitAttr());
       def->setAttr(kRegistersReasonAttrName,
-                   passBuilder.getStringAttr(decision.reason));
+                   builder.getStringAttr(decision.reason));
       ++runStats.registers;
       LLVM_DEBUG(llvm::dbgs() << "global '" << global.getSymName()
                               << "': registers (" << decision.reason << ")\n");
@@ -1708,6 +1821,8 @@ struct InferVitisSplitArray
     if (getConstantTripCount(loop) == uint64_t(0))
       return std::nullopt;
 
+    // Pipelining a loop unrolls everything inside it, so a loop below a user
+    // pipeline is part of that region, not one of its own.
     for (auto parent = loop->getParentOfType<AffineForOp>(); parent;
          parent = parent->getParentOfType<AffineForOp>())
       if (parent->hasAttr(kPipelineAttr) && !parent->hasAttr(kPipelineOffAttr))
@@ -1719,7 +1834,8 @@ struct InferVitisSplitArray
       return WalkResult::interrupt();
     });
     if (hasNestedLoop) {
-
+      // Accesses are counted as they stand in the body; counting through a
+      // loop that is still there would under-report them.
       if (userPipelined)
         mlir::emitWarning(loop.getLoc())
             << "hls.pipeline on a loop that still contains loops: unroll them "
@@ -1729,6 +1845,11 @@ struct InferVitisSplitArray
     return getUserTargetII(loop).value_or(targetIIValue);
   }
 
+  // The values the run uses: an option given explicitly, else the
+  // configuration (tool.hls.options.array_partition.*,
+  // tool.hls.partitioning.*, frontend.user_storage_pragmas). With the
+  // configuration a bare --infer-vitis-split-array is td=off (the ground
+  // truth, design memo decision 5); td=auto must be asked for.
   unsigned targetIIValue = 1, portsValue = 2, readPortsValue = 1,
            writePortsValue = 1, maxDimsValue = 1;
   int64_t maxFactorValue = 0, completeThresholdValue = 4;
@@ -1753,8 +1874,8 @@ struct InferVitisSplitArray
         writePorts, static_cast<unsigned>(inf.portsWrite));
     maxDimsValue =
         resolveOption<unsigned>(maxDims, static_cast<unsigned>(inf.maxDims));
-    maxFactorValue =
-        maxFactor.hasValue() ? static_cast<int64_t>(maxFactor) : inf.maxFactor;
+    maxFactorValue = maxFactor.hasValue() ? static_cast<int64_t>(maxFactor)
+                                          : inf.maxFactor;
     rotatingBanksValue = resolveOption(rotatingBanks, inf.rotatingBanks);
     const circt::hlsest::ArrayPartitionOptions &ap =
         cfg.tool.hls.options.arrayPartition;
@@ -1762,9 +1883,9 @@ struct InferVitisSplitArray
     completeThresholdValue = completeThreshold.hasValue()
                                  ? static_cast<int64_t>(completeThreshold)
                                  : ap.completeThreshold;
-    throughputDrivenValue = throughputDriven.hasValue()
-                                ? std::string(throughputDriven)
-                                : ap.throughputDriven;
+    throughputDrivenValue =
+        throughputDriven.hasValue() ? std::string(throughputDriven)
+                                    : ap.throughputDriven;
     userStoragePragmas = cfg.frontend.userStoragePragmas;
   }
 
@@ -1772,6 +1893,9 @@ struct InferVitisSplitArray
   /// statistics).
   circt::hlsest::PartitionStatistics runStats;
 
+  // A module pass: the policy runs on one function at a time, and rule (a)
+  // marks the globals a function uses (applySmallGlobals), which a function
+  // pass may not write.
   void runOnOperation() override {
     for (func::FuncOp func : getOperation().getOps<func::FuncOp>()) {
       if (func.isExternal())
@@ -1781,8 +1905,12 @@ struct InferVitisSplitArray
     }
     if (circt::hlsest::Config::get()
             .tool.hls.middleEnd.deadMemory.unreadRegisterElements)
-      removeUnreadRegisterElements(getOperation());
-
+      // To a fixpoint: deleting one array's stores deletes the loads that
+      // fed them, which may leave elements of another registers array
+      // unread (a chain of window arrays).
+      while (removeUnreadRegisterElements(getOperation()) != 0) {
+      }
+    // The kept calls' occupancy with the partitions decided (O133 / O144).
     if (circt::hlsest::Config::get()
             .tool.hls.pipelineDecision.callOccupancyAfterPartition)
       circt::hls_analysis::refreshCallOccupancies(getOperation());
@@ -1811,17 +1939,16 @@ struct InferVitisSplitArray
           << throughputDrivenValue << "'";
       return failure();
     }
-
+    // The decision is the configuration's PartitionPolicy (builtin vitis-td:
+    // runInference below).
     const circt::hlsest::Config &cfg = circt::hlsest::Config::get();
     circt::hlsest::ConfigDiagnostics diag;
     std::unique_ptr<circt::hlsest::PartitionPolicy> policy =
-        circt::hlsest::PluginRegistry<
-            circt::hlsest::PartitionPolicy>::instance()
+        circt::hlsest::PluginRegistry<circt::hlsest::PartitionPolicy>::instance()
             .create(cfg.tool.hls.partitioning.policy, cfg, diag);
     if (!policy) {
-      InFlightDiagnostic dimensionIndex =
-          func.emitError("infer-vitis-split-array: ");
-      llvm::interleave(diag.errors, dimensionIndex, "; ");
+      InFlightDiagnostic d = func.emitError("infer-vitis-split-array: ");
+      llvm::interleave(diag.errors, d, "; ");
       return failure();
     }
     circt::hlsest::PartitionStatistics stats;
@@ -1875,10 +2002,12 @@ struct InferVitisSplitArray
     bool tdOff = throughputDrivenValue == "off";
     PortModel pm{portsValue, readPortsValue, writePortsValue};
 
+    // 0. Vitis' automatic partitions that do not depend on throughput.
     DenseSet<Value> decided;
     if (tdOff || autoPartitions)
       decided = applyAutomaticPartitions(func);
 
+    // 1. Port pressure per (memory, pipelined loop).
     TermTable terms;
     llvm::MapVector<Value, SmallVector<PipelineRegion, 2>> pressure;
     func.walk([&](AffineForOp loop) {
@@ -1888,7 +2017,8 @@ struct InferVitisSplitArray
       }
     });
 
-    Builder passBuilder(func.getContext());
+    // 2. One decision per memory, over all the loops that touch it.
+    Builder builder(func.getContext());
     for (auto &entry : pressure) {
       Value mem = entry.first;
       ArrayRef<PipelineRegion> regions = entry.second;
@@ -1897,13 +2027,15 @@ struct InferVitisSplitArray
       bool isFuncArg = arg && arg.getOwner() == &func.getBody().front();
 
       if (annotatePressure) {
-        ArrayAttr attr = buildPressureAttr(passBuilder, regions);
+        ArrayAttr attr = buildPressureAttr(builder, regions);
         if (def)
           def->setAttr(kPressureAttr, attr);
         else if (isFuncArg)
           func.setArgAttr(arg.getArgNumber(), kPressureAttr, attr);
       }
 
+      // td=off: Vitis replicates instead of partitioning (RAM_1WNR), which
+      // --bram-analysis prices; an array (a)-(c) decided is settled.
       if (tdOff || decided.contains(mem))
         continue;
 
@@ -1912,8 +2044,9 @@ struct InferVitisSplitArray
         continue;
       ArrayRef<int64_t> shape = memTy.getShape();
       if (portLimit(regions, {}, pm, rotatingBanksValue).excess == 0)
-        continue;
+        continue; // the ports keep up with every loop as it is
 
+      // Where the spec lives, and whether a user already wrote one.
       auto iface = dyn_cast_or_null<MemoryResourceOpInterface>(def);
       bool canAnnotate = iface || (isFuncArg && includePortsValue);
       bool hasUserSpec =
@@ -1930,7 +2063,7 @@ struct InferVitisSplitArray
       Location loc = def ? def->getLoc() : mem.getLoc();
 
       if (hasUserSpec)
-        continue;
+        continue; // the user's pragma stands, whatever it achieves
       StringRef obstacle;
       if (!canAnnotate)
         obstacle = isFuncArg ? "interface array (see include-ports)"
@@ -1950,21 +2083,24 @@ struct InferVitisSplitArray
         continue;
       }
 
-      PartitionPlan plan = inferPartition(
-          regions, shape, pm, rotatingBanksValue, maxFactorValue, maxDimsValue,
-          cfgPartitioning->inference.maxScannedFactor);
+      PartitionPlan plan =
+          inferPartition(regions, shape, pm, rotatingBanksValue,
+                         maxFactorValue, maxDimsValue,
+                         cfgPartitioning->inference.maxScannedFactor);
 
       if (!plan.parts.empty()) {
         ArrayAttr spec =
-            buildPartitionAttr(passBuilder, plan.parts, shape, varName);
+            buildPartitionAttr(builder, plan.parts, shape, varName);
         if (def)
           def->setAttr(kPartitionAttr, spec);
         else
           func.setArgAttr(arg.getArgNumber(), kPartitionAttr, spec);
         ++runStats.partitioned;
 
+        // Record why, for the debug report: the loop the ports held back the
+        // most before partitioning is the one that drove the factor.
         if (plan.before.region) {
-          StringAttr reason = passBuilder.getStringAttr(
+          StringAttr reason = builder.getStringAttr(
               describePartitionReason(plan, *plan.before.region, shape));
           if (def)
             def->setAttr(kReasonAttr, reason);
@@ -1991,7 +2127,7 @@ struct InferVitisSplitArray
         ++runStats.unresolved;
         if (emitRemarks) {
           const PipelineRegion &worst = *plan.after.region;
-          AffineForOp worstLoop = worst.loop;
+          AffineForOp worstLoop = worst.loop; // getLoc() is non-const
           InFlightDiagnostic diag =
               mlir::emitRemark(loc)
               << "array '" << name
@@ -2027,11 +2163,11 @@ public:
 } // namespace
 
 void circt::hlsest::builtin::registerPartitionPolicies() {
-  circt::hlsest::PluginRegistry<circt::hlsest::PartitionPolicy>::instance().add(
-      "vitis-td",
-      "Vitis automatic partitions (td=off) and the port-pressure "
-      "inference (td=auto)",
-      [] { return std::make_unique<VitisTdPartitions>(); }, "builtin");
+  circt::hlsest::PluginRegistry<circt::hlsest::PartitionPolicy>::instance()
+      .add("vitis-td",
+           "Vitis automatic partitions (td=off) and the port-pressure "
+           "inference (td=auto)",
+           [] { return std::make_unique<VitisTdPartitions>(); }, "builtin");
 }
 
 namespace circt::hls_analysis {

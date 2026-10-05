@@ -69,6 +69,10 @@ std::optional<unsigned> mangledElementBits(llvm::StringRef elementMangled);
 /// times the count. 0 when unknown.
 unsigned packedTypeBits(mlir::Type type);
 
+/// The bits of `type`'s C storage with natural alignment (sizeof * 8,
+/// padding included; VITIS_NOTES N141), or 0 when a member is unknown.
+unsigned storageTypeBits(mlir::Type type);
+
 /// How Vitis implements one FIFO and what it costs.
 struct FifoPrice {
   unsigned bram = 0;

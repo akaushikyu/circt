@@ -15,9 +15,9 @@ inherits any distance between Vitis' report and the final bitstream. For {{ev_ov
 numbers for them are never checked by an implementation run. On the {{ev_fits_compared}} designs that fit,
 {{ev_fits_exact}} are exact and {{ev_fits_in_band}} in band (Table 6.1).
 
-The goal band (exact or at most 15 % over) is asymmetric by design: {{under}} of the {{compared}}
-compared designs under-count and are out of band whatever their size, and {{over_gt15}} over-count by more
-than 15 %. Measured in BRAM_18K, the under-counts sum to {{under_sum}} and the over-counts to {{over_sum}}.
+The goal band (exact or at most {{band_over_pct}} % over) is asymmetric by design: {{under}} of the {{compared}}
+compared designs under-count and are out of band whatever their size, and {{over_gt_band}} over-count by more
+than {{band_over_pct}} %. Measured in BRAM_18K, the under-counts sum to {{under_sum}} and the over-counts to {{over_sum}}.
 Table 8.1 (`tables/frame-undercounts.md`) lists the largest under-counts with their largest per-array
 differences.
 
