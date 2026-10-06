@@ -1,24 +1,24 @@
-//===- BRAMClassification.cpp ---------------------------------------------===//
 
-#include "circt/Dialect/Resource/Config/ConfigUtils.h"
+
 #include "circt/Dialect/Resource/Passes/MemrefBankClassification.h"
+#include "circt/Dialect/Resource/Config/ConfigUtils.h"
 #include "circt/Dialect/Resource/HLS/HLSOps.h"
+#include "circt/Dialect/Resource/Passes/CallInstances.h"
+#include "circt/Dialect/Resource/Passes/LoopPragmas.h"
+#include "circt/Dialect/Resource/Passes/MemoryRecurrences.h"
+#include "circt/Dialect/Resource/Passes/StoragePragmas.h"
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinOps.h"
+#include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/SymbolTable.h"
 #include "mlir/Interfaces/CallInterfaces.h"
-#include "mlir/Interfaces/ViewLikeInterface.h"
-#include "circt/Dialect/Resource/Passes/CallInstances.h"
-#include "circt/Dialect/Resource/Passes/LoopPragmas.h"
-#include "circt/Dialect/Resource/Passes/MemoryRecurrences.h"
-#include "circt/Dialect/Resource/Passes/StoragePragmas.h"
-#include "llvm/ADT/MapVector.h"
-#include "mlir/IR/BuiltinTypes.h"
 #include "mlir/Interfaces/LoopLikeInterface.h"
+#include "mlir/Interfaces/ViewLikeInterface.h"
+#include "llvm/ADT/MapVector.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Debug.h"
 
@@ -33,10 +33,6 @@ using namespace mlir;
 
 namespace circt::hls_analysis {
 
-
-//===----------------------------------------------------------------------===//
-// Small helpers
-//===----------------------------------------------------------------------===//
 StringRef stringifyStorageMode(StorageMode mode) {
   switch (mode) {
   case StorageMode::OnePort:
@@ -59,9 +55,10 @@ static unsigned blockRamPorts() {
   const circt::hlsest::Config &cfg = circt::hlsest::Config::get();
   const circt::hlsest::MemoryArchitectureConfig &ma =
       cfg.tool.hls.memoryArchitecture;
-  if (const circt::hlsest::DeviceMemory *m =
+  if (const circt::hlsest::DeviceMemory *memoryOp =
           cfg.device.memory(cfg.tool.backend.memoryMapper.primitive))
-    if (const circt::hlsest::PortConfig *pc = m->portConfig(ma.pricedNarrow))
+    if (const circt::hlsest::PortConfig *pc =
+            memoryOp->portConfig(ma.pricedNarrow))
       return static_cast<unsigned>(pc->ports.size());
   return kDualPortSlots;
 }
@@ -70,17 +67,16 @@ unsigned storageModeSlots(StorageMode mode) {
   switch (mode) {
   case StorageMode::OnePort:
     return 1;
-  case StorageMode::SDP: // one read + one write; callers split the pools
+  case StorageMode::SDP:
   case StorageMode::TDP:
     return blockRamPorts();
   case StorageMode::OneWriteNRead:
-    // max_copies x (ports - 1) + 1 = 17 (tool.hls.memory_architecture.
-    // replication).
-    return static_cast<unsigned>(circt::hlsest::Config::get()
-                                     .tool.hls.memoryArchitecture
-                                     .replicatedSlots());
+
+    return static_cast<unsigned>(
+        circt::hlsest::Config::get()
+            .tool.hls.memoryArchitecture.replicatedSlots());
   case StorageMode::Registers:
-    return std::numeric_limits<unsigned>::max(); // no memory, no limit
+    return std::numeric_limits<unsigned>::max();
   }
   return blockRamPorts();
 }
@@ -99,17 +95,15 @@ StringRef stringifyStorageKind(StorageKind mode) {
 }
 
 StorageKind classifyStorageKind(unsigned reads, unsigned writes) {
-  if (reads + writes <= 1) return StorageKind::RAM_1P;
-  if (writes > 1) return StorageKind::RAM_2P;
+  if (reads + writes <= 1)
+    return StorageKind::RAM_1P;
+  if (writes > 1)
+    return StorageKind::RAM_2P;
   return StorageKind::RAM_1WNR;
 }
 
-// Vitis (VITIS_NOTES.md N4, replication.md R1-R3): a bank some loop body
-// stores to more than once stays one true-dual-port RAM (the II is raised to
-// ceil((R+W)/2)); otherwise extra reads are served by replicated copies, up to
-// 16 copies + the shared write port = 17 accesses per cycle.
 StorageMode classifyMode(unsigned maxStoresPerLoop) {
-  // tool.hls.memory_architecture.replication.max_stores_per_iteration (1).
+
   if (static_cast<int64_t>(maxStoresPerLoop) >
       circt::hlsest::Config::get()
           .tool.hls.memoryArchitecture.replication.maxStoresPerIteration)
@@ -121,35 +115,24 @@ StorageMode classifyMode(unsigned maxStoresPerLoop) {
 /// null Value for any other op.
 static Value getAccessedMemRef(Operation *op, bool &isLoad, bool &isStore) {
   isLoad = isStore = false;
-  // A register-promoted access (VITIS_NOTES N87) uses no port of the bank.
+
   if (hls_analysis::isPromotedAccess(op))
     return Value{};
   return TypeSwitch<Operation *, Value>(op)
-      .Case<affine::AffineLoadOp, memref::LoadOp>(
-          [&](auto l) { isLoad = true; return l.getMemRef(); })
-      .Case<affine::AffineStoreOp, memref::StoreOp>(
-          [&](auto s) { isStore = true; return s.getMemRef(); })
-      .Case<AffineStoreEnableOp, StoreEnableOp>(
-          [&](auto s) { isStore = true; return s.getMemref(); })  // note: getMemref()
+      .Case<affine::AffineLoadOp, memref::LoadOp>([&](auto lowerIndex) {
+        isLoad = true;
+        return lowerIndex.getMemRef();
+      })
+      .Case<affine::AffineStoreOp, memref::StoreOp>([&](auto stringValue) {
+        isStore = true;
+        return stringValue.getMemRef();
+      })
+      .Case<AffineStoreEnableOp, StoreEnableOp>([&](auto stringValue) {
+        isStore = true;
+        return stringValue.getMemref();
+      })
       .Default(Value{});
 }
-
-
-//===----------------------------------------------------------------------===//
-// Stores per loop body made by callees
-//===----------------------------------------------------------------------===//
-// Vitis decides whether an array can be a RAM_1WNR from every loop that
-// accesses it, the loops of the functions it is passed to included: a callee
-// loop that stores a bank twice per iteration keeps the caller's bank one
-// 2-port RAM, and then the caller's own pipelined loops get two ports of it,
-// not the replicated read slots (the price model, analyzeReplication in
-// BRAMAnalysis, already follows calls; a caller loop scheduled with the
-// replicated slots got an II and a copy count for its other arrays that
-// Vitis never builds: a softmax callee storing 16 banks of `attention` per
-// iteration, the caller reading them at II 1 and replicating `V_local` 15
-// times where Vitis builds one copy). The convert-affine-to-loopschedule
-// pass runs per function and may not read the callees, so this module-level
-// step records the callees' worst loop body on the caller's bank.
 
 /// The memref operands of an access op that writes, else null.
 static Value storedMemRef(Operation *op) {
@@ -176,10 +159,10 @@ static bool pairedWithThenArmStore(Operation *store) {
                      store->getOperands().drop_front()) ||
         storedMemRef(&op) != storedMemRef(store))
       continue;
-    // Same memref, indices and (for affine.store) map.
-    if (auto a = dyn_cast<affine::AffineStoreOp>(op)) {
-      auto b = cast<affine::AffineStoreOp>(store);
-      if (a.getAffineMap() != b.getAffineMap())
+
+    if (auto arrayValue = dyn_cast<affine::AffineStoreOp>(op)) {
+      auto buildPoint = cast<affine::AffineStoreOp>(store);
+      if (arrayValue.getAffineMap() != buildPoint.getAffineMap())
         continue;
     }
     return true;
@@ -200,11 +183,11 @@ static llvm::cl::opt<bool> clExclusiveArmStores(
 namespace {
 /// One arm of one if: the if (an op, or an `hls.if_arms` id) and the arm.
 struct IfArm {
-  const void *ifOp = nullptr; // set for an if the store is nested in
-  int64_t hoistedId = 0;      // set for an if it was hoisted out of
+  const void *ifOp = nullptr;
+  int64_t hoistedId = 0;
   int64_t arm = 0;
-  bool sameIf(const IfArm &o) const {
-    return ifOp == o.ifOp && hoistedId == o.hoistedId;
+  bool sameIf(const IfArm &opHandle) const {
+    return ifOp == opHandle.ifOp && hoistedId == opHandle.hoistedId;
   }
 };
 using ArmPath = SmallVector<IfArm, 4>;
@@ -223,11 +206,12 @@ static ArmPath armPathOf(Operation *op, Operation *scope) {
     cur = parent;
   }
   ArmPath path(nested.rbegin(), nested.rend());
-  // hls.if_arms lists [if id, arm, ...] innermost first.
+
   if (auto arms = op->getAttrOfType<DenseI64ArrayAttr>(kIfArmsAttr)) {
-    ArrayRef<int64_t> a = arms.asArrayRef();
-    for (size_t i = a.size(); i >= 2; i -= 2)
-      path.push_back({nullptr, a[i - 2], a[i - 1]});
+    ArrayRef<int64_t> arrayValue = arms.asArrayRef();
+    for (size_t loopIndex = arrayValue.size(); loopIndex >= 2; loopIndex -= 2)
+      path.push_back(
+          {nullptr, arrayValue[loopIndex - 2], arrayValue[loopIndex - 1]});
   }
   return path;
 }
@@ -239,18 +223,18 @@ static ArmPath armPathOf(Operation *op, Operation *scope) {
 /// time).
 static unsigned maxConcurrent(ArrayRef<const ArmPath *> paths, unsigned depth) {
   unsigned total = 0;
-  // if -> arm -> paths, in first-seen order (the sum and max do not depend
-  // on it).
+
   std::map<std::pair<const void *, int64_t>,
            std::map<int64_t, SmallVector<const ArmPath *>>>
       byIf;
-  for (const ArmPath *p : paths) {
-    if (p->size() <= depth) {
+  for (const ArmPath *portValue : paths) {
+    if (portValue->size() <= depth) {
       ++total;
       continue;
     }
-    const IfArm &a = (*p)[depth];
-    byIf[{a.ifOp, a.hoistedId}][a.arm].push_back(p);
+    const IfArm &arrayValue = (*portValue)[depth];
+    byIf[{arrayValue.ifOp, arrayValue.hoistedId}][arrayValue.arm].push_back(
+        portValue);
   }
   for (auto &[theIf, arms] : byIf) {
     unsigned best = 0;
@@ -265,9 +249,9 @@ static unsigned maxConcurrent(ArrayRef<const ArmPath *> paths, unsigned depth) {
 /// tool.hls.memory_architecture.replication.exclusive_arm_stores_once.
 static bool exclusiveArmStores() {
   return circt::hlsest::resolveGlobalOption(
-      clExclusiveArmStores, circt::hlsest::Config::get()
-                                .tool.hls.memoryArchitecture.replication
-                                .exclusiveArmStoresOnce);
+      clExclusiveArmStores,
+      circt::hlsest::Config::get()
+          .tool.hls.memoryArchitecture.replication.exclusiveArmStoresOnce);
 }
 
 unsigned maxStoresInOneIteration(ArrayRef<Operation *> stores,
@@ -279,8 +263,8 @@ unsigned maxStoresInOneIteration(ArrayRef<Operation *> stores,
   for (Operation *store : stores)
     paths.push_back(armPathOf(store, scope));
   SmallVector<const ArmPath *> refs;
-  for (const ArmPath &p : paths)
-    refs.push_back(&p);
+  for (const ArmPath &portValue : paths)
+    refs.push_back(&portValue);
   return maxConcurrent(refs, 0);
 }
 
@@ -308,31 +292,32 @@ class CalleeStores {
 public:
   /// Max stores per loop body of the memref parameter `idx` of `fn`, in `fn`
   /// and, transitively, in the callees it is passed on to.
-  unsigned ofParameter(func::FuncOp fn, unsigned idx) {
-    auto key = std::make_pair(fn.getOperation(), idx);
+  unsigned ofParameter(func::FuncOp fn, unsigned indexValue) {
+    auto key = std::make_pair(fn.getOperation(), indexValue);
     if (auto it = memo.find(key); it != memo.end())
       return it->second;
-    memo[key] = 0; // a recursive call contributes nothing
-    BlockArgument arg = fn.getArgument(idx);
-    unsigned n = std::max(localStoresPerLoop(arg), throughCalls(arg));
-    memo[key] = n;
-    return n;
+    memo[key] = 0;
+    BlockArgument arg = fn.getArgument(indexValue);
+    unsigned elementCount =
+        std::max(localStoresPerLoop(arg), throughCalls(arg));
+    memo[key] = elementCount;
+    return elementCount;
   }
 
   /// Max over the defined callees `mem` is passed to directly.
   unsigned throughCalls(Value mem) {
     unsigned best = 0;
     for (OpOperand &use : mem.getUses()) {
-      auto call = dyn_cast<CallOpInterface>(use.getOwner());
-      if (!call)
+      auto callSite = dyn_cast<CallOpInterface>(use.getOwner());
+      if (!callSite)
         continue;
-      func::FuncOp callee = resolveDefinedCallee(call);
+      func::FuncOp callee = resolveDefinedCallee(callSite);
       if (!callee || callee.isExternal())
         continue;
-      std::optional<unsigned> idx = callArgIndex(call, use);
-      if (!idx || *idx >= callee.getNumArguments())
+      std::optional<unsigned> indexValue = callArgIndex(callSite, use);
+      if (!indexValue || *indexValue >= callee.getNumArguments())
         continue;
-      best = std::max(best, ofParameter(callee, *idx));
+      best = std::max(best, ofParameter(callee, *indexValue));
     }
     return best;
   }
@@ -344,11 +329,12 @@ private:
 
 void annotateCalleeStoresPerLoop(ModuleOp module) {
   CalleeStores stores;
-  OpBuilder b(module.getContext());
+  OpBuilder buildPoint(module.getContext());
   module.walk([&](memref::AllocaOp alloca) {
-    unsigned n = stores.throughCalls(alloca.getResult());
-    if (n > 1)
-      alloca->setAttr(kCalleeStoresPerLoopAttr, b.getI64IntegerAttr(n));
+    unsigned elementCount = stores.throughCalls(alloca.getResult());
+    if (elementCount > 1)
+      alloca->setAttr(kCalleeStoresPerLoopAttr,
+                      buildPoint.getI64IntegerAttr(elementCount));
   });
   module.walk([&](func::FuncOp fn) {
     if (fn.isExternal())
@@ -356,10 +342,10 @@ void annotateCalleeStoresPerLoop(ModuleOp module) {
     for (BlockArgument arg : fn.getArguments()) {
       if (!isa<MemRefType>(arg.getType()))
         continue;
-      unsigned n = stores.throughCalls(arg);
-      if (n > 1)
+      unsigned elementCount = stores.throughCalls(arg);
+      if (elementCount > 1)
         fn.setArgAttr(arg.getArgNumber(), kCalleeStoresPerLoopAttr,
-                      b.getI64IntegerAttr(n));
+                      buildPoint.getI64IntegerAttr(elementCount));
     }
   });
 }
@@ -373,36 +359,38 @@ namespace {
 class CallerStores {
 public:
   explicit CallerStores(ModuleOp module) {
-    module.walk([&](CallOpInterface call) {
-      if (func::FuncOp callee = resolveDefinedCallee(call))
-        callers[callee.getOperation()].push_back(call);
+    module.walk([&](CallOpInterface callSite) {
+      if (func::FuncOp callee = resolveDefinedCallee(callSite))
+        callers[callee.getOperation()].push_back(callSite);
     });
   }
 
-  unsigned ofParameter(func::FuncOp fn, unsigned idx) {
-    auto key = std::make_pair(fn.getOperation(), idx);
+  unsigned ofParameter(func::FuncOp fn, unsigned indexValue) {
+    auto key = std::make_pair(fn.getOperation(), indexValue);
     if (auto it = memo.find(key); it != memo.end())
       return it->second;
-    memo[key] = 0; // a recursive call contributes nothing
+    memo[key] = 0;
     unsigned best = 0;
-    for (CallOpInterface call : callers.lookup(fn.getOperation())) {
-      if (idx >= call.getArgOperands().size())
+    for (CallOpInterface callSite : callers.lookup(fn.getOperation())) {
+      if (indexValue >= callSite.getArgOperands().size())
         continue;
-      best = std::max(best, ofValue(call.getArgOperands()[idx]));
+      best = std::max(best, ofValue(callSite.getArgOperands()[indexValue]));
     }
     memo[key] = best;
     return best;
   }
 
 private:
-  unsigned ofValue(Value v) {
-    if (!isa<MemRefType>(v.getType()))
+  unsigned ofValue(Value valueHandle) {
+    if (!isa<MemRefType>(valueHandle.getType()))
       return 0;
-    unsigned n = std::max(localStoresPerLoop(v), callees.throughCalls(v));
-    if (auto arg = dyn_cast<BlockArgument>(v))
+    unsigned elementCount = std::max(localStoresPerLoop(valueHandle),
+                                     callees.throughCalls(valueHandle));
+    if (auto arg = dyn_cast<BlockArgument>(valueHandle))
       if (auto fn = dyn_cast<func::FuncOp>(arg.getOwner()->getParentOp()))
-        n = std::max(n, ofParameter(fn, arg.getArgNumber()));
-    return n;
+        elementCount =
+            std::max(elementCount, ofParameter(fn, arg.getArgNumber()));
+    return elementCount;
   }
 
   CalleeStores callees;
@@ -413,24 +401,20 @@ private:
 
 void annotateCallerStoresPerLoop(ModuleOp module) {
   CallerStores stores(module);
-  OpBuilder b(module.getContext());
+  OpBuilder buildPoint(module.getContext());
   module.walk([&](func::FuncOp fn) {
     if (fn.isExternal())
       return;
     for (BlockArgument arg : fn.getArguments()) {
       if (!isa<MemRefType>(arg.getType()))
         continue;
-      unsigned n = stores.ofParameter(fn, arg.getArgNumber());
-      if (n > 1)
+      unsigned elementCount = stores.ofParameter(fn, arg.getArgNumber());
+      if (elementCount > 1)
         fn.setArgAttr(arg.getArgNumber(), kCallerStoresPerLoopAttr,
-                      b.getI64IntegerAttr(n));
+                      buildPoint.getI64IntegerAttr(elementCount));
     }
   });
 }
-
-//===----------------------------------------------------------------------===//
-// m_axi bundles through calls, global recurrences of callees
-//===----------------------------------------------------------------------===//
 
 namespace {
 /// The m_axi bundle a memref value is a port of: a parameter with an
@@ -439,25 +423,27 @@ class MaxiBundles {
 public:
   MaxiBundles(ModuleOp module, StringRef mode, StringRef defaultBundle)
       : mode(mode), defaultBundle(defaultBundle) {
-    module.walk([&](CallOpInterface call) {
-      if (func::FuncOp callee = resolveDefinedCallee(call))
-        callers[callee.getOperation()].push_back(call);
+    module.walk([&](CallOpInterface callSite) {
+      if (func::FuncOp callee = resolveDefinedCallee(callSite))
+        callers[callee.getOperation()].push_back(callSite);
     });
   }
 
   /// The bundle of parameter `idx` of `fn` from its own interface; nullopt
   /// when it has none of the mode.
-  std::optional<std::string> declared(func::FuncOp fn, unsigned idx) const {
-    auto ifaces = fn.getArgAttrOfType<ArrayAttr>(idx, "hls.interface");
+  std::optional<std::string> declared(func::FuncOp fn,
+                                      unsigned indexValue) const {
+    auto ifaces = fn.getArgAttrOfType<ArrayAttr>(indexValue, "hls.interface");
     if (!ifaces)
       return std::nullopt;
     for (Attribute attr : ifaces) {
-      auto d = dyn_cast<DictionaryAttr>(attr);
-      auto m = d ? d.getAs<StringAttr>("mode") : StringAttr();
-      if (!m || m.getValue() != mode)
+      auto dimensionIndex = dyn_cast<DictionaryAttr>(attr);
+      auto memoryOp = dimensionIndex ? dimensionIndex.getAs<StringAttr>("mode")
+                                     : StringAttr();
+      if (!memoryOp || memoryOp.getValue() != mode)
         continue;
-      if (auto b = d.getAs<StringAttr>("bundle"))
-        return b.getValue().str();
+      if (auto buildPoint = dimensionIndex.getAs<StringAttr>("bundle"))
+        return buildPoint.getValue().str();
       return defaultBundle;
     }
     return std::nullopt;
@@ -465,24 +451,26 @@ public:
 
   /// The bundle every call site of `fn` binds parameter `idx` to; nullopt
   /// when one binds something else, they disagree, or nothing calls it.
-  std::optional<std::string> throughCalls(func::FuncOp fn, unsigned idx) {
-    auto key = std::make_pair(fn.getOperation(), idx);
+  std::optional<std::string> throughCalls(func::FuncOp fn,
+                                          unsigned indexValue) {
+    auto key = std::make_pair(fn.getOperation(), indexValue);
     if (auto it = memo.find(key); it != memo.end())
       return it->second;
-    memo[key] = std::nullopt; // a recursive call binds nothing
+    memo[key] = std::nullopt;
     std::optional<std::string> bundle;
     bool any = false, agree = true;
-    for (CallOpInterface call : callers.lookup(fn.getOperation())) {
-      if (idx >= call.getArgOperands().size()) {
+    for (CallOpInterface callSite : callers.lookup(fn.getOperation())) {
+      if (indexValue >= callSite.getArgOperands().size()) {
         agree = false;
         break;
       }
-      std::optional<std::string> b = ofValue(call.getArgOperands()[idx]);
-      if (!b || (any && *b != *bundle)) {
+      std::optional<std::string> buildPoint =
+          ofValue(callSite.getArgOperands()[indexValue]);
+      if (!buildPoint || (any && *buildPoint != *bundle)) {
         agree = false;
         break;
       }
-      bundle = b;
+      bundle = buildPoint;
       any = true;
     }
     std::optional<std::string> result =
@@ -492,17 +480,18 @@ public:
   }
 
 private:
-  std::optional<std::string> ofValue(Value v) {
-    while (auto view = v.getDefiningOp<ViewLikeOpInterface>())
-      v = view.getViewSource();
-    auto arg = dyn_cast<BlockArgument>(v);
+  std::optional<std::string> ofValue(Value valueHandle) {
+    while (auto view = valueHandle.getDefiningOp<ViewLikeOpInterface>())
+      valueHandle = view.getViewSource();
+    auto arg = dyn_cast<BlockArgument>(valueHandle);
     if (!arg)
       return std::nullopt;
     auto fn = dyn_cast<func::FuncOp>(arg.getOwner()->getParentOp());
     if (!fn || !isa<BaseMemRefType>(arg.getType()))
       return std::nullopt;
-    if (std::optional<std::string> b = declared(fn, arg.getArgNumber()))
-      return b;
+    if (std::optional<std::string> buildPoint =
+            declared(fn, arg.getArgNumber()))
+      return buildPoint;
     return throughCalls(fn, arg.getArgNumber());
   }
 
@@ -515,16 +504,19 @@ private:
 void annotateMaxiBundlesThroughCalls(ModuleOp module, StringRef mode,
                                      StringRef defaultBundle) {
   MaxiBundles bundles(module, mode, defaultBundle);
-  OpBuilder b(module.getContext());
+  OpBuilder buildPoint(module.getContext());
   module.walk([&](func::FuncOp fn) {
     if (fn.isExternal())
       return;
     for (BlockArgument arg : fn.getArguments()) {
-      unsigned idx = arg.getArgNumber();
-      if (!isa<BaseMemRefType>(arg.getType()) || bundles.declared(fn, idx))
+      unsigned indexValue = arg.getArgNumber();
+      if (!isa<BaseMemRefType>(arg.getType()) ||
+          bundles.declared(fn, indexValue))
         continue;
-      if (std::optional<std::string> bundle = bundles.throughCalls(fn, idx))
-        fn.setArgAttr(idx, kMaxiBundleAttr, b.getStringAttr(*bundle));
+      if (std::optional<std::string> bundle =
+              bundles.throughCalls(fn, indexValue))
+        fn.setArgAttr(indexValue, kMaxiBundleAttr,
+                      buildPoint.getStringAttr(*bundle));
     }
   });
 }
@@ -540,11 +532,11 @@ public:
   const Sets &of(func::FuncOp fn) {
     auto [it, inserted] = memo.try_emplace(fn.getOperation());
     if (!inserted)
-      return it->second; // computed, or a recursive call in progress
+      return it->second;
     Sets sets;
     fn.walk([&](Operation *op) {
-      if (auto call = dyn_cast<CallOpInterface>(op)) {
-        if (func::FuncOp callee = resolveDefinedCallee(call)) {
+      if (auto callSite = dyn_cast<CallOpInterface>(op)) {
+        if (func::FuncOp callee = resolveDefinedCallee(callSite)) {
           const Sets &inner = of(callee);
           sets.reads.insert(inner.reads.begin(), inner.reads.end());
           sets.writes.insert(inner.writes.begin(), inner.writes.end());
@@ -553,14 +545,14 @@ public:
       }
       Value mem;
       bool write = false;
-      if (auto l = dyn_cast<affine::AffineReadOpInterface>(op))
-        mem = l.getMemRef();
-      else if (auto s = dyn_cast<affine::AffineWriteOpInterface>(op))
-        mem = s.getMemRef(), write = true;
-      else if (auto l = dyn_cast<memref::LoadOp>(op))
-        mem = l.getMemRef();
-      else if (auto s = dyn_cast<memref::StoreOp>(op))
-        mem = s.getMemRef(), write = true;
+      if (auto lowerIndex = dyn_cast<affine::AffineReadOpInterface>(op))
+        mem = lowerIndex.getMemRef();
+      else if (auto stringValue = dyn_cast<affine::AffineWriteOpInterface>(op))
+        mem = stringValue.getMemRef(), write = true;
+      else if (auto lowerIndex = dyn_cast<memref::LoadOp>(op))
+        mem = lowerIndex.getMemRef();
+      else if (auto stringValue = dyn_cast<memref::StoreOp>(op))
+        mem = stringValue.getMemRef(), write = true;
       if (!mem)
         return;
       while (auto view = mem.getDefiningOp<ViewLikeOpInterface>())
@@ -581,14 +573,15 @@ private:
 void annotateCalleeGlobalRecurrences(ModuleOp module) {
   GlobalEffects effects;
   UnitAttr unit = UnitAttr::get(module.getContext());
-  module.walk([&](CallOpInterface call) {
-    func::FuncOp callee = resolveDefinedCallee(call);
+  module.walk([&](CallOpInterface callSite) {
+    func::FuncOp callee = resolveDefinedCallee(callSite);
     if (!callee || !isKeptCallee(callee))
       return;
     const GlobalEffects::Sets &sets = effects.of(callee);
-    if (llvm::any_of(sets.writes,
-                     [&](StringRef g) { return sets.reads.contains(g); }))
-      call->setAttr(kCalleeGlobalRecurrenceAttr, unit);
+    if (llvm::any_of(sets.writes, [&](StringRef globalOp) {
+          return sets.reads.contains(globalOp);
+        }))
+      callSite->setAttr(kCalleeGlobalRecurrenceAttr, unit);
   });
 }
 
@@ -599,33 +592,28 @@ unsigned callerStoresPerLoop(Value bank) {
   auto fn = dyn_cast<func::FuncOp>(arg.getOwner()->getParentOp());
   if (!fn)
     return 0;
-  auto a = fn.getArgAttrOfType<IntegerAttr>(arg.getArgNumber(),
-                                            kCallerStoresPerLoopAttr);
-  return a ? static_cast<unsigned>(a.getInt()) : 0u;
+  auto arrayValue = fn.getArgAttrOfType<IntegerAttr>(arg.getArgNumber(),
+                                                     kCallerStoresPerLoopAttr);
+  return arrayValue ? static_cast<unsigned>(arrayValue.getInt()) : 0u;
 }
 
 unsigned calleeStoresPerLoop(Value bank) {
-  IntegerAttr a;
+  IntegerAttr arrayValue;
   if (auto arg = dyn_cast<BlockArgument>(bank)) {
     if (auto fn = dyn_cast<func::FuncOp>(arg.getOwner()->getParentOp()))
-      a = fn.getArgAttrOfType<IntegerAttr>(arg.getArgNumber(),
-                                           kCalleeStoresPerLoopAttr);
+      arrayValue = fn.getArgAttrOfType<IntegerAttr>(arg.getArgNumber(),
+                                                    kCalleeStoresPerLoopAttr);
   } else if (Operation *def = bank.getDefiningOp()) {
-    a = def->getAttrOfType<IntegerAttr>(kCalleeStoresPerLoopAttr);
+    arrayValue = def->getAttrOfType<IntegerAttr>(kCalleeStoresPerLoopAttr);
   }
-  return a ? static_cast<unsigned>(a.getInt()) : 0u;
+  return arrayValue ? static_cast<unsigned>(arrayValue.getInt()) : 0u;
 }
-
-//===----------------------------------------------------------------------===//
-// BRAMClassification
-//===----------------------------------------------------------------------===//
 
 BRAMClassification::BRAMClassification(Operation *op) {
   enumerateBanks(op);
   profileAccesses(op);
   LLVM_DEBUG(dump(llvm::dbgs()));
 }
-
 
 /// One bank of a complete partition (a memref.alloca memory banking made,
 /// `hls.partition`, holding a single element) is a register: Vitis gives the
@@ -641,28 +629,14 @@ static bool isOneElementPartitionBank(Operation *alloca, MemRefType memTy) {
 }
 
 void BRAMClassification::enumerateBanks(Operation *root) {
-  // W3 (VITIS_NOTES.md N14 R6): the memref arguments of a non-inlined callee
-  // name the caller's arrays, which Vitis replicates for the callee's own
-  // pipelined loops like any local array (inl_e1: `buf` read 3x per cycle in
-  // the callee, RAM_1WNR, 4 BRAM). The arguments of the top are its ports:
-  // not tracked, two slots per cycle. A callee is a private function (the
-  // harness prefix --symbol-privatize=exclude=<top> makes every function but
-  // the top private; cgeist emits `static` functions private) or one that
-  // carries hls.inline_off or hls.inline_auto_off. This analysis runs inside
-  // a function pass, which may not look at the other functions of the module
-  // (the pass manager runs function passes in parallel), so the call sites
-  // are not searched.
-  // An argument listed in `hls.port_bound_args` (--auto-pipeline-unroll: its
-  // array crosses a module instantiated at more than one place) is not
-  // replicated for the callee (N14 R6; w3rev_k3, w3fx_d2_conc: rd3's loop
-  // II 2, the caller's array RAM_1R1W): it stays untracked, two ports.
+
   if (auto fn = dyn_cast<func::FuncOp>(root)) {
     bool isCallee = fn.isPrivate() || isKeptCallee(fn);
     SmallVector<int64_t> portBound;
     if (auto bound = fn->getAttrOfType<ArrayAttr>(kPortBoundArgsAttr))
-      for (Attribute a : bound)
-        if (auto i = dyn_cast<IntegerAttr>(a))
-          portBound.push_back(i.getInt());
+      for (Attribute arrayValue : bound)
+        if (auto loopIndex = dyn_cast<IntegerAttr>(arrayValue))
+          portBound.push_back(loopIndex.getInt());
     if (isCallee)
       for (BlockArgument arg : fn.getArguments()) {
         auto memTy = dyn_cast<MemRefType>(arg.getType());
@@ -677,9 +651,9 @@ void BRAMClassification::enumerateBanks(Operation *root) {
         BankProfile prof;
         prof.memref = arg;
         prof.width = elt.isIntOrFloat()
-                     ? elt.getIntOrFloatBitWidth()
-                     : static_cast<unsigned>(
-                           circt::hlsest::Config::get().frontend.indexBits);
+                         ? elt.getIntOrFloatBitWidth()
+                         : static_cast<unsigned>(
+                               circt::hlsest::Config::get().frontend.indexBits);
         prof.depth = static_cast<unsigned>(memTy.getNumElements());
         banks.try_emplace(arg, prof);
       }
@@ -688,11 +662,8 @@ void BRAMClassification::enumerateBanks(Operation *root) {
     Value bank = alloca.getResult();
     auto memTy = dyn_cast<MemRefType>(bank.getType());
     if (!memTy || !memTy.hasStaticShape())
-      return; // Skip dynamic / non-memref allocas.
+      return;
 
-    // Only arrays of integers / floats (and index) are storage the scheduler
-    // models; a memref of memrefs or of an LLVM struct is a pointer variable
-    // or an aggregate (cgeist output for forgebench conv_*), not a bank.
     Type elt = memTy.getElementType();
     if (!elt.isIntOrFloat() && !isa<IndexType>(elt))
       return;
@@ -710,9 +681,7 @@ void BRAMClassification::enumerateBanks(Operation *root) {
       prof.mode = StorageMode::Registers;
     banks.try_emplace(bank, prof);
   });
-  // A global (or function static) marked hls.registers has no memory ports
-  // either (VITIS_NOTES N7 (a), kernel w9rv_r1_glob4); every other global
-  // stays untracked (two ports).
+
   root->walk([&](memref::GetGlobalOp get) {
     auto global = SymbolTable::lookupNearestSymbolFrom<memref::GlobalOp>(
         get, get.getNameAttr());
@@ -739,14 +708,14 @@ static bool userRam1wnr(Value bank) {
            .tool.hls.memoryArchitecture.replication.userRam1wnrReplicable)
     return false;
   Operation *def = bank.getDefiningOp();
-  auto binds = def ? def->getAttrOfType<ArrayAttr>("hls.bind_storage")
-                   : ArrayAttr();
+  auto binds =
+      def ? def->getAttrOfType<ArrayAttr>("hls.bind_storage") : ArrayAttr();
   if (!binds)
     return false;
-  for (Attribute b : binds)
-    if (auto d = dyn_cast<DictionaryAttr>(b))
-      if (auto t = d.getAs<StringAttr>("type"))
-        if (t.getValue().equals_insensitive("ram_1wnr"))
+  for (Attribute buildPoint : binds)
+    if (auto dimensionIndex = dyn_cast<DictionaryAttr>(buildPoint))
+      if (auto typeValue = dimensionIndex.getAs<StringAttr>("type"))
+        if (typeValue.getValue().equals_insensitive("ram_1wnr"))
           return true;
   return false;
 }
@@ -765,17 +734,10 @@ static bool userPinnedRam(Value bank) {
 }
 
 void BRAMClassification::profileAccesses(Operation *root) {
-  // Per bank, per enclosing innermost loop: (reads, writes) within one body.
-  // Keyed loop = the innermost enclosing LoopLikeOpInterface op (affine.for,
-  // scf.for, ...: the same notion of scope as BRAMAnalysis' sequentialScope),
-  // or null for a straight-line access outside every loop. The counts are per loop *body* (after
-  // unrolling), which is what Vitis' replication rule looks at: a body with
-  // two stores to the bank needs two write ports in one iteration, so the bank
-  // cannot be a RAM_1WNR (one shared write port) and stays a 2-port RAM.
+
   using LoopCounts = llvm::DenseMap<Operation *, std::pair<unsigned, unsigned>>;
   llvm::DenseMap<Value, LoopCounts> perLoop;
-  // The stores themselves, per bank and loop: two in the arms of one if
-  // count once for replicability (maxStoresInOneIteration).
+
   llvm::DenseMap<Value, llvm::MapVector<Operation *, SmallVector<Operation *>>>
       storesPerLoop;
 
@@ -786,7 +748,7 @@ void BRAMClassification::profileAccesses(Operation *root) {
       return;
     auto it = banks.find(bank);
     if (it == banks.end())
-      return; // Access to an argument/off-chip memref, not a tracked bank.
+      return;
 
     Operation *loop = op->getParentOfType<LoopLikeOpInterface>();
     auto &counts = perLoop[bank][loop];
@@ -798,9 +760,6 @@ void BRAMClassification::profileAccesses(Operation *root) {
     }
   });
 
-  // Fold to the worst-case profile across loops. Straight-line accesses
-  // (null loop) run once and have no II, so they do not decide replicability
-  // (Vitis' rule was only observed on loop bodies; replication.md "R3").
   for (auto &[bank, loopCounts] : perLoop) {
     BankProfile &prof = banks[bank];
     unsigned maxStoresPerLoop = 0;
@@ -809,26 +768,21 @@ void BRAMClassification::profileAccesses(Operation *root) {
       prof.maxReads = std::max(prof.maxReads, reads);
       prof.maxWrites = std::max(prof.maxWrites, writes);
       if (loop && writes)
-        maxStoresPerLoop = std::max(
-            maxStoresPerLoop,
-            hls_analysis::maxStoresInOneIteration(storesPerLoop[bank][loop],
-                                                  loop));
+        maxStoresPerLoop =
+            std::max(maxStoresPerLoop, hls_analysis::maxStoresInOneIteration(
+                                           storesPerLoop[bank][loop], loop));
     }
-    // The loops of the callees this bank is passed to (annotated by
-    // annotateCalleeStoresPerLoop, which can see the other functions).
+
     maxStoresPerLoop = std::max(maxStoresPerLoop, calleeStoresPerLoop(bank));
-    // A parameter: the arrays its call sites pass, stored by the callers
-    // (annotateCallerStoresPerLoop, VITIS_NOTES N99).
+
     maxStoresPerLoop = std::max(maxStoresPerLoop, callerStoresPerLoop(bank));
     prof.replicable = maxStoresPerLoop <= 1;
-    // A user `bind_storage type=ram_1wnr` (N113): replicated anyway; the
-    // loops storing it twice keep the shared write port and a higher II.
+
     if (!prof.replicable && userRam1wnr(bank)) {
       prof.replicable = true;
       maxStoresPerLoop = 1;
     }
-    // A user binding of a plain RAM type (N173): never replicated; the
-    // loops that read it more often than its ports allow raise their II.
+
     if (userPinnedRam(bank)) {
       prof.replicable = false;
       maxStoresPerLoop = std::numeric_limits<unsigned>::max();
@@ -838,7 +792,6 @@ void BRAMClassification::profileAccesses(Operation *root) {
     prof.type = classifyStorageKind(prof.maxReads, prof.maxWrites);
   }
 }
-
 
 StorageMode BRAMClassification::getMode(Value bank) const {
   auto it = banks.find(bank);
@@ -854,12 +807,12 @@ void BRAMClassification::dump(llvm::raw_ostream &os) const {
   os << "=== (BRAMClassification) ===\n";
   for (auto &[bank, prof] : banks) {
     os << "  bank " << bank << ": " << prof.width << "x" << prof.depth
-       << " modes=" << stringifyStorageMode(prof.mode) << " (R=" << prof.maxReads
-       << " W=" << prof.maxWrites
+       << " modes=" << stringifyStorageMode(prof.mode)
+       << " (R=" << prof.maxReads << " W=" << prof.maxWrites
        << (prof.replicable ? ", replicable" : ", not replicable") << ")"
        << " slots/cycle=" << storageModeSlots(prof.mode)
        << " storage kind= " << stringifyStorageKind(prof.type) << "\n";
   }
 }
 
-} // namespace bramopt
+} // namespace circt::hls_analysis
