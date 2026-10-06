@@ -262,7 +262,16 @@ def main():
         }
     )
     subprocess.run(
-        ["git", "commit", "--amend", "--no-gpg-sign", "--no-verify", "-m", message],
+        [
+            "git",
+            "commit",
+            "--amend",
+            "--allow-empty",
+            "--no-gpg-sign",
+            "--no-verify",
+            "-m",
+            message,
+        ],
         check=True,
         env=environment,
     )
