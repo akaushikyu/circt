@@ -340,9 +340,10 @@ static SmallVector<int64_t> scheduleSignature(ModuloProblem &prob,
     }
     if (auto rsrcs = prob.getLinkedResourceTypes(op)) {
       widthValue.push_back(rsrcs->size());
-      for (Problem::ResourceType r : *rsrcs) {
-        widthValue.push_back(idOf(rsrcIds, r.getAttr().getAsOpaquePointer()));
-        widthValue.push_back(optToWord(prob.getLimit(r)));
+      for (Problem::ResourceType resultValue : *rsrcs) {
+        widthValue.push_back(
+            idOf(rsrcIds, resultValue.getAttr().getAsOpaquePointer()));
+        widthValue.push_back(optToWord(prob.getLimit(resultValue)));
       }
     } else {
       widthValue.push_back(-1);
@@ -405,8 +406,9 @@ static bool isPlainMemrefUse(Operation *user) {
       user->hasTrait<OpTrait::IsTerminator>() ||
       !isa<MemoryEffectOpInterface>(user))
     return false;
-  return llvm::none_of(user->getResultTypes(),
-                       [](Type t) { return isa<BaseMemRefType>(t); });
+  return llvm::none_of(user->getResultTypes(), [](Type typeValue) {
+    return isa<BaseMemRefType>(typeValue);
+  });
 }
 
 static MemrefAliasInfo collectMemrefAliases(Value mem) {
@@ -420,15 +422,16 @@ static MemrefAliasInfo collectMemrefAliases(Value mem) {
     Value valueHandle = worklist.pop_back_val();
     for (Operation *user : valueHandle.getUsers()) {
       if (isa<ViewLikeOpInterface>(user)) {
-        for (Value r : user->getResults())
-          if (isa<BaseMemRefType>(r.getType()) && info.members.insert(r).second)
-            worklist.push_back(r);
+        for (Value resultValue : user->getResults())
+          if (isa<BaseMemRefType>(resultValue.getType()) &&
+              info.members.insert(resultValue).second)
+            worklist.push_back(resultValue);
         continue;
       }
 
       if (isa<CallOpInterface>(user) &&
-          llvm::none_of(user->getResultTypes(), [](Type t) {
-            return isa<BaseMemRefType, LLVM::LLVMPointerType>(t);
+          llvm::none_of(user->getResultTypes(), [](Type typeValue) {
+            return isa<BaseMemRefType, LLVM::LLVMPointerType>(typeValue);
           })) {
         info.passedToCall = true;
         continue;
@@ -550,8 +553,8 @@ void AffineToLoopSchedule::hoistInvariantLoads() {
       if (!hoistable)
         continue;
       toHoist.push_back(&op);
-      for (Value r : op.getResults())
-        invariant.insert(r);
+      for (Value resultValue : op.getResults())
+        invariant.insert(resultValue);
     }
 
     if (hoistConditional)
@@ -603,8 +606,8 @@ void AffineToLoopSchedule::hoistInvariantLoads() {
         if (!ok)
           continue;
         moves.push_back(&op);
-        for (Value r : op.getResults())
-          hoisted.insert(r);
+        for (Value resultValue : op.getResults())
+          hoisted.insert(resultValue);
       }
 
       if (llvm::none_of(moves,
@@ -690,17 +693,17 @@ static std::pair<AffineExpr, int64_t> splitConstantTerm(AffineExpr e) {
   return {e, 0};
 }
 
-static AddrRelation compareAddresses(const AccessAddr &a,
+static AddrRelation compareAddresses(const AccessAddr &arrayValue,
                                      const AccessAddr &buildPoint) {
-  if (a.map.getNumResults() != buildPoint.map.getNumResults())
+  if (arrayValue.map.getNumResults() != buildPoint.map.getNumResults())
     return AddrRelation::MayAlias;
 
-  if (a.operands == buildPoint.operands &&
-      a.map.getNumDims() == buildPoint.map.getNumDims() &&
-      a.map.getNumSymbols() == buildPoint.map.getNumSymbols()) {
+  if (arrayValue.operands == buildPoint.operands &&
+      arrayValue.map.getNumDims() == buildPoint.map.getNumDims() &&
+      arrayValue.map.getNumSymbols() == buildPoint.map.getNumSymbols()) {
     bool allEqualParts = true;
     for (auto [ea, eb] :
-         llvm::zip(a.map.getResults(), buildPoint.map.getResults())) {
+         llvm::zip(arrayValue.map.getResults(), buildPoint.map.getResults())) {
       auto [va, ca] = splitConstantTerm(ea);
       auto [vb, callback] = splitConstantTerm(eb);
       if (va != vb) {
@@ -713,8 +716,8 @@ static AddrRelation compareAddresses(const AccessAddr &a,
     if (allEqualParts)
       return AddrRelation::Same;
   }
-  AffineValueMap va(a.map, a.operands), vb(buildPoint.map, buildPoint.operands),
-      diff;
+  AffineValueMap va(arrayValue.map, arrayValue.operands),
+      vb(buildPoint.map, buildPoint.operands), diff;
   AffineValueMap::difference(va, vb, &diff);
   bool allZero = true;
   for (unsigned d = 0, elementCount = diff.getNumResults(); d < elementCount;
@@ -729,8 +732,8 @@ static AddrRelation compareAddresses(const AccessAddr &a,
 }
 
 static int64_t counterAttr(Operation *op, StringRef name) {
-  if (auto a = op->getAttrOfType<IntegerAttr>(name))
-    return a.getInt();
+  if (auto arrayValue = op->getAttrOfType<IntegerAttr>(name))
+    return arrayValue.getInt();
   return 0;
 }
 
@@ -789,17 +792,17 @@ public:
     SmallVector<std::optional<int64_t>, 4> k;
   };
 
-  Split split(const AccessAddr &a) {
+  Split split(const AccessAddr &arrayValue) {
     Split out;
     std::vector<uintptr_t> key;
-    key.push_back(a.map.getNumResults());
-    key.push_back(a.map.getNumDims());
-    key.push_back(a.map.getNumSymbols());
-    for (Value valueHandle : a.operands)
+    key.push_back(arrayValue.map.getNumResults());
+    key.push_back(arrayValue.map.getNumDims());
+    key.push_back(arrayValue.map.getNumSymbols());
+    for (Value valueHandle : arrayValue.operands)
       key.push_back(
           reinterpret_cast<uintptr_t>(valueHandle.getAsOpaquePointer()));
     SmallVector<AffineExpr, 4> parts;
-    for (AffineExpr e : a.map.getResults()) {
+    for (AffineExpr e : arrayValue.map.getResults()) {
       auto [part, candidateValue] = splitConstantTerm(e);
       parts.push_back(part);
       out.consts.push_back(candidateValue);
@@ -809,10 +812,11 @@ public:
     auto [it, inserted] = shapeIds.try_emplace(key, shapes.size());
     if (inserted) {
       Shape sh;
-      sh.ctx = a.map.getContext();
-      sh.numDims = a.map.getNumDims();
-      sh.numSymbols = a.map.getNumSymbols();
-      sh.operands.assign(a.operands.begin(), a.operands.end());
+      sh.ctx = arrayValue.map.getContext();
+      sh.numDims = arrayValue.map.getNumDims();
+      sh.numSymbols = arrayValue.map.getNumSymbols();
+      sh.operands.assign(arrayValue.operands.begin(),
+                         arrayValue.operands.end());
       sh.parts = std::move(parts);
       shapes.push_back(std::move(sh));
     }
@@ -825,16 +829,16 @@ public:
     if (!inserted)
       return it->second;
     PairInfo &info = it->second;
-    const Shape &a = shapes[sa], &buildPoint = shapes[sb];
-    if (a.parts.size() != buildPoint.parts.size()) {
+    const Shape &arrayValue = shapes[sa], &buildPoint = shapes[sb];
+    if (arrayValue.parts.size() != buildPoint.parts.size()) {
       info.mayAliasAll = true;
       return info;
     }
-    bool sameOperands = a.operands == buildPoint.operands &&
-                        a.numDims == buildPoint.numDims &&
-                        a.numSymbols == buildPoint.numSymbols;
+    bool sameOperands = arrayValue.operands == buildPoint.operands &&
+                        arrayValue.numDims == buildPoint.numDims &&
+                        arrayValue.numSymbols == buildPoint.numSymbols;
     bool needDifference = false;
-    for (auto [pa, pb] : llvm::zip(a.parts, buildPoint.parts)) {
+    for (auto [pa, pb] : llvm::zip(arrayValue.parts, buildPoint.parts)) {
       if (sameOperands && pa == pb)
         info.k.push_back(0);
       else {
@@ -844,15 +848,17 @@ public:
     }
     if (!needDifference)
       return info;
-    AffineValueMap va(partsMap(a), a.operands),
+    AffineValueMap va(partsMap(arrayValue), arrayValue.operands),
         vb(partsMap(buildPoint), buildPoint.operands), diff;
     AffineValueMap::difference(va, vb, &diff);
-    for (unsigned r = 0, elementCount = diff.getNumResults(); r < elementCount;
-         ++r) {
-      if (sameOperands && a.parts[r] == buildPoint.parts[r])
+    for (unsigned resultValue = 0, elementCount = diff.getNumResults();
+         resultValue < elementCount; ++resultValue) {
+      if (sameOperands &&
+          arrayValue.parts[resultValue] == buildPoint.parts[resultValue])
         continue;
-      if (auto candidateValue = dyn_cast<AffineConstantExpr>(diff.getResult(r)))
-        info.k[r] = candidateValue.getValue();
+      if (auto candidateValue =
+              dyn_cast<AffineConstantExpr>(diff.getResult(resultValue)))
+        info.k[resultValue] = candidateValue.getValue();
     }
     return info;
   }
@@ -864,13 +870,14 @@ public:
     if (portValue.mayAliasAll)
       return AddrRelation::MayAlias;
     bool allZero = true;
-    for (unsigned r = 0, elementCount = portValue.k.size(); r < elementCount;
-         ++r) {
-      if (!portValue.k[r]) {
+    for (unsigned resultValue = 0, elementCount = portValue.k.size();
+         resultValue < elementCount; ++resultValue) {
+      if (!portValue.k[resultValue]) {
         allZero = false;
         continue;
       }
-      if (*portValue.k[r] + ca[r] - callback[r] != 0)
+      if (*portValue.k[resultValue] + ca[resultValue] - callback[resultValue] !=
+          0)
         return AddrRelation::Disjoint;
     }
     return allZero ? AddrRelation::Same : AddrRelation::MayAlias;
@@ -918,10 +925,10 @@ struct KnownValues {
   static std::vector<int64_t> project(ArrayRef<int64_t> candidateValue,
                                       uint64_t mask) {
     std::vector<int64_t> out;
-    for (unsigned r = 0, elementCount = candidateValue.size(); r < elementCount;
-         ++r)
-      if (mask & (uint64_t(1) << r))
-        out.push_back(candidateValue[r]);
+    for (unsigned resultValue = 0, elementCount = candidateValue.size();
+         resultValue < elementCount; ++resultValue)
+      if (mask & (uint64_t(1) << resultValue))
+        out.push_back(candidateValue[resultValue]);
     return out;
   }
 
@@ -962,13 +969,14 @@ struct KnownValues {
         continue;
       }
       uint64_t mask = 0;
-      for (unsigned r = 0; r < elementCount; ++r)
-        if (portValue.k[r])
-          mask |= uint64_t(1) << r;
+      for (unsigned resultValue = 0; resultValue < elementCount; ++resultValue)
+        if (portValue.k[resultValue])
+          mask |= uint64_t(1) << resultValue;
       std::vector<int64_t> target;
-      for (unsigned r = 0; r < elementCount; ++r)
-        if (portValue.k[r])
-          target.push_back(queueValue.consts[r] + *portValue.k[r]);
+      for (unsigned resultValue = 0; resultValue < elementCount; ++resultValue)
+        if (portValue.k[resultValue])
+          target.push_back(queueValue.consts[resultValue] +
+                           *portValue.k[resultValue]);
       uint64_t full =
           elementCount == 64 ? ~uint64_t(0) : (uint64_t(1) << elementCount) - 1;
       if (mask == 0) {
@@ -1217,16 +1225,16 @@ public:
     op->walk([&](Operation *rowValue) {
       if (isa<CallOpInterface>(rowValue))
         summary->hasCall = true;
-      ConflictSummary::Toucher t;
-      t.op = rowValue;
+      ConflictSummary::Toucher typeValue;
+      typeValue.op = rowValue;
       for (Value valueHandle : rowValue->getOperands())
         if (isa<BaseMemRefType>(valueHandle.getType()))
-          t.memrefs.push_back(valueHandle);
-      if (t.memrefs.empty())
+          typeValue.memrefs.push_back(valueHandle);
+      if (typeValue.memrefs.empty())
         return;
       if (isa<AffineLoadOp, AffineStoreOp>(rowValue))
-        t.addr.emplace(accessAddr(rowValue));
-      summary->touchers.push_back(std::move(t));
+        typeValue.addr.emplace(accessAddr(rowValue));
+      summary->touchers.push_back(std::move(typeValue));
     });
     return *cache.try_emplace(op, std::move(summary)).first->second;
   }
@@ -1253,9 +1261,9 @@ static bool mayConflict(Operation *other, Value mem,
   const ConflictSummary &stringValue = summaries.get(other);
   if (alias.passedToCall && stringValue.hasCall)
     return true;
-  for (const ConflictSummary::Toucher &t : stringValue.touchers) {
-    Operation *op = t.op;
-    bool touches = llvm::any_of(t.memrefs, [&](Value valueHandle) {
+  for (const ConflictSummary::Toucher &typeValue : stringValue.touchers) {
+    Operation *op = typeValue.op;
+    bool touches = llvm::any_of(typeValue.memrefs, [&](Value valueHandle) {
       return alias.members.contains(valueHandle);
     });
     if (!touches)
@@ -1266,7 +1274,7 @@ static bool mayConflict(Operation *other, Value mem,
     if ((isLoad || isStore) && accessMemref(op) == mem) {
       if (isLoad && !readsConflict)
         continue;
-      if (compareAddresses(*t.addr, addr) == AddrRelation::Disjoint)
+      if (compareAddresses(*typeValue.addr, addr) == AddrRelation::Disjoint)
         continue;
     }
     return true;
@@ -1299,11 +1307,11 @@ struct ArmTouchers {
       const ConflictSummary &stringValue = summaries.get(&op);
       if (stringValue.hasCall)
         callPositions.push_back(pos);
-      for (const ConflictSummary::Toucher &t : stringValue.touchers)
-        for (Value valueHandle : t.memrefs) {
+      for (const ConflictSummary::Toucher &typeValue : stringValue.touchers)
+        for (Value valueHandle : typeValue.memrefs) {
           SmallVector<Entry> &list = byMemref[valueHandle];
-          if (list.empty() || list.back().second != &t)
-            list.push_back({pos, &t});
+          if (list.empty() || list.back().second != &typeValue)
+            list.push_back({pos, &typeValue});
         }
       ++pos;
     }
@@ -1326,15 +1334,15 @@ struct ArmTouchers {
       for (const Entry &e : it->second) {
         if (!inRange(e.first))
           continue;
-        const ConflictSummary::Toucher &t = *e.second;
-        Operation *op = t.op;
+        const ConflictSummary::Toucher &typeValue = *e.second;
+        Operation *op = typeValue.op;
         if (isa<ViewLikeOpInterface>(op))
           continue;
         bool isLoad = isa<AffineLoadOp>(op), isStore = isa<AffineStoreOp>(op);
         if ((isLoad || isStore) && accessMemref(op) == mem) {
           if (isLoad && !readsConflict)
             continue;
-          if (compareAddresses(*t.addr, addr) == AddrRelation::Disjoint)
+          if (compareAddresses(*typeValue.addr, addr) == AddrRelation::Disjoint)
             continue;
         }
         return true;
@@ -1387,20 +1395,20 @@ pairSameAddress(ArrayRef<AccessOp> thenOps, ArrayRef<AccessOp> elseOps) {
   DenseSet<Operation *> used;
 
   SmallVector<std::optional<AccessAddr>> elseAddrs(elseOps.size());
-  for (AccessOp t : thenOps) {
+  for (AccessOp typeValue : thenOps) {
     std::optional<AccessAddr> tAddr;
     for (unsigned ei = 0; ei < elseOps.size(); ++ei) {
       AccessOp e = elseOps[ei];
-      if (used.contains(e) || t.getMemRef() != e.getMemRef())
+      if (used.contains(e) || typeValue.getMemRef() != e.getMemRef())
         continue;
       if (!tAddr)
-        tAddr.emplace(accessAddr(t));
+        tAddr.emplace(accessAddr(typeValue));
       if (!elseAddrs[ei])
         elseAddrs[ei].emplace(accessAddr(e));
       if (compareAddresses(*tAddr, *elseAddrs[ei]) != AddrRelation::Same)
         continue;
       used.insert(e);
-      pairs.push_back({t, e});
+      pairs.push_back({typeValue, e});
       break;
     }
   }
@@ -1413,8 +1421,8 @@ static Operation *addIfResults(Operation *ifOp,
                                ArrayRef<std::pair<Value, Value>> yielded) {
   OpBuilder buildPoint(ifOp);
   SmallVector<Type> types(ifOp->getResultTypes());
-  for (auto [t, e] : yielded)
-    types.push_back(t.getType());
+  for (auto [typeValue, e] : yielded)
+    types.push_back(typeValue.getType());
   Operation *newIf;
   if (auto sIf = dyn_cast<scf::IfOp>(ifOp)) {
     auto elementCount =
@@ -1434,8 +1442,8 @@ static Operation *addIfResults(Operation *ifOp,
   for (unsigned armIdx = 0; armIdx < 2; ++armIdx) {
     Operation *term = newIf->getRegion(armIdx).front().getTerminator();
     SmallVector<Value> operands(term->getOperands());
-    for (auto [t, e] : yielded)
-      operands.push_back(armIdx == 0 ? t : e);
+    for (auto [typeValue, e] : yielded)
+      operands.push_back(armIdx == 0 ? typeValue : e);
     term->setOperands(operands);
   }
   for (auto [oldRes, newRes] :
@@ -1456,8 +1464,8 @@ static void collectLoadsThroughIfs(Operation *op, bool memrefLoads,
   }
   if (!isa<AffineIfOp, scf::IfOp>(op))
     return;
-  for (Region &r : op->getRegions())
-    for (Block &buildPoint : r)
+  for (Region &resultValue : op->getRegions())
+    for (Block &buildPoint : resultValue)
       for (Operation &in : buildPoint)
         collectLoadsThroughIfs(&in, memrefLoads, out);
 }
@@ -1649,8 +1657,8 @@ public:
       const ConflictSummary &stringValue = summaries.get(&op);
       if (stringValue.hasCall)
         callPositions.push_back(pos);
-      for (const ConflictSummary::Toucher &t : stringValue.touchers)
-        add(t, &op, pos);
+      for (const ConflictSummary::Toucher &typeValue : stringValue.touchers)
+        add(typeValue, &op, pos);
       ++pos;
     }
   }
@@ -1684,10 +1692,11 @@ public:
                   });
       uint64_t mask = 0;
       Constants target;
-      for (unsigned r = 0; r < k.size() && r < 64; ++r)
-        if (k[r]) {
-          mask |= uint64_t(1) << r;
-          target.push_back(ca[r] + *k[r]);
+      for (unsigned resultValue = 0; resultValue < k.size() && resultValue < 64;
+           ++resultValue)
+        if (k[resultValue]) {
+          mask |= uint64_t(1) << resultValue;
+          target.push_back(ca[resultValue] + *k[resultValue]);
         }
       const std::vector<unsigned> *bucket =
           sh.bucket(mask, k.size() == ca.size() ? k.size() : 0, full, target);
@@ -1756,9 +1765,11 @@ private:
           if (!e.isStore && !(full && e.topLoad))
             continue;
           Constants candidateValue = constantsOf(e.addr), proj;
-          for (unsigned r = 0; r < candidateValue.size() && r < 64; ++r)
-            if (mask & (uint64_t(1) << r))
-              proj.push_back(candidateValue[r]);
+          for (unsigned resultValue = 0;
+               resultValue < candidateValue.size() && resultValue < 64;
+               ++resultValue)
+            if (mask & (uint64_t(1) << resultValue))
+              proj.push_back(candidateValue[resultValue]);
           it->second[proj].push_back(loopIndex);
         }
       (void)numResults;
@@ -1774,55 +1785,58 @@ private:
   DenseMap<Operation *, std::pair<Shape *, unsigned>> entryOfOp;
   SmallVector<unsigned> callPositions;
 
-  static ShapeKey shapeOf(const AccessAddr &a) {
+  static ShapeKey shapeOf(const AccessAddr &arrayValue) {
     ShapeKey k;
-    for (Value valueHandle : a.operands)
+    for (Value valueHandle : arrayValue.operands)
       k.push_back(valueHandle.getAsOpaquePointer());
     k.push_back(reinterpret_cast<const void *>(
-        static_cast<uintptr_t>(a.map.getNumDims())));
+        static_cast<uintptr_t>(arrayValue.map.getNumDims())));
     k.push_back(reinterpret_cast<const void *>(
-        static_cast<uintptr_t>(a.map.getNumSymbols())));
+        static_cast<uintptr_t>(arrayValue.map.getNumSymbols())));
     k.push_back(reinterpret_cast<const void *>(
-        static_cast<uintptr_t>(a.map.getNumResults())));
-    for (AffineExpr e : a.map.getResults())
+        static_cast<uintptr_t>(arrayValue.map.getNumResults())));
+    for (AffineExpr e : arrayValue.map.getResults())
       k.push_back(splitConstantTerm(e).first.getAsOpaquePointer());
     return k;
   }
-  static Constants constantsOf(const AccessAddr &a) {
+  static Constants constantsOf(const AccessAddr &arrayValue) {
     Constants candidateValue;
-    for (AffineExpr e : a.map.getResults())
+    for (AffineExpr e : arrayValue.map.getResults())
       candidateValue.push_back(splitConstantTerm(e).second);
     return candidateValue;
   }
   /// `a` without the constant terms of its results.
-  static AffineMap partsOf(const AccessAddr &a) {
+  static AffineMap partsOf(const AccessAddr &arrayValue) {
     SmallVector<AffineExpr, 4> parts;
-    for (AffineExpr e : a.map.getResults()) {
+    for (AffineExpr e : arrayValue.map.getResults()) {
       AffineExpr portValue = splitConstantTerm(e).first;
-      parts.push_back(portValue ? portValue
-                                : getAffineConstantExpr(0, a.map.getContext()));
+      parts.push_back(
+          portValue ? portValue
+                    : getAffineConstantExpr(0, arrayValue.map.getContext()));
     }
-    return AffineMap::get(a.map.getNumDims(), a.map.getNumSymbols(), parts,
-                          a.map.getContext());
+    return AffineMap::get(arrayValue.map.getNumDims(),
+                          arrayValue.map.getNumSymbols(), parts,
+                          arrayValue.map.getContext());
   }
   /// Per result, the difference of the non-constant parts of `a` and `b`
   /// when it is a constant (empty when the result counts differ). Memoized
   /// per pair of shapes: it depends on nothing else.
   SmallVector<std::optional<int64_t>, 4>
-  partDifference(const AccessAddr &a, const AccessAddr &buildPoint) {
+  partDifference(const AccessAddr &arrayValue, const AccessAddr &buildPoint) {
     SmallVector<std::optional<int64_t>, 4> k;
-    if (a.map.getNumResults() != buildPoint.map.getNumResults())
+    if (arrayValue.map.getNumResults() != buildPoint.map.getNumResults())
       return k;
-    std::pair<ShapeKey, ShapeKey> key{shapeOf(a), shapeOf(buildPoint)};
+    std::pair<ShapeKey, ShapeKey> key{shapeOf(arrayValue), shapeOf(buildPoint)};
     auto it = differenceCache.find(key);
     if (it != differenceCache.end())
       return it->second;
-    AffineValueMap va(partsOf(a), a.operands),
+    AffineValueMap va(partsOf(arrayValue), arrayValue.operands),
         vb(partsOf(buildPoint), buildPoint.operands), diff;
     AffineValueMap::difference(va, vb, &diff);
-    for (unsigned r = 0, elementCount = diff.getNumResults(); r < elementCount;
-         ++r) {
-      if (auto candidateValue = dyn_cast<AffineConstantExpr>(diff.getResult(r)))
+    for (unsigned resultValue = 0, elementCount = diff.getNumResults();
+         resultValue < elementCount; ++resultValue) {
+      if (auto candidateValue =
+              dyn_cast<AffineConstantExpr>(diff.getResult(resultValue)))
         k.push_back(candidateValue.getValue());
       else
         k.push_back(std::nullopt);
@@ -1834,22 +1848,24 @@ private:
            SmallVector<std::optional<int64_t>, 4>>
       differenceCache;
 
-  void add(const ConflictSummary::Toucher &t, Operation *top, unsigned pos) {
-    Operation *op = t.op;
+  void add(const ConflictSummary::Toucher &typeValue, Operation *top,
+           unsigned pos) {
+    Operation *op = typeValue.op;
     if (isa<ViewLikeOpInterface>(op))
       return;
     bool isLoad = isa<AffineLoadOp>(op), isStore = isa<AffineStoreOp>(op);
-    for (Value valueHandle : t.memrefs) {
+    for (Value valueHandle : typeValue.memrefs) {
       MemrefEntries &memoryOp = perMemref[valueHandle];
       if (!(isLoad || isStore) || accessMemref(op) != valueHandle) {
         if (memoryOp.irregular.empty() || memoryOp.irregular.back() != pos)
           memoryOp.irregular.push_back(pos);
         continue;
       }
-      Shape &sh = memoryOp.shapes[shapeOf(*t.addr)];
+      Shape &sh = memoryOp.shapes[shapeOf(*typeValue.addr)];
       sh.buckets.clear();
       entryOfOp[op] = {&sh, static_cast<unsigned>(sh.entries.size())};
-      sh.entries.push_back({pos, op, isLoad && op == top, isStore, *t.addr});
+      sh.entries.push_back(
+          {pos, op, isLoad && op == top, isStore, *typeValue.addr});
     }
   }
 };
@@ -1970,13 +1986,15 @@ void AffineToLoopSchedule::mergeIfElseAccesses() {
       loadAddrs.erase(user);
 
       if (changesAnAddress(user, loaded))
-        for (Operation *a = user; a; a = a->getParentOp())
-          blockIndex.erase(a->getBlock());
+        for (Operation *arrayValue = user; arrayValue;
+             arrayValue = arrayValue->getParentOp())
+          blockIndex.erase(arrayValue->getBlock());
     }
     load.getResult().replaceAllUsesWith(earlier.getResult());
-    for (Operation *a = load; a && !isa<func::FuncOp>(a);
-         a = a->getParentOp()) {
-      auto it = blockIndex.find(a->getBlock());
+    for (Operation *arrayValue = load;
+         arrayValue && !isa<func::FuncOp>(arrayValue);
+         arrayValue = arrayValue->getParentOp()) {
+      auto it = blockIndex.find(arrayValue->getBlock());
       if (it != blockIndex.end())
         it->second->erase(load);
     }
@@ -1997,11 +2015,12 @@ void AffineToLoopSchedule::mergeIfElseAccesses() {
     movableAccesses(thenArm, ifOp, tracked, thenLoads, thenStores, summaries);
     movableAccesses(elseArm, ifOp, tracked, elseLoads, elseStores, summaries);
 
-    for (auto [t, e] : pairSameAddress<AffineLoadOp>(thenLoads, elseLoads)) {
-      t->moveBefore(ifOp);
-      addCounterAttr(t, "hls.merged_loads",
+    for (auto [typeValue, e] :
+         pairSameAddress<AffineLoadOp>(thenLoads, elseLoads)) {
+      typeValue->moveBefore(ifOp);
+      addCounterAttr(typeValue, "hls.merged_loads",
                      1 + counterAttr(e, "hls.merged_loads"));
-      e.getResult().replaceAllUsesWith(t.getResult());
+      e.getResult().replaceAllUsesWith(typeValue.getResult());
       e.erase();
       ++hoisted;
     }
@@ -2010,19 +2029,19 @@ void AffineToLoopSchedule::mergeIfElseAccesses() {
     if (storePairs.empty())
       continue;
     SmallVector<std::pair<Value, Value>> yielded;
-    for (auto [t, e] : storePairs)
-      yielded.push_back({t.getValueToStore(), e.getValueToStore()});
+    for (auto [typeValue, e] : storePairs)
+      yielded.push_back({typeValue.getValueToStore(), e.getValueToStore()});
     unsigned firstNew = ifOp->getNumResults();
 
     SmallVector<AffineStoreOp> kept;
-    for (auto [t, e] : storePairs) {
-      addCounterAttr(t, "hls.merged_if_else_stores",
+    for (auto [typeValue, e] : storePairs) {
+      addCounterAttr(typeValue, "hls.merged_if_else_stores",
                      1 + counterAttr(e, "hls.merged_if_else_stores"));
-      addCounterAttr(t, "hls.removed_stores",
+      addCounterAttr(typeValue, "hls.removed_stores",
                      counterAttr(e, "hls.removed_stores"));
-      addCounterAttr(t, "hls.forwarded_loads",
+      addCounterAttr(typeValue, "hls.forwarded_loads",
                      counterAttr(e, "hls.forwarded_loads"));
-      kept.push_back(t);
+      kept.push_back(typeValue);
       e.erase();
     }
     Operation *newIf = addIfResults(ifOp, yielded);
@@ -2223,8 +2242,8 @@ void AffineToLoopSchedule::sinkFlattenedParentCode() {
         continue;
       llvm::SmallPtrSet<Operation *, 16> moved(pre.begin(), pre.end());
       for (Operation *op : pre)
-        for (Value r : op->getResults())
-          for (Operation *useValue : r.getUsers()) {
+        for (Value resultValue : op->getResults())
+          for (Operation *useValue : resultValue.getUsers()) {
             Operation *top = useValue;
             while (top && top->getBlock() != parent.getBody())
               top = top->getParentOp();
@@ -2826,10 +2845,10 @@ static std::optional<StringRef> fpUnitClass(Operation *op) {
   if (!isa<AddFOp, SubFOp, MulFOp, DivFOp, math::SqrtOp>(op) ||
       op->getNumResults() != 1)
     return std::nullopt;
-  Type t = op->getResult(0).getType();
-  if (!t.isF16() && !t.isF32() && !t.isF64())
+  Type typeValue = op->getResult(0).getType();
+  if (!typeValue.isF16() && !typeValue.isF32() && !typeValue.isF64())
     return std::nullopt;
-  const char *prefix = t.isF64() ? "d" : t.isF32() ? "f" : "h";
+  const char *prefix = typeValue.isF64() ? "d" : typeValue.isF32() ? "f" : "h";
   const char *kind = "add";
   if (isa<MulFOp>(op) ||
       (isa<DivFOp>(op) && circt::hls_analysis::isExactReciprocalDivide(op)))
@@ -2849,8 +2868,8 @@ unsigned FastModuloScheduler::countLimitedOps(ModuloProblem &prob) {
     auto lr = prob.getLinkedResourceTypes(op);
     if (!lr)
       continue;
-    if (llvm::any_of(*lr, [&](Problem::ResourceType r) {
-          return prob.getLimit(r).value_or(0) > 0;
+    if (llvm::any_of(*lr, [&](Problem::ResourceType resultValue) {
+          return prob.getLimit(resultValue).value_or(0) > 0;
         }))
       ++elementCount;
   }
@@ -2876,9 +2895,9 @@ LogicalResult FastModuloScheduler::build() {
       return failure();
     latency[loopIndex] = *lat;
     if (auto lr = prob.getLinkedResourceTypes(ops[loopIndex]))
-      for (Problem::ResourceType r : *lr)
-        if (prob.getLimit(r).value_or(0) > 0)
-          rsrcs[loopIndex].push_back(r);
+      for (Problem::ResourceType resultValue : *lr)
+        if (prob.getLimit(resultValue).value_or(0) > 0)
+          rsrcs[loopIndex].push_back(resultValue);
   }
   fpClass.assign(elementCount, -1);
   if (fpUnitLimits) {
@@ -2945,10 +2964,10 @@ LogicalResult FastModuloScheduler::build() {
           isa<AffineStoreOp, memref::StoreOp, StoreEnableOp>(ops[loopIndex]);
       height[loopIndex] = h + (store ? 0 : latency[loopIndex]);
     }
-    kahn([&height](unsigned a, unsigned buildPoint) {
-      if (height[a] != height[buildPoint])
-        return height[a] < height[buildPoint];
-      return a > buildPoint;
+    kahn([&height](unsigned arrayValue, unsigned buildPoint) {
+      if (height[arrayValue] != height[buildPoint])
+        return height[arrayValue] < height[buildPoint];
+      return arrayValue > buildPoint;
     });
   }
   DEBUG_WITH_TYPE("fast-modulo-size", {
@@ -2965,11 +2984,11 @@ LogicalResult FastModuloScheduler::build() {
 unsigned FastModuloScheduler::resMinII() const {
   DenseMap<Problem::ResourceType, unsigned> symbolUses;
   for (auto &rs : rsrcs)
-    for (Problem::ResourceType r : rs)
-      ++symbolUses[r];
+    for (Problem::ResourceType resultValue : rs)
+      ++symbolUses[resultValue];
   unsigned ii = 1;
-  for (auto &[r, count] : symbolUses) {
-    unsigned limit = *prob.getLimit(r);
+  for (auto &[resultValue, count] : symbolUses) {
+    unsigned limit = *prob.getLimit(resultValue);
     ii = std::max(ii, (count + limit - 1) / limit);
   }
   return ii;
@@ -3094,8 +3113,8 @@ bool FastModuloScheduler::tryII(unsigned ii, SmallVectorImpl<unsigned> &start,
       }
     if (!violated) {
       start.clear();
-      for (int64_t t : st)
-        start.push_back(static_cast<unsigned>(t));
+      for (int64_t typeValue : st)
+        start.push_back(static_cast<unsigned>(typeValue));
       return true;
     }
     if (!raised || round >= recurrenceRepairRounds)
@@ -3123,11 +3142,12 @@ bool FastModuloScheduler::placeAll(unsigned ii, ArrayRef<int64_t> asap,
     if (!fpTable.empty() && fpClass[innerIndex] >= 0) {
 
       SmallVector<unsigned> &tab = fpTable[fpClass[innerIndex]];
-      int64_t t = est;
-      while (tab[static_cast<unsigned>(t % ii)] >= fpUnits[fpClass[innerIndex]])
-        ++t;
-      ++tab[static_cast<unsigned>(t % ii)];
-      st[innerIndex] = t;
+      int64_t typeValue = est;
+      while (tab[static_cast<unsigned>(typeValue % ii)] >=
+             fpUnits[fpClass[innerIndex]])
+        ++typeValue;
+      ++tab[static_cast<unsigned>(typeValue % ii)];
+      st[innerIndex] = typeValue;
       continue;
     }
     if (rsrcs[innerIndex].empty()) {
@@ -3136,23 +3156,23 @@ bool FastModuloScheduler::placeAll(unsigned ii, ArrayRef<int64_t> asap,
     }
     bool placed = false;
     for (unsigned k = 0; k < ii && !placed; ++k) {
-      int64_t t = est + k;
-      unsigned slot = static_cast<unsigned>(t % ii);
+      int64_t typeValue = est + k;
+      unsigned slot = static_cast<unsigned>(typeValue % ii);
       bool free = true;
-      for (Problem::ResourceType r : rsrcs[innerIndex]) {
-        auto &tab = mrt[r];
+      for (Problem::ResourceType resultValue : rsrcs[innerIndex]) {
+        auto &tab = mrt[resultValue];
         if (tab.empty())
           tab.assign(ii, 0);
-        if (tab[slot] >= *prob.getLimit(r)) {
+        if (tab[slot] >= *prob.getLimit(resultValue)) {
           free = false;
           break;
         }
       }
       if (!free)
         continue;
-      for (Problem::ResourceType r : rsrcs[innerIndex])
-        ++mrt[r][slot];
-      st[innerIndex] = t;
+      for (Problem::ResourceType resultValue : rsrcs[innerIndex])
+        ++mrt[resultValue][slot];
+      st[innerIndex] = typeValue;
       placed = true;
     }
     if (!placed)
@@ -3364,7 +3384,7 @@ static Value loadedMemref(Operation *op) {
 /// selected address, one read fewer (`c ? t[i][j] : t[i+1][j]` that cgeist
 /// emits as an if; W9 round 22 review kernels w9r22rv_k02_condsel and
 /// w9r22fx_f5_condsel_int: 3 read slots, 2 copies, 64 BRAM, hls-est 96).
-static void markIfArmLoadMerges(func::FuncOp func, Builder &builder) {
+static void markIfArmLoadMerges(func::FuncOp func, Builder &passBuilder) {
   auto armLoad = [](Block &arm, unsigned loopIndex) -> Operation * {
     Value valueHandle = arm.getTerminator()->getOperand(loopIndex);
     Operation *def = valueHandle.getDefiningOp();
@@ -3398,7 +3418,7 @@ static void markIfArmLoadMerges(func::FuncOp func, Builder &builder) {
       if (auto old = thenLoad->getAttrOfType<IntegerAttr>("hls.select_reloads"))
         reloads += old.getInt();
       thenLoad->setAttr("hls.select_reloads",
-                        builder.getI64IntegerAttr(reloads));
+                        passBuilder.getI64IntegerAttr(reloads));
     }
   });
 }
@@ -3416,8 +3436,8 @@ static void markSelectOfLoadReloads(func::FuncOp func) {
     return it == reloadingSelects.end() ? std::pair<Value, Operation *>{}
                                         : it->second;
   };
-  Builder builder(func.getContext());
-  markIfArmLoadMerges(func, builder);
+  Builder passBuilder(func.getContext());
+  markIfArmLoadMerges(func, passBuilder);
   func.walk([&](arith::SelectOp select) {
     auto [trueMem, trueLoad] = baseOf(select.getTrueValue());
     auto [falseMem, falseLoad] = baseOf(select.getFalseValue());
@@ -3446,7 +3466,7 @@ static void markSelectOfLoadReloads(func::FuncOp func) {
       if (auto old = trueLoad->getAttrOfType<IntegerAttr>("hls.select_reloads"))
         reloads += old.getInt();
       trueLoad->setAttr("hls.select_reloads",
-                        builder.getI64IntegerAttr(reloads));
+                        passBuilder.getI64IntegerAttr(reloads));
       return;
     }
 
@@ -3459,7 +3479,8 @@ static void markSelectOfLoadReloads(func::FuncOp func) {
     int64_t reloads = 1;
     if (auto old = trueLoad->getAttrOfType<IntegerAttr>("hls.select_reloads"))
       reloads += old.getInt();
-    trueLoad->setAttr("hls.select_reloads", builder.getI64IntegerAttr(reloads));
+    trueLoad->setAttr("hls.select_reloads",
+                      passBuilder.getI64IntegerAttr(reloads));
   });
 }
 
@@ -3684,15 +3705,15 @@ FailureOr<bool> AffineToLoopSchedule::pipelineLoop(
 /// --bram-debug can still report them.
 static SmallVector<NamedAttribute> hlsAttrsOf(Operation *op) {
   SmallVector<NamedAttribute> out;
-  for (NamedAttribute a : op->getDiscardableAttrs())
-    if (a.getName().strref().starts_with("hls."))
-      out.push_back(a);
+  for (NamedAttribute arrayValue : op->getDiscardableAttrs())
+    if (arrayValue.getName().strref().starts_with("hls."))
+      out.push_back(arrayValue);
   return out;
 }
 
 static void setAttrs(Operation *op, ArrayRef<NamedAttribute> attrs) {
-  for (const NamedAttribute &a : attrs)
-    op->setAttr(a.getName(), a.getValue());
+  for (const NamedAttribute &arrayValue : attrs)
+    op->setAttr(arrayValue.getName(), arrayValue.getValue());
 }
 
 /// Also replaces the affine load with the memref load in dependenceAnalysis.
@@ -4021,26 +4042,27 @@ static void tagPartitionedArgumentBanks(func::FuncOp func) {
 /// else its operator latency; an operation the timing model does not time
 /// adds nothing.
 int64_t AffineToLoopSchedule::recurrenceLatency(Operation *op) const {
-  std::optional<circt::hlsest::OperatorTiming> t =
+  std::optional<circt::hlsest::OperatorTiming> typeValue =
       timingModel->timing(op, schedulingContext);
-  if (!t)
+  if (!typeValue)
     return 0;
   const auto &table =
       circt::hlsest::Config::get().scheduling.recurrenceLatencies;
   if (op->getNumResults() == 1)
     if (auto ft = dyn_cast<FloatType>(op->getResult(0).getType())) {
-      auto it = table.find(t->cls + "_f" + std::to_string(ft.getWidth()));
+      auto it =
+          table.find(typeValue->cls + "_f" + std::to_string(ft.getWidth()));
       if (it != table.end())
         return it->second;
     }
 
-  StringRef cls = t->cls;
+  StringRef cls = typeValue->cls;
   auto it = table.find(cls.str());
   if (it == table.end())
     it = table.find(cls.split('_').first.str());
   if (it != table.end())
     return it->second;
-  return t->latency;
+  return typeValue->latency;
 }
 
 /// VITIS_NOTES N160: the longest register recurrence of an iter_arg that
@@ -4093,7 +4115,7 @@ AffineToLoopSchedule::promotedElementRecurrence(
     }
   };
   auto isF64Op = [](Operation *op) {
-    auto isF64 = [](Type t) { return t.isF64(); };
+    auto isF64 = [](Type typeValue) { return typeValue.isF64(); };
     return llvm::any_of(op->getResultTypes(), isF64) ||
            llvm::any_of(op->getOperandTypes(), isF64);
   };
@@ -4122,9 +4144,9 @@ AffineToLoopSchedule::promotedElementRecurrence(
   auto latency = [&](Operation *op) -> int64_t {
     auto [it, fresh] = latencyOf.try_emplace(op, 0);
     if (fresh && op->getNumRegions() == 0)
-      if (std::optional<circt::hlsest::OperatorTiming> t =
+      if (std::optional<circt::hlsest::OperatorTiming> typeValue =
               timingModel->timing(op, schedulingContext))
-        it->second = t->latency;
+        it->second = typeValue->latency;
     return it->second;
   };
   latencyFn = latency;
@@ -4151,8 +4173,8 @@ AffineToLoopSchedule::promotedElementRecurrence(
         if (budget > 0 && ++visited > budget)
           return std::nullopt;
         slice.push_back(op);
-        for (Value r : op->getResults())
-          work.push_back(r);
+        for (Value resultValue : op->getResults())
+          work.push_back(resultValue);
       }
     }
     llvm::sort(slice, [&](Operation *exprValue, Operation *rowValue) {
@@ -4162,8 +4184,8 @@ AffineToLoopSchedule::promotedElementRecurrence(
     dist[arg] = Path{0, 0};
     DenseSet<Value> onPath{arg};
     for (Operation *op : slice)
-      for (Value r : op->getResults())
-        onPath.insert(r);
+      for (Value resultValue : op->getResults())
+        onPath.insert(resultValue);
     auto pathOf = [&](Value valueHandle) {
       auto it = dist.find(valueHandle);
       return it == dist.end() ? Path{} : it->second;
@@ -4172,8 +4194,8 @@ AffineToLoopSchedule::promotedElementRecurrence(
       Path in;
       for (Value opHandle : op->getOperands())
         in = std::max(in, pathOf(opHandle));
-      for (Region &r : op->getRegions())
-        for (Block &buildPoint : r)
+      for (Region &resultValue : op->getRegions())
+        for (Block &buildPoint : resultValue)
           for (Value opHandle : buildPoint.getTerminator()->getOperands())
             in = std::max(in, pathOf(opHandle));
       if (in.latency < 0)
@@ -4182,8 +4204,8 @@ AffineToLoopSchedule::promotedElementRecurrence(
       Path out{in.latency + lat, in.multiCycle + (lat > 0 ? 1u : 0u),
                in.f64 || (lat > 0 && isF64Op(op) &&
                           fedByMultiCycleFloat(op, onPath))};
-      for (Value r : op->getResults())
-        dist[r] = out;
+      for (Value resultValue : op->getResults())
+        dist[resultValue] = out;
     }
     Path portValue = pathOf(yield->getOperand(indexValue));
     if (portValue.latency < 0)
@@ -4283,13 +4305,13 @@ void AffineToLoopSchedule::tagMemoryRecurrences() {
                   yieldOp->getOperand(portValue->iterArg).getDefiningOp())
             if (def->getBlock() == body && def->getNumRegions() == 0)
               def->setAttr(kRegisterCycleAttr, buildPoint.getUnitAttr());
-          circt::hls_analysis::MemoryRecurrence r;
-          r.ii = static_cast<unsigned>(portValue->chain + 1);
-          r.distance = 1;
-          r.chain = portValue->chain;
-          r.rule = "N160";
-          r.load = r.store = loop;
-          rec = r;
+          circt::hls_analysis::MemoryRecurrence resultValue;
+          resultValue.ii = static_cast<unsigned>(portValue->chain + 1);
+          resultValue.distance = 1;
+          resultValue.chain = portValue->chain;
+          resultValue.rule = "N160";
+          resultValue.load = resultValue.store = loop;
+          rec = resultValue;
         }
     if (!rec)
       continue;
@@ -4485,18 +4507,18 @@ linkMemoryResource(Operation *memOp, Value memRef, bool isLoad,
         (pool.consumes == circt::hlsest::PortPool::Write && isLoad))
       continue;
     for (const std::string &poolKey : poolKeys) {
-      Problem::ResourceType r =
+      Problem::ResourceType resultValue =
           problem.getOrInsertResourceType("mem_" + poolKey + pool.suffix);
-      problem.setLimit(r, *pool.limit);
-      rsrcs.push_back(r);
+      problem.setLimit(resultValue, *pool.limit);
+      rsrcs.push_back(resultValue);
     }
   }
 
   if (auto bus = maxiBundleRequests(memRef, isLoad)) {
-    Problem::ResourceType r = problem.getOrInsertResourceType(
+    Problem::ResourceType resultValue = problem.getOrInsertResourceType(
         "maxi_" + bus->first + (isLoad ? "_rd" : "_wr"));
-    problem.setLimit(r, static_cast<unsigned>(bus->second));
-    rsrcs.push_back(r);
+    problem.setLimit(resultValue, static_cast<unsigned>(bus->second));
+    rsrcs.push_back(resultValue);
   }
 
   if (!rsrcs.empty() && !hls_analysis::isPromotedAccess(memOp))
@@ -4560,9 +4582,9 @@ shadowedByOtherArm(Operation *op, StringRef unit,
     for (auto [opHandle, useValue] : unitOf) {
       if (useValue != unit)
         continue;
-      for (auto [id, a] : ifArmsOf(opHandle))
+      for (auto [id, arrayValue] : ifArmsOf(opHandle))
         if (id == ifId)
-          ++(a == arm ? own : other);
+          ++(arrayValue == arm ? own : other);
     }
     if (other > own || (other == own && arm != 0))
       return true;
@@ -4580,9 +4602,10 @@ static void linkUnitResources(ArrayRef<UnitUser> users,
   for (const UnitUser &useValue : users) {
     if (shadowedByOtherArm(useValue.op, useValue.unit, unitOf))
       continue;
-    Problem::ResourceType r = problem.getOrInsertResourceType(useValue.unit);
-    problem.setLimit(r, useValue.limit);
-    problem.setLinkedResourceTypes(useValue.op, {r});
+    Problem::ResourceType resultValue =
+        problem.getOrInsertResourceType(useValue.unit);
+    problem.setLimit(resultValue, useValue.limit);
+    problem.setLinkedResourceTypes(useValue.op, {resultValue});
   }
 }
 
@@ -4619,13 +4642,13 @@ static DenseSet<Operation *> registerRecurrenceOps(Operation *loop) {
   };
   for (unsigned k = 0; k < elementCount; ++k) {
     Operation *op = nodes[k];
-    for (Value r : op->getResults())
-      addUsers(k, r);
+    for (Value resultValue : op->getResults())
+      addUsers(k, resultValue);
 
     if (op->hasTrait<OpTrait::IsTerminator>())
       if (Operation *parent = op->getParentOp(); index.count(parent))
-        for (Value r : parent->getResults())
-          addUsers(k, r);
+        for (Value resultValue : parent->getResults())
+          addUsers(k, resultValue);
   }
 
   for (unsigned loopIndex = 0; loopIndex < numIter; ++loopIndex) {
@@ -4697,9 +4720,9 @@ LogicalResult AffineToLoopSchedule::populateOperatorTypes(
     const BRAMClassification &bramClass) {
   SmallVector<circt::hlsest::OperatorTiming> library;
   timingModel->library(library);
-  for (const circt::hlsest::OperatorTiming &t : library) {
-    Problem::OperatorType opr = problem.getOrInsertOperatorType(t.cls);
-    problem.setLatency(opr, t.latency);
+  for (const circt::hlsest::OperatorTiming &typeValue : library) {
+    Problem::OperatorType opr = problem.getOrInsertOperatorType(typeValue.cls);
+    problem.setLatency(opr, typeValue.latency);
   }
   const circt::hlsest::Config &cfg = circt::hlsest::Config::get();
   const circt::hlsest::DeviceMemory *blockMemory = cfg.blockMemory();
@@ -4713,60 +4736,63 @@ LogicalResult AffineToLoopSchedule::populateOperatorTypes(
   if (cfg.scheduling.registerRecurrenceLatencies)
     onRecurrence = registerRecurrenceOps(loop);
   WalkResult result = loopBody(loop)->walk([&](Operation *op) {
-    std::optional<circt::hlsest::OperatorTiming> t =
+    std::optional<circt::hlsest::OperatorTiming> typeValue =
         timingModel->timing(op, schedulingContext);
-    if (!t) {
+    if (!typeValue) {
       unsupported = op;
       return WalkResult::interrupt();
     }
     if (onRecurrence.contains(op) &&
-        (StringRef(t->cls).starts_with("fpaddsub") ||
-         StringRef(t->cls).starts_with("fpmul")) &&
+        (StringRef(typeValue->cls).starts_with("fpaddsub") ||
+         StringRef(typeValue->cls).starts_with("fpmul")) &&
         isa<AddFOp, SubFOp, MulFOp>(op)) {
       unsigned recLatency = static_cast<unsigned>(recurrenceLatency(op));
-      if (recLatency < t->latency) {
+      if (recLatency < typeValue->latency) {
         Problem::OperatorType alt =
-            problem.getOrInsertOperatorType(t->cls + "_recurrence");
+            problem.getOrInsertOperatorType(typeValue->cls + "_recurrence");
         problem.setLatency(alt, recLatency);
         recurrenceAlternatives.push_back({op, alt});
       }
     }
     bool isLoad = false;
     if (Value memRef = accessedMemref(op, isLoad)) {
-      linkMemoryResource(op, memRef, isLoad, t->latency, problem, bramClass,
-                         *memoryPolicy, *storageSelector, *blockMemory);
+      linkMemoryResource(op, memRef, isLoad, typeValue->latency, problem,
+                         bramClass, *memoryPolicy, *storageSelector,
+                         *blockMemory);
       return WalkResult::advance();
     }
 
-    auto [it, inserted] = latencyOfClass.try_emplace(t->cls, t->latency);
-    if (!inserted && it->second != t->latency) {
+    auto [it, inserted] =
+        latencyOfClass.try_emplace(typeValue->cls, typeValue->latency);
+    if (!inserted && it->second != typeValue->latency) {
       inconsistent = op;
       return WalkResult::interrupt();
     }
-    Problem::OperatorType opr = problem.getOrInsertOperatorType(t->cls);
-    problem.setLatency(opr, t->latency);
+    Problem::OperatorType opr = problem.getOrInsertOperatorType(typeValue->cls);
+    problem.setLatency(opr, typeValue->latency);
     problem.setLinkedOperatorType(op, opr);
 
     if (op->hasAttr(kRegisterCycleAttr)) {
       Problem::OperatorType held =
-          problem.getOrInsertOperatorType(t->cls + "_register_cycle");
-      problem.setLatency(held, t->latency + 1);
+          problem.getOrInsertOperatorType(typeValue->cls + "_register_cycle");
+      problem.setLatency(held, typeValue->latency + 1);
       problem.setLinkedOperatorType(op, held);
     }
-    if (t->unitLimit) {
-      std::string unit = "unit_" + t->cls;
-      if (!t->unitInstance.empty())
-        unit += "@" + t->unitInstance;
-      unitUsers.push_back({op, unit, *t->unitLimit});
+    if (typeValue->unitLimit) {
+      std::string unit = "unit_" + typeValue->cls;
+      if (!typeValue->unitInstance.empty())
+        unit += "@" + typeValue->unitInstance;
+      unitUsers.push_back({op, unit, *typeValue->unitLimit});
     }
     if (emitDetail) {
       Builder buildPoint(op->getContext());
       op->setAttr(
           "hls.op_timing",
           buildPoint.getDictionaryAttr(
-              {buildPoint.getNamedAttr("cls", buildPoint.getStringAttr(t->cls)),
-               buildPoint.getNamedAttr(
-                   "latency", buildPoint.getI64IntegerAttr(t->latency))}));
+              {buildPoint.getNamedAttr(
+                   "cls", buildPoint.getStringAttr(typeValue->cls)),
+               buildPoint.getNamedAttr("latency", buildPoint.getI64IntegerAttr(
+                                                      typeValue->latency))}));
     }
     return WalkResult::advance();
   });
@@ -4856,8 +4882,9 @@ AffineToLoopSchedule::solveSchedulingProblem(Operation *loop,
   }
   auto applyReused = [&]() {
     problem.setInitiationInterval(reused->ii);
-    for (auto [op, t] : llvm::zip(problem.getOperations(), reused->startTimes))
-      problem.setStartTime(op, t);
+    for (auto [op, typeValue] :
+         llvm::zip(problem.getOperations(), reused->startTimes))
+      problem.setStartTime(op, typeValue);
   };
 
   SmallVector<Problem::OperatorType> chainedTypes;
@@ -4911,8 +4938,9 @@ AffineToLoopSchedule::solveSchedulingProblem(Operation *loop,
     } else {
       linkRecurrenceLatencies(false);
       problem.setInitiationInterval(chainedII);
-      for (auto [op, t] : llvm::zip(problem.getOperations(), chainedStart))
-        problem.setStartTime(op, t);
+      for (auto [op, typeValue] :
+           llvm::zip(problem.getOperations(), chainedStart))
+        problem.setStartTime(op, typeValue);
     }
   }
 
@@ -4975,7 +5003,7 @@ AffineToLoopSchedule::solveSchedulingProblem(Operation *loop,
 LogicalResult
 AffineToLoopSchedule::createLoopSchedulePipeline(Operation *loop,
                                                  ModuloProblem &problem) {
-  ImplicitLocOpBuilder builder(loop->getLoc(), loop);
+  ImplicitLocOpBuilder passBuilder(loop->getLoc(), loop);
   Block *body = loopBody(loop);
 
   Value lowerBound, upperBound, step;
@@ -4983,11 +5011,11 @@ AffineToLoopSchedule::createLoopSchedulePipeline(Operation *loop,
   std::optional<uint64_t> constantTrip;
   arith::CmpIPredicate continuePredicate = arith::CmpIPredicate::ult;
   if (auto forOp = dyn_cast<AffineForOp>(loop)) {
-    lowerBound = lowerAffineLowerBound(forOp, builder);
-    upperBound = lowerAffineUpperBound(forOp, builder);
+    lowerBound = lowerAffineLowerBound(forOp, passBuilder);
+    upperBound = lowerAffineUpperBound(forOp, passBuilder);
     int64_t stepValue = forOp.getStep().getSExtValue();
     step = arith::ConstantOp::create(
-        builder, IntegerAttr::get(builder.getIndexType(), stepValue));
+        passBuilder, IntegerAttr::get(passBuilder.getIndexType(), stepValue));
     inits = forOp.getInits();
     constantTrip = getConstantTripCount(forOp);
   } else {
@@ -5002,7 +5030,8 @@ AffineToLoopSchedule::createLoopSchedulePipeline(Operation *loop,
 
   TypeRange resultTypes = loop->getResultTypes();
 
-  auto ii = builder.getI64IntegerAttr(problem.getInitiationInterval().value());
+  auto ii =
+      passBuilder.getI64IntegerAttr(problem.getInitiationInterval().value());
 
   SmallVector<Value> iterArgs;
   iterArgs.push_back(lowerBound);
@@ -5010,9 +5039,9 @@ AffineToLoopSchedule::createLoopSchedulePipeline(Operation *loop,
 
   std::optional<IntegerAttr> tripCountAttr;
   if (constantTrip)
-    tripCountAttr = builder.getI64IntegerAttr(*constantTrip);
+    tripCountAttr = passBuilder.getI64IntegerAttr(*constantTrip);
 
-  auto pipeline = LoopSchedulePipelineOp::create(builder, resultTypes, ii,
+  auto pipeline = LoopSchedulePipelineOp::create(passBuilder, resultTypes, ii,
                                                  tripCountAttr, iterArgs);
 
   for (StringRef name :
@@ -5024,14 +5053,14 @@ AffineToLoopSchedule::createLoopSchedulePipeline(Operation *loop,
         circt::hls_analysis::kLoopSchedulerAttr, kMemoryRecurrenceAttr,
         circt::hls_analysis::kFoldedGuardsAttr,
         circt::hls_analysis::kPinnedGuardOperandsAttr})
-    if (Attribute a = loop->getAttr(name))
-      pipeline->setAttr(name, a);
+    if (Attribute arrayValue = loop->getAttr(name))
+      pipeline->setAttr(name, arrayValue);
 
   Block &condBlock = pipeline.getCondBlock();
-  builder.setInsertionPointToStart(&condBlock);
-  auto cmpResult =
-      arith::CmpIOp::create(builder, builder.getI1Type(), continuePredicate,
-                            condBlock.getArgument(0), upperBound);
+  passBuilder.setInsertionPointToStart(&condBlock);
+  auto cmpResult = arith::CmpIOp::create(passBuilder, passBuilder.getI1Type(),
+                                         continuePredicate,
+                                         condBlock.getArgument(0), upperBound);
   condBlock.getTerminator()->insertOperands(0, {cmpResult});
 
   DenseMap<unsigned, SmallVector<Operation *>> startGroups;
@@ -5052,9 +5081,9 @@ AffineToLoopSchedule::createLoopSchedulePipeline(Operation *loop,
   if (auto termStart = problem.getStartTime(body->getTerminator());
       termStart && *termStart > 0)
     maxStartTime = std::max(maxStartTime, *termStart - 1);
-  for (unsigned t = 0; t <= maxStartTime; ++t)
-    if (!startGroups.count(t))
-      startGroups.try_emplace(t, SmallVector<Operation *>());
+  for (unsigned typeValue = 0; typeValue <= maxStartTime; ++typeValue)
+    if (!startGroups.count(typeValue))
+      startGroups.try_emplace(typeValue, SmallVector<Operation *>());
 
   IRMapping valueMap;
   assert(iterArgs.size() == body->getNumArguments());
@@ -5063,7 +5092,7 @@ AffineToLoopSchedule::createLoopSchedulePipeline(Operation *loop,
                  pipeline.getStagesBlock().getArgument(loopIndex));
 
   Block &stagesBlock = pipeline.getStagesBlock();
-  builder.setInsertionPointToStart(&stagesBlock);
+  passBuilder.setInsertionPointToStart(&stagesBlock);
 
   SmallVector<unsigned> startTimes;
   for (const auto &group : startGroups)
@@ -5079,8 +5108,8 @@ AffineToLoopSchedule::createLoopSchedulePipeline(Operation *loop,
 
   for (auto startTime : startTimes) {
     auto group = startGroups[startTime];
-    llvm::sort(group, [&](Operation *a, Operation *buildPoint) {
-      return dom.properlyDominates(a, buildPoint);
+    llvm::sort(group, [&](Operation *arrayValue, Operation *buildPoint) {
+      return dom.properlyDominates(arrayValue, buildPoint);
     });
 
     SmallVector<Value> registered;
@@ -5105,17 +5134,17 @@ AffineToLoopSchedule::createLoopSchedulePipeline(Operation *loop,
     if (startTime == 0)
       stageTypes.push_back(lowerBound.getType());
 
-    builder.setInsertionPoint(stagesBlock.getTerminator());
-    auto startTimeAttr =
-        builder.getIntegerAttr(builder.getIntegerType(64, true), startTime);
-    auto stage =
-        LoopSchedulePipelineStageOp::create(builder, stageTypes, startTimeAttr);
+    passBuilder.setInsertionPoint(stagesBlock.getTerminator());
+    auto startTimeAttr = passBuilder.getIntegerAttr(
+        passBuilder.getIntegerType(64, true), startTime);
+    auto stage = LoopSchedulePipelineStageOp::create(passBuilder, stageTypes,
+                                                     startTimeAttr);
     auto &stageBlock = stage.getBodyBlock();
     auto *stageTerminator = stageBlock.getTerminator();
-    builder.setInsertionPointToStart(&stageBlock);
+    passBuilder.setInsertionPointToStart(&stageBlock);
 
     for (auto *op : group) {
-      auto *newOp = builder.clone(*op, current);
+      auto *newOp = passBuilder.clone(*op, current);
 
       for (auto result : op->getResults())
         current.map(result, newOp->getResult(result.getResultNumber()));
@@ -5131,7 +5160,7 @@ AffineToLoopSchedule::createLoopSchedulePipeline(Operation *loop,
 
     if (startTime == 0) {
       auto incResult =
-          arith::AddIOp::create(builder, stagesBlock.getArgument(0), step);
+          arith::AddIOp::create(passBuilder, stagesBlock.getArgument(0), step);
       stageTerminator->insertOperands(stageTerminator->getNumOperands(),
                                       incResult->getResults());
     }
@@ -5307,8 +5336,8 @@ public:
         .Case<math::FloorOp, math::CeilOp, math::RoundOp, math::RoundEvenOp,
               math::TruncOp>([&](Operation *) { return make("fpaddsub"); })
         .Default([&](Operation *badOp) -> std::optional<OperatorTiming> {
-          if (std::optional<OperatorTiming> t = streamTiming(badOp))
-            return t;
+          if (std::optional<OperatorTiming> typeValue = streamTiming(badOp))
+            return typeValue;
           auto call = dyn_cast<CallOpInterface>(badOp);
           if (!call)
             return std::nullopt;
@@ -5319,10 +5348,10 @@ public:
             if (auto occ = badOp->getAttrOfType<IntegerAttr>(
                     circt::hls_analysis::kCallOccupancyAttr))
               lat = static_cast<unsigned>(std::max<int64_t>(1, occ.getInt()));
-            OperatorTiming t;
-            t.cls = "call_kept_" + std::to_string(lat);
-            t.latency = lat;
-            return t;
+            OperatorTiming typeValue;
+            typeValue.cls = "call_kept_" + std::to_string(lat);
+            typeValue.latency = lat;
+            return typeValue;
           }
 
           if (auto fc = dyn_cast<func::CallOp>(badOp))
@@ -5336,10 +5365,10 @@ public:
                             llvm::IsaPred<BaseMemRefType>) &&
               llvm::none_of(badOp->getResultTypes(),
                             llvm::IsaPred<BaseMemRefType>)) {
-            OperatorTiming t;
-            t.cls = "call";
-            t.latency = static_cast<unsigned>(other);
-            return t;
+            OperatorTiming typeValue;
+            typeValue.cls = "call";
+            typeValue.latency = static_cast<unsigned>(other);
+            return typeValue;
           }
           return std::nullopt;
         });
@@ -5360,11 +5389,11 @@ private:
     auto call = dyn_cast<func::CallOp>(op);
     if (!call)
       return std::nullopt;
-    std::optional<circt::hls_analysis::StreamTemplate> t =
+    std::optional<circt::hls_analysis::StreamTemplate> typeValue =
         circt::hls_analysis::parseStreamMethod(call.getCallee());
-    if (!t)
+    if (!typeValue)
       return std::nullopt;
-    StringRef memoryOp = t->method;
+    StringRef memoryOp = typeValue->method;
     if ((memoryOp.starts_with("4read") && !memoryOp.starts_with("4read_nb")) ||
         memoryOp.starts_with("rs"))
       return StringRef(kStreamRead);
@@ -5382,8 +5411,8 @@ private:
   /// True when every use of `op`'s results is, through further views, an
   /// operand of a blocking stream access.
   static bool reachesOnlyStreamAccesses(Operation *op) {
-    for (Value r : op->getResults())
-      for (Operation *user : r.getUsers()) {
+    for (Value resultValue : op->getResults())
+      for (Operation *user : resultValue.getUsers()) {
         if (isHandleView(user) ? !reachesOnlyStreamAccesses(user)
                                : !streamAccessClass(user))
           return false;
@@ -5448,10 +5477,10 @@ private:
     std::optional<StringRef> cls = streamAccessClass(op);
     if (!cls || op->getNumOperands() == 0)
       return std::nullopt;
-    OperatorTiming t = make(*cls);
-    t.unitLimit = kStreamAccessesPerCycle;
-    t.unitInstance = streamObjectKey(op->getOperand(0));
-    return t;
+    OperatorTiming typeValue = make(*cls);
+    typeValue.unitLimit = kStreamAccessesPerCycle;
+    typeValue.unitInstance = streamObjectKey(op->getOperand(0));
+    return typeValue;
   }
 
   int64_t latency(StringRef cls) const {
@@ -5468,10 +5497,10 @@ private:
     return latencies.count(typed) ? typed : base.str();
   }
   OperatorTiming make(StringRef cls) const {
-    OperatorTiming t;
-    t.cls = cls.str();
-    t.latency = static_cast<unsigned>(latency(cls));
-    return t;
+    OperatorTiming typeValue;
+    typeValue.cls = cls.str();
+    typeValue.latency = static_cast<unsigned>(latency(cls));
+    return typeValue;
   }
 };
 
@@ -5607,8 +5636,8 @@ private:
       return false;
     SmallVector<std::pair<Operation *, unsigned>> firstStart;
     for (Operation *op : problem.getOperations())
-      if (std::optional<unsigned> t = problem.getStartTime(op))
-        firstStart.push_back({op, *t});
+      if (std::optional<unsigned> typeValue = problem.getStartTime(op))
+        firstStart.push_back({op, *typeValue});
 
     FastModuloScheduler fast(problem, recurrenceRepairRounds, heightPriority,
                              fpUnitLimits);
@@ -5616,8 +5645,8 @@ private:
         *problem.getInitiationInterval() < *firstII && verifiesQuietly(problem))
       return true;
     problem.setInitiationInterval(*firstII);
-    for (auto [op, t] : firstStart)
-      problem.setStartTime(op, t);
+    for (auto [op, typeValue] : firstStart)
+      problem.setStartTime(op, typeValue);
     return false;
   }
 
@@ -5634,16 +5663,16 @@ private:
       return false;
     SmallVector<std::pair<Operation *, unsigned>> firstStart;
     for (Operation *op : problem.getOperations())
-      if (std::optional<unsigned> t = problem.getStartTime(op))
-        firstStart.push_back({op, *t});
+      if (std::optional<unsigned> typeValue = problem.getStartTime(op))
+        firstStart.push_back({op, *typeValue});
     FastModuloScheduler fast(problem, recurrenceRepairRounds, heightPriority,
                              fpUnitLimits);
     if (succeeded(fast.schedule(maxIIBumps, *firstII, *firstII + 1)) &&
         verifiesQuietly(problem))
       return true;
     problem.setInitiationInterval(*firstII);
-    for (auto [op, t] : firstStart)
-      problem.setStartTime(op, t);
+    for (auto [op, typeValue] : firstStart)
+      problem.setStartTime(op, typeValue);
     return false;
   }
 
@@ -5695,8 +5724,8 @@ void circt::hlsest::builtin::registerDependenceModels() {
 }
 
 void circt::hlsest::builtin::registerModuloSchedulers() {
-  auto &r = PluginRegistry<ModuloScheduler>::instance();
-  r.add(
+  auto &resultValue = PluginRegistry<ModuloScheduler>::instance();
+  resultValue.add(
       "greedy-simplex",
       "greedy resource-bound modulo scheduler above fast_threshold, else "
       "the simplex; each falls back to the other",
@@ -5705,13 +5734,13 @@ void circt::hlsest::builtin::registerModuloSchedulers() {
             ModuloSchedulers::GreedySimplex);
       },
       "builtin");
-  r.add(
+  resultValue.add(
       "greedy", "the greedy resource-bound modulo scheduler only",
       [] {
         return std::make_unique<ModuloSchedulers>(ModuloSchedulers::Greedy);
       },
       "builtin");
-  r.add(
+  resultValue.add(
       "simplex", "the simplex modulo scheduler only",
       [] {
         return std::make_unique<ModuloSchedulers>(ModuloSchedulers::Simplex);
@@ -5749,21 +5778,21 @@ circt::hlsest::ScheduleView::fromIR(func::FuncOp func) {
     return stringValue;
   };
   func.walk([&](circt::loopschedule::LoopSchedulePipelineOp pipe) {
-    RegionSchedule r;
-    r.region = pipe.getOperation();
-    r.pipelined = true;
-    r.ii = static_cast<unsigned>(pipe.getII());
+    RegionSchedule resultValue;
+    resultValue.region = pipe.getOperation();
+    resultValue.pipelined = true;
+    resultValue.ii = static_cast<unsigned>(pipe.getII());
     if (auto tc = pipe.getTripCount())
-      r.tripCount = static_cast<int64_t>(*tc);
+      resultValue.tripCount = static_cast<int64_t>(*tc);
     if (auto label = pipe->getAttrOfType<StringAttr>(
             circt::hls_analysis::kLoopSchedulerAttr))
-      r.scheduler = label.getValue().str();
+      resultValue.scheduler = label.getValue().str();
     pipe.walk([&](circt::loopschedule::LoopSchedulePipelineStageOp stage) {
       for (Operation &op : stage.getBodyBlock())
-        r.ops.push_back(
+        resultValue.ops.push_back(
             opSchedule(&op, static_cast<unsigned>(stage.getStart())));
     });
-    view.regions.push_back(std::move(r));
+    view.regions.push_back(std::move(resultValue));
   });
 
   llvm::MapVector<Operation *, RegionSchedule> sequential;
@@ -5772,9 +5801,10 @@ circt::hlsest::ScheduleView::fromIR(func::FuncOp func) {
     if (!state)
       return;
     Operation *parent = op->getParentOp();
-    RegionSchedule &r = sequential[parent];
-    r.region = parent;
-    r.ops.push_back(opSchedule(op, static_cast<unsigned>(state.getInt())));
+    RegionSchedule &resultValue = sequential[parent];
+    resultValue.region = parent;
+    resultValue.ops.push_back(
+        opSchedule(op, static_cast<unsigned>(state.getInt())));
   });
   for (auto &kv : sequential)
     view.regions.push_back(std::move(kv.second));
