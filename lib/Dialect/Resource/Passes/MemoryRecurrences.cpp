@@ -1,19 +1,6 @@
-//===- MemoryRecurrences.cpp - loop-carried memory recurrences ------------===//
-//
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
+
+
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
-//
-//===----------------------------------------------------------------------===//
-//
-// See MemoryRecurrences.h. Distances are found by evaluating every access's
-// address over the first iterations of the loop: an index built from the
-// induction variable, constants, values defined outside the loop (one fixed
-// sample each; an enclosing loop's induction variable at its lower bound)
-// and side-effect-free integer arithmetic is evaluated; an index that needs
-// a loaded value, a call result or a loop-carried value is unknown.
-//
-//===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/Resource/Passes/MemoryRecurrences.h"
 #include "circt/Dialect/Resource/Config/Config.h"
@@ -28,8 +15,8 @@
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/Dialect/Utils/StaticValueUtils.h"
 #include "llvm/ADT/DenseMap.h"
-#include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/Hashing.h"
+#include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/StringSet.h"
 #include "llvm/ADT/TypeSwitch.h"
 
@@ -48,8 +35,8 @@ struct Access {
   Value value; ///< the stored value (store) or the loaded value (load)
   AffineMap map;
   SmallVector<Value, 4> operands;
-  unsigned pos = 0;     ///< post-order position in the body
-  bool known = true;    ///< every address can be evaluated
+  unsigned pos = 0;           ///< post-order position in the body
+  bool known = true;          ///< every address can be evaluated
   SmallVector<uint64_t> addr; ///< address hash per evaluated iteration
   /// The access happens only where this set holds over predOperands (the
   /// enable of a bank's store; a run-time-bank load takes the enable of
@@ -83,25 +70,27 @@ class AddressEvaluator {
 public:
   explicit AddressEvaluator(const LoopShape &shape) : shape(shape) {}
 
-  std::optional<int64_t> value(Value v, int64_t ivValue, unsigned depth = 0) {
-    if (v == shape.iv)
+  std::optional<int64_t> value(Value valueHandle, int64_t ivValue,
+                               unsigned depth = 0) {
+    if (valueHandle == shape.iv)
       return ivValue;
-    if (std::optional<int64_t> c = getConstantIntValue(v))
-      return c;
+    if (std::optional<int64_t> candidateValue =
+            getConstantIntValue(valueHandle))
+      return candidateValue;
     if (depth > kMaxEvalDepth)
       return std::nullopt;
-    if (!isInsideLoop(v))
-      return outsideSample(v);
-    Operation *def = v.getDefiningOp();
+    if (!isInsideLoop(valueHandle))
+      return outsideSample(valueHandle);
+    Operation *def = valueHandle.getDefiningOp();
     if (!def)
-      return std::nullopt; // an iter_arg or a nested region's argument
+      return std::nullopt;
     if (auto apply = dyn_cast<AffineApplyOp>(def)) {
       SmallVector<int64_t, 4> vals;
-      for (Value o : apply.getMapOperands()) {
-        std::optional<int64_t> x = value(o, ivValue, depth + 1);
-        if (!x)
+      for (Value opHandle : apply.getMapOperands()) {
+        std::optional<int64_t> exprValue = value(opHandle, ivValue, depth + 1);
+        if (!exprValue)
           return std::nullopt;
-        vals.push_back(*x);
+        vals.push_back(*exprValue);
       }
       return expr(apply.getAffineMap().getResult(0), vals,
                   apply.getAffineMap().getNumDims());
@@ -110,120 +99,133 @@ public:
       return value(def->getOperand(0), ivValue, depth + 1);
     };
     auto binary =
-        [&](llvm::function_ref<std::optional<int64_t>(int64_t, int64_t)> f)
-        -> std::optional<int64_t> {
+        [&](llvm::function_ref<std::optional<int64_t>(int64_t, int64_t)>
+                fieldValue) -> std::optional<int64_t> {
       std::optional<int64_t> a = value(def->getOperand(0), ivValue, depth + 1);
       if (!a)
         return std::nullopt;
-      std::optional<int64_t> b = value(def->getOperand(1), ivValue, depth + 1);
-      if (!b)
+      std::optional<int64_t> buildPoint =
+          value(def->getOperand(1), ivValue, depth + 1);
+      if (!buildPoint)
         return std::nullopt;
-      return f(*a, *b);
+      return fieldValue(*a, *buildPoint);
     };
     return TypeSwitch<Operation *, std::optional<int64_t>>(def)
         .Case<arith::IndexCastOp, arith::IndexCastUIOp, arith::ExtSIOp,
               arith::ExtUIOp, arith::TruncIOp>([&](auto) { return unary(); })
         .Case<arith::AddIOp>([&](auto) {
-          return binary([](int64_t a, int64_t b) -> std::optional<int64_t> {
-            return a + b;
-          });
+          return binary(
+              [](int64_t a, int64_t buildPoint) -> std::optional<int64_t> {
+                return a + buildPoint;
+              });
         })
         .Case<arith::SubIOp>([&](auto) {
-          return binary([](int64_t a, int64_t b) -> std::optional<int64_t> {
-            return a - b;
-          });
+          return binary(
+              [](int64_t a, int64_t buildPoint) -> std::optional<int64_t> {
+                return a - buildPoint;
+              });
         })
         .Case<arith::MulIOp>([&](auto) {
-          return binary([](int64_t a, int64_t b) -> std::optional<int64_t> {
-            return a * b;
-          });
+          return binary(
+              [](int64_t a, int64_t buildPoint) -> std::optional<int64_t> {
+                return a * buildPoint;
+              });
         })
         .Case<arith::AndIOp>([&](auto) {
-          return binary([](int64_t a, int64_t b) -> std::optional<int64_t> {
-            return a & b;
-          });
+          return binary(
+              [](int64_t a, int64_t buildPoint) -> std::optional<int64_t> {
+                return a & buildPoint;
+              });
         })
         .Case<arith::OrIOp>([&](auto) {
-          return binary([](int64_t a, int64_t b) -> std::optional<int64_t> {
-            return a | b;
-          });
+          return binary(
+              [](int64_t a, int64_t buildPoint) -> std::optional<int64_t> {
+                return a | buildPoint;
+              });
         })
         .Case<arith::XOrIOp>([&](auto) {
-          return binary([](int64_t a, int64_t b) -> std::optional<int64_t> {
-            return a ^ b;
-          });
+          return binary(
+              [](int64_t a, int64_t buildPoint) -> std::optional<int64_t> {
+                return a ^ buildPoint;
+              });
         })
         .Case<arith::ShLIOp>([&](auto) {
-          return binary([](int64_t a, int64_t b) -> std::optional<int64_t> {
-            if (b < 0 || b > 62)
-              return std::nullopt;
-            return a << b;
-          });
+          return binary(
+              [](int64_t a, int64_t buildPoint) -> std::optional<int64_t> {
+                if (buildPoint < 0 || buildPoint > 62)
+                  return std::nullopt;
+                return a << buildPoint;
+              });
         })
         .Case<arith::ShRSIOp, arith::ShRUIOp>([&](auto) {
-          return binary([](int64_t a, int64_t b) -> std::optional<int64_t> {
-            if (b < 0 || b > 62)
-              return std::nullopt;
-            return a >> b;
-          });
+          return binary(
+              [](int64_t a, int64_t buildPoint) -> std::optional<int64_t> {
+                if (buildPoint < 0 || buildPoint > 62)
+                  return std::nullopt;
+                return a >> buildPoint;
+              });
         })
         .Case<arith::DivSIOp, arith::DivUIOp>([&](auto) {
-          return binary([](int64_t a, int64_t b) -> std::optional<int64_t> {
-            if (b == 0)
-              return std::nullopt;
-            return a / b;
-          });
+          return binary(
+              [](int64_t a, int64_t buildPoint) -> std::optional<int64_t> {
+                if (buildPoint == 0)
+                  return std::nullopt;
+                return a / buildPoint;
+              });
         })
         .Case<arith::RemSIOp, arith::RemUIOp>([&](auto) {
-          return binary([](int64_t a, int64_t b) -> std::optional<int64_t> {
-            if (b == 0)
-              return std::nullopt;
-            return a % b;
-          });
+          return binary(
+              [](int64_t a, int64_t buildPoint) -> std::optional<int64_t> {
+                if (buildPoint == 0)
+                  return std::nullopt;
+                return a % buildPoint;
+              });
         })
         .Default([](Operation *) { return std::nullopt; });
   }
 
   /// An affine expression over dimension and symbol values.
-  static std::optional<int64_t> expr(AffineExpr e, ArrayRef<int64_t> vals,
-                                     unsigned numDims) {
-    if (auto c = dyn_cast<AffineConstantExpr>(e))
-      return c.getValue();
-    if (auto d = dyn_cast<AffineDimExpr>(e))
-      return vals[d.getPosition()];
-    if (auto s = dyn_cast<AffineSymbolExpr>(e))
-      return vals[numDims + s.getPosition()];
-    auto bin = cast<AffineBinaryOpExpr>(e);
+  static std::optional<int64_t> expr(AffineExpr entryValue,
+                                     ArrayRef<int64_t> vals, unsigned numDims) {
+    if (auto candidateValue = dyn_cast<AffineConstantExpr>(entryValue))
+      return candidateValue.getValue();
+    if (auto dimensionIndex = dyn_cast<AffineDimExpr>(entryValue))
+      return vals[dimensionIndex.getPosition()];
+    if (auto stringValue = dyn_cast<AffineSymbolExpr>(entryValue))
+      return vals[numDims + stringValue.getPosition()];
+    auto bin = cast<AffineBinaryOpExpr>(entryValue);
     std::optional<int64_t> a = expr(bin.getLHS(), vals, numDims);
-    std::optional<int64_t> b = expr(bin.getRHS(), vals, numDims);
-    if (!a || !b)
+    std::optional<int64_t> buildPoint = expr(bin.getRHS(), vals, numDims);
+    if (!a || !buildPoint)
       return std::nullopt;
-    switch (e.getKind()) {
+    switch (entryValue.getKind()) {
     case AffineExprKind::Add:
-      return *a + *b;
+      return *a + *buildPoint;
     case AffineExprKind::Mul:
-      return *a * *b;
+      return *a * *buildPoint;
     case AffineExprKind::Mod:
-      if (*b <= 0)
+      if (*buildPoint <= 0)
         return std::nullopt;
-      return ((*a % *b) + *b) % *b;
+      return ((*a % *buildPoint) + *buildPoint) % *buildPoint;
     case AffineExprKind::FloorDiv:
-      if (*b == 0)
+      if (*buildPoint == 0)
         return std::nullopt;
-      return *a / *b - ((*a % *b != 0) && ((*a < 0) != (*b < 0)));
+      return *a / *buildPoint -
+             ((*a % *buildPoint != 0) && ((*a < 0) != (*buildPoint < 0)));
     case AffineExprKind::CeilDiv:
-      if (*b == 0)
+      if (*buildPoint == 0)
         return std::nullopt;
-      return *a / *b + ((*a % *b != 0) && ((*a < 0) == (*b < 0)));
+      return *a / *buildPoint +
+             ((*a % *buildPoint != 0) && ((*a < 0) == (*buildPoint < 0)));
     default:
       return std::nullopt;
     }
   }
 
 private:
-  bool isInsideLoop(Value v) const {
-    Region *r = v.getParentRegion();
-    return r && shape.loop->isAncestor(r->getParentOp());
+  bool isInsideLoop(Value valueHandle) const {
+    Region *resultValue = valueHandle.getParentRegion();
+    return resultValue && shape.loop->isAncestor(resultValue->getParentOp());
   }
 
   /// An enclosing loop's induction variable: its lower bound plus
@@ -235,16 +237,16 @@ private:
   /// loop is missed (OPEN_ISSUES O170 (b), kernel w9r16fx_gp_ffo).
   static int64_t enclosingSample(int64_t lb, int64_t step,
                                  std::optional<uint64_t> trip) {
-    int64_t k =
+    int64_t keyValue =
         circt::hlsest::Config::get().scheduling.enclosingIvSampleSteps;
     if (trip)
-      k = std::min<int64_t>(k, *trip > 0 ? static_cast<int64_t>(*trip) - 1
-                                         : 0);
-    return lb + k * step;
+      keyValue = std::min<int64_t>(
+          keyValue, *trip > 0 ? static_cast<int64_t>(*trip) - 1 : 0);
+    return lb + keyValue * step;
   }
 
-  int64_t outsideSample(Value v) {
-    if (auto arg = dyn_cast<BlockArgument>(v)) {
+  int64_t outsideSample(Value valueHandle) {
+    if (auto arg = dyn_cast<BlockArgument>(valueHandle)) {
       if (auto outer = dyn_cast<AffineForOp>(arg.getOwner()->getParentOp()))
         if (arg == outer.getInductionVar() && outer.hasConstantLowerBound())
           return enclosingSample(outer.getConstantLowerBound(),
@@ -266,8 +268,9 @@ private:
           }
     }
     auto [it, inserted] = samples.try_emplace(
-        v, kOutsideSampleBase +
-               kOutsideSampleStride * static_cast<int64_t>(samples.size()));
+        valueHandle,
+        kOutsideSampleBase +
+            kOutsideSampleStride * static_cast<int64_t>(samples.size()));
     return it->second;
   }
 
@@ -276,28 +279,30 @@ private:
 };
 
 std::optional<LoopShape> shapeOf(Operation *loop) {
-  LoopShape s;
-  s.loop = loop;
-  if (auto f = dyn_cast<AffineForOp>(loop)) {
-    s.iv = f.getInductionVar();
-    s.lb = f.hasConstantLowerBound() ? f.getConstantLowerBound() : 0;
-    s.step = f.getStepAsInt();
-    if (std::optional<uint64_t> t = getConstantTripCount(f))
-      s.trip = static_cast<int64_t>(*t);
-    s.body = f.getBody();
-    return s;
+  LoopShape stringValue;
+  stringValue.loop = loop;
+  if (auto fieldValue = dyn_cast<AffineForOp>(loop)) {
+    stringValue.iv = fieldValue.getInductionVar();
+    stringValue.lb = fieldValue.hasConstantLowerBound()
+                         ? fieldValue.getConstantLowerBound()
+                         : 0;
+    stringValue.step = fieldValue.getStepAsInt();
+    if (std::optional<uint64_t> typeValue = getConstantTripCount(fieldValue))
+      stringValue.trip = static_cast<int64_t>(*typeValue);
+    stringValue.body = fieldValue.getBody();
+    return stringValue;
   }
-  if (auto f = dyn_cast<scf::ForOp>(loop)) {
-    s.iv = f.getInductionVar();
-    std::optional<int64_t> lb = getConstantIntValue(f.getLowerBound());
-    std::optional<int64_t> ub = getConstantIntValue(f.getUpperBound());
-    std::optional<int64_t> st = getConstantIntValue(f.getStep());
-    s.lb = lb.value_or(0);
-    s.step = st.value_or(1);
+  if (auto fieldValue = dyn_cast<scf::ForOp>(loop)) {
+    stringValue.iv = fieldValue.getInductionVar();
+    std::optional<int64_t> lb = getConstantIntValue(fieldValue.getLowerBound());
+    std::optional<int64_t> ub = getConstantIntValue(fieldValue.getUpperBound());
+    std::optional<int64_t> st = getConstantIntValue(fieldValue.getStep());
+    stringValue.lb = lb.value_or(0);
+    stringValue.step = st.value_or(1);
     if (lb && ub && st && *st > 0)
-      s.trip = std::max<int64_t>(0, (*ub - *lb + *st - 1) / *st);
-    s.body = f.getBody();
-    return s;
+      stringValue.trip = std::max<int64_t>(0, (*ub - *lb + *st - 1) / *st);
+    stringValue.body = fieldValue.getBody();
+    return stringValue;
   }
   return std::nullopt;
 }
@@ -314,40 +319,37 @@ std::optional<Access> accessOf(Operation *op) {
     a.operands.assign(operands.begin(), operands.end());
     fullyComposeAffineMapAndOperands(&a.map, &a.operands);
   };
-  if (auto l = dyn_cast<AffineLoadOp>(op)) {
-    a.mem = l.getMemRef();
-    a.value = l.getResult();
-    composed(l.getAffineMap(), l.getMapOperands());
-  } else if (auto s = dyn_cast<AffineStoreOp>(op)) {
-    a.mem = s.getMemRef();
+  if (auto lowerIndex = dyn_cast<AffineLoadOp>(op)) {
+    a.mem = lowerIndex.getMemRef();
+    a.value = lowerIndex.getResult();
+    composed(lowerIndex.getAffineMap(), lowerIndex.getMapOperands());
+  } else if (auto stringValue = dyn_cast<AffineStoreOp>(op)) {
+    a.mem = stringValue.getMemRef();
     a.isStore = true;
-    a.value = s.getValueToStore();
-    composed(s.getAffineMap(), s.getMapOperands());
-  } else if (auto l = dyn_cast<memref::LoadOp>(op)) {
-    a.mem = l.getMemRef();
-    a.value = l.getResult();
-    identity(l.getIndices());
-  } else if (auto s = dyn_cast<memref::StoreOp>(op)) {
-    a.mem = s.getMemRef();
+    a.value = stringValue.getValueToStore();
+    composed(stringValue.getAffineMap(), stringValue.getMapOperands());
+  } else if (auto lowerIndex = dyn_cast<memref::LoadOp>(op)) {
+    a.mem = lowerIndex.getMemRef();
+    a.value = lowerIndex.getResult();
+    identity(lowerIndex.getIndices());
+  } else if (auto stringValue = dyn_cast<memref::StoreOp>(op)) {
+    a.mem = stringValue.getMemRef();
     a.isStore = true;
-    a.value = s.getValueToStore();
-    identity(s.getIndices());
-  } else if (auto s = dyn_cast<circt::hls_analysis::AffineStoreEnableOp>(op);
-             s && circt::hlsest::Config::get()
-                      .scheduling.bankStoreRecurrences) {
-    // The store of one bank of a partitioned array whose bank is chosen at
-    // run time (--memory-banking-bram), enabled where its bank is the one
-    // chosen: the array's store before banking, so the array's loop-carried
-    // recurrence stays visible (OPEN_ISSUES O170 (a): polybench_pragmas
-    // k2mm `tmp1[i][j] +=` with tmp1 cyclic 4 on j; Vitis II 8).
-    a.mem = s.getMemref();
+    a.value = stringValue.getValueToStore();
+    identity(stringValue.getIndices());
+  } else if (auto stringValue =
+                 dyn_cast<circt::hls_analysis::AffineStoreEnableOp>(op);
+             stringValue &&
+             circt::hlsest::Config::get().scheduling.bankStoreRecurrences) {
+
+    a.mem = stringValue.getMemref();
     a.isStore = true;
-    a.value = s.getValue();
-    composed(s.getMap(), s.getMapOperands());
-    a.pred = s.getCondition();
+    a.value = stringValue.getValue();
+    composed(stringValue.getMap(), stringValue.getMapOperands());
+    a.pred = stringValue.getCondition();
     a.hasPred = true;
-    a.predOperands.assign(s.getSetOperands().begin(),
-                          s.getSetOperands().end());
+    a.predOperands.assign(stringValue.getSetOperands().begin(),
+                          stringValue.getSetOperands().end());
   } else {
     return std::nullopt;
   }
@@ -356,10 +358,11 @@ std::optional<Access> accessOf(Operation *op) {
 
 /// The same map over the same operand values: the same address in every
 /// iteration, whether or not it can be evaluated.
-bool identicalAddress(const Access &x, const Access &y) {
-  if (x.hasPred || y.hasPred)
-    return false; // the same address, but maybe not in the same iterations
-  return x.map == y.map && x.operands == y.operands;
+bool identicalAddress(const Access &exprValue, const Access &rowValue) {
+  if (exprValue.hasPred || rowValue.hasPred)
+    return false;
+  return exprValue.map == rowValue.map &&
+         exprValue.operands == rowValue.operands;
 }
 
 /// Evaluate `a`'s address for iterations [0, count).
@@ -368,55 +371,55 @@ void evaluate(Access &a, const LoopShape &shape, AddressEvaluator &eval,
   a.addr.reserve(count);
   SmallVector<int64_t, 4> vals(a.operands.size());
   SmallVector<int64_t, 4> coords;
-  for (unsigned k = 0; k < count; ++k) {
-    int64_t ivValue = shape.lb + static_cast<int64_t>(k) * shape.step;
-    for (auto [i, v] : llvm::enumerate(a.operands)) {
-      std::optional<int64_t> x = eval.value(v, ivValue);
-      if (!x) {
+  for (unsigned keyValue = 0; keyValue < count; ++keyValue) {
+    int64_t ivValue = shape.lb + static_cast<int64_t>(keyValue) * shape.step;
+    for (auto [loopIndex, valueHandle] : llvm::enumerate(a.operands)) {
+      std::optional<int64_t> exprValue = eval.value(valueHandle, ivValue);
+      if (!exprValue) {
         a.known = false;
         a.addr.clear();
         return;
       }
-      vals[i] = *x;
+      vals[loopIndex] = *exprValue;
     }
     coords.clear();
-    for (AffineExpr e : a.map.getResults()) {
-      std::optional<int64_t> x =
-          AddressEvaluator::expr(e, vals, a.map.getNumDims());
-      if (!x) {
+    for (AffineExpr entryValue : a.map.getResults()) {
+      std::optional<int64_t> exprValue =
+          AddressEvaluator::expr(entryValue, vals, a.map.getNumDims());
+      if (!exprValue) {
         a.known = false;
         a.addr.clear();
         return;
       }
-      coords.push_back(*x);
+      coords.push_back(*exprValue);
     }
     if (a.hasPred) {
       SmallVector<int64_t, 4> pv;
-      for (Value v : a.predOperands) {
-        std::optional<int64_t> x = eval.value(v, ivValue);
-        if (!x) {
+      for (Value valueHandle : a.predOperands) {
+        std::optional<int64_t> exprValue = eval.value(valueHandle, ivValue);
+        if (!exprValue) {
           a.known = false;
           a.addr.clear();
           return;
         }
-        pv.push_back(*x);
+        pv.push_back(*exprValue);
       }
       bool holds = true;
-      for (unsigned c = 0; c < a.pred.getNumConstraints() && holds; ++c) {
-        std::optional<int64_t> x = AddressEvaluator::expr(
-            a.pred.getConstraint(c), pv, a.pred.getNumDims());
-        if (!x) {
+      for (unsigned candidateValue = 0;
+           candidateValue < a.pred.getNumConstraints() && holds;
+           ++candidateValue) {
+        std::optional<int64_t> exprValue = AddressEvaluator::expr(
+            a.pred.getConstraint(candidateValue), pv, a.pred.getNumDims());
+        if (!exprValue) {
           a.known = false;
           a.addr.clear();
           return;
         }
-        holds = a.pred.isEq(c) ? *x == 0 : *x >= 0;
+        holds = a.pred.isEq(candidateValue) ? *exprValue == 0 : *exprValue >= 0;
       }
       if (!holds) {
-        // Disabled in this iteration: a sentinel of the iteration (equal
-        // for two accesses disabled in the same iteration, so an element
-        // they both touch whenever enabled stays "the same address").
-        a.addr.push_back(llvm::hash_combine(0x5e471e1, k));
+
+        a.addr.push_back(llvm::hash_combine(0x5e471e1, keyValue));
         continue;
       }
     }
@@ -437,22 +440,23 @@ uint64_t addressSignature(const Access &a) {
 
 /// The same address in one iteration: identical, or equal over the
 /// evaluated iterations.
-bool sameAddressInIteration(const Access &x, const Access &y) {
-  if (identicalAddress(x, y))
+bool sameAddressInIteration(const Access &exprValue, const Access &rowValue) {
+  if (identicalAddress(exprValue, rowValue))
     return true;
-  if (!x.known || !y.known || x.addr.empty() || y.addr.empty())
+  if (!exprValue.known || !rowValue.known || exprValue.addr.empty() ||
+      rowValue.addr.empty())
     return false;
-  return x.addr == y.addr;
+  return exprValue.addr == rowValue.addr;
 }
 
 /// The load reads, in every evaluated iteration but the first, the address
 /// the store wrote in the iteration before.
 bool alwaysPreviousIteration(const Access &store, const Access &load) {
-  size_t n = std::min(store.addr.size() + 1, load.addr.size());
-  if (n < 2)
+  size_t elementCount = std::min(store.addr.size() + 1, load.addr.size());
+  if (elementCount < 2)
     return false;
-  for (size_t k = 1; k < n; ++k)
-    if (load.addr[k] != store.addr[k - 1])
+  for (size_t keyValue = 1; keyValue < elementCount; ++keyValue)
+    if (load.addr[keyValue] != store.addr[keyValue - 1])
       return false;
   return true;
 }
@@ -462,8 +466,8 @@ using AddressIndex = DenseMap<uint64_t, SmallVector<unsigned, 2>>;
 
 AddressIndex indexAddresses(const Access &load) {
   AddressIndex index;
-  for (auto [k, h] : llvm::enumerate(load.addr))
-    index[h].push_back(static_cast<unsigned>(k));
+  for (auto [keyValue, h] : llvm::enumerate(load.addr))
+    index[h].push_back(static_cast<unsigned>(keyValue));
   return index;
 }
 
@@ -473,17 +477,18 @@ std::optional<int64_t> carriedDistance(const Access &store,
                                        const AddressIndex &loadIndex,
                                        int64_t maxD, unsigned window) {
   std::optional<int64_t> best;
-  for (size_t k = 0; k < window && k < store.addr.size(); ++k) {
-    auto it = loadIndex.find(store.addr[k]);
+  for (size_t keyValue = 0; keyValue < window && keyValue < store.addr.size();
+       ++keyValue) {
+    auto it = loadIndex.find(store.addr[keyValue]);
     if (it == loadIndex.end())
       continue;
     for (unsigned kl : it->second) {
-      if (kl <= k)
+      if (kl <= keyValue)
         continue;
-      int64_t d = static_cast<int64_t>(kl - k);
-      if (d <= maxD && (!best || d < *best))
-        best = d;
-      break; // the list is ascending: later iterations are farther
+      int64_t dimensionIndex = static_cast<int64_t>(kl - keyValue);
+      if (dimensionIndex <= maxD && (!best || dimensionIndex < *best))
+        best = dimensionIndex;
+      break;
     }
     if (best && *best == 1)
       break;
@@ -498,7 +503,7 @@ std::optional<int64_t> carriedDistance(const Access &store,
 /// the stores, memoised, without recursion (a long unrolled chain is deep).
 class ChainSources {
 public:
-  using Sources = SmallVector<std::pair<unsigned, int64_t>, 2>; // load, lat
+  using Sources = SmallVector<std::pair<unsigned, int64_t>, 2>;
 
   ChainSources(Operation *loop, ArrayRef<Access> accesses,
                const DenseMap<Operation *, unsigned> &loadIndexOf,
@@ -510,87 +515,90 @@ public:
   const Sources &of(Value root) {
     if (auto it = memo.find(root); it != memo.end())
       return it->second;
-    // Iterative post-order DFS over the value graph.
+
     SmallVector<std::pair<Value, bool>> stack{{root, false}};
     while (!stack.empty()) {
-      auto [v, expanded] = stack.pop_back_val();
-      if (memo.count(v))
+      auto [valueHandle, expanded] = stack.pop_back_val();
+      if (memo.count(valueHandle))
         continue;
       SmallVector<Value, 4> preds;
-      predecessors(v, preds);
+      predecessors(valueHandle, preds);
       if (!expanded) {
-        stack.push_back({v, true});
-        for (Value p : preds)
-          if (!memo.count(p))
-            stack.push_back({p, false});
+        stack.push_back({valueHandle, true});
+        for (Value portValue : preds)
+          if (!memo.count(portValue))
+            stack.push_back({portValue, false});
         continue;
       }
       Sources out;
       int64_t lat = 0;
-      Operation *def = v.getDefiningOp();
+      Operation *def = valueHandle.getDefiningOp();
       if (def && def->getNumRegions() == 0)
         lat = std::max<int64_t>(0, latency(def));
       if (def) {
         if (auto it = loadIndexOf.find(def); it != loadIndexOf.end())
           merge(out, {{it->second, 0}}, 0);
       }
-      for (Value p : preds)
-        merge(out, memo[p], isForwardedStoreValue(v, p) ? 0 : lat);
-      memo[v] = std::move(out);
+      for (Value portValue : preds)
+        merge(out, memo[portValue],
+              isForwardedStoreValue(valueHandle, portValue) ? 0 : lat);
+      memo[valueHandle] = std::move(out);
     }
     return memo[root];
   }
 
 private:
-  bool inside(Value v) const {
-    Region *r = v.getParentRegion();
-    return r && loop->isAncestor(r->getParentOp());
+  bool inside(Value valueHandle) const {
+    Region *resultValue = valueHandle.getParentRegion();
+    return resultValue && loop->isAncestor(resultValue->getParentOp());
   }
 
   /// A load's predecessor is the value of the store it is forwarded from.
-  bool isForwardedStoreValue(Value v, Value p) const {
-    Operation *def = v.getDefiningOp();
+  bool isForwardedStoreValue(Value valueHandle, Value portValue) const {
+    Operation *def = valueHandle.getDefiningOp();
     if (!def)
       return false;
     auto it = loadIndexOf.find(def);
     if (it == loadIndexOf.end())
       return false;
-    auto f = forwardedFrom.find(it->second);
-    return f != forwardedFrom.end() && accesses[f->second].value == p;
+    auto fieldValue = forwardedFrom.find(it->second);
+    return fieldValue != forwardedFrom.end() &&
+           accesses[fieldValue->second].value == portValue;
   }
 
-  void predecessors(Value v, SmallVectorImpl<Value> &out) const {
-    Operation *def = v.getDefiningOp();
-    if (!def || !inside(v))
+  void predecessors(Value valueHandle, SmallVectorImpl<Value> &out) const {
+    Operation *def = valueHandle.getDefiningOp();
+    if (!def || !inside(valueHandle))
       return;
     if (auto it = loadIndexOf.find(def); it != loadIndexOf.end()) {
-      // A load: its own value, or the forwarded store's value.
-      auto f = forwardedFrom.find(it->second);
-      if (f != forwardedFrom.end())
-        out.push_back(accesses[f->second].value);
+
+      auto fieldValue = forwardedFrom.find(it->second);
+      if (fieldValue != forwardedFrom.end())
+        out.push_back(accesses[fieldValue->second].value);
       return;
     }
     if (def->getNumRegions() != 0) {
-      // An if's result: the values its arms yield, and its condition.
-      unsigned idx = cast<OpResult>(v).getResultNumber();
-      for (Region &r : def->getRegions())
-        for (Block &b : r)
-          if (!b.empty())
-            if (Operation *term = &b.back())
-              if (idx < term->getNumOperands())
-                out.push_back(term->getOperand(idx));
-      for (Value o : def->getOperands())
-        out.push_back(o);
+
+      unsigned indexValue = cast<OpResult>(valueHandle).getResultNumber();
+      for (Region &resultValue : def->getRegions())
+        for (Block &buildPoint : resultValue)
+          if (!buildPoint.empty())
+            if (Operation *term = &buildPoint.back())
+              if (indexValue < term->getNumOperands())
+                out.push_back(term->getOperand(indexValue));
+      for (Value opHandle : def->getOperands())
+        out.push_back(opHandle);
       return;
     }
-    for (Value o : def->getOperands())
-      if (!isa<MemRefType>(o.getType()))
-        out.push_back(o);
+    for (Value opHandle : def->getOperands())
+      if (!isa<MemRefType>(opHandle.getType()))
+        out.push_back(opHandle);
   }
 
   static void merge(Sources &into, const Sources &from, int64_t add) {
     for (auto [load, lat] : from) {
-      auto it = llvm::find_if(into, [&](auto &e) { return e.first == load; });
+      auto it = llvm::find_if(
+          into, [&](auto &entryValue) { return entryValue.first == load; });
       if (it == into.end())
         into.push_back({load, lat + add});
       else
@@ -619,36 +627,34 @@ private:
 /// guarded store stays, II 2.
 static void eliminateGuardedStores(Operation *loop, Block *body,
                                    ArrayRef<Access> accesses,
-                                   ArrayRef<unsigned> idx,
+                                   ArrayRef<unsigned> indexValue,
                                    MemoryRecurrences &result) {
-  Value mem = accesses[idx.front()].mem;
+  Value mem = accesses[indexValue.front()].mem;
   if (!isa_and_present<memref::AllocaOp, memref::AllocOp>(mem.getDefiningOp()))
     return;
-  // Every other use is an access of this loop's body: a call or a view may
-  // read it, and so may an access after the loop.
+
   for (Operation *user : mem.getUsers())
     if (!user->hasTrait<OpTrait::IsTerminator>() &&
         !isa<memref::DeallocOp>(user) &&
         (!loop->isAncestor(user) || !accessOf(user)))
       return;
-  // The accesses of the memory in program order; for each guarded store,
-  // the next access that is not a load of the same address must be a store
-  // of that address at the body's top level.
-  SmallVector<unsigned> ordered(idx.begin(), idx.end());
-  llvm::sort(ordered, [&](unsigned x, unsigned y) {
-    return accesses[x].pos < accesses[y].pos;
+
+  SmallVector<unsigned> ordered(indexValue.begin(), indexValue.end());
+  llvm::sort(ordered, [&](unsigned exprValue, unsigned rowValue) {
+    return accesses[exprValue].pos < accesses[rowValue].pos;
   });
-  for (size_t n = 0; n < ordered.size(); ++n) {
-    const Access &guarded = accesses[ordered[n]];
+  for (size_t elementCount = 0; elementCount < ordered.size(); ++elementCount) {
+    const Access &guarded = accesses[ordered[elementCount]];
     if (!guarded.isStore || guarded.op->getBlock() == body ||
         result.promoted.contains(guarded.op))
       continue;
-    for (size_t m = n + 1; m < ordered.size(); ++m) {
-      const Access &next = accesses[ordered[m]];
+    for (size_t memoryOp = elementCount + 1; memoryOp < ordered.size();
+         ++memoryOp) {
+      const Access &next = accesses[ordered[memoryOp]];
       if (!sameAddressInIteration(next, guarded))
-        break; // another address in between may alias it
+        break;
       if (!next.isStore)
-        continue; // a load of the address: served by the guarded value
+        continue;
       if (next.op->getBlock() == body) {
         result.promoted.insert(guarded.op);
         result.rule[guarded.op] = "N90a";
@@ -669,19 +675,20 @@ static void eliminateGuardedStores(Operation *loop, Block *body,
 /// j loop, `if (i == N-1)` reads [j][h] after it): 1 BRAM per bank, one read
 /// and one write port.
 static void forwardToGuardedLoads(Block *body, ArrayRef<Access> accesses,
-                                  ArrayRef<unsigned> idx,
+                                  ArrayRef<unsigned> indexValue,
                                   MemoryRecurrences &result) {
-  SmallVector<unsigned> ordered(idx.begin(), idx.end());
-  llvm::sort(ordered, [&](unsigned x, unsigned y) {
-    return accesses[x].pos < accesses[y].pos;
+  SmallVector<unsigned> ordered(indexValue.begin(), indexValue.end());
+  llvm::sort(ordered, [&](unsigned exprValue, unsigned rowValue) {
+    return accesses[exprValue].pos < accesses[rowValue].pos;
   });
-  for (size_t n = 0; n < ordered.size(); ++n) {
-    const Access &store = accesses[ordered[n]];
+  for (size_t elementCount = 0; elementCount < ordered.size(); ++elementCount) {
+    const Access &store = accesses[ordered[elementCount]];
     if (!store.isStore || store.op->getBlock() != body ||
         result.promoted.contains(store.op))
       continue;
-    for (size_t m = n + 1; m < ordered.size(); ++m) {
-      const Access &next = accesses[ordered[m]];
+    for (size_t memoryOp = elementCount + 1; memoryOp < ordered.size();
+         ++memoryOp) {
+      const Access &next = accesses[ordered[memoryOp]];
       if (next.isStore || !sameAddressInIteration(next, store))
         break;
       if (next.op->getBlock() != body && result.promoted.insert(next.op)) {
@@ -702,14 +709,14 @@ static std::optional<StringRef> userNameOf(Value mem) {
       mem = cast.getSource();
       continue;
     }
-    if (auto v = def->getAttrOfType<StringAttr>("polygeist.varname"))
-      return v.getValue();
-    if (auto b = def->getAttrOfType<StringAttr>("hls.bank_of"))
-      return b.getValue();
-    if (auto g = def->getAttrOfType<StringAttr>("hls.from_global"))
-      return g.getValue();
-    if (auto g = dyn_cast<memref::GetGlobalOp>(def))
-      return g.getName();
+    if (auto valueHandle = def->getAttrOfType<StringAttr>("polygeist.varname"))
+      return valueHandle.getValue();
+    if (auto buildPoint = def->getAttrOfType<StringAttr>("hls.bank_of"))
+      return buildPoint.getValue();
+    if (auto globalOp = def->getAttrOfType<StringAttr>("hls.from_global"))
+      return globalOp.getValue();
+    if (auto globalOp = dyn_cast<memref::GetGlobalOp>(def))
+      return globalOp.getName();
     return std::nullopt;
   }
   return std::nullopt;
@@ -730,13 +737,13 @@ static llvm::StringSet<> userInterIndependent(Operation *loop) {
     if (!arr)
       continue;
     for (Attribute a : arr) {
-      auto d = dyn_cast<DictionaryAttr>(a);
-      if (!d)
+      auto dimensionIndex = dyn_cast<DictionaryAttr>(a);
+      if (!dimensionIndex)
         continue;
-      auto type = d.getAs<StringAttr>("type");
-      auto dependent = d.getAs<BoolAttr>("dependent");
-      auto variable = d.getAs<StringAttr>("variable");
-      auto direction = d.getAs<StringAttr>("direction");
+      auto type = dimensionIndex.getAs<StringAttr>("type");
+      auto dependent = dimensionIndex.getAs<BoolAttr>("dependent");
+      auto variable = dimensionIndex.getAs<StringAttr>("variable");
+      auto direction = dimensionIndex.getAs<StringAttr>("direction");
       if (!type || type.getValue() != "inter" || !dependent ||
           dependent.getValue() || !variable)
         continue;
@@ -755,7 +762,6 @@ MemoryRecurrences circt::hls_analysis::findMemoryRecurrences(
   if (!shape || shape->step <= 0)
     return {};
 
-  // The accesses of the body in post-order (program order for siblings).
   SmallVector<Access> accesses;
   unsigned pos = 0;
   for (Operation &top : *shape->body)
@@ -767,32 +773,29 @@ MemoryRecurrences circt::hls_analysis::findMemoryRecurrences(
       ++pos;
     });
 
-  // A run-time-bank load takes the enable of its bank's store of the same
-  // address (the bank select of the array's read before banking).
-  for (Access &l : accesses) {
-    if (l.isStore || !l.op->hasAttr("hls.runtime_bank"))
+  for (Access &lowerIndex : accesses) {
+    if (lowerIndex.isStore || !lowerIndex.op->hasAttr("hls.runtime_bank"))
       continue;
     for (const Access &st : accesses)
-      if (st.isStore && st.hasPred && st.mem == l.mem && st.map == l.map &&
-          st.operands == l.operands) {
-        l.pred = st.pred;
-        l.hasPred = true;
-        l.predOperands = st.predOperands;
+      if (st.isStore && st.hasPred && st.mem == lowerIndex.mem &&
+          st.map == lowerIndex.map && st.operands == lowerIndex.operands) {
+        lowerIndex.pred = st.pred;
+        lowerIndex.hasPred = true;
+        lowerIndex.predOperands = st.predOperands;
         break;
       }
   }
 
-  // Memories both read and written in the body.
   llvm::MapVector<Value, SmallVector<unsigned>> byMem;
-  for (auto [i, a] : llvm::enumerate(accesses))
-    byMem[a.mem].push_back(i);
+  for (auto [loopIndex, a] : llvm::enumerate(accesses))
+    byMem[a.mem].push_back(loopIndex);
   SmallVector<unsigned> candidates;
-  for (auto &[mem, idx] : byMem) {
+  for (auto &[mem, indexValue] : byMem) {
     bool loads = false, stores = false;
-    for (unsigned i : idx)
-      (accesses[i].isStore ? stores : loads) = true;
+    for (unsigned loopIndex : indexValue)
+      (accesses[loopIndex].isStore ? stores : loads) = true;
     if (loads && stores)
-      candidates.append(idx.begin(), idx.end());
+      candidates.append(indexValue.begin(), indexValue.end());
   }
   if (candidates.empty())
     return {};
@@ -803,46 +806,42 @@ MemoryRecurrences circt::hls_analysis::findMemoryRecurrences(
   int64_t evalCount = window + kMaxDistance + 1;
   if (shape->trip)
     evalCount = std::min<int64_t>(evalCount, *shape->trip);
-  for (unsigned i : candidates)
-    evaluate(accesses[i], *shape, eval, static_cast<unsigned>(evalCount));
+  for (unsigned loopIndex : candidates)
+    evaluate(accesses[loopIndex], *shape, eval,
+             static_cast<unsigned>(evalCount));
 
-  for (auto &[mem, idx] : byMem) {
+  for (auto &[mem, indexValue] : byMem) {
     SmallVector<unsigned> loads, stores;
-    for (unsigned i : idx)
-      (accesses[i].isStore ? stores : loads).push_back(i);
+    for (unsigned loopIndex : indexValue)
+      (accesses[loopIndex].isStore ? stores : loads).push_back(loopIndex);
     if (loads.empty() || stores.empty())
       continue;
 
-    // Store -> later load of the same address in one iteration: the load
-    // reads the value the latest such store wrote.
     DenseMap<uint64_t, SmallVector<unsigned>> storesBySig;
-    for (unsigned s : stores)
-      storesBySig[addressSignature(accesses[s])].push_back(s);
+    for (unsigned stringValue : stores)
+      storesBySig[addressSignature(accesses[stringValue])].push_back(
+          stringValue);
     DenseMap<Operation *, unsigned> loadIndexOf;
     DenseMap<unsigned, unsigned> forwardedFrom;
-    for (unsigned l : loads) {
-      loadIndexOf[accesses[l].op] = l;
-      auto it = storesBySig.find(addressSignature(accesses[l]));
+    for (unsigned lowerIndex : loads) {
+      loadIndexOf[accesses[lowerIndex].op] = lowerIndex;
+      auto it = storesBySig.find(addressSignature(accesses[lowerIndex]));
       if (it == storesBySig.end())
         continue;
       std::optional<unsigned> latest;
-      for (unsigned s : it->second)
-        if (accesses[s].pos < accesses[l].pos &&
-            sameAddressInIteration(accesses[s], accesses[l]) &&
-            (!latest || accesses[s].pos > accesses[*latest].pos))
-          latest = s;
+      for (unsigned stringValue : it->second)
+        if (accesses[stringValue].pos < accesses[lowerIndex].pos &&
+            sameAddressInIteration(accesses[stringValue],
+                                   accesses[lowerIndex]) &&
+            (!latest || accesses[stringValue].pos > accesses[*latest].pos))
+          latest = stringValue;
       if (latest)
-        forwardedFrom[l] = *latest;
+        forwardedFrom[lowerIndex] = *latest;
     }
 
-    // R1: Vitis keeps the element in a register for the whole inner loop:
-    // one load in the first iteration, one store in the last; every other
-    // access of the element (an init store under `j == 0`, a forwarded
-    // re-load) uses no port. Only when every access of the memory in the
-    // body names that element (another address could alias it in another
-    // iteration).
-    bool oneElement = llvm::all_of(idx, [&](unsigned i) {
-      return sameAddressInIteration(accesses[i], accesses[idx.front()]);
+    bool oneElement = llvm::all_of(indexValue, [&](unsigned loopIndex) {
+      return sameAddressInIteration(accesses[loopIndex],
+                                    accesses[indexValue.front()]);
     });
     bool promotedElement = false;
     auto promoteElement = [&]() {
@@ -850,25 +849,26 @@ MemoryRecurrences circt::hls_analysis::findMemoryRecurrences(
         return;
       promotedElement = true;
       const Access *firstLoad = nullptr, *lastStore = nullptr;
-      for (unsigned i : idx) {
-        const Access &a = accesses[i];
+      for (unsigned loopIndex : indexValue) {
+        const Access &a = accesses[loopIndex];
         if (!a.isStore && (!firstLoad || a.pos < firstLoad->pos))
           firstLoad = &a;
         if (a.isStore && (!lastStore || a.pos > lastStore->pos))
           lastStore = &a;
       }
-      for (unsigned i : idx)
-        if (&accesses[i] != firstLoad && &accesses[i] != lastStore &&
-            result.promoted.insert(accesses[i].op)) {
-          result.rule[accesses[i].op] = "R1";
+      for (unsigned loopIndex : indexValue)
+        if (&accesses[loopIndex] != firstLoad &&
+            &accesses[loopIndex] != lastStore &&
+            result.promoted.insert(accesses[loopIndex].op)) {
+          result.rule[accesses[loopIndex].op] = "R1";
           ++result.standsFor[firstLoad->op];
         }
     };
 
     if (options.guardedStoreElimination)
-      eliminateGuardedStores(loop, shape->body, accesses, idx, result);
+      eliminateGuardedStores(loop, shape->body, accesses, indexValue, result);
     if (options.forwardToGuardedLoads)
-      forwardToGuardedLoads(shape->body, accesses, idx, result);
+      forwardToGuardedLoads(shape->body, accesses, indexValue, result);
     if (!options.recurrences)
       continue;
     std::optional<StringRef> memName = userNameOf(mem);
@@ -878,10 +878,11 @@ MemoryRecurrences circt::hls_analysis::findMemoryRecurrences(
     ChainSources chains(loop, accesses, loadIndexOf, forwardedFrom,
                         recurrenceLatency);
     DenseMap<unsigned, AddressIndex> loadIndexes;
-    // N154: whether an access of the memref is a lane chosen at run time.
+
     const bool dynamicLane =
-        options.dynamicLaneRmw && llvm::any_of(idx, [&](unsigned i) {
-          return accesses[i].op->hasAttr("hls.dynamic_lane");
+        options.dynamicLaneRmw &&
+        llvm::any_of(indexValue, [&](unsigned loopIndex) {
+          return accesses[loopIndex].op->hasAttr("hls.dynamic_lane");
         });
     for (unsigned si : stores) {
       const Access &store = accesses[si];
@@ -892,14 +893,10 @@ MemoryRecurrences circt::hls_analysis::findMemoryRecurrences(
         rec.load = load.op;
         rec.store = store.op;
         if (!store.known || !load.known) {
-          // One address value the body computes (h[v]++): the next
-          // iteration may read what this one writes. Vitis forwards a
-          // chain of at least two cycles through a reuse register (R4);
-          // a shorter one still waits for the write, II 2 (VITIS_NOTES
-          // N117, kernel w9r15p_hs_rmw).
+
           bool floor = options.unknownAddressMinII > 0;
           if ((chain <= 0 && !floor) || !identicalAddress(store, load))
-            continue; // unknown distance between different index values
+            continue;
           rec.distance = 1;
           rec.rule = "R4";
           if (floor && chain < options.unknownAddressMinII) {
@@ -908,35 +905,22 @@ MemoryRecurrences circt::hls_analysis::findMemoryRecurrences(
             rec.chain = chain;
           }
         } else {
-          // Only d < 2 + chain can bound the II above 1; d = 1 also decides
-          // the register promotion of R1 / R3.
+
           int64_t maxD = std::clamp<int64_t>(chain + 1, 1, kMaxDistance);
           auto [it, fresh] = loadIndexes.try_emplace(li);
           if (fresh)
             it->second = indexAddresses(load);
-          std::optional<int64_t> d =
+          std::optional<int64_t> dimensionIndex =
               carriedDistance(store, it->second, maxD, window);
-          if (!d)
+          if (!dimensionIndex)
             continue;
-          rec.distance = *d;
-          // R3 forwards the previous iteration's value only when the load
-          // always reads what the store wrote one iteration earlier
-          // (a[i] / a[i-1]); a distance of 1 in some iterations only
-          // (b[i] / b[j] of a flattened nest) is a recurrence through the
-          // memory, R2 with d = 1.
-          rec.rule = *d >= 2                               ? "R2"
-                     : sameAddressInIteration(store, load) ? "R1"
+          rec.distance = *dimensionIndex;
+
+          rec.rule = *dimensionIndex >= 2                   ? "R2"
+                     : sameAddressInIteration(store, load)  ? "R1"
                      : alwaysPreviousIteration(store, load) ? "R3"
-                                                             : "R2";
-          // N154: a read-modify-write of a lane chosen at run time in an
-          // aggregated word (hls.dynamic_lane, SplitStructMemrefs) is no
-          // promoted element: Vitis addresses the lane, not the word, and
-          // keeps the word in memory; the load waits for the previous
-          // iteration's store, and the lane insert takes one more state
-          // (kernel w9r21p_e1_vecrmw: II 3, one port).
-          // Only at a word address the loop keeps (C[i][j] += x in the j
-          // loop): a lane write that walks the words (p[i >> 3][i & 7] = v,
-          // lit struct_through_calls, Vitis RAM_2P) stays R1.
+                                                            : "R2";
+
           auto invariant = [](const Access &a) {
             return a.known && !a.addr.empty() && llvm::all_equal(a.addr);
           };
@@ -951,13 +935,13 @@ MemoryRecurrences circt::hls_analysis::findMemoryRecurrences(
           ++result.standsFor[store.op];
         }
         if (userIndependent)
-          continue; // the user's dependence pragma: no carried RAW bound
+          continue;
         bool throughRegister = rec.rule != "R2" && rec.rule != "N154";
         int64_t ii = throughRegister
                          ? chain
                          : (2 + chain + rec.distance - 1) / rec.distance;
         if (rec.rule == "N154") {
-          ii += 1; // the lane insert
+          ii += 1;
           result.laneRecurrences.push_back({store.op, load.op});
         }
         rec.ii = static_cast<unsigned>(std::max<int64_t>(1, ii));
