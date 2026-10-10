@@ -643,13 +643,14 @@ static std::optional<int64_t> evaluateConstantInt(Value valueHandle,
       !valueHandle.getType().isIntOrIndex())
     return std::nullopt;
   SmallVector<Attribute, 4> operands;
-  for (Value o : def->getOperands()) {
-    if (!o.getType().isIntOrIndex())
+  for (Value opHandle : def->getOperands()) {
+    if (!opHandle.getType().isIntOrIndex())
       return std::nullopt;
-    std::optional<int64_t> candidateValue = evaluateConstantInt(o, depth + 1);
+    std::optional<int64_t> candidateValue =
+        evaluateConstantInt(opHandle, depth + 1);
     if (!candidateValue)
       return std::nullopt;
-    operands.push_back(IntegerAttr::get(o.getType(), *candidateValue));
+    operands.push_back(IntegerAttr::get(opHandle.getType(), *candidateValue));
   }
   SmallVector<OpFoldResult, 1> results;
   if (failed(def->fold(operands, results)) || results.size() != 1)
@@ -890,11 +891,12 @@ memrefIndexRangeImpl(Value valueHandle, unsigned depth, RangeMemo &memo) {
 
   if (auto apply = dyn_cast<affine::AffineApplyOp>(def)) {
     SmallVector<Attribute> operands;
-    for (Value o : apply.getMapOperands()) {
-      auto resultValue = memrefIndexRange(o, depth + 1, memo);
+    for (Value opHandle : apply.getMapOperands()) {
+      auto resultValue = memrefIndexRange(opHandle, depth + 1, memo);
       if (!resultValue || resultValue->first != resultValue->second)
         return std::nullopt;
-      operands.push_back(IntegerAttr::get(o.getType(), resultValue->first));
+      operands.push_back(
+          IntegerAttr::get(opHandle.getType(), resultValue->first));
     }
     SmallVector<Attribute> results;
     if (failed(apply.getAffineMap().constantFold(operands, results)) ||
@@ -1283,11 +1285,11 @@ static std::pair<Value, int64_t> residueBase(Value valueHandle, int64_t factor,
       exprValue = cast.getIn();
     if (auto apply = exprValue.getDefiningOp<affine::AffineApplyOp>()) {
       SmallVector<Attribute> attrs;
-      for (Value o : apply.getMapOperands()) {
-        std::optional<int64_t> candidateValue = getConstantIndexValue(o);
+      for (Value opHandle : apply.getMapOperands()) {
+        std::optional<int64_t> candidateValue = getConstantIndexValue(opHandle);
         if (!candidateValue)
           return std::nullopt;
-        attrs.push_back(IntegerAttr::get(o.getType(), *candidateValue));
+        attrs.push_back(IntegerAttr::get(opHandle.getType(), *candidateValue));
       }
       SmallVector<Attribute> passResult;
       if (succeeded(apply.getAffineMap().constantFold(attrs, passResult)) &&
@@ -1383,8 +1385,8 @@ static bool hoistBefore(Value valueHandle, Operation *before, bool dryRun,
     return def != before;
   if (depth > 64 || def->getNumRegions() || !isMemoryEffectFree(def))
     return false;
-  for (Value o : def->getOperands())
-    if (!hoistBefore(o, before, dryRun, depth + 1))
+  for (Value opHandle : def->getOperands())
+    if (!hoistBefore(opHandle, before, dryRun, depth + 1))
       return false;
   if (!dryRun)
     def->moveBefore(before);
@@ -1506,8 +1508,8 @@ static bool hoistBeforeThroughGuards(Value valueHandle, Operation *before,
     return false;
   if (depth > 64 || def->getNumRegions() || !isMemoryEffectFree(def))
     return false;
-  for (Value o : def->getOperands())
-    if (!hoistBeforeThroughGuards(o, before, dryRun, depth + 1))
+  for (Value opHandle : def->getOperands())
+    if (!hoistBeforeThroughGuards(opHandle, before, dryRun, depth + 1))
       return false;
   if (!dryRun)
     def->moveBefore(before);
@@ -1576,8 +1578,8 @@ indexRange(Value valueHandle, unsigned depth = 0) {
   if (auto apply = dyn_cast<affine::AffineApplyOp>(def)) {
     AffineMap map = apply.getAffineMap();
     SmallVector<std::optional<std::pair<int64_t, int64_t>>> ops;
-    for (Value o : apply.getMapOperands())
-      ops.push_back(indexRange(o, depth + 1));
+    for (Value opHandle : apply.getMapOperands())
+      ops.push_back(indexRange(opHandle, depth + 1));
     std::function<std::optional<std::pair<int64_t, int64_t>>(AffineExpr)> eval =
         [&](AffineExpr entryValue)
         -> std::optional<std::pair<int64_t, int64_t>> {
@@ -1819,9 +1821,9 @@ static ResidueSet computeResidues(Value valueHandle, int64_t fieldValue,
     if (map.getNumResults() != 1)
       return allResidues(fieldValue);
     SmallVector<ResidueSet> dims, syms;
-    for (auto [loopIndex, o] : llvm::enumerate(apply.getMapOperands()))
+    for (auto [loopIndex, opHandle] : llvm::enumerate(apply.getMapOperands()))
       (loopIndex < map.getNumDims() ? dims : syms)
-          .push_back(residuesOf(o, fieldValue, depth + 1, memo));
+          .push_back(residuesOf(opHandle, fieldValue, depth + 1, memo));
     return affineExprResidues(map.getResult(0), dims, syms, fieldValue);
   }
   return allResidues(fieldValue);
@@ -2548,7 +2550,7 @@ private:
                                const BankLayout &lowerIndex);
   DictionaryAttr bankAttrs(OpBuilder &buildPoint, const BankLayout &lowerIndex,
                            unsigned bankIdx, Operation *from, StringRef bankOf);
-  SmallVector<Value> createAllocaBanks(memref::AllocaOp alloca,
+  SmallVector<Value> createAllocaBanks(memref::AllocaOp localAlloca,
                                        const BankLayout &lowerIndex);
   void createGlobalBanks(memref::GlobalOp globalOp, ArrayRef<Value> sites,
                          const BankLayout &lowerIndex);
@@ -2742,8 +2744,8 @@ static FileLineColLoc findFileLineColLoc(Location loc) {
     for (Location lowerIndex : fu.getLocations())
       if (auto fieldValue = findFileLineColLoc(lowerIndex))
         return fieldValue;
-  if (auto o = dyn_cast<OpaqueLoc>(loc))
-    return findFileLineColLoc(o.getFallbackLocation());
+  if (auto opHandle = dyn_cast<OpaqueLoc>(loc))
+    return findFileLineColLoc(opHandle.getFallbackLocation());
   return {};
 }
 
@@ -2766,19 +2768,20 @@ static std::string unnamedBankOf(Value mem) {
 }
 
 SmallVector<Value>
-BankingPlan::createAllocaBanks(memref::AllocaOp alloca,
+BankingPlan::createAllocaBanks(memref::AllocaOp localAlloca,
                                const BankLayout &lowerIndex) {
-  OpBuilder buildPoint(alloca->getContext());
-  buildPoint.setInsertionPointAfter(alloca);
-  Attribute varName = alloca->getAttr("polygeist.varname");
+  OpBuilder buildPoint(localAlloca->getContext());
+  buildPoint.setInsertionPointAfter(localAlloca);
+  Attribute varName = localAlloca->getAttr("polygeist.varname");
   std::string bankOf = varName ? cast<StringAttr>(varName).getValue().str()
-                               : unnamedBankOf(alloca.getResult());
+                               : unnamedBankOf(localAlloca.getResult());
   SmallVector<Value> banks;
   for (int64_t loopIndex = 0; loopIndex < lowerIndex.numBanks; ++loopIndex) {
-    auto bank = memref::AllocaOp::create(buildPoint, alloca.getLoc(),
+    auto bank = memref::AllocaOp::create(buildPoint, localAlloca.getLoc(),
                                          lowerIndex.bankType);
     bank->setAttrs(bankAttrs(buildPoint, lowerIndex,
-                             static_cast<unsigned>(loopIndex), alloca, bankOf));
+                             static_cast<unsigned>(loopIndex), localAlloca,
+                             bankOf));
     banks.push_back(bank.getResult());
   }
   return banks;
@@ -3057,18 +3060,18 @@ static void dropUnreadBankValues(ModuleOp module, SymbolTable &symbols,
     unsigned loopIndex = lb.index;
     if (!bank || !unread.contains(bank))
       continue;
-    auto alloca = bank.getDefiningOp<memref::AllocaOp>();
-    if (!alloca || !alloca->use_empty())
+    auto localAlloca = bank.getDefiningOp<memref::AllocaOp>();
+    if (!localAlloca || !localAlloca->use_empty())
       continue;
-    auto fn = alloca->getParentOfType<func::FuncOp>();
+    auto fn = localAlloca->getParentOfType<func::FuncOp>();
     const std::string &name = lb.name;
     dead.push_back(buildPoint.getDictionaryAttr(
         {buildPoint.getNamedAttr("kind", buildPoint.getStringAttr("alloca")),
          buildPoint.getNamedAttr(
              "func", buildPoint.getStringAttr(fn ? fn.getName() : "")),
          buildPoint.getNamedAttr("name", buildPoint.getStringAttr(name)),
-         buildPoint.getNamedAttr("loc", alloca.getLoc()),
-         buildPoint.getNamedAttr("type", TypeAttr::get(alloca.getType())),
+         buildPoint.getNamedAttr("loc", localAlloca.getLoc()),
+         buildPoint.getNamedAttr("type", TypeAttr::get(localAlloca.getType())),
          buildPoint.getNamedAttr(
              "by", buildPoint.getStringAttr("--memory-banking-bram")),
          buildPoint.getNamedAttr(
@@ -3076,7 +3079,7 @@ static void dropUnreadBankValues(ModuleOp module, SymbolTable &symbols,
              buildPoint.getStringAttr("bank " + std::to_string(loopIndex) +
                                       " of a partitioned array that no access "
                                       "reads (VITIS_NOTES N157)"))}));
-    alloca->erase();
+    localAlloca->erase();
     bank = Value();
   }
   module->setAttr("hls.dead_memrefs", buildPoint.getArrayAttr(dead));

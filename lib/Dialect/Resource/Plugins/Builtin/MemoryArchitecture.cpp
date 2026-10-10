@@ -376,7 +376,7 @@ findSameStatePair(ArrayRef<const AccessSummary *> accs,
       };
       auto blockSize = [](unsigned level) {
         unsigned size = kBlockFanout;
-        for (unsigned l = 0; l < level; ++l)
+        for (unsigned lowerIndex = 0; lowerIndex < level; ++lowerIndex)
           size *= kBlockFanout;
         return size;
       };
@@ -899,12 +899,13 @@ static std::string ramReasonFor(const PortDemand &dimensionIndex,
   if (kr.kind == StorageKind::RAM_1WNR) {
     os << "replicable (no loop body stores to it more than once)";
     if (rep.limitingLoop) {
-      for (const ReplicationLoopRecord &l : rep.loops)
-        if (l.scopeLoc == *rep.limitingLoop) {
-          os << "; pipeline @ " << l.scopeLoc << ": " << l.reads << "R+"
-             << l.writes << "W per iteration at II " << l.ii << " needs ceil("
-             << (l.reads + l.writes) << "/" << l.ii << ")=" << l.need
-             << " port-cycles";
+      for (const ReplicationLoopRecord &lowerIndex : rep.loops)
+        if (lowerIndex.scopeLoc == *rep.limitingLoop) {
+          os << "; pipeline @ " << lowerIndex.scopeLoc << ": "
+             << lowerIndex.reads << "R+" << lowerIndex.writes
+             << "W per iteration at II " << lowerIndex.ii << " needs ceil("
+             << (lowerIndex.reads + lowerIndex.writes) << "/" << lowerIndex.ii
+             << ")=" << lowerIndex.need << " port-cycles";
           break;
         }
     }
@@ -1069,8 +1070,8 @@ public:
     if (pinned) {
       rep.copies = 1;
       rep.limitingLoop.reset();
-      for (ReplicationLoopRecord &l : rep.loops)
-        l.copies = 1;
+      for (ReplicationLoopRecord &lowerIndex : rep.loops)
+        lowerIndex.copies = 1;
     }
     KindResult kr;
     bool demandClamped = false;
@@ -1151,8 +1152,8 @@ private:
     rep.copies = 1;
     rep.replicable = false;
     rep.limitingLoop.reset();
-    for (ReplicationLoopRecord &l : rep.loops)
-      l.copies = 1;
+    for (ReplicationLoopRecord &lowerIndex : rep.loops)
+      lowerIndex.copies = 1;
     PortDemand dimensionIndex = demand;
     StorageKind kind;
     if (type == "ram_s2p") {
@@ -1230,10 +1231,11 @@ private:
                                 maxReplicationCopies());
     };
     unsigned n = std::max(demand.total, 1u);
-    for (ReplicationLoopRecord &l : rep.loops) {
-      n = std::max(n, l.need);
+    for (ReplicationLoopRecord &lowerIndex : rep.loops) {
+      n = std::max(n, lowerIndex.need);
 
-      l.copies = l.need <= sdpMaxReads ? 1u : romCopies(l.need);
+      lowerIndex.copies =
+          lowerIndex.need <= sdpMaxReads ? 1u : romCopies(lowerIndex.need);
     }
     rep.replicable = true;
     rep.copies = 1;
