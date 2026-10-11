@@ -101,85 +101,86 @@ public:
     auto binary =
         [&](llvm::function_ref<std::optional<int64_t>(int64_t, int64_t)>
                 fieldValue) -> std::optional<int64_t> {
-      std::optional<int64_t> a = value(def->getOperand(0), ivValue, depth + 1);
-      if (!a)
+      std::optional<int64_t> arrayValue =
+          value(def->getOperand(0), ivValue, depth + 1);
+      if (!arrayValue)
         return std::nullopt;
       std::optional<int64_t> buildPoint =
           value(def->getOperand(1), ivValue, depth + 1);
       if (!buildPoint)
         return std::nullopt;
-      return fieldValue(*a, *buildPoint);
+      return fieldValue(*arrayValue, *buildPoint);
     };
     return TypeSwitch<Operation *, std::optional<int64_t>>(def)
         .Case<arith::IndexCastOp, arith::IndexCastUIOp, arith::ExtSIOp,
               arith::ExtUIOp, arith::TruncIOp>([&](auto) { return unary(); })
         .Case<arith::AddIOp>([&](auto) {
-          return binary(
-              [](int64_t a, int64_t buildPoint) -> std::optional<int64_t> {
-                return a + buildPoint;
-              });
+          return binary([](int64_t arrayValue,
+                           int64_t buildPoint) -> std::optional<int64_t> {
+            return arrayValue + buildPoint;
+          });
         })
         .Case<arith::SubIOp>([&](auto) {
-          return binary(
-              [](int64_t a, int64_t buildPoint) -> std::optional<int64_t> {
-                return a - buildPoint;
-              });
+          return binary([](int64_t arrayValue,
+                           int64_t buildPoint) -> std::optional<int64_t> {
+            return arrayValue - buildPoint;
+          });
         })
         .Case<arith::MulIOp>([&](auto) {
-          return binary(
-              [](int64_t a, int64_t buildPoint) -> std::optional<int64_t> {
-                return a * buildPoint;
-              });
+          return binary([](int64_t arrayValue,
+                           int64_t buildPoint) -> std::optional<int64_t> {
+            return arrayValue * buildPoint;
+          });
         })
         .Case<arith::AndIOp>([&](auto) {
-          return binary(
-              [](int64_t a, int64_t buildPoint) -> std::optional<int64_t> {
-                return a & buildPoint;
-              });
+          return binary([](int64_t arrayValue,
+                           int64_t buildPoint) -> std::optional<int64_t> {
+            return arrayValue & buildPoint;
+          });
         })
         .Case<arith::OrIOp>([&](auto) {
-          return binary(
-              [](int64_t a, int64_t buildPoint) -> std::optional<int64_t> {
-                return a | buildPoint;
-              });
+          return binary([](int64_t arrayValue,
+                           int64_t buildPoint) -> std::optional<int64_t> {
+            return arrayValue | buildPoint;
+          });
         })
         .Case<arith::XOrIOp>([&](auto) {
-          return binary(
-              [](int64_t a, int64_t buildPoint) -> std::optional<int64_t> {
-                return a ^ buildPoint;
-              });
+          return binary([](int64_t arrayValue,
+                           int64_t buildPoint) -> std::optional<int64_t> {
+            return arrayValue ^ buildPoint;
+          });
         })
         .Case<arith::ShLIOp>([&](auto) {
-          return binary(
-              [](int64_t a, int64_t buildPoint) -> std::optional<int64_t> {
-                if (buildPoint < 0 || buildPoint > 62)
-                  return std::nullopt;
-                return a << buildPoint;
-              });
+          return binary([](int64_t arrayValue,
+                           int64_t buildPoint) -> std::optional<int64_t> {
+            if (buildPoint < 0 || buildPoint > 62)
+              return std::nullopt;
+            return arrayValue << buildPoint;
+          });
         })
         .Case<arith::ShRSIOp, arith::ShRUIOp>([&](auto) {
-          return binary(
-              [](int64_t a, int64_t buildPoint) -> std::optional<int64_t> {
-                if (buildPoint < 0 || buildPoint > 62)
-                  return std::nullopt;
-                return a >> buildPoint;
-              });
+          return binary([](int64_t arrayValue,
+                           int64_t buildPoint) -> std::optional<int64_t> {
+            if (buildPoint < 0 || buildPoint > 62)
+              return std::nullopt;
+            return arrayValue >> buildPoint;
+          });
         })
         .Case<arith::DivSIOp, arith::DivUIOp>([&](auto) {
-          return binary(
-              [](int64_t a, int64_t buildPoint) -> std::optional<int64_t> {
-                if (buildPoint == 0)
-                  return std::nullopt;
-                return a / buildPoint;
-              });
+          return binary([](int64_t arrayValue,
+                           int64_t buildPoint) -> std::optional<int64_t> {
+            if (buildPoint == 0)
+              return std::nullopt;
+            return arrayValue / buildPoint;
+          });
         })
         .Case<arith::RemSIOp, arith::RemUIOp>([&](auto) {
-          return binary(
-              [](int64_t a, int64_t buildPoint) -> std::optional<int64_t> {
-                if (buildPoint == 0)
-                  return std::nullopt;
-                return a % buildPoint;
-              });
+          return binary([](int64_t arrayValue,
+                           int64_t buildPoint) -> std::optional<int64_t> {
+            if (buildPoint == 0)
+              return std::nullopt;
+            return arrayValue % buildPoint;
+          });
         })
         .Default([](Operation *) { return std::nullopt; });
   }
@@ -194,29 +195,31 @@ public:
     if (auto stringValue = dyn_cast<AffineSymbolExpr>(entryValue))
       return vals[numDims + stringValue.getPosition()];
     auto bin = cast<AffineBinaryOpExpr>(entryValue);
-    std::optional<int64_t> a = expr(bin.getLHS(), vals, numDims);
+    std::optional<int64_t> arrayValue = expr(bin.getLHS(), vals, numDims);
     std::optional<int64_t> buildPoint = expr(bin.getRHS(), vals, numDims);
-    if (!a || !buildPoint)
+    if (!arrayValue || !buildPoint)
       return std::nullopt;
     switch (entryValue.getKind()) {
     case AffineExprKind::Add:
-      return *a + *buildPoint;
+      return *arrayValue + *buildPoint;
     case AffineExprKind::Mul:
-      return *a * *buildPoint;
+      return *arrayValue * *buildPoint;
     case AffineExprKind::Mod:
       if (*buildPoint <= 0)
         return std::nullopt;
-      return ((*a % *buildPoint) + *buildPoint) % *buildPoint;
+      return ((*arrayValue % *buildPoint) + *buildPoint) % *buildPoint;
     case AffineExprKind::FloorDiv:
       if (*buildPoint == 0)
         return std::nullopt;
-      return *a / *buildPoint -
-             ((*a % *buildPoint != 0) && ((*a < 0) != (*buildPoint < 0)));
+      return *arrayValue / *buildPoint -
+             ((*arrayValue % *buildPoint != 0) &&
+              ((*arrayValue < 0) != (*buildPoint < 0)));
     case AffineExprKind::CeilDiv:
       if (*buildPoint == 0)
         return std::nullopt;
-      return *a / *buildPoint +
-             ((*a % *buildPoint != 0) && ((*a < 0) == (*buildPoint < 0)));
+      return *arrayValue / *buildPoint +
+             ((*arrayValue % *buildPoint != 0) &&
+              ((*arrayValue < 0) == (*buildPoint < 0)));
     default:
       return std::nullopt;
     }
@@ -308,52 +311,53 @@ std::optional<LoopShape> shapeOf(Operation *loop) {
 }
 
 std::optional<Access> accessOf(Operation *op) {
-  Access a;
-  a.op = op;
+  Access arrayValue;
+  arrayValue.op = op;
   auto identity = [&](ValueRange indices) {
-    a.map = AffineMap::getMultiDimIdentityMap(indices.size(), op->getContext());
-    a.operands.assign(indices.begin(), indices.end());
+    arrayValue.map =
+        AffineMap::getMultiDimIdentityMap(indices.size(), op->getContext());
+    arrayValue.operands.assign(indices.begin(), indices.end());
   };
   auto composed = [&](AffineMap map, ValueRange operands) {
-    a.map = map;
-    a.operands.assign(operands.begin(), operands.end());
-    fullyComposeAffineMapAndOperands(&a.map, &a.operands);
+    arrayValue.map = map;
+    arrayValue.operands.assign(operands.begin(), operands.end());
+    fullyComposeAffineMapAndOperands(&arrayValue.map, &arrayValue.operands);
   };
   if (auto lowerIndex = dyn_cast<AffineLoadOp>(op)) {
-    a.mem = lowerIndex.getMemRef();
-    a.value = lowerIndex.getResult();
+    arrayValue.mem = lowerIndex.getMemRef();
+    arrayValue.value = lowerIndex.getResult();
     composed(lowerIndex.getAffineMap(), lowerIndex.getMapOperands());
   } else if (auto stringValue = dyn_cast<AffineStoreOp>(op)) {
-    a.mem = stringValue.getMemRef();
-    a.isStore = true;
-    a.value = stringValue.getValueToStore();
+    arrayValue.mem = stringValue.getMemRef();
+    arrayValue.isStore = true;
+    arrayValue.value = stringValue.getValueToStore();
     composed(stringValue.getAffineMap(), stringValue.getMapOperands());
   } else if (auto lowerIndex = dyn_cast<memref::LoadOp>(op)) {
-    a.mem = lowerIndex.getMemRef();
-    a.value = lowerIndex.getResult();
+    arrayValue.mem = lowerIndex.getMemRef();
+    arrayValue.value = lowerIndex.getResult();
     identity(lowerIndex.getIndices());
   } else if (auto stringValue = dyn_cast<memref::StoreOp>(op)) {
-    a.mem = stringValue.getMemRef();
-    a.isStore = true;
-    a.value = stringValue.getValueToStore();
+    arrayValue.mem = stringValue.getMemRef();
+    arrayValue.isStore = true;
+    arrayValue.value = stringValue.getValueToStore();
     identity(stringValue.getIndices());
   } else if (auto stringValue =
                  dyn_cast<circt::hls_analysis::AffineStoreEnableOp>(op);
              stringValue &&
              circt::hlsest::Config::get().scheduling.bankStoreRecurrences) {
 
-    a.mem = stringValue.getMemref();
-    a.isStore = true;
-    a.value = stringValue.getValue();
+    arrayValue.mem = stringValue.getMemref();
+    arrayValue.isStore = true;
+    arrayValue.value = stringValue.getValue();
     composed(stringValue.getMap(), stringValue.getMapOperands());
-    a.pred = stringValue.getCondition();
-    a.hasPred = true;
-    a.predOperands.assign(stringValue.getSetOperands().begin(),
-                          stringValue.getSetOperands().end());
+    arrayValue.pred = stringValue.getCondition();
+    arrayValue.hasPred = true;
+    arrayValue.predOperands.assign(stringValue.getSetOperands().begin(),
+                                   stringValue.getSetOperands().end());
   } else {
     return std::nullopt;
   }
-  return a;
+  return arrayValue;
 }
 
 /// The same map over the same operand values: the same address in every
@@ -366,76 +370,81 @@ bool identicalAddress(const Access &exprValue, const Access &rowValue) {
 }
 
 /// Evaluate `a`'s address for iterations [0, count).
-void evaluate(Access &a, const LoopShape &shape, AddressEvaluator &eval,
-              unsigned count) {
-  a.addr.reserve(count);
-  SmallVector<int64_t, 4> vals(a.operands.size());
+void evaluate(Access &arrayValue, const LoopShape &shape,
+              AddressEvaluator &eval, unsigned count) {
+  arrayValue.addr.reserve(count);
+  SmallVector<int64_t, 4> vals(arrayValue.operands.size());
   SmallVector<int64_t, 4> coords;
   for (unsigned keyValue = 0; keyValue < count; ++keyValue) {
     int64_t ivValue = shape.lb + static_cast<int64_t>(keyValue) * shape.step;
-    for (auto [loopIndex, valueHandle] : llvm::enumerate(a.operands)) {
+    for (auto [loopIndex, valueHandle] : llvm::enumerate(arrayValue.operands)) {
       std::optional<int64_t> exprValue = eval.value(valueHandle, ivValue);
       if (!exprValue) {
-        a.known = false;
-        a.addr.clear();
+        arrayValue.known = false;
+        arrayValue.addr.clear();
         return;
       }
       vals[loopIndex] = *exprValue;
     }
     coords.clear();
-    for (AffineExpr entryValue : a.map.getResults()) {
+    for (AffineExpr entryValue : arrayValue.map.getResults()) {
       std::optional<int64_t> exprValue =
-          AddressEvaluator::expr(entryValue, vals, a.map.getNumDims());
+          AddressEvaluator::expr(entryValue, vals, arrayValue.map.getNumDims());
       if (!exprValue) {
-        a.known = false;
-        a.addr.clear();
+        arrayValue.known = false;
+        arrayValue.addr.clear();
         return;
       }
       coords.push_back(*exprValue);
     }
-    if (a.hasPred) {
+    if (arrayValue.hasPred) {
       SmallVector<int64_t, 4> pv;
-      for (Value valueHandle : a.predOperands) {
+      for (Value valueHandle : arrayValue.predOperands) {
         std::optional<int64_t> exprValue = eval.value(valueHandle, ivValue);
         if (!exprValue) {
-          a.known = false;
-          a.addr.clear();
+          arrayValue.known = false;
+          arrayValue.addr.clear();
           return;
         }
         pv.push_back(*exprValue);
       }
       bool holds = true;
       for (unsigned candidateValue = 0;
-           candidateValue < a.pred.getNumConstraints() && holds;
+           candidateValue < arrayValue.pred.getNumConstraints() && holds;
            ++candidateValue) {
         std::optional<int64_t> exprValue = AddressEvaluator::expr(
-            a.pred.getConstraint(candidateValue), pv, a.pred.getNumDims());
+            arrayValue.pred.getConstraint(candidateValue), pv,
+            arrayValue.pred.getNumDims());
         if (!exprValue) {
-          a.known = false;
-          a.addr.clear();
+          arrayValue.known = false;
+          arrayValue.addr.clear();
           return;
         }
-        holds = a.pred.isEq(candidateValue) ? *exprValue == 0 : *exprValue >= 0;
+        holds = arrayValue.pred.isEq(candidateValue) ? *exprValue == 0
+                                                     : *exprValue >= 0;
       }
       if (!holds) {
 
-        a.addr.push_back(llvm::hash_combine(0x5e471e1, keyValue));
+        arrayValue.addr.push_back(llvm::hash_combine(0x5e471e1, keyValue));
         continue;
       }
     }
-    a.addr.push_back(llvm::hash_combine_range(coords.begin(), coords.end()));
+    arrayValue.addr.push_back(
+        llvm::hash_combine_range(coords.begin(), coords.end()));
   }
 }
 
 /// A key for "the same address in every evaluated iteration": the evaluated
 /// addresses, or the map and operands when they cannot be evaluated.
-uint64_t addressSignature(const Access &a) {
-  if (a.known && !a.addr.empty())
-    return llvm::hash_combine(
-        1, llvm::hash_combine_range(a.addr.begin(), a.addr.end()));
+uint64_t addressSignature(const Access &arrayValue) {
+  if (arrayValue.known && !arrayValue.addr.empty())
+    return llvm::hash_combine(1,
+                              llvm::hash_combine_range(arrayValue.addr.begin(),
+                                                       arrayValue.addr.end()));
   return llvm::hash_combine(
-      2, a.map.getAsOpaquePointer(),
-      llvm::hash_combine_range(a.operands.begin(), a.operands.end()));
+      2, arrayValue.map.getAsOpaquePointer(),
+      llvm::hash_combine_range(arrayValue.operands.begin(),
+                               arrayValue.operands.end()));
 }
 
 /// The same address in one iteration: identical, or equal over the
@@ -736,8 +745,8 @@ static llvm::StringSet<> userInterIndependent(Operation *loop) {
     auto arr = op->getAttrOfType<ArrayAttr>("hls.dependence");
     if (!arr)
       continue;
-    for (Attribute a : arr) {
-      auto dimensionIndex = dyn_cast<DictionaryAttr>(a);
+    for (Attribute arrayValue : arr) {
+      auto dimensionIndex = dyn_cast<DictionaryAttr>(arrayValue);
       if (!dimensionIndex)
         continue;
       auto type = dimensionIndex.getAs<StringAttr>("type");
@@ -766,9 +775,9 @@ MemoryRecurrences circt::hls_analysis::findMemoryRecurrences(
   unsigned pos = 0;
   for (Operation &top : *shape->body)
     top.walk<WalkOrder::PostOrder>([&](Operation *op) {
-      if (std::optional<Access> a = accessOf(op)) {
-        a->pos = pos;
-        accesses.push_back(std::move(*a));
+      if (std::optional<Access> arrayValue = accessOf(op)) {
+        arrayValue->pos = pos;
+        accesses.push_back(std::move(*arrayValue));
       }
       ++pos;
     });
@@ -787,8 +796,8 @@ MemoryRecurrences circt::hls_analysis::findMemoryRecurrences(
   }
 
   llvm::MapVector<Value, SmallVector<unsigned>> byMem;
-  for (auto [loopIndex, a] : llvm::enumerate(accesses))
-    byMem[a.mem].push_back(loopIndex);
+  for (auto [loopIndex, arrayValue] : llvm::enumerate(accesses))
+    byMem[arrayValue.mem].push_back(loopIndex);
   SmallVector<unsigned> candidates;
   for (auto &[mem, indexValue] : byMem) {
     bool loads = false, stores = false;
@@ -850,11 +859,13 @@ MemoryRecurrences circt::hls_analysis::findMemoryRecurrences(
       promotedElement = true;
       const Access *firstLoad = nullptr, *lastStore = nullptr;
       for (unsigned loopIndex : indexValue) {
-        const Access &a = accesses[loopIndex];
-        if (!a.isStore && (!firstLoad || a.pos < firstLoad->pos))
-          firstLoad = &a;
-        if (a.isStore && (!lastStore || a.pos > lastStore->pos))
-          lastStore = &a;
+        const Access &arrayValue = accesses[loopIndex];
+        if (!arrayValue.isStore &&
+            (!firstLoad || arrayValue.pos < firstLoad->pos))
+          firstLoad = &arrayValue;
+        if (arrayValue.isStore &&
+            (!lastStore || arrayValue.pos > lastStore->pos))
+          lastStore = &arrayValue;
       }
       for (unsigned loopIndex : indexValue)
         if (&accesses[loopIndex] != firstLoad &&
@@ -921,8 +932,9 @@ MemoryRecurrences circt::hls_analysis::findMemoryRecurrences(
                      : alwaysPreviousIteration(store, load) ? "R3"
                                                             : "R2";
 
-          auto invariant = [](const Access &a) {
-            return a.known && !a.addr.empty() && llvm::all_equal(a.addr);
+          auto invariant = [](const Access &arrayValue) {
+            return arrayValue.known && !arrayValue.addr.empty() &&
+                   llvm::all_equal(arrayValue.addr);
           };
           if (dynamicLane && rec.rule == "R1" && invariant(store) &&
               invariant(load))
