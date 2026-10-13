@@ -137,14 +137,14 @@ static Region *regionUnder(Operation *op, Operation *anc) {
 /// common ancestor: it is a conditional (scf.if, affine.if, scf.index_switch)
 /// and they lie in different regions of it (W3 review 2 D1, w3r2_k5:
 /// `if (sel) work(a, b); else work(c, d);`, Vitis 1 instance, 4 BRAM).
-static bool mutuallyExclusive(Operation *arrayValue, Operation *b) {
+static bool mutuallyExclusive(Operation *arrayValue, Operation *buildPoint) {
 
   auto armsOf = [](Operation *op) -> ArrayRef<int64_t> {
     if (auto at = op->getAttrOfType<DenseI64ArrayAttr>(kIfArmsAttr))
       return at.asArrayRef();
     return {};
   };
-  ArrayRef<int64_t> ha = armsOf(arrayValue), hb = armsOf(b);
+  ArrayRef<int64_t> ha = armsOf(arrayValue), hb = armsOf(buildPoint);
   for (size_t exprValue = 0; exprValue + 1 < ha.size(); exprValue += 2)
     for (size_t rowValue = 0; rowValue + 1 < hb.size(); rowValue += 2)
       if (ha[exprValue] == hb[rowValue] &&
@@ -152,12 +152,12 @@ static bool mutuallyExclusive(Operation *arrayValue, Operation *b) {
         return true;
   for (Operation *portValue = arrayValue->getParentOp(); portValue;
        portValue = portValue->getParentOp()) {
-    if (!portValue->isProperAncestor(b))
+    if (!portValue->isProperAncestor(buildPoint))
       continue;
     if (!isa<scf::IfOp, affine::AffineIfOp, scf::IndexSwitchOp>(portValue))
       return false;
     Region *ra = regionUnder(arrayValue, portValue),
-           *rb = regionUnder(b, portValue);
+           *rb = regionUnder(buildPoint, portValue);
     return ra && rb && ra != rb;
   }
   return false;
@@ -191,13 +191,14 @@ static unsigned chainCover(ArrayRef<llvm::BitVector> reach,
   SmallVector<int> matchR(memoryOp, -1), next(memoryOp, -1);
   SmallVector<char> visited;
   std::function<bool(unsigned)> augment = [&](unsigned arrayValue) -> bool {
-    for (unsigned b = 0; b < memoryOp; ++b) {
-      if (b == arrayValue || visited[b] ||
-          !reach[nodes[arrayValue]].test(nodes[b]))
+    for (unsigned buildPoint = 0; buildPoint < memoryOp; ++buildPoint) {
+      if (buildPoint == arrayValue || visited[buildPoint] ||
+          !reach[nodes[arrayValue]].test(nodes[buildPoint]))
         continue;
-      visited[b] = 1;
-      if (matchR[b] < 0 || augment(static_cast<unsigned>(matchR[b]))) {
-        matchR[b] = static_cast<int>(arrayValue);
+      visited[buildPoint] = 1;
+      if (matchR[buildPoint] < 0 ||
+          augment(static_cast<unsigned>(matchR[buildPoint]))) {
+        matchR[buildPoint] = static_cast<int>(arrayValue);
         return true;
       }
     }
@@ -207,16 +208,16 @@ static unsigned chainCover(ArrayRef<llvm::BitVector> reach,
     visited.assign(memoryOp, 0);
     (void)augment(arrayValue);
   }
-  for (unsigned b = 0; b < memoryOp; ++b)
-    if (matchR[b] >= 0)
-      next[matchR[b]] = static_cast<int>(b);
+  for (unsigned buildPoint = 0; buildPoint < memoryOp; ++buildPoint)
+    if (matchR[buildPoint] >= 0)
+      next[matchR[buildPoint]] = static_cast<int>(buildPoint);
 
   SmallVector<int> chainOfNode(memoryOp, -1);
   unsigned chains = 0;
-  for (unsigned b = 0; b < memoryOp; ++b) {
-    if (matchR[b] >= 0)
+  for (unsigned buildPoint = 0; buildPoint < memoryOp; ++buildPoint) {
+    if (matchR[buildPoint] >= 0)
       continue;
-    for (int candidateValue = static_cast<int>(b); candidateValue >= 0;
+    for (int candidateValue = static_cast<int>(buildPoint); candidateValue >= 0;
          candidateValue = next[candidateValue])
       chainOfNode[candidateValue] = static_cast<int>(chains);
     ++chains;
@@ -317,14 +318,14 @@ static bool isStreamArray(Value root) {
   return false;
 }
 
-static bool sharesObject(Operation *arrayValue, Operation *b,
+static bool sharesObject(Operation *arrayValue, Operation *buildPoint,
                          DenseMap<Value, bool> &streamArrays) {
   for (OpOperand &ox : arrayValue->getOpOperands()) {
     Value exprValue = ox.get();
     if (!isa<BaseMemRefType>(exprValue.getType()))
       continue;
     StorageRoot rx = storageRoot(exprValue);
-    for (OpOperand &oy : b->getOpOperands()) {
+    for (OpOperand &oy : buildPoint->getOpOperands()) {
       Value rowValue = oy.get();
       if (!isa<BaseMemRefType>(rowValue.getType()) ||
           storageRoot(rowValue) != rx)
@@ -335,11 +336,12 @@ static bool sharesObject(Operation *arrayValue, Operation *b,
           it->second = isStreamArray(rx.value);
         if (it->second) {
           auto px = constantElementPathAt(arrayValue, ox.getOperandNumber()),
-               py = constantElementPathAt(b, oy.getOperandNumber());
+               py = constantElementPathAt(buildPoint, oy.getOperandNumber());
           if (px && py) {
             bool differ = false;
-            for (size_t keyValue = 0, e = std::min(px->size(), py->size());
-                 keyValue < e; ++keyValue)
+            for (size_t keyValue = 0,
+                        entryValue = std::min(px->size(), py->size());
+                 keyValue < entryValue; ++keyValue)
               differ |= (*px)[keyValue] != (*py)[keyValue];
             if (differ)
               continue;
@@ -352,7 +354,7 @@ static bool sharesObject(Operation *arrayValue, Operation *b,
   return false;
 }
 
-static bool distinctStreamElements(Operation *arrayValue, Operation *b,
+static bool distinctStreamElements(Operation *arrayValue, Operation *buildPoint,
                                    const StorageRoot &root,
                                    DenseMap<Value, bool> &streamArrays) {
   if (!root.value)
@@ -364,7 +366,7 @@ static bool distinctStreamElements(Operation *arrayValue, Operation *b,
     return false;
   SmallVector<SmallVector<int64_t, 2>> pa, pb;
   for (auto [op, paths] :
-       {std::make_pair(arrayValue, &pa), std::make_pair(b, &pb)})
+       {std::make_pair(arrayValue, &pa), std::make_pair(buildPoint, &pb)})
     for (OpOperand &opHandle : op->getOpOperands()) {
       Value valueHandle = opHandle.get();
       if (!isa<BaseMemRefType>(valueHandle.getType()) ||
@@ -380,8 +382,9 @@ static bool distinctStreamElements(Operation *arrayValue, Operation *b,
   for (const auto &exprValue : pa)
     for (const auto &rowValue : pb) {
       bool differ = false;
-      for (size_t keyValue = 0, e = std::min(exprValue.size(), rowValue.size());
-           keyValue < e; ++keyValue)
+      for (size_t keyValue = 0,
+                  entryValue = std::min(exprValue.size(), rowValue.size());
+           keyValue < entryValue; ++keyValue)
         differ |= exprValue[keyValue] != rowValue[keyValue];
       if (!differ)
         return false;
@@ -439,9 +442,11 @@ static bool mayBeWritten(Value mem, ArgWriteMemo &memo) {
       }
       SmallVector<MemoryEffects::EffectInstance> effects;
       eff.getEffects(effects);
-      for (auto &e : effects)
-        if ((e.getValue() == cur && !isa<MemoryEffects::Read>(e.getEffect())) ||
-            (!e.getValue() && isa<MemoryEffects::Write>(e.getEffect())))
+      for (auto &entryValue : effects)
+        if ((entryValue.getValue() == cur &&
+             !isa<MemoryEffects::Read>(entryValue.getEffect())) ||
+            (!entryValue.getValue() &&
+             isa<MemoryEffects::Write>(entryValue.getEffect())))
           writes = true;
     }
   }
@@ -522,14 +527,14 @@ readsWrites(Operation *op, const SmallVectorImpl<StorageRoot> &roots,
   }
   SmallVector<MemoryEffects::EffectInstance> effects;
   eff.getEffects(effects);
-  for (auto &e : effects) {
-    Value valueHandle = e.getValue();
+  for (auto &entryValue : effects) {
+    Value valueHandle = entryValue.getValue();
     if (!valueHandle || !isa<BaseMemRefType>(valueHandle.getType()) ||
         !inRoots(valueHandle))
       continue;
-    if (isa<MemoryEffects::Read>(e.getEffect()))
+    if (isa<MemoryEffects::Read>(entryValue.getEffect()))
       reads = true;
-    else if (isa<MemoryEffects::Write>(e.getEffect()))
+    else if (isa<MemoryEffects::Write>(entryValue.getEffect()))
       writes = true;
   }
 }
@@ -735,7 +740,7 @@ groupConcurrentCalls(func::FuncOp parent, ArrayRef<Operation *> sites,
           it->second = portValue;
     return it->second;
   };
-  auto shareLoop = [&](Operation *arrayValue, Operation *b) {
+  auto shareLoop = [&](Operation *arrayValue, Operation *buildPoint) {
     Operation *loop = outermostLoop(arrayValue);
     if (!loop)
       return false;
@@ -746,7 +751,7 @@ groupConcurrentCalls(func::FuncOp parent, ArrayRef<Operation *> sites,
           [&](Operation *op) { last = std::max(last, ordinal.lookup(op)); });
       it->second = last;
     }
-    unsigned ob = ordinal.lookup(b);
+    unsigned ob = ordinal.lookup(buildPoint);
     return ob > ordinal.lookup(loop) && ob <= it->second;
   };
   auto mayFollow = [&](Operation *earlier, Operation *later) {
@@ -799,8 +804,8 @@ groupConcurrentCalls(func::FuncOp parent, ArrayRef<Operation *> sites,
       for (Value resultValue : op->getResults())
         taintValue(resultValue);
       for (Region &region : op->getRegions())
-        for (Block &b : region)
-          for (BlockArgument arrayValue : b.getArguments())
+        for (Block &buildPoint : region)
+          for (BlockArgument arrayValue : buildPoint.getArguments())
             taintValue(arrayValue);
 
       for (const RootAccess &ra : rootAccesses(op))
@@ -971,9 +976,10 @@ groupConcurrentCalls(func::FuncOp parent, ArrayRef<Operation *> sites,
             acc[typeValue].ssaDeps.push_back(topIndex.lookup(dimensionIndex));
       });
     }
-    auto meets = [](ArrayRef<StorageRoot> arrayValue, ArrayRef<StorageRoot> b) {
+    auto meets = [](ArrayRef<StorageRoot> arrayValue,
+                    ArrayRef<StorageRoot> buildPoint) {
       return llvm::any_of(arrayValue, [&](const StorageRoot &exprValue) {
-        return llvm::is_contained(b, exprValue);
+        return llvm::is_contained(buildPoint, exprValue);
       });
     };
     auto calleeOf = [](Operation *op) -> Operation * {
@@ -1024,9 +1030,9 @@ groupConcurrentCalls(func::FuncOp parent, ArrayRef<Operation *> sites,
       finish[keyValue] = st + (step ? 1 : 0);
     }
 
-    auto waitingCallBetween = [&](unsigned arrayValue, unsigned b) {
-      for (unsigned candidateValue = arrayValue + 1; candidateValue < b;
-           ++candidateValue)
+    auto waitingCallBetween = [&](unsigned arrayValue, unsigned buildPoint) {
+      for (unsigned candidateValue = arrayValue + 1;
+           candidateValue < buildPoint; ++candidateValue)
         if ((isa<CallOpInterface>(top[candidateValue]) ||
              top[candidateValue]->getNumRegions() > 0) &&
             waits[candidateValue].test(arrayValue))
@@ -1083,8 +1089,9 @@ groupConcurrentCalls(func::FuncOp parent, ArrayRef<Operation *> sites,
       SmallVector<std::pair<StorageRoot, Operation *>, 2> reads;
       dataOperandMemories(sites[loopIndex], reads);
       for (const auto &[root, op] : reads) {
-        auto *mem = llvm::find_if(
-            memories, [&](const auto &e) { return e.first == root; });
+        auto *mem = llvm::find_if(memories, [&](const auto &entryValue) {
+          return entryValue.first == root;
+        });
         if (mem == memories.end()) {
           memories.push_back({root, {}});
           mem = std::prev(memories.end());
@@ -1160,9 +1167,10 @@ groupConcurrentCalls(func::FuncOp parent, ArrayRef<Operation *> sites,
                                          llvm::BitVector(indexValue.size()));
         for (unsigned arrayValue = 0; arrayValue < indexValue.size();
              ++arrayValue)
-          for (unsigned b = 0; b < indexValue.size(); ++b)
-            if (before[indexValue[arrayValue]].test(indexValue[b]))
-              sub[arrayValue].set(b);
+          for (unsigned buildPoint = 0; buildPoint < indexValue.size();
+               ++buildPoint)
+            if (before[indexValue[arrayValue]].test(indexValue[buildPoint]))
+              sub[arrayValue].set(buildPoint);
         SmallVector<unsigned> subGroup;
         unsigned width = chainCover(sub, subGroup);
         unsigned kept = dimensionIndex ? width : std::min(width, cap);
@@ -1503,7 +1511,7 @@ bool InstanceModel::argReachesSharedModule(func::FuncOp fn,
 /// (w2rv_twoloops), and a dataflow region's processes overlap: not ordered
 /// here. Unconfirmed: two pipelined loops on disjoint arrays.
 static bool orderedBySequentialLoops(func::FuncOp parent, Operation *arrayValue,
-                                     Operation *b) {
+                                     Operation *buildPoint) {
   if (parent->hasAttr("hls.dataflow"))
     return false;
   auto isLoop = [](Operation *op) {
@@ -1514,7 +1522,7 @@ static bool orderedBySequentialLoops(func::FuncOp parent, Operation *arrayValue,
        portValue && portValue != parent.getOperation();
        portValue = portValue->getParentOp())
     holderOfA.try_emplace(portValue->getBlock(), portValue);
-  for (Operation *queueValue = b;
+  for (Operation *queueValue = buildPoint;
        queueValue && queueValue != parent.getOperation();
        queueValue = queueValue->getParentOp()) {
     auto it = holderOfA.find(queueValue->getBlock());
@@ -1738,8 +1746,8 @@ char floatArrayKind(Value arg, const DenseMap<Value, char> &paramKinds) {
 }
 } // namespace
 
-bool inExclusiveArms(Operation *arrayValue, Operation *b) {
-  return mutuallyExclusive(arrayValue, b);
+bool inExclusiveArms(Operation *arrayValue, Operation *buildPoint) {
+  return mutuallyExclusive(arrayValue, buildPoint);
 }
 
 unsigned cloneKeptCalleesPerArgumentType(ModuleOp module) {
@@ -1928,15 +1936,16 @@ unsigned refreshCallOccupancies(ModuleOp module) {
     unsigned now = estimateCallOccupancy(callee, symbolTable, stack, ignore);
     if (now == static_cast<unsigned>(occ.getInt()))
       return;
-    Builder b(callSite.getContext());
-    callSite->setAttr(kCallOccupancyAttr, b.getI64IntegerAttr(now));
+    Builder buildPoint(callSite.getContext());
+    callSite->setAttr(kCallOccupancyAttr, buildPoint.getI64IntegerAttr(now));
 
     if (auto est = callSite->getAttrOfType<IntegerAttr>(kCallDepthEstimateAttr))
-      callSite->setAttr(kCallDepthAttr, b.getI64IntegerAttr(std::max<int64_t>(
-                                            est.getInt(), now)));
+      callSite->setAttr(
+          kCallDepthAttr,
+          buildPoint.getI64IntegerAttr(std::max<int64_t>(est.getInt(), now)));
     else if (auto depth = callSite->getAttrOfType<IntegerAttr>(kCallDepthAttr);
              depth && depth.getInt() < now)
-      callSite->setAttr(kCallDepthAttr, b.getI64IntegerAttr(now));
+      callSite->setAttr(kCallDepthAttr, buildPoint.getI64IntegerAttr(now));
     ++changedCalls;
   });
   return changedCalls;
