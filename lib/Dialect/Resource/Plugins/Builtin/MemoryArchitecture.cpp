@@ -1,6 +1,37 @@
-
-
+//===- MemoryArchitecture.cpp - The builtin memory architecture policy ----===//
+//
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//
+//===----------------------------------------------------------------------===//
+//
+// vitis-auto: how Vitis HLS 2025.1 builds the memory of an automatic array
+// (td=off), as a MemoryArchitecturePolicy:
+//
+//   capacity    the port slots the modulo scheduler may use per cycle: a bank
+//               no loop body stores to more than max_stores_per_iteration
+//               (1) times can be replicated, max_copies x (ports - 1) + 1 =
+//               17 read-or-write slots (VITIS_NOTES N4); any other bank, and
+//               an interface array, the two ports of one block RAM;
+//   replication RAM_1WNR copies = max(1, ceil((R + W) / II) - 1), capped at
+//               max_copies, max over the pipelined loops (N4);
+//   sequential  two independent accesses of one straight-line stretch of a
+//   scopes      non-pipelined scope share a state (N12; stretch-pair), or one
+//               access per state (one-port);
+//   plan        the storage kind from the per-cycle demand (ram_1p, ram_2p,
+//               ram_t2p; never ram_s2p without a pragma), a ROM's kind from
+//               its reads (rom.sdp_max_reads), and the port configuration
+//               that prices the bank: the kinds whose port set is in
+//               wide_port_sets (one port; a read and a write port; one or two
+//               read-only ports) at priced_configs.wide (sdp: x36), the rest
+//               and every replicated copy at priced_configs.narrow (tdp:
+//               x18) (N6, N8).
+//
+// The storage kind names (RAM_1P, ...) are this policy's report labels; no
+// interface carries them. (Moved from BRAMAnalysis.cpp, P2.)
+//
+//===----------------------------------------------------------------------===//
 
 #include "Builtins.h"
 
@@ -11,12 +42,12 @@
 #include "circt/Dialect/Resource/Plugins/MemoryInterfaces.h"
 #include "circt/Dialect/Resource/Plugins/Registry.h"
 
-#include "mlir/Dialect/Affine/IR/AffineOps.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
+#include "mlir/Dialect/Affine/IR/AffineOps.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
-#include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/Matchers.h"
 #include "mlir/Interfaces/CallInterfaces.h"
+#include "mlir/IR/BuiltinTypes.h"
 #include "mlir/Interfaces/LoopLikeInterface.h"
 #include "llvm/ADT/BitVector.h"
 #include "llvm/ADT/DenseSet.h"
@@ -36,9 +67,7 @@ namespace {
 
 const Config &config() { return Config::get(); }
 
-int64_t ceilDiv(int64_t arrayValue, int64_t buildPoint) {
-  return (arrayValue + buildPoint - 1) / buildPoint;
-}
+int64_t ceilDiv(int64_t a, int64_t b) { return (a + b - 1) / b; }
 
 /// The widest port of a bank priced wide (36) or narrow (18).
 unsigned maxPortWidth(bool wide) {
@@ -54,21 +83,66 @@ unsigned maxReplicationCopies() {
       config().tool.hls.memoryArchitecture.replication.maxCopies);
 }
 
+//===----------------------------------------------------------------------===//
+// Sequential scopes: accesses per state (--bram-seq-dual-port, on by default
+// since MEMOS.md M6; VITIS_NOTES.md N12, OPEN_ISSUES.md O3).
+//===----------------------------------------------------------------------===//
+// Vitis schedules a non-pipelined region with the same 2-port RAM core it uses
+// in a pipeline (`Core .. 'RAM' .. <Ports = 2>` in *.verbose.sched.rpt), puts
+// up to two accesses of one array in one state, and the binder makes the array
+// ram_2p (two reads, or a read and a write) / ram_t2p (two writes), x18
+// columns, as soon as one state holds two (polybench atax: the 64 invariant
+// buff_x loads hoisted into the parent issue two per state, buff_x_U ram_2p =
+// 2). Kernels (~/hls-est-work/exp-src/seqports*, 33 runs; t6rev, 6 runs): two
+// accesses share a state when they lie in one straight-line stretch of the
+// scope and neither depends on the other:
+//   - stretch: the scope's block up to the next loop / pipeline / other
+//     region op. That boundary is confirmed only where the later access feeds
+//     something ordered after the loop (sp_split_loop, rv_sib3: 1); Vitis
+//     outlines a pipelined inner loop as a call and can start an independent
+//     second loop beside it, loading for both in one state (rv_sib2: 2, this
+//     model 1 - an under-estimate, OPEN_ISSUES.md O21).
+//     The arms of an if belong to the stretch (Vitis predicates them: sp_if
+//     2), but the two arms of one if never pair (sp_o_ifarms, sp_o_ifst 1),
+//     also after --convert-affine-to-loopschedule hoisted them in front of the
+//     if (the arm is kept in hls.if_arms).
+//   - dependence: an SSA chain from one access to the other (sp_dd 1, a
+//     read-modify-write 1), a store ordered against a may-alias access
+//     (sp_stld_alias 1), or a memory order through another array (a value
+//     stored to b and read back from b feeds the second address: rv_memdep,
+//     rv_memdep2 1); provably disjoint addresses do not order
+//     (sp_stld / sp_ldst 2). Two loads of one address are one load (GVN).
+//   - the ASAP distance does not matter for two loads (sp_far: 38 cycles
+//     apart, still one state), and a state never holds more than two
+//     (sp_8ld: 8 loads -> four states of two, ram_2p, no RAM_1WNR).
+// Over-estimates (Vitis spread the two over the slack of the stretch: 1 port
+// where this says 2): sp_stfar, sp_o_2st, sp_o_far2, sp_o_2ld_rmw
+// (OPEN_ISSUES.md O21).
+
+
+
+// The accesses (indices into the access list of one stretch, in program
+// order) an operation depends on: every index below `prefix`, plus the set
+// bits of `tail` at or above it. Dependences in a stretch mostly form chains
+// (each access ordered after all earlier ones), which this keeps at constant
+// size; one k-bit vector per operation of the stretch was quadratic in time
+// and memory (hlsyn gemm-blocked: 131k accesses of one bank in one stretch,
+// over 600 s and 4.6 GB; OPEN_ISSUES O103 (2)). The sets it describes are
+// exactly those of the bit vectors it replaced.
 class DepSet {
 public:
-  bool test(unsigned loopIndex) const {
-    return loopIndex < prefix ||
-           (loopIndex < tail.size() && tail.test(loopIndex));
+  bool test(unsigned i) const {
+    return i < prefix || (i < tail.size() && tail.test(i));
   }
   bool any() const { return prefix > 0 || firstTailBit(0) >= 0; }
   /// Every index below this is in the set.
   unsigned prefixSize() const { return prefix; }
-  void set(unsigned loopIndex) {
-    if (loopIndex < prefix)
+  void set(unsigned i) {
+    if (i < prefix)
       return;
-    if (loopIndex >= tail.size())
-      tail.resize(loopIndex + 1);
-    tail.set(loopIndex);
+    if (i >= tail.size())
+      tail.resize(i + 1);
+    tail.set(i);
     normalize();
   }
   /// Adds every index below `n`.
@@ -78,33 +152,33 @@ public:
     prefix = n;
     normalize();
   }
-  DepSet &operator|=(const DepSet &opHandle) {
-    prefix = std::max(prefix, opHandle.prefix);
-    if (opHandle.firstTailBit(prefix) >= 0) {
-      if (tail.size() < opHandle.tail.size())
-        tail.resize(opHandle.tail.size());
-      tail |= opHandle.tail;
+  DepSet &operator|=(const DepSet &o) {
+    prefix = std::max(prefix, o.prefix);
+    if (o.firstTailBit(prefix) >= 0) {
+      if (tail.size() < o.tail.size())
+        tail.resize(o.tail.size());
+      tail |= o.tail;
     }
     normalize();
     return *this;
   }
   /// Whether some index of this set is missing from `o` (BitVector::test).
-  bool hasIndexNotIn(const DepSet &opHandle) const {
-    if (prefix > opHandle.prefix)
-      return true;
-
-    unsigned from = opHandle.prefix;
+  bool hasIndexNotIn(const DepSet &o) const {
+    if (prefix > o.prefix)
+      return true; // o.prefix itself is not in o (normalized)
+    // A tail bit at or above o.prefix (>= prefix) that o's tail lacks, a word
+    // at a time (the bits above a BitVector's size are zero).
+    unsigned from = o.prefix;
     if (from >= tail.size())
       return false;
     ArrayRef<uintptr_t> mine = tail.getData();
-    ArrayRef<uintptr_t> theirs = opHandle.tail.getData();
+    ArrayRef<uintptr_t> theirs = o.tail.getData();
     constexpr unsigned kWordBits = sizeof(uintptr_t) * 8;
     unsigned first = from / kWordBits;
-    for (unsigned widthValue = first; widthValue < mine.size(); ++widthValue) {
+    for (unsigned w = first; w < mine.size(); ++w) {
       uintptr_t missing =
-          mine[widthValue] &
-          ~(widthValue < theirs.size() ? theirs[widthValue] : uintptr_t(0));
-      if (widthValue == first)
+          mine[w] & ~(w < theirs.size() ? theirs[w] : uintptr_t(0));
+      if (w == first)
         missing &= ~uintptr_t(0) << (from % kWordBits);
       if (missing)
         return true;
@@ -116,9 +190,8 @@ public:
     from = std::max(from, prefix);
     if (from >= tail.size())
       return from;
-    int useValue = tail.find_first_unset_in(from, tail.size());
-    return useValue < 0 ? static_cast<unsigned>(tail.size())
-                        : static_cast<unsigned>(useValue);
+    int u = tail.find_first_unset_in(from, tail.size());
+    return u < 0 ? static_cast<unsigned>(tail.size()) : static_cast<unsigned>(u);
   }
 
 private:
@@ -133,15 +206,26 @@ private:
   /// that holds nothing above it.
   void normalize() {
     if (prefix < tail.size() && tail.test(prefix)) {
-      int useValue = tail.find_first_unset_in(prefix, tail.size());
-      prefix = useValue < 0 ? static_cast<unsigned>(tail.size())
-                            : static_cast<unsigned>(useValue);
+      int u = tail.find_first_unset_in(prefix, tail.size());
+      prefix = u < 0 ? static_cast<unsigned>(tail.size())
+                     : static_cast<unsigned>(u);
     }
     if (!tail.empty() && firstTailBit(prefix) < 0)
       tail = llvm::BitVector();
   }
 };
 
+// Read placement in a sequential scope (VITIS_NOTES N101): Vitis issues a
+// read in the state before its first consumer starts, not as soon as its
+// address is ready, so two independent reads share a state only when their
+// first consumers start in the same cycle (w9r13fix_sq_mul: `buf[3] * b +
+// buf[15]`, the second read waits for the multiplier: 1 port, 1 BRAM;
+// sq_add `buf[3] + buf[15] + b` and sq_mul2 `buf[3] * b + buf[15] * c`: one
+// state of two, 2; sq_chain, sq_fadd (float): 1; the corpus kernel
+// w9r13rev_rs_c32 too). The schedule is a cycle count per op of the
+// stretch: an op starts when its operands from the stretch are ready, and an
+// op of a multi-cycle class takes a cycle before its result is (the exact
+// latencies do not matter, only which consumers start together).
 static bool isMultiCycleOp(Operation *op) {
   if (isa<CallOpInterface>(op) || isa<memref::LoadOp, affine::AffineLoadOp>(op))
     return true;
@@ -149,16 +233,16 @@ static bool isMultiCycleOp(Operation *op) {
     return false;
   if (isa<arith::ConstantOp, arith::SelectOp, arith::BitcastOp>(op))
     return false;
-  StringRef targetDialect = op->getName().getDialectNamespace();
-  if (targetDialect == "math")
+  StringRef dialect = op->getName().getDialectNamespace();
+  if (dialect == "math")
     return true;
-  if (targetDialect != "arith")
+  if (dialect != "arith")
     return false;
-
+  // Floating-point arithmetic is pipelined over several cycles.
   if (llvm::any_of(op->getOperandTypes(),
-                   [](Type typeValue) { return isa<FloatType>(typeValue); }))
+                   [](Type t) { return isa<FloatType>(t); }))
     return true;
-
+  // A multiplier of two variables (a constant factor is shifts and adds).
   if (isa<arith::MulIOp>(op))
     return !matchPattern(op->getOperand(0), m_Constant()) &&
            !matchPattern(op->getOperand(1), m_Constant());
@@ -167,35 +251,34 @@ static bool isMultiCycleOp(Operation *op) {
 }
 
 static const std::vector<int64_t> &
-stretchStartCycles(const SeqScopeIndex::Scope &stringValue, unsigned stretch) {
-  if (stringValue.startCycles.size() <= stretch)
-    stringValue.startCycles.resize(stringValue.stretches.size());
-  std::vector<int64_t> &start = stringValue.startCycles[stretch];
-  const std::vector<Operation *> &ops = stringValue.stretches[stretch];
+stretchStartCycles(const SeqScopeIndex::Scope &s, unsigned stretch) {
+  if (s.startCycles.size() <= stretch)
+    s.startCycles.resize(s.stretches.size());
+  std::vector<int64_t> &start = s.startCycles[stretch];
+  const std::vector<Operation *> &ops = s.stretches[stretch];
   if (start.size() == ops.size())
     return start;
   start.assign(ops.size(), 0);
-  for (unsigned portValue = 0; portValue < ops.size(); ++portValue) {
-    int64_t typeValue = 0;
-    auto addValue = [&](Value valueHandle) {
-      Operation *def = valueHandle.getDefiningOp();
+  for (unsigned p = 0; p < ops.size(); ++p) {
+    int64_t t = 0;
+    auto addValue = [&](Value v) {
+      Operation *def = v.getDefiningOp();
       if (!def)
         return;
-      auto it = stringValue.info.find(def);
-      if (it == stringValue.info.end() || it->second.stretch != stretch ||
-          it->second.ordinal >= portValue)
+      auto it = s.info.find(def);
+      if (it == s.info.end() || it->second.stretch != stretch ||
+          it->second.ordinal >= p)
         return;
-      typeValue = std::max(typeValue, start[it->second.ordinal] +
-                                          (isMultiCycleOp(def) ? 1 : 0));
+      t = std::max(t, start[it->second.ordinal] + (isMultiCycleOp(def) ? 1 : 0));
     };
-    for (Value valueHandle : ops[portValue]->getOperands())
-      addValue(valueHandle);
-    for (Region &region : ops[portValue]->getRegions())
+    for (Value v : ops[p]->getOperands())
+      addValue(v);
+    for (Region &region : ops[p]->getRegions()) // an if: its arms' results
       for (Block &block : region)
         if (!block.empty())
-          for (Value valueHandle : block.back().getOperands())
-            addValue(valueHandle);
-    start[portValue] = typeValue;
+          for (Value v : block.back().getOperands())
+            addValue(v);
+    start[p] = t;
   }
   return start;
 }
@@ -203,94 +286,117 @@ stretchStartCycles(const SeqScopeIndex::Scope &stringValue, unsigned stretch) {
 /// The cycle the first consumer of the read `op` starts in (the latest cycle
 /// of the stretch when nothing in the stretch consumes it: the reads that
 /// feed a later loop all wait for it, polybench atax's hoisted buff_x).
-static int64_t firstConsumerCycle(const SeqScopeIndex::Scope &stringValue,
+static int64_t firstConsumerCycle(const SeqScopeIndex::Scope &s,
                                   unsigned stretch, Operation *op) {
-  const std::vector<int64_t> &start = stretchStartCycles(stringValue, stretch);
+  const std::vector<int64_t> &start = stretchStartCycles(s, stretch);
   int64_t first = std::numeric_limits<int64_t>::max();
   for (Operation *user : op->getUsers()) {
-    auto it = stringValue.info.find(user);
-    if (it != stringValue.info.end() && it->second.stretch == stretch)
+    auto it = s.info.find(user);
+    if (it != s.info.end() && it->second.stretch == stretch)
       first = std::min(first, start[it->second.ordinal]);
   }
   return first;
 }
 
+// The OpInfo and the operand-defining ordinals of every op of a stretch,
+// built once per stretch (SeqScopeIndex::Scope::operands).
 static const SeqScopeIndex::Scope::StretchOperands &
-stretchOperands(const SeqScopeIndex::Scope &stringValue, unsigned stretch) {
-  if (stringValue.operands.size() <= stretch)
-    stringValue.operands.resize(stringValue.stretches.size());
-  SeqScopeIndex::Scope::StretchOperands &cache = stringValue.operands[stretch];
-  const std::vector<Operation *> &ops = stringValue.stretches[stretch];
+stretchOperands(const SeqScopeIndex::Scope &s, unsigned stretch) {
+  if (s.operands.size() <= stretch)
+    s.operands.resize(s.stretches.size());
+  SeqScopeIndex::Scope::StretchOperands &cache = s.operands[stretch];
+  const std::vector<Operation *> &ops = s.stretches[stretch];
   if (!cache.infos.empty() || ops.empty())
     return cache;
   cache.infos.resize(ops.size());
   cache.defs.resize(ops.size());
   cache.touches.resize(ops.size());
-  for (auto [portValue, op] : llvm::enumerate(ops)) {
-    cache.infos[portValue] = &stringValue.info.find(op)->second;
-    memTouches(op, cache.touches[portValue]);
-    auto addValue = [&](Value valueHandle) {
-      Operation *def = valueHandle.getDefiningOp();
+  for (auto [p, op] : llvm::enumerate(ops)) {
+    cache.infos[p] = &s.info.find(op)->second;
+    memTouches(op, cache.touches[p]);
+    auto addValue = [&](Value v) {
+      Operation *def = v.getDefiningOp();
       if (!def)
         return;
-      auto it = stringValue.info.find(def);
-      if (it != stringValue.info.end() && it->second.stretch == stretch)
-        cache.defs[portValue].push_back(it->second.ordinal);
+      auto it = s.info.find(def);
+      if (it != s.info.end() && it->second.stretch == stretch)
+        cache.defs[p].push_back(it->second.ordinal);
     };
-    for (Value valueHandle : op->getOperands())
-      addValue(valueHandle);
-    for (Region &region : op->getRegions())
+    for (Value v : op->getOperands())
+      addValue(v);
+    for (Region &region : op->getRegions()) // an if: results from its arms
       for (Block &block : region)
         if (!block.empty())
-          for (Value valueHandle : block.back().getOperands())
-            addValue(valueHandle);
+          for (Value v : block.back().getOperands())
+            addValue(v);
   }
   return cache;
 }
 
+// Two accesses of `accs` (one bank, one stretch of a sequential scope, in
+// program order) that Vitis issues in the same state, or none.
 static std::optional<std::pair<const AccessSummary *, const AccessSummary *>>
 findSameStatePair(ArrayRef<const AccessSummary *> accs,
-                  const SeqScopeIndex::Scope &stringValue, unsigned stretch,
+                  const SeqScopeIndex::Scope &s, unsigned stretch,
                   const DenseSet<Value> &bankValues) {
-  unsigned keyValue = accs.size();
-  const std::vector<Operation *> &ops = stringValue.stretches[stretch];
-  SmallVector<unsigned> ord(keyValue);
-  SmallVector<const SeqScopeIndex::OpInfo *> info(keyValue);
-  for (unsigned innerIndex = 0; innerIndex < keyValue; ++innerIndex) {
-    info[innerIndex] = &stringValue.info.find(accs[innerIndex]->op)->second;
-    ord[innerIndex] = info[innerIndex]->ordinal;
+  unsigned k = accs.size();
+  const std::vector<Operation *> &ops = s.stretches[stretch];
+  SmallVector<unsigned> ord(k);
+  SmallVector<const SeqScopeIndex::OpInfo *> info(k);
+  for (unsigned j = 0; j < k; ++j) {
+    info[j] = &s.info.find(accs[j]->op)->second;
+    ord[j] = info[j]->ordinal;
   }
   unsigned lo = ord.front(), hi = ord.back();
-
+  // deps[p - lo]: the accesses (indices into accs) the op at ordinal p
+  // depends on, through SSA values or memory order. Invariant: an access in
+  // a set brings its own dependences along (i in d implies deps[i] in d), so
+  // an access already in d never needs to be looked at again.
   std::vector<DepSet> deps(hi - lo + 1);
-
+  // Every access before the last other use of the bank (a prefix: accs is
+  // in program order).
   unsigned barrier = 0;
-
-  SmallVector<ArrayRef<int64_t>> hoistedArms(keyValue);
-  for (unsigned innerIndex = 0; innerIndex < keyValue; ++innerIndex)
-    hoistedArms[innerIndex] = hoistedArmsOf(accs[innerIndex]->op);
-  auto exclusive = [&](unsigned loopIndex, unsigned innerIndex) {
-    return inExclusiveArms(*info[loopIndex], hoistedArms[loopIndex],
-                           *info[innerIndex], hoistedArms[innerIndex]);
+  // The arms an access was hoisted out of by --convert-affine-to-loopschedule
+  // (hls.if_arms: [if id, arm, ...]).
+  SmallVector<ArrayRef<int64_t>> hoistedArms(k);
+  for (unsigned j = 0; j < k; ++j)
+    hoistedArms[j] = hoistedArmsOf(accs[j]->op);
+  auto exclusive = [&](unsigned i, unsigned j) {
+    return inExclusiveArms(*info[i], hoistedArms[i], *info[j], hoistedArms[j]);
   };
   const bool readsBeforeConsumer =
       config().tool.hls.memoryArchitecture.sequentialLoadsBeforeConsumer;
-  SmallVector<std::optional<int64_t>> consumerCycles(keyValue);
-  auto consumerCycle = [&](unsigned loopIndex) {
-    if (!consumerCycles[loopIndex])
-      consumerCycles[loopIndex] =
-          firstConsumerCycle(stringValue, stretch, accs[loopIndex]->op);
-    return *consumerCycles[loopIndex];
+  SmallVector<std::optional<int64_t>> consumerCycles(k);
+  auto consumerCycle = [&](unsigned i) {
+    if (!consumerCycles[i])
+      consumerCycles[i] = firstConsumerCycle(s, stretch, accs[i]->op);
+    return *consumerCycles[i];
   };
-
+  // The ops of [lo, p) with memory effects whose order can carry an access of
+  // `accs`: the accesses themselves and the ops that depend on one. A later op
+  // whose effects may conflict with one of them inherits its dependences, so
+  // the memory order through any storage counts (x = a[i]; b[j] = x;
+  // y = b[k]; a[y]: rv_memdep, VITIS_NOTES.md N12). An op that depends on no
+  // access never carries one and is left out.
   struct MemEvent {
     Operation *op;
     unsigned pos;
-    int acc;
+    int acc; // index into accs, -1 for another op
     ArrayRef<MemTouch> touches;
   };
   std::vector<MemEvent> events;
-
+  // Events per storage key, and those touching any storage (a null key); an
+  // access of `accs` inherits nothing from another access of `accs` (they
+  // are ordered by their addresses below), so the events that are not
+  // accesses are also indexed on their own.
+  // A list of events in program order, with the union of the sets the
+  // events of each complete block can give (their accesses' dependences and
+  // the accesses themselves), on four levels of blocks of 8, 64, 512 and 4096
+  // events, so a block that holds nothing an op lacks is skipped as a whole.
+  // (Speed only: an op usually depends already on everything an earlier event
+  // could give, and a fully unrolled filter window visited 6e9 such events,
+  // Vitis_Libraries bilateralfilter FILTER_SIZE 7.) A block's union is built
+  // when first asked for, after every op of the block has its final set.
   static constexpr unsigned kBlockFanout = 8, kBlockLevels = 4;
   struct EventList {
     SmallVector<unsigned> ids;
@@ -300,292 +406,306 @@ findSameStatePair(ArrayRef<const AccessSummary *> accs,
         ids.push_back(ei);
     }
   };
-
+  // The `W` lists hold only the events with a write touch of that kind: a
+  // read of op conflicts only with an earlier write (mayConflict), so a
+  // read-only touch looks at those alone (speed only, as above).
   struct EventIndex {
     DenseMap<const void *, EventList> byKey, byKeyW;
     EventList anyStorage, all, anyStorageW, allW;
     void add(unsigned ei, ArrayRef<MemTouch> touches) {
       all.push(ei);
-      for (const MemTouch &typeValue : touches) {
-        if (typeValue.write)
+      for (const MemTouch &t : touches) {
+        if (t.write)
           allW.push(ei);
-        if (!typeValue.key) {
+        if (!t.key) {
           anyStorage.push(ei);
-          if (typeValue.write)
+          if (t.write)
             anyStorageW.push(ei);
           continue;
         }
-        byKey[typeValue.key].push(ei);
-        if (typeValue.write)
-          byKeyW[typeValue.key].push(ei);
+        byKey[t.key].push(ei);
+        if (t.write)
+          byKeyW[t.key].push(ei);
       }
     }
   };
   EventIndex allEvents, otherEvents;
-  SmallVector<unsigned> seenStamp;
+  SmallVector<unsigned> seenStamp; // per event: the op that listed it last
   unsigned stamp = 0;
   const SeqScopeIndex::Scope::StretchOperands &operands =
-      stretchOperands(stringValue, stretch);
-
+      stretchOperands(s, stretch);
+  // accAt[p - lo]: the index into accs of the op at ordinal p, or -1.
   std::vector<int> accAt(hi - lo + 1, -1);
-  for (unsigned innerIndex = 0; innerIndex < keyValue; ++innerIndex)
-    accAt[ord[innerIndex] - lo] = static_cast<int>(innerIndex);
-  for (unsigned portValue = lo; portValue <= hi; ++portValue) {
-    Operation *op = ops[portValue];
-    DepSet &dimensionIndex = deps[portValue - lo];
-    for (unsigned def : operands.defs[portValue]) {
-      if (def < lo || def >= portValue)
-        continue;
-      dimensionIndex |= deps[def - lo];
+  for (unsigned j = 0; j < k; ++j)
+    accAt[ord[j] - lo] = static_cast<int>(j);
+  for (unsigned p = lo; p <= hi; ++p) {
+    Operation *op = ops[p];
+    DepSet &d = deps[p - lo];
+    for (unsigned def : operands.defs[p]) {
+      if (def < lo || def >= p)
+        continue; // defined before the first access or after op
+      d |= deps[def - lo];
       if (accAt[def - lo] >= 0)
-        dimensionIndex.set(static_cast<unsigned>(accAt[def - lo]));
+        d.set(static_cast<unsigned>(accAt[def - lo]));
     }
-    int selfAcc = accAt[portValue - lo];
-
-    ArrayRef<MemTouch> touches = operands.touches[portValue];
+    int selfAcc = accAt[p - lo];
+    // Memory order against the earlier ops of the stretch (two accesses of the
+    // bank are ordered below, by their addresses).
+    ArrayRef<MemTouch> touches = operands.touches[p];
     EventIndex &index = selfAcc >= 0 ? otherEvents : allEvents;
     if (!touches.empty() && !index.all.ids.empty()) {
-      const SeqScopeIndex::OpInfo &opInfo = *operands.infos[portValue];
+      const SeqScopeIndex::OpInfo &opInfo = *operands.infos[p];
       ArrayRef<int64_t> opHoisted = hoistedArmsOf(op);
-
+      // Only events that can conflict with a touch of op: the same storage,
+      // or any storage (a null key) on either side (mayConflict). What d
+      // inherits is a union, so the order of the events does not matter.
+      // (Speed only: the scan over every earlier event was quadratic in the
+      // stretch, barry_walker lab_2.)
       ++stamp;
-
+      // Inherits the dependences of event `ei` when it conflicts with op.
       auto consider = [&](unsigned ei) {
         if (seenStamp[ei] == stamp)
-          return;
+          return; // listed for another touch of op
         seenStamp[ei] = stamp;
-        const MemEvent &entryValue = events[ei];
-        const DepSet &ed = deps[entryValue.pos - lo];
-        if (!ed.hasIndexNotIn(dimensionIndex) &&
-            !(entryValue.acc >= 0 && !dimensionIndex.test(entryValue.acc)))
+        const MemEvent &e = events[ei];
+        const DepSet &ed = deps[e.pos - lo];
+        if (!ed.hasIndexNotIn(d) && !(e.acc >= 0 && !d.test(e.acc)))
+          return; // nothing to inherit
+        if (inExclusiveArms(*operands.infos[e.pos], hoistedArmsOf(e.op), opInfo,
+                            opHoisted))
           return;
-        if (inExclusiveArms(*operands.infos[entryValue.pos],
-                            hoistedArmsOf(entryValue.op), opInfo, opHoisted))
-          return;
-        bool conflict =
-            llvm::any_of(entryValue.touches, [&](const MemTouch &arrayValue) {
-              return llvm::any_of(touches, [&](const MemTouch &buildPoint) {
-                return mayConflict(entryValue.op, arrayValue, op, buildPoint);
-              });
-            });
+        bool conflict = llvm::any_of(e.touches, [&](const MemTouch &a) {
+          return llvm::any_of(touches, [&](const MemTouch &b) {
+            return mayConflict(e.op, a, op, b);
+          });
+        });
         if (!conflict)
           return;
-        dimensionIndex |= ed;
-        if (entryValue.acc >= 0)
-          dimensionIndex.set(entryValue.acc);
+        d |= ed;
+        if (e.acc >= 0)
+          d.set(e.acc);
       };
       auto blockSize = [](unsigned level) {
         unsigned size = kBlockFanout;
-        for (unsigned lowerIndex = 0; lowerIndex < level; ++lowerIndex)
+        for (unsigned l = 0; l < level; ++l)
           size *= kBlockFanout;
         return size;
       };
-
+      // The union of complete block `b` of `level` (built on first use).
       auto blockUnion = [&](auto &self, EventList &list, unsigned level,
-                            unsigned buildPoint) -> const DepSet & {
+                            unsigned b) -> const DepSet & {
         std::vector<DepSet> &unions = list.unions[level];
-        while (unions.size() <= buildPoint) {
-          unsigned candidateValue = unions.size();
-          DepSet useValue;
-          for (unsigned innerIndex = 0; innerIndex < kBlockFanout;
-               ++innerIndex) {
-            unsigned child = candidateValue * kBlockFanout + innerIndex;
+        while (unions.size() <= b) {
+          unsigned c = unions.size();
+          DepSet u;
+          for (unsigned j = 0; j < kBlockFanout; ++j) {
+            unsigned child = c * kBlockFanout + j;
             if (level > 0) {
-              useValue |= self(self, list, level - 1, child);
+              u |= self(self, list, level - 1, child);
               continue;
             }
-            const MemEvent &entryValue = events[list.ids[child]];
-            useValue |= deps[entryValue.pos - lo];
-            if (entryValue.acc >= 0)
-              useValue.set(static_cast<unsigned>(entryValue.acc));
+            const MemEvent &e = events[list.ids[child]];
+            u |= deps[e.pos - lo];
+            if (e.acc >= 0)
+              u.set(static_cast<unsigned>(e.acc));
           }
-          unions.push_back(std::move(useValue));
+          unions.push_back(std::move(u));
         }
-        return unions[buildPoint];
+        return unions[b];
       };
-
+      // The events of block `b` of `level`, latest first: a later event
+      // usually holds the earlier ones' dependences, so d grows early and
+      // the earlier blocks are skipped whole.
       auto visit = [&](auto &self, EventList &list, unsigned level,
-                       unsigned buildPoint) -> void {
+                       unsigned b) -> void {
         unsigned n = list.ids.size(), size = blockSize(level);
-        unsigned first = buildPoint * size;
+        unsigned first = b * size;
         if (first >= n)
           return;
         if (n - first >= size &&
-            !blockUnion(blockUnion, list, level, buildPoint)
-                 .hasIndexNotIn(dimensionIndex))
-          return;
+            !blockUnion(blockUnion, list, level, b).hasIndexNotIn(d))
+          return; // every event of the block would be skipped
         if (level > 0) {
-          for (unsigned innerIndex = kBlockFanout; innerIndex-- > 0;)
-            self(self, list, level - 1, buildPoint * kBlockFanout + innerIndex);
+          for (unsigned j = kBlockFanout; j-- > 0;)
+            self(self, list, level - 1, b * kBlockFanout + j);
           return;
         }
-        for (unsigned loopIndex = std::min(n, first + size);
-             loopIndex-- > first;)
-          consider(list.ids[loopIndex]);
+        for (unsigned i = std::min(n, first + size); i-- > first;)
+          consider(list.ids[i]);
       };
       auto add = [&](EventList &list) {
         unsigned top = kBlockLevels - 1, size = blockSize(top);
-        for (unsigned buildPoint = (list.ids.size() + size - 1) / size;
-             buildPoint-- > 0;)
-          visit(visit, list, top, buildPoint);
+        for (unsigned b = (list.ids.size() + size - 1) / size; b-- > 0;)
+          visit(visit, list, top, b);
       };
-      bool anyStorageWrite =
-          llvm::any_of(touches, [](const MemTouch &typeValue) {
-            return typeValue.key == nullptr && typeValue.write;
-          });
+      bool anyStorageWrite = llvm::any_of(touches, [](const MemTouch &t) {
+        return t.key == nullptr && t.write;
+      });
       if (anyStorageWrite) {
         add(index.all);
       } else {
         bool anyWrite = false;
-        for (const MemTouch &typeValue : touches) {
-          if (!typeValue.key) {
+        for (const MemTouch &t : touches) {
+          if (!t.key) { // a read of any storage: every earlier write
             add(index.allW);
             continue;
           }
-          anyWrite |= typeValue.write;
-          auto &byKey = typeValue.write ? index.byKey : index.byKeyW;
-          auto it = byKey.find(typeValue.key);
+          anyWrite |= t.write;
+          auto &byKey = t.write ? index.byKey : index.byKeyW;
+          auto it = byKey.find(t.key);
           if (it != byKey.end())
             add(it->second);
         }
         add(anyWrite ? index.anyStorage : index.anyStorageW);
       }
     }
-    if (!touches.empty() && (selfAcc >= 0 || dimensionIndex.any())) {
+    if (!touches.empty() && (selfAcc >= 0 || d.any())) {
       unsigned ei = events.size();
-      events.push_back({op, portValue, selfAcc, touches});
+      events.push_back({op, p, selfAcc, touches});
       seenStamp.push_back(0);
       allEvents.add(ei, touches);
       if (selfAcc < 0)
         otherEvents.add(ei, touches);
     }
     if (selfAcc < 0) {
-
-      if (llvm::any_of(op->getOperands(), [&](Value valueHandle) {
-            return bankValues.contains(valueHandle);
-          }))
+      // Another use of the bank (a call, a view): every access after it is
+      // ordered after every access before it.
+      if (llvm::any_of(op->getOperands(),
+                       [&](Value v) { return bankValues.contains(v); }))
         barrier = std::max<unsigned>(
-            barrier, static_cast<unsigned>(llvm::lower_bound(ord, portValue) -
+            barrier, static_cast<unsigned>(llvm::lower_bound(ord, p) -
                                            ord.begin()));
       continue;
     }
-    unsigned innerIndex = static_cast<unsigned>(selfAcc);
-    dimensionIndex.setPrefix(barrier);
-
-    for (unsigned loopIndex = innerIndex;
-         loopIndex-- > dimensionIndex.prefixSize();) {
-      if (dimensionIndex.test(loopIndex) || exclusive(loopIndex, innerIndex) ||
-          !(accs[loopIndex]->isWrite || accs[innerIndex]->isWrite))
+    unsigned j = static_cast<unsigned>(selfAcc);
+    d.setPrefix(barrier);
+    // The earlier accesses this one is ordered after by address. Latest
+    // first: the set is a union, and an access already in it (with its own
+    // dependences) adds nothing, so a chain is settled by its last link.
+    for (unsigned i = j; i-- > d.prefixSize();) {
+      if (d.test(i) || exclusive(i, j) ||
+          !(accs[i]->isWrite || accs[j]->isWrite))
         continue;
-      if (compareAddresses(accs[loopIndex]->op, op) != AddrRelation::Disjoint) {
-        dimensionIndex.set(loopIndex);
-        dimensionIndex |= deps[ord[loopIndex] - lo];
+      if (compareAddresses(accs[i]->op, op) != AddrRelation::Disjoint) {
+        d.set(i);
+        d |= deps[ord[i] - lo];
       }
     }
-    for (unsigned loopIndex = dimensionIndex.nextUnset(0);
-         loopIndex < innerIndex;
-         loopIndex = dimensionIndex.nextUnset(loopIndex + 1)) {
-      if (exclusive(loopIndex, innerIndex))
+    for (unsigned i = d.nextUnset(0); i < j; i = d.nextUnset(i + 1)) {
+      if (exclusive(i, j))
         continue;
-      if (!accs[loopIndex]->isWrite && !accs[innerIndex]->isWrite &&
-          compareAddresses(accs[loopIndex]->op, op) == AddrRelation::Same)
-        continue;
-      if (readsBeforeConsumer && !accs[loopIndex]->isWrite &&
-          !accs[innerIndex]->isWrite &&
-          consumerCycle(loopIndex) != consumerCycle(innerIndex))
-        continue;
-      return std::make_pair(accs[loopIndex], accs[innerIndex]);
+      if (!accs[i]->isWrite && !accs[j]->isWrite &&
+          compareAddresses(accs[i]->op, op) == AddrRelation::Same)
+        continue; // one load after GVN
+      if (readsBeforeConsumer && !accs[i]->isWrite && !accs[j]->isWrite &&
+          consumerCycle(i) != consumerCycle(j))
+        continue; // issued in the states before their consumers (N101)
+      return std::make_pair(accs[i], accs[j]);
     }
   }
   return std::nullopt;
 }
 
+
+// Per-state demand of a sequential scope: one access per state unless two of
+// them share one (findSameStatePair); never more than two.
 static PortDemand sequentialScopeDemand(ArrayRef<const AccessSummary *> group,
                                         SeqScopeIndex &index,
                                         std::string *note) {
-  PortDemand dimensionIndex;
+  PortDemand d;
   bool anyR = false, anyW = false;
-  for (const auto *arrayValue : group)
-    (arrayValue->isWrite ? anyW : anyR) = true;
-  dimensionIndex.reads = anyR ? 1u : 0u;
-  dimensionIndex.writes = anyW ? 1u : 0u;
-  dimensionIndex.total = (anyR || anyW) ? 1u : 0u;
+  for (const auto *a : group)
+    (a->isWrite ? anyW : anyR) = true;
+  d.reads = anyR ? 1u : 0u;
+  d.writes = anyW ? 1u : 0u;
+  d.total = (anyR || anyW) ? 1u : 0u;
   Operation *scope = group.front()->scope;
   if (!scope || group.size() < 2)
-    return dimensionIndex;
-  const SeqScopeIndex::Scope &stringValue = index.get(scope);
+    return d;
+  const SeqScopeIndex::Scope &s = index.get(scope);
   std::map<unsigned, SmallVector<const AccessSummary *>> byStretch;
-  for (const auto *arrayValue : group) {
-    auto it = stringValue.info.find(arrayValue->op);
-    if (it != stringValue.info.end())
-      byStretch[it->second.stretch].push_back(arrayValue);
+  for (const auto *a : group) {
+    auto it = s.info.find(a->op);
+    if (it != s.info.end()) // else under a region op that is not an if: alone
+      byStretch[it->second.stretch].push_back(a);
   }
   DenseSet<Value> bankValues;
-  for (const auto *arrayValue : group)
-    for (Value valueHandle : arrayValue->op->getOperands())
-      if (isa<BaseMemRefType>(valueHandle.getType()))
-        bankValues.insert(valueHandle);
+  for (const auto *a : group)
+    for (Value v : a->op->getOperands())
+      if (isa<BaseMemRefType>(v.getType()))
+        bankValues.insert(v);
   for (auto &[stretch, accs] : byStretch) {
     if (accs.size() < 2)
       continue;
-    llvm::sort(accs, [&](const AccessSummary *exprValue,
-                         const AccessSummary *rowValue) {
-      return stringValue.info.find(exprValue->op)->second.ordinal <
-             stringValue.info.find(rowValue->op)->second.ordinal;
+    llvm::sort(accs, [&](const AccessSummary *x, const AccessSummary *y) {
+      return s.info.find(x->op)->second.ordinal <
+             s.info.find(y->op)->second.ordinal;
     });
-    auto pair = findSameStatePair(accs, stringValue, stretch, bankValues);
+    auto pair = findSameStatePair(accs, s, stretch, bankValues);
     if (!pair)
       continue;
     bool w1 = pair->first->isWrite, w2 = pair->second->isWrite;
-    dimensionIndex.total = 2;
+    d.total = 2;
     if (!w1 && !w2)
-      dimensionIndex.reads = 2;
+      d.reads = 2;
     else if (w1 && w2)
-      dimensionIndex.writes = 2;
+      d.writes = 2;
     if (note)
       *note = "same state (independent, one straight-line stretch): " +
               accessText(pair->first) + " + " + accessText(pair->second);
-    return dimensionIndex;
+    return d;
   }
-  return dimensionIndex;
+  return d;
 }
 
+// Independent reads of a ROM in one state of a sequential scope (VITIS_NOTES
+// N93, kernels w9r12p_rom_s2 / s3 / s4 / s8: 2 / 3 / 4 / 8 independent reads
+// of `T[256]` give Vitis 1 / 2 / 2 / 4 ROM copies; rom_chain4, `r = T[r]`
+// four times, 1). Vitis schedules a ROM read as soon as its address is ready
+// and binds a dual-port copy per two reads of one state, where it spreads
+// RAM accesses over more states (N12). Per stretch, a read issues at the
+// depth of its address: the longest chain of reads of the stretch its
+// operands are computed from (SSA def-use within the stretch); the result is
+// the largest number of reads at one depth.
 static unsigned sequentialRomReadsImpl(ArrayRef<const AccessSummary *> group,
                                        SeqScopeIndex &index) {
   Operation *scope = group.front()->scope;
   if (!scope)
     return 0;
-  const SeqScopeIndex::Scope &stringValue = index.get(scope);
+  const SeqScopeIndex::Scope &s = index.get(scope);
   std::map<unsigned, SmallVector<Operation *>> byStretch;
-  for (const AccessSummary *arrayValue : group) {
-    if (arrayValue->isWrite)
+  for (const AccessSummary *a : group) {
+    if (a->isWrite)
       return 0;
-    auto it = stringValue.info.find(arrayValue->op);
-    if (it != stringValue.info.end())
-      byStretch[it->second.stretch].push_back(arrayValue->op);
+    auto it = s.info.find(a->op);
+    if (it != s.info.end())
+      byStretch[it->second.stretch].push_back(a->op);
   }
   unsigned best = 0;
   for (auto &[stretch, reads] : byStretch) {
     DenseSet<Operation *> isRead(reads.begin(), reads.end());
-
+    // depth(op): reads of the stretch on the longest chain into op's value,
+    // computed bottom-up with an explicit stack (no recursion limit, so no
+    // truncated depth is memoised; W9 round 12 review). SSA def-use is
+    // acyclic; an operand still open on the stack counts 0.
     DenseMap<Operation *, unsigned> memo;
     auto inStretch = [&](Operation *op) {
-      auto it = stringValue.info.find(op);
-      return it != stringValue.info.end() && it->second.stretch == stretch;
+      auto it = s.info.find(op);
+      return it != s.info.end() && it->second.stretch == stretch;
     };
     auto operandDefs = [&](Operation *op) {
       SmallVector<Operation *> defs;
-      auto from = [&](Value valueHandle) {
-        if (Operation *def = valueHandle.getDefiningOp())
+      auto from = [&](Value v) {
+        if (Operation *def = v.getDefiningOp())
           defs.push_back(def);
       };
-      for (Value valueHandle : op->getOperands())
-        from(valueHandle);
+      for (Value v : op->getOperands())
+        from(v);
       for (Region &region : op->getRegions())
         for (Block &block : region)
           if (!block.empty())
-            for (Value valueHandle : block.back().getOperands())
-              from(valueHandle);
+            for (Value v : block.back().getOperands())
+              from(v);
       return defs;
     };
     auto valueDepth = [&](Operation *root) -> unsigned {
@@ -596,7 +716,7 @@ static unsigned sequentialRomReadsImpl(ArrayRef<const AccessSummary *> group,
         if (memo.contains(op))
           continue;
         if (!inStretch(op)) {
-          memo[op] = 0;
+          memo[op] = 0; // defined before the stretch or elsewhere
           continue;
         }
         SmallVector<Operation *> defs = operandDefs(op);
@@ -609,20 +729,20 @@ static unsigned sequentialRomReadsImpl(ArrayRef<const AccessSummary *> group,
               stack.push_back({def, false});
           continue;
         }
-        unsigned dimensionIndex = 0;
+        unsigned d = 0;
         for (Operation *def : defs)
-          dimensionIndex = std::max(dimensionIndex, memo.lookup(def));
+          d = std::max(d, memo.lookup(def));
         if (isRead.contains(op))
-          ++dimensionIndex;
-        memo[op] = dimensionIndex;
+          ++d;
+        memo[op] = d;
       }
       return memo.lookup(root);
     };
     std::map<unsigned, unsigned> perDepth;
-    for (Operation *resultValue : reads) {
+    for (Operation *r : reads) {
       unsigned issue = 0;
-      for (Value valueHandle : resultValue->getOperands())
-        if (Operation *def = valueHandle.getDefiningOp())
+      for (Value v : r->getOperands())
+        if (Operation *def = v.getDefiningOp())
           issue = std::max(issue, valueDepth(def));
       best = std::max(best, ++perDepth[issue]);
     }
@@ -630,68 +750,87 @@ static unsigned sequentialRomReadsImpl(ArrayRef<const AccessSummary *> group,
   return best;
 }
 
-static const char *kindName(StorageKind keyValue) {
-  switch (keyValue) {
-  case StorageKind::RAM_1P:
-    return "RAM_1P";
-  case StorageKind::RAM_2P:
-    return "RAM_2P";
-  case StorageKind::RAM_S2P:
-    return "RAM_S2P";
-  case StorageKind::RAM_T2P:
-    return "RAM_T2P";
-  case StorageKind::RAM_1WNR:
-    return "RAM_1WNR";
-  case StorageKind::LUTRAM:
-    return "LUTRAM";
-  case StorageKind::URAM:
-    return "URAM";
-  case StorageKind::ROM_1P:
-    return "ROM_1P";
-  case StorageKind::ROM_2P:
-    return "ROM_2P";
-  case StorageKind::ROM_NP:
-    return "ROM_NP";
+//===----------------------------------------------------------------------===//
+// Kind naming (declared early; used in notes).
+//===----------------------------------------------------------------------===//
+static const char *kindName(StorageKind k) {
+  switch (k) {
+  case StorageKind::RAM_1P:   return "RAM_1P";
+  case StorageKind::RAM_2P:   return "RAM_2P";
+  case StorageKind::RAM_S2P:  return "RAM_S2P";
+  case StorageKind::RAM_T2P:  return "RAM_T2P";
+  case StorageKind::RAM_1WNR: return "RAM_1WNR";
+  case StorageKind::LUTRAM:   return "LUTRAM";
+  case StorageKind::URAM:     return "URAM";
+  case StorageKind::ROM_1P:   return "ROM_1P";
+  case StorageKind::ROM_2P:   return "ROM_2P";
+  case StorageKind::ROM_NP:   return "ROM_NP";
   }
   return "?";
 }
 
+//===----------------------------------------------------------------------===//
+// Storage-kind inference from port demand (replaces the old flat multiplier).
+//===----------------------------------------------------------------------===//
 struct KindResult {
   StorageKind kind = StorageKind::RAM_1P;
-  bool infeasible = false;
+  bool infeasible = false; // demand exceeds the 2 physical ports of one block
   std::string note;
 };
 
-static KindResult selectStorageKind(const PortDemand &dimensionIndex) {
-  KindResult resultValue;
-  unsigned total = dimensionIndex.total, widthValue = dimensionIndex.writes,
-           rd = dimensionIndex.reads;
-  const unsigned ports = blockPorts();
+// A single BRAM primitive has at most two ports. Map the per-cycle access
+// pattern to the narrowest mode that serves it; that mode then fixes whether
+// the x36 aspect ratio is allowed (isWideKind). Note this is count-only and
+// never returns RAM_S2P: from counts a read-modify array (narrow RAM_2P) and a
+// segregated producer/consumer (wide RAM_S2P) both look like 1R+1W, and Vitis'
+// automatic storage inference never picks ram_s2p either (aspect.md R2) - only
+// an explicit bind_storage pragma does. Two live ports are ram_2p (port A
+// read / write, port B read) unless two writes share a cycle, which needs
+// ram_t2p: Vitis binds ram_2p for two reads per state (N12 sp_far / sp_8ld;
+// td=off corpus: polybench atax buff_x, mvt buff_y1, polybench_pragmas mvt
+// buff_A, k2mm buff_B) and ram_t2p for two stores (sp_2st). Both are x18 per
+// port, so the BRAM count does not depend on which of the two it is.
+static KindResult selectStorageKind(const PortDemand &d) {
+  KindResult r;
+  unsigned total = d.total, w = d.writes, rd = d.reads;
+  const unsigned ports = blockPorts(); // 2: one block RAM
 
   if (total <= 1) {
-    resultValue.kind = StorageKind::RAM_1P;
-    return resultValue;
+    r.kind = StorageKind::RAM_1P;          // one live port, wide x36
+    return r;
   }
   if (total <= ports) {
-    resultValue.kind =
-        widthValue >= 2 ? StorageKind::RAM_T2P : StorageKind::RAM_2P;
-    return resultValue;
+    r.kind = w >= 2 ? StorageKind::RAM_T2P : StorageKind::RAM_2P;
+    return r;
   }
 
-  resultValue.kind = StorageKind::RAM_T2P;
-  resultValue.infeasible = true;
-  resultValue.note = "port demand " + std::to_string(total) + "/cycle (" +
-                     std::to_string(rd) + "R+" + std::to_string(widthValue) +
-                     "W, multi-writer) exceeds " + std::to_string(ports) +
-                     " ports; needs array_partition.";
-  return resultValue;
+  r.kind = StorageKind::RAM_T2P;
+  r.infeasible = true;
+  r.note = "port demand " + std::to_string(total) + "/cycle (" +
+           std::to_string(rd) + "R+" + std::to_string(w) +
+           "W, multi-writer) exceeds " + std::to_string(ports) +
+           " ports; needs array_partition.";
+  return r;
 }
 
+//===----------------------------------------------------------------------===//
+// Width-aware block count.
+//===----------------------------------------------------------------------===//
+// Whether the bank is simple dual port (SDP), so a block may use the x36
+// aspect ratio (both ports ganged). Vitis decides it on the ports the binder
+// used (VITIS_NOTES.md N8 (b)/(d)): SDP = one used port, or one write-only +
+// one read-only port, or two read-only ports; anything else (a read-write
+// port next to a read port, two read-write ports, more than two ports) caps
+// each port at x18. The kinds stand for these port sets: RAM_1P one port;
+// RAM_S2P write-only + read-only; ROM_1P / ROM_2P one / two read-only ports;
+// RAM_2P read-write + read (what Vitis binds for two accesses per cycle of an
+// automatic RAM: the N6 corpus, 13379 of 13421 rows with a port vector);
+// RAM_T2P two read-write ports; RAM_1WNR / ROM_NP more than two.
 /// The port set each kind stands for (tool.hls.memory_architecture.
 /// port_set_rule = by_kind); empty for a kind with more than two ports
 /// (RAM_1WNR, ROM_NP: every copy is priced narrow) or no block RAM at all.
-static std::vector<std::string> kindPortSet(StorageKind keyValue) {
-  switch (keyValue) {
+static std::vector<std::string> kindPortSet(StorageKind k) {
+  switch (k) {
   case StorageKind::RAM_1P:
     return {"rw"};
   case StorageKind::RAM_2P:
@@ -713,28 +852,45 @@ static std::vector<std::string> kindPortSet(StorageKind keyValue) {
   return {};
 }
 
-static bool isWideKind(StorageKind keyValue) {
-
-  std::vector<std::string> ports = kindPortSet(keyValue);
+static bool isWideKind(StorageKind k) {
+  // A kind is wide when its port set is one of the profile's wide port sets
+  // (Vitis: one port, a read-only and a write-only port, one or two
+  // read-only ports; tool.hls.memory_architecture.wide_port_sets).
+  std::vector<std::string> ports = kindPortSet(k);
   return !ports.empty() &&
          config().tool.hls.memoryArchitecture.isWidePortSet(ports);
 }
 
-static unsigned blockDataWidth(StorageKind keyValue) {
-  if (keyValue == StorageKind::LUTRAM || keyValue == StorageKind::URAM)
-    return 0;
-  return maxPortWidth(isWideKind(keyValue));
+// Widest aspect-ratio mode (data bits per port) the kind allows.
+static unsigned blockDataWidth(StorageKind k) {
+  if (k == StorageKind::LUTRAM || k == StorageKind::URAM)
+    return 0; // not mapped to BRAM
+  return maxPortWidth(isWideKind(k));
 }
 
+//===----------------------------------------------------------------------===//
+// Replication (RAM_1WNR), VITIS_NOTES.md N4 / replication.md R1-R3.
+//===----------------------------------------------------------------------===//
+// Per pipelined loop L with R loads and W stores of the bank per iteration at
+// II: Vitis needs ceil((R + W) / II) port-cycles per II; one true-dual-port
+// RAM gives two, every further one comes from a copy whose port B serves
+// reads while port A of all copies is the single shared write port (reading
+// when idle). So copies = max(1, ceil((R + W) / II) - 1), capped at 16, max
+// over the loops that access the bank. A bank that some loop body stores to
+// more than once is never replicated (one shared write port cannot take two
+// writes per iteration): it stays a plain 2-port RAM and the scheduler has
+// raised that loop's II to ceil((R + W) / 2) instead (MemrefBankClassification).
+// Straight-line code outside any loop does not take part (the rule was only
+// observed on loop bodies).
 /// Copies of a replicated bank that give `need` port-cycles per cycle: every
 /// copy adds its ports but the shared write port (port B of a true-dual-port
 /// block reads), and the shared write port reads when idle
 /// (tool.hls.memory_architecture.replication.shared_write_port_reads_when_idle):
 /// need - 1 for Vitis. At least 1.
 static unsigned copiesForPortCycles(unsigned need) {
-  const bool idleReads =
-      config()
-          .tool.hls.memoryArchitecture.replication.sharedWritePortReadsWhenIdle;
+  const bool idleReads = config()
+                             .tool.hls.memoryArchitecture.replication
+                             .sharedWritePortReadsWhenIdle;
   const unsigned perCopy = std::max(1u, blockPorts() - 1);
   unsigned shared = idleReads ? 1u : 0u;
   if (need <= shared)
@@ -747,165 +903,178 @@ static unsigned copiesForPortCycles(unsigned need) {
 /// `bind_storage type=ram_1wnr` (hls.bind_storage on its alloca / bank).
 static bool boundRam1wnr(Operation *access) {
   Value mem;
-  for (Value valueHandle : access->getOperands())
-    if (isa<BaseMemRefType>(valueHandle.getType())) {
-      mem = valueHandle;
+  for (Value v : access->getOperands())
+    if (isa<BaseMemRefType>(v.getType())) {
+      mem = v;
       break;
     }
   Operation *def = mem ? mem.getDefiningOp() : nullptr;
-  auto binds =
-      def ? def->getAttrOfType<ArrayAttr>("hls.bind_storage") : ArrayAttr();
+  auto binds = def ? def->getAttrOfType<ArrayAttr>("hls.bind_storage")
+                   : ArrayAttr();
   if (!binds)
     return false;
-  for (Attribute buildPoint : binds)
-    if (auto dimensionIndex = dyn_cast<DictionaryAttr>(buildPoint))
-      if (auto typeValue = dimensionIndex.getAs<StringAttr>("type"))
-        if (typeValue.getValue().equals_insensitive("ram_1wnr"))
+  for (Attribute b : binds)
+    if (auto d = dyn_cast<DictionaryAttr>(b))
+      if (auto t = d.getAs<StringAttr>("type"))
+        if (t.getValue().equals_insensitive("ram_1wnr"))
           return true;
   return false;
 }
 
 static ReplicationRecord analyzeReplication(ArrayRef<AccessSummary> accesses,
                                             bool attributed) {
-  ReplicationRecord resultValue;
-  resultValue.present = attributed;
+  ReplicationRecord r;
+  r.present = attributed;
   if (!attributed)
-    return resultValue;
+    return r;
 
   struct ScopeStats {
     Operation *scope = nullptr;
     unsigned reads = 0, writes = 0, ii = 0;
-
+    // Steered reads whose in-bank address varies with the bank
+    // (hls.rotating_bank + hls.bank_address_varies; N115 / N125).
     unsigned rotatingReads = 0;
-    bool portBound = false;
+    bool portBound = false; // reached through a shared module (N14 R6)
     SmallVector<Operation *> stores;
-
+    // Reads whose bank of a cyclic partition is chosen at run time
+    // (hls.runtime_bank: steered or a lone read's per-bank load); N124.
     SmallVector<Operation *> steeredReads;
     bool allReadsVarying = false;
   };
-  SmallVector<ScopeStats> scopes;
-  for (const AccessSummary &arrayValue : accesses) {
+  SmallVector<ScopeStats> scopes; // first-appearance order (deterministic)
+  for (const AccessSummary &a : accesses) {
     ScopeStats *st = nullptr;
-    for (ScopeStats &stringValue : scopes)
-      if (stringValue.scope == arrayValue.scope)
-        st = &stringValue;
+    for (ScopeStats &s : scopes)
+      if (s.scope == a.scope)
+        st = &s;
     if (!st) {
-      scopes.push_back({arrayValue.scope, 0, 0, arrayValue.ii, false});
+      scopes.push_back({a.scope, 0, 0, a.ii, false});
       st = &scopes.back();
     }
-    (arrayValue.isWrite ? st->writes : st->reads)++;
-
-    if (!arrayValue.isWrite && arrayValue.op)
-      if (auto reloads =
-              arrayValue.op->getAttrOfType<IntegerAttr>("hls.select_reloads"))
+    (a.isWrite ? st->writes : st->reads)++;
+    // A select of two loads of the bank loads the selected address once
+    // more, or, when nothing else uses the two loaded values, is that one
+    // load (-1) (VITIS_NOTES N163; set by --convert-affine-to-loopschedule).
+    if (!a.isWrite && a.op)
+      if (auto reloads = a.op->getAttrOfType<IntegerAttr>("hls.select_reloads"))
         st->reads = static_cast<unsigned>(std::max<int64_t>(
             0, static_cast<int64_t>(st->reads) + reloads.getInt()));
-    if (!arrayValue.isWrite && arrayValue.op &&
-        arrayValue.op->hasAttr("hls.rotating_bank") &&
-        arrayValue.op->hasAttr("hls.bank_address_varies"))
+    if (!a.isWrite && a.op && a.op->hasAttr("hls.rotating_bank") &&
+        a.op->hasAttr("hls.bank_address_varies"))
       ++st->rotatingReads;
-    if (arrayValue.isWrite && arrayValue.op)
-      st->stores.push_back(arrayValue.op);
-    if (!arrayValue.isWrite && arrayValue.op &&
-        arrayValue.op->hasAttr("hls.runtime_bank"))
-      st->steeredReads.push_back(arrayValue.op);
-    st->portBound |= arrayValue.portBound;
+    if (a.isWrite && a.op)
+      st->stores.push_back(a.op);
+    if (!a.isWrite && a.op && a.op->hasAttr("hls.runtime_bank"))
+      st->steeredReads.push_back(a.op);
+    st->portBound |= a.portBound;
   }
-
-  for (ScopeStats &stringValue : scopes)
-    if (stringValue.scope && stringValue.stores.size() == stringValue.writes &&
-        stringValue.writes > 1)
-      stringValue.writes = circt::hls_analysis::maxStoresInOneIteration(
-          stringValue.stores, stringValue.scope);
+  // Stores in the two arms of one if share the write port: they count once
+  // (both for replicability and for the port-cycles of the loop).
+  for (ScopeStats &s : scopes)
+    if (s.scope && s.stores.size() == s.writes && s.writes > 1)
+      s.writes = circt::hls_analysis::maxStoresInOneIteration(s.stores, s.scope);
   const circt::hlsest::ReplicationConfig &repCfg =
       config().tool.hls.memoryArchitecture.replication;
-
-  for (ScopeStats &stringValue : scopes) {
-    stringValue.allReadsVarying =
-        stringValue.reads > 0 && stringValue.rotatingReads == stringValue.reads;
-    if (repCfg.exclusiveSteeredReadsShareSlot && stringValue.scope &&
-        stringValue.steeredReads.size() > 1) {
+  // Reads whose bank is selected at run time keep their predicates in Vitis
+  // (each bank's load is enabled by the arm condition and the bank select):
+  // reads in different arms of one if / else-if chain then share a port
+  // slot (VITIS_NOTES N124: kernel w9r16p_ie_part 8, the seven unpartitioned
+  // controls, whose arm loads are speculated, keep every read; FocusedACO
+  // coords). Steered groups already read each bank once per group; a lone
+  // read of a run-time bank loads every candidate bank. Only cyclic
+  // partitions are marked hls.runtime_bank: a block partition's arm loads
+  // are speculated (W9r16 review kernel w9r16rv_ie_blk: Vitis 40).
+  for (ScopeStats &s : scopes) {
+    s.allReadsVarying = s.reads > 0 && s.rotatingReads == s.reads;
+    if (repCfg.exclusiveSteeredReadsShareSlot && s.scope &&
+        s.steeredReads.size() > 1) {
       unsigned shared = circt::hls_analysis::maxStoresInOneIteration(
-          stringValue.steeredReads, stringValue.scope);
-      stringValue.reads -=
-          static_cast<unsigned>(stringValue.steeredReads.size()) - shared;
+          s.steeredReads, s.scope);
+      s.reads -= static_cast<unsigned>(s.steeredReads.size()) - shared;
     }
   }
 
-  resultValue.maxStoresPerLoop = 0;
-  for (const ScopeStats &stringValue : scopes) {
-    bool isLoopBody =
-        stringValue.scope && (isa<LoopSchedulePipelineOp>(stringValue.scope) ||
-                              isa<LoopLikeOpInterface>(stringValue.scope));
+  r.maxStoresPerLoop = 0;
+  for (const ScopeStats &s : scopes) {
+    bool isLoopBody = s.scope && (isa<LoopSchedulePipelineOp>(s.scope) ||
+                                  isa<LoopLikeOpInterface>(s.scope));
     if (isLoopBody)
-      resultValue.maxStoresPerLoop =
-          std::max(resultValue.maxStoresPerLoop, stringValue.writes);
+      r.maxStoresPerLoop = std::max(r.maxStoresPerLoop, s.writes);
   }
-  resultValue.replicable = static_cast<int64_t>(resultValue.maxStoresPerLoop) <=
-                           repCfg.maxStoresPerIteration;
-
-  if (!resultValue.replicable && repCfg.userRam1wnrReplicable &&
-      llvm::any_of(accesses, [](const AccessSummary &arrayValue) {
-        return arrayValue.op && boundRam1wnr(arrayValue.op);
+  r.replicable =
+      static_cast<int64_t>(r.maxStoresPerLoop) <= repCfg.maxStoresPerIteration;
+  // A user `bind_storage type=ram_1wnr` makes the bank replicable whatever
+  // its loops store; a loop storing it twice per iteration raises its II
+  // instead (VITIS_NOTES N113: kernels w9r15p_bw_1wnr 12 against bw_none 4).
+  if (!r.replicable && repCfg.userRam1wnrReplicable &&
+      llvm::any_of(accesses, [](const AccessSummary &a) {
+        return a.op && boundRam1wnr(a.op);
       }))
-    resultValue.replicable = true;
-  resultValue.copies = 1;
-  for (const ScopeStats &stringValue : scopes) {
-    if (!stringValue.scope || !isa<LoopSchedulePipelineOp>(stringValue.scope) ||
-        stringValue.ii == 0)
+    r.replicable = true;
+  r.copies = 1;
+  for (const ScopeStats &s : scopes) {
+    if (!s.scope || !isa<LoopSchedulePipelineOp>(s.scope) || s.ii == 0)
       continue;
     ReplicationLoopRecord lr;
-    lr.scopeLoc = locString(stringValue.scope->getLoc());
-    lr.ii = stringValue.ii;
-    lr.reads = stringValue.reads;
-    lr.writes = stringValue.writes;
-    lr.need = static_cast<unsigned>(
-        ceilDiv(stringValue.reads + stringValue.writes, stringValue.ii));
+    lr.scopeLoc = locString(s.scope->getLoc());
+    lr.ii = s.ii;
+    lr.reads = s.reads;
+    lr.writes = s.writes;
+    lr.need = static_cast<unsigned>(ceilDiv(s.reads + s.writes, s.ii));
     lr.copies = std::min(copiesForPortCycles(lr.need), maxReplicationCopies());
-
-    if (stringValue.allReadsVarying && stringValue.writes == 0 &&
-        stringValue.ii > 1 && repCfg.rotatingReadsFullCopies) {
-      lr.copies =
-          std::min<unsigned>(std::max(1u, lr.need), maxReplicationCopies());
+    // Every read of a loop that does not write the bank selects its bank at
+    // run time (a steered group) and its in-bank address depends on the bank:
+    // Vitis issues one predicated load per bank, and the copies' shared write
+    // port takes no read slot (VITIS_NOTES N115: kernels w9r15p_rc_rot 16
+    // copies against rc_fix 15; NeuroFPGA padded_A). Steered reads at one
+    // in-bank address on every candidate bank are read unpredicated and
+    // muxed, and keep N4's count (N125: w9r16p_rs_nc, k3mm tmp2). Every
+    // full-copy observation is at II 2; at II 1 the predicated reads of
+    // w9r16p_ie_part and FocusedACO coords keep N4's count (unconfirmed
+    // between: R / II below 16 at II > 1).
+    if (s.allReadsVarying && s.writes == 0 && s.ii > 1 &&
+        repCfg.rotatingReadsFullCopies) {
+      lr.copies = std::min<unsigned>(std::max(1u, lr.need),
+                                     maxReplicationCopies());
       lr.fullCopies = true;
     }
-
-    if (stringValue.portBound) {
+    // A loop of a callee instantiated at more than one place reads the
+    // caller's bank through the module's two ports (N14 R6, W3 review D2:
+    // w3rev_k3 / k3b, w3fx_d2_conc: no replication, the loop's II rises).
+    if (s.portBound) {
       lr.portBound = true;
       lr.copies = 1;
-      resultValue.portBoundLimited |= lr.need > 2;
+      r.portBoundLimited |= lr.need > 2;
     }
-    if (resultValue.replicable && lr.copies > resultValue.copies) {
-      resultValue.copies = lr.copies;
-      resultValue.limitingLoop = lr.scopeLoc;
+    if (r.replicable && lr.copies > r.copies) {
+      r.copies = lr.copies;
+      r.limitingLoop = lr.scopeLoc;
     }
-    resultValue.loops.push_back(std::move(lr));
+    r.loops.push_back(std::move(lr));
   }
-  if (!resultValue.replicable)
-    resultValue.copies = 1;
-  return resultValue;
+  if (!r.replicable)
+    r.copies = 1;
+  return r;
 }
 
-static std::string ramReasonFor(const PortDemand &dimensionIndex,
-                                const KindResult &kr,
+static std::string ramReasonFor(const PortDemand &d, const KindResult &kr,
                                 const ReplicationRecord &rep, bool attributed,
                                 bool anyStoreEnable, bool demandClamped) {
-  std::string stringValue;
-  llvm::raw_string_ostream os(stringValue);
+  std::string s;
+  llvm::raw_string_ostream os(s);
   if (!attributed) {
     os << "global: accesses not attributed, default " << kindName(kr.kind);
-    return stringValue;
+    return s;
   }
   if (kr.kind == StorageKind::RAM_1WNR) {
     os << "replicable (no loop body stores to it more than once)";
     if (rep.limitingLoop) {
-      for (const ReplicationLoopRecord &lowerIndex : rep.loops)
-        if (lowerIndex.scopeLoc == *rep.limitingLoop) {
-          os << "; pipeline @ " << lowerIndex.scopeLoc << ": "
-             << lowerIndex.reads << "R+" << lowerIndex.writes
-             << "W per iteration at II " << lowerIndex.ii << " needs ceil("
-             << (lowerIndex.reads + lowerIndex.writes) << "/" << lowerIndex.ii
-             << ")=" << lowerIndex.need << " port-cycles";
+      for (const ReplicationLoopRecord &l : rep.loops)
+        if (l.scopeLoc == *rep.limitingLoop) {
+          os << "; pipeline @ " << l.scopeLoc << ": " << l.reads << "R+"
+             << l.writes << "W per iteration at II " << l.ii
+             << " needs ceil(" << (l.reads + l.writes) << "/" << l.ii
+             << ")=" << l.need << " port-cycles";
           break;
         }
     }
@@ -915,14 +1084,13 @@ static std::string ramReasonFor(const PortDemand &dimensionIndex,
     if (rep.copies >= maxReplicationCopies())
       os << "; capped at " << maxReplicationCopies();
     os << "); each copy is a true-dual-port RAM (x18/port)";
-    return stringValue;
+    return s;
   }
-  os << "peak port demand " << dimensionIndex.total << "/cycle ("
-     << dimensionIndex.reads << "R+" << dimensionIndex.writes
-     << "W, max over scopes)";
+  os << "peak port demand " << d.total << "/cycle (" << d.reads << "R+"
+     << d.writes << "W, max over scopes)";
   if (kr.infeasible) {
     os << ": " << kr.note;
-    return stringValue;
+    return s;
   }
   if (demandClamped && rep.portBoundLimited)
     os << ", clamped to 2 ports (a callee instantiated at more than one "
@@ -932,7 +1100,7 @@ static std::string ramReasonFor(const PortDemand &dimensionIndex,
     os << ", clamped to 2 ports (replicable bank, but no pipelined loop needs "
           "more than ceil((R+W)/II) <= 2 port-cycles, so Vitis spreads the "
           "accesses over the II)";
-  if (dimensionIndex.total <= 1 && !demandClamped)
+  if (d.total <= 1 && !demandClamped)
     os << ": at most one live port -> " << kindName(kr.kind) << " (x"
        << blockDataWidth(kr.kind) << " wide, no TDP constraint)";
   else if (kr.kind == StorageKind::RAM_S2P)
@@ -941,21 +1109,22 @@ static std::string ramReasonFor(const PortDemand &dimensionIndex,
           "RAM_S2P (a read-only and a write-only port, x"
        << blockDataWidth(kr.kind) << ", simple dual port; N90)";
   else
-    os << ": two ports live in the same cycle -> " << kindName(kr.kind) << " (x"
-       << blockDataWidth(kr.kind) << "/port, true dual port)";
+    os << ": two ports live in the same cycle -> " << kindName(kr.kind)
+       << " (x" << blockDataWidth(kr.kind) << "/port, true dual port)";
   if (!rep.replicable)
     os << "; not replicable: a loop body stores to it " << rep.maxStoresPerLoop
        << " times (Vitis keeps one 2-port RAM and raises that loop's II)";
   else if (!rep.loops.empty())
     os << "; replicable, but every pipelined loop needs <= 2 port-cycles per "
           "II (no RAM_1WNR)";
-  if (dimensionIndex.segregated)
+  if (d.segregated)
     os << "; reads and writes live in different scopes (RAM_S2P-eligible) but "
           "count-only selection never picks RAM_S2P";
   if (anyStoreEnable)
     os << "; hls.store_enable counts as a write only (no phantom read port)";
-  return stringValue;
+  return s;
 }
+
 
 class VitisAutoArchitecture : public circt::hlsest::MemoryArchitecturePolicy {
 public:
@@ -972,11 +1141,11 @@ public:
   /// by_demand (a designer knob for other targets) builds it from the demand,
   /// one r per read and one w per write, [rw] for at most one access.
   std::string pricedConfigOf(StorageKind kind, const PortDemand &demand) const {
-    const circt::hlsest::MemoryArchitectureConfig &memoryOp =
+    const circt::hlsest::MemoryArchitectureConfig &m =
         config().tool.hls.memoryArchitecture;
     if (!byDemand || kind == StorageKind::RAM_1WNR ||
         kind == StorageKind::ROM_NP)
-      return isWideKind(kind) ? memoryOp.pricedWide : memoryOp.pricedNarrow;
+      return isWideKind(kind) ? m.pricedWide : m.pricedNarrow;
     std::vector<std::string> ports;
     if (demand.total <= 1) {
       ports.push_back("rw");
@@ -984,8 +1153,7 @@ public:
       ports.assign(demand.reads, "r");
       ports.insert(ports.end(), demand.writes, "w");
     }
-    return memoryOp.isWidePortSet(ports) ? memoryOp.pricedWide
-                                         : memoryOp.pricedNarrow;
+    return m.isWidePortSet(ports) ? m.pricedWide : m.pricedNarrow;
   }
 
   void checkDevice(const circt::hlsest::Device &device,
@@ -994,10 +1162,10 @@ public:
     const circt::hlsest::DeviceMemory *block =
         device.memory(cfg.tool.backend.memoryMapper.primitive);
     if (!block)
-      return;
-    const circt::hlsest::MemoryArchitectureConfig &memoryOp =
+      return; // the mapper check names the missing primitive
+    const circt::hlsest::MemoryArchitectureConfig &m =
         cfg.tool.hls.memoryArchitecture;
-    for (const std::string *pc : {&memoryOp.pricedWide, &memoryOp.pricedNarrow})
+    for (const std::string *pc : {&m.pricedWide, &m.pricedNarrow})
       if (!block->portConfig(*pc))
         diag.errors.push_back("tool.hls.memory_architecture.priced_configs: "
                               "the block memory '" +
@@ -1016,7 +1184,7 @@ public:
       pool.limit = static_cast<unsigned>(
           config().tool.hls.memoryArchitecture.untrackedMemoryPorts);
     else if (profile->registers)
-      return pools;
+      return pools; // no memory: no port limit
     else if (!profile->pinnedType.empty())
       return pinnedTypePools(profile->pinnedType);
     else if (profile->replicable)
@@ -1054,83 +1222,95 @@ public:
   circt::hlsest::MemoryPlan
   plan(const PortDemand &demand, ReplicationRecord &rep,
        const circt::hlsest::MemoryRequest &request,
-       const circt::hlsest::PlanContext &context) const override {
-    const circt::hlsest::MemoryArchitectureConfig &memoryOp =
+       const circt::hlsest::PlanContext &ctx) const override {
+    const circt::hlsest::MemoryArchitectureConfig &m =
         config().tool.hls.memoryArchitecture;
-    circt::hlsest::MemoryPlan portValue;
+    circt::hlsest::MemoryPlan p;
     if (request.readOnly)
-      return romPlan(demand, rep, memoryOp);
-
+      return romPlan(demand, rep, m);
+    // A user binding of a plain RAM type (N173): no copies. ram_s2p and
+    // ram_1p fix the port set; ram_2p / ram_t2p are priced on the ports the
+    // clamped demand uses, like an automatic RAM (N90's read / write split
+    // included).
     const bool pinned =
-        memoryOp.replication.userPlainRamPinsKind && request.pragmaType &&
+        m.replication.userPlainRamPinsKind && request.pragmaType &&
         circt::hls_analysis::isPinnedRamType(*request.pragmaType);
-    if (pinned &&
-        (*request.pragmaType == "ram_s2p" || *request.pragmaType == "ram_1p"))
+    if (pinned && (*request.pragmaType == "ram_s2p" ||
+                   *request.pragmaType == "ram_1p"))
       return pinnedPlan(demand, rep, *request.pragmaType);
     if (pinned) {
       rep.copies = 1;
       rep.limitingLoop.reset();
-      for (ReplicationLoopRecord &lowerIndex : rep.loops)
-        lowerIndex.copies = 1;
+      for (ReplicationLoopRecord &l : rep.loops)
+        l.copies = 1;
     }
     KindResult kr;
     bool demandClamped = false;
     if (rep.copies > 1) {
-
+      // RAM_1WNR: `copies` true-dual-port RAMs holding identical data.
       kr.kind = StorageKind::RAM_1WNR;
-      portValue.copies = rep.copies;
-      portValue.pricedConfig = memoryOp.pricedNarrow;
+      p.copies = rep.copies;
+      p.pricedConfig = m.pricedNarrow;
     } else {
-      PortDemand dimensionIndex = demand;
+      PortDemand d = demand;
       const unsigned ports = blockPorts();
-      if ((rep.replicable || pinned) && dimensionIndex.total > ports) {
-
+      if ((rep.replicable || pinned) && d.total > ports) {
+        // The scheduler grants a replicable bank 17 slots per cycle, so it
+        // may pack more than two accesses into one cycle even when
+        // ceil((R+W)/II) <= 2 (the II was raised by something else). Vitis
+        // then spreads them over the II on the two ports of one plain RAM.
         demandClamped = true;
-        dimensionIndex.total = ports;
-        dimensionIndex.reads = std::min(dimensionIndex.reads, ports);
-        dimensionIndex.writes = std::min(dimensionIndex.writes, ports);
-        if (dimensionIndex.reads >= 1 && dimensionIndex.writes >= 1)
-          dimensionIndex.reads = dimensionIndex.writes = 1;
+        d.total = ports;
+        d.reads = std::min(d.reads, ports);
+        d.writes = std::min(d.writes, ports);
+        if (d.reads >= 1 && d.writes >= 1)
+          d.reads = d.writes = 1;
       }
-      kr = selectStorageKind(dimensionIndex);
-
-      bool oneLoop = context.onePipelinedScope &&
-                     kr.kind == StorageKind::RAM_2P &&
-                     dimensionIndex.reads == 1 && dimensionIndex.writes == 1;
-      bool split =
-          context.readWriteSplit &&
-          (kr.kind == StorageKind::RAM_2P || kr.kind == StorageKind::RAM_T2P) &&
-          dimensionIndex.total <= blockPorts();
-      if (memoryOp.oneLoopReadWriteSdp && !demandClamped &&
-          (oneLoop || split)) {
+      kr = selectStorageKind(d);
+      // VITIS_NOTES N90 (c): one pipelined loop with one read and one
+      // write per cycle and no other access, or one read per iteration of
+      // one pipelined loop, at most one write per cycle once spread over its
+      // II, and loops that only write: a read-only and a write-only port.
+      bool oneLoop = ctx.onePipelinedScope && kr.kind == StorageKind::RAM_2P &&
+                     d.reads == 1 && d.writes == 1;
+      bool split = ctx.readWriteSplit &&
+                   (kr.kind == StorageKind::RAM_2P ||
+                    kr.kind == StorageKind::RAM_T2P) &&
+                   d.total <= blockPorts();
+      if (m.oneLoopReadWriteSdp && !demandClamped && (oneLoop || split)) {
         kr.kind = StorageKind::RAM_S2P;
-        dimensionIndex.reads = dimensionIndex.writes = 1;
+        d.reads = d.writes = 1;
       }
-
-      if (pinned && *request.pragmaType == "ram_2p" &&
-          dimensionIndex.reads <= 1 && dimensionIndex.writes <= 1 &&
-          !kr.infeasible) {
+      // A user ram_2p has a read-only port and a read / write port, and the
+      // scheduler gives it one write per cycle (pinnedTypePools): at most
+      // one read per cycle leaves the read / write port writing only, a
+      // simple-dual-port pair priced x36 up to 512 words, whatever the
+      // demand before the II was raised (W9r23 review D4: kernel
+      // w9r23rev_r5_bind2p_2w1r, 64 x 64 bits written twice and read once
+      // per iteration, Vitis 2 at II 3 (hls-est 4, RAM_T2P x18); control
+      // r5c without the binding 4; w9r23p_b5, read once per cycle, 4).
+      if (pinned && *request.pragmaType == "ram_2p" && d.reads <= 1 &&
+          d.writes <= 1 && !kr.infeasible) {
         kr.kind = StorageKind::RAM_S2P;
-        dimensionIndex.reads = dimensionIndex.writes = 1;
+        d.reads = d.writes = 1;
       }
-      portValue.pricedConfig = pricedConfigOf(kr.kind, dimensionIndex);
+      p.pricedConfig = pricedConfigOf(kr.kind, d);
     }
-    portValue.label = kindName(kr.kind);
+    p.label = kindName(kr.kind);
     if (pinned && *request.pragmaType == "ram_2p")
-      portValue.label = "RAM_2P";
-    portValue.infeasible = kr.infeasible;
-    portValue.note = kr.note;
-    portValue.reason = ramReasonFor(demand, kr, rep, context.attributed,
-                                    context.anyStoreEnable, demandClamped);
+      p.label = "RAM_2P";
+    p.infeasible = kr.infeasible;
+    p.note = kr.note;
+    p.reason = ramReasonFor(demand, kr, rep, ctx.attributed,
+                            ctx.anyStoreEnable, demandClamped);
     if (pinned) {
       rep.replicable = false;
-      portValue.reason =
-          "bind_storage type=" + *request.pragmaType +
-          " pins the kind (N173): no RAM_1WNR copies, the scheduler "
-          "keeps two ports and raises the II; " +
-          portValue.reason;
+      p.reason = "bind_storage type=" + *request.pragmaType +
+                 " pins the kind (N173): no RAM_1WNR copies, the scheduler "
+                 "keeps two ports and raises the II; " +
+                 p.reason;
     }
-    return portValue;
+    return p;
   }
 
   std::string unpricedLabel(bool readOnly) const override {
@@ -1152,33 +1332,33 @@ private:
     rep.copies = 1;
     rep.replicable = false;
     rep.limitingLoop.reset();
-    for (ReplicationLoopRecord &lowerIndex : rep.loops)
-      lowerIndex.copies = 1;
-    PortDemand dimensionIndex = demand;
+    for (ReplicationLoopRecord &l : rep.loops)
+      l.copies = 1;
+    PortDemand d = demand;
     StorageKind kind;
     if (type == "ram_s2p") {
       kind = StorageKind::RAM_S2P;
-      dimensionIndex.reads = dimensionIndex.writes = 1;
-      dimensionIndex.total = 2;
+      d.reads = d.writes = 1;
+      d.total = 2;
     } else {
       kind = StorageKind::RAM_1P;
-      dimensionIndex.total = 1;
-      dimensionIndex.reads = std::min(dimensionIndex.reads, 1u);
-      dimensionIndex.writes = std::min(dimensionIndex.writes, 1u);
+      d.total = 1;
+      d.reads = std::min(d.reads, 1u);
+      d.writes = std::min(d.writes, 1u);
     }
-    circt::hlsest::MemoryPlan portValue;
-    portValue.label = kindName(kind);
-    portValue.pricedConfig = pricedConfigOf(kind, dimensionIndex);
-    std::string stringValue;
-    llvm::raw_string_ostream os(stringValue);
+    circt::hlsest::MemoryPlan p;
+    p.label = kindName(kind);
+    p.pricedConfig = pricedConfigOf(kind, d);
+    std::string s;
+    llvm::raw_string_ostream os(s);
     os << "bind_storage type=" << type
        << " pins the kind (N173): no RAM_1WNR copies, the scheduler keeps "
           "the type's ports and raises the II; peak port demand "
        << demand.total << "/cycle (" << demand.reads << "R+" << demand.writes
        << "W) -> " << kindName(kind) << " (x" << blockDataWidth(kind)
        << (isWideKind(kind) ? ", simple dual port)" : "/port)");
-    portValue.reason = stringValue;
-    return portValue;
+    p.reason = s;
+    return p;
   }
 
   /// The ports of a user-bound plain RAM type (VITIS_NOTES N173: the
@@ -1203,7 +1383,10 @@ private:
     pool.consumes = circt::hlsest::PortPool::Any;
     pool.limit = type == "ram_1p" ? 1u : blockPorts();
     pools.pools.push_back(pool);
-
+    // ram_2p: one of the two ports only reads (UG1399 RAM_2P: "read
+    // operations on one port and both read and write operations on the
+    // other"), so at most one write per cycle (W9r23 review D4: kernel
+    // w9r23rev_r5_bind2p_2w1r, two writes per iteration, Vitis II 3 > 1).
     if (type == "ram_2p") {
       pool.suffix = "_wr";
       pool.consumes = circt::hlsest::PortPool::Write;
@@ -1220,43 +1403,42 @@ private:
   /// at least ceil(R / II) of every pipelined loop.
   circt::hlsest::MemoryPlan
   romPlan(const PortDemand &demand, ReplicationRecord &rep,
-          const circt::hlsest::MemoryArchitectureConfig &memoryOp) const {
-    const circt::hlsest::RomConfig &romCfg = memoryOp.rom;
+          const circt::hlsest::MemoryArchitectureConfig &m) const {
+    const circt::hlsest::RomConfig &romCfg = m.rom;
     const unsigned sdpMaxReads = static_cast<unsigned>(romCfg.sdpMaxReads);
     auto romCopies = [&](unsigned reads) {
-      unsigned candidateValue = romCfg.copies == "n_minus_1"
-                                    ? reads - 1
-                                    : static_cast<unsigned>(ceilDiv(reads, 2));
-      return std::min<unsigned>(std::max(candidateValue, 1u),
-                                maxReplicationCopies());
+      unsigned c = romCfg.copies == "n_minus_1"
+                       ? reads - 1
+                       : static_cast<unsigned>(ceilDiv(reads, 2));
+      return std::min<unsigned>(std::max(c, 1u), maxReplicationCopies());
     };
     unsigned n = std::max(demand.total, 1u);
-    for (ReplicationLoopRecord &lowerIndex : rep.loops) {
-      n = std::max(n, lowerIndex.need);
-
-      lowerIndex.copies =
-          lowerIndex.need <= sdpMaxReads ? 1u : romCopies(lowerIndex.need);
+    for (ReplicationLoopRecord &l : rep.loops) {
+      n = std::max(n, l.need);
+      // What the loop alone would need of a ROM (debug record only): one
+      // ROM up to two reads per cycle, else ceil(need / 2) (ROM_NP).
+      l.copies = l.need <= sdpMaxReads ? 1u : romCopies(l.need);
     }
     rep.replicable = true;
     rep.copies = 1;
     rep.limitingLoop.reset();
-    circt::hlsest::MemoryPlan portValue;
+    circt::hlsest::MemoryPlan p;
     StorageKind kind;
     if (n <= sdpMaxReads) {
       kind = n <= 1 ? StorageKind::ROM_1P : StorageKind::ROM_2P;
       PortDemand reads;
       reads.reads = reads.total = n;
-      portValue.pricedConfig = pricedConfigOf(kind, reads);
+      p.pricedConfig = pricedConfigOf(kind, reads);
     } else {
       kind = StorageKind::ROM_NP;
       rep.copies = romCopies(n);
-      portValue.copies = rep.copies;
-      portValue.pricedConfig = memoryOp.pricedNarrow;
+      p.copies = rep.copies;
+      p.pricedConfig = m.pricedNarrow;
     }
-    portValue.label = kindName(kind);
-    portValue.rom = true;
-    portValue.romReads = n;
-    portValue.reason =
+    p.label = kindName(kind);
+    p.rom = true;
+    p.romReads = n;
+    p.reason =
         ": peak " + std::to_string(n) + " read(s) per cycle -> " +
         kindName(kind) +
         (n <= sdpMaxReads
@@ -1267,7 +1449,7 @@ private:
                    " at x" + std::to_string(maxPortWidth(false)) +
                    " (N8 (c) ROM_nP: fr_rom3r / fr_rom4r, aes sbox, gsm "
                    "bitoff)");
-    return portValue;
+    return p;
   }
 };
 

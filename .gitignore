@@ -1,6 +1,7 @@
 /build*
 /install*
 /docker_build
+/hls-doc
 tags
 TAGS
 .vscode

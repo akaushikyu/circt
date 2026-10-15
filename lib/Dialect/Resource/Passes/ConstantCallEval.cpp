@@ -1,6 +1,17 @@
-
-
+//===- ConstantCallEval.cpp - evaluate pure calls of constants ------------===//
+//
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//
+//===----------------------------------------------------------------------===//
+//
+// See ConstantCallEval.h. Evidence: VITIS_NOTES N130 (kernels w9r17p_sq_*:
+// `scale = (data_t)1.0 / hls::sqrt((data_t)4)` gives no sqrt core and a 15-bit
+// `buf`; a scale Vitis cannot know keeps 16 bits) and N14 R8 (all-constant
+// library calls are folded at compile time).
+//
+//===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/Resource/Passes/ConstantCallEval.h"
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
@@ -36,17 +47,17 @@ struct CVal {
   llvm::APInt i;
   llvm::APFloat f{0.0};
 
-  static CVal ofInt(llvm::APInt valueHandle) {
-    CVal candidateValue;
-    candidateValue.kind = Kind::Int;
-    candidateValue.i = std::move(valueHandle);
-    return candidateValue;
+  static CVal ofInt(llvm::APInt v) {
+    CVal c;
+    c.kind = Kind::Int;
+    c.i = std::move(v);
+    return c;
   }
-  static CVal ofFloat(llvm::APFloat valueHandle) {
-    CVal candidateValue;
-    candidateValue.kind = Kind::Float;
-    candidateValue.f = std::move(valueHandle);
-    return candidateValue;
+  static CVal ofFloat(llvm::APFloat v) {
+    CVal c;
+    c.kind = Kind::Float;
+    c.f = std::move(v);
+    return c;
   }
   static CVal poison() { return CVal(); }
   bool isInt() const { return kind == Kind::Int; }
@@ -56,10 +67,10 @@ struct CVal {
 
 constexpr unsigned kIndexBits = 64;
 
-static unsigned bitsOf(Type typeValue) {
-  if (typeValue.isIndex())
+static unsigned bitsOf(Type t) {
+  if (t.isIndex())
     return kIndexBits;
-  if (auto it = dyn_cast<IntegerType>(typeValue))
+  if (auto it = dyn_cast<IntegerType>(t))
     return it.getWidth();
   return 0;
 }
@@ -80,8 +91,8 @@ public:
   /// Enables loads and stores of the arrays in `a` (keyed by their alloca),
   /// and makes a value that is neither computed by the evaluation nor a
   /// constant stop it (instead of reading as poison).
-  void enableArrays(DenseMap<Value, ArrayState> *arrayValue) {
-    arrays = arrayValue;
+  void enableArrays(DenseMap<Value, ArrayState> *a) {
+    arrays = a;
     strictValues = true;
   }
   /// Runs one operation in `env` (the arrays enabled); false when it cannot
@@ -96,8 +107,7 @@ public:
   }
 
   /// Runs `fn` on `args`; `results` receives the returned values.
-  bool call(func::FuncOp fn, ArrayRef<CVal> args,
-            SmallVectorImpl<CVal> &results) {
+  bool call(func::FuncOp fn, ArrayRef<CVal> args, SmallVectorImpl<CVal> &results) {
     if (fn.isExternal() || ++depth > kMaxDepth) {
       --depth;
       return false;
@@ -108,8 +118,8 @@ public:
       return false;
     }
     DenseMap<Value, CVal> env;
-    for (auto [arrayValue, valueHandle] : llvm::zip(entry.getArguments(), args))
-      env[arrayValue] = valueHandle;
+    for (auto [a, v] : llvm::zip(entry.getArguments(), args))
+      env[a] = v;
     bool ok = runRegionFrom(fn.getBody(), env, results);
     --depth;
     return ok;
@@ -120,26 +130,25 @@ private:
 
   /// Runs a function body (possibly several blocks with cf branches is not
   /// supported: one block that ends in func.return).
-  bool runRegionFrom(Region &resultValue, DenseMap<Value, CVal> &env,
+  bool runRegionFrom(Region &r, DenseMap<Value, CVal> &env,
                      SmallVectorImpl<CVal> &results) {
-    if (!resultValue.hasOneBlock())
+    if (!r.hasOneBlock())
       return false;
     Operation *term = nullptr;
-    if (!runBlock(resultValue.front(), env, term))
+    if (!runBlock(r.front(), env, term))
       return false;
-    auto returnOp = dyn_cast_or_null<func::ReturnOp>(term);
-    if (!returnOp)
+    auto ret = dyn_cast_or_null<func::ReturnOp>(term);
+    if (!ret)
       return false;
-    for (Value valueHandle : returnOp.getOperands())
-      results.push_back(lookup(env, valueHandle));
+    for (Value v : ret.getOperands())
+      results.push_back(lookup(env, v));
     return true;
   }
 
   /// Runs the operations of `b` up to its terminator, which is returned
   /// unexecuted in `term` (the caller reads its operands).
-  bool runBlock(Block &buildPoint, DenseMap<Value, CVal> &env,
-                Operation *&term) {
-    for (Operation &op : buildPoint) {
+  bool runBlock(Block &b, DenseMap<Value, CVal> &env, Operation *&term) {
+    for (Operation &op : b) {
       if (op.hasTrait<OpTrait::IsTerminator>()) {
         term = &op;
         return true;
@@ -157,35 +166,35 @@ private:
 
   /// Runs a single-block region with `args` bound to its arguments and
   /// collects the terminator's operands (a yield / condition).
-  bool runNested(Region &resultValue, ArrayRef<CVal> args,
-                 DenseMap<Value, CVal> &env, SmallVectorImpl<CVal> &out,
-                 Operation **termOut = nullptr) {
-    if (!resultValue.hasOneBlock())
+  bool runNested(Region &r, ArrayRef<CVal> args, DenseMap<Value, CVal> &env,
+                 SmallVectorImpl<CVal> &out, Operation **termOut = nullptr) {
+    if (!r.hasOneBlock())
       return false;
-    Block &buildPoint = resultValue.front();
-    if (buildPoint.getNumArguments() != args.size())
+    Block &b = r.front();
+    if (b.getNumArguments() != args.size())
       return false;
-    for (auto [arrayValue, valueHandle] :
-         llvm::zip(buildPoint.getArguments(), args))
-      env[arrayValue] = valueHandle;
+    for (auto [a, v] : llvm::zip(b.getArguments(), args))
+      env[a] = v;
     Operation *term = nullptr;
-    if (!runBlock(buildPoint, env, term))
+    if (!runBlock(b, env, term))
       return false;
     out.clear();
-    for (Value valueHandle : term->getOperands())
-      out.push_back(lookup(env, valueHandle));
+    for (Value v : term->getOperands())
+      out.push_back(lookup(env, v));
     if (termOut)
       *termOut = term;
     return true;
   }
 
-  CVal lookup(DenseMap<Value, CVal> &env, Value valueHandle) {
-    auto it = env.find(valueHandle);
+  CVal lookup(DenseMap<Value, CVal> &env, Value v) {
+    auto it = env.find(v);
     if (it != env.end())
       return it->second;
-
-    if (auto candidateValue = valueHandle.getDefiningOp<arith::ConstantOp>())
-      if (std::optional<CVal> cv = constantValue(candidateValue.getValue()))
+    // A value defined outside the evaluated code (a constant hoisted out of
+    // the callee by an earlier pass cannot happen; a block argument of an
+    // enclosing function is never reached): only constants are read.
+    if (auto c = v.getDefiningOp<arith::ConstantOp>())
+      if (std::optional<CVal> cv = constantValue(c.getValue()))
         return *cv;
     if (strictValues)
       unknownSeen = true;
@@ -200,31 +209,31 @@ private:
     auto it = arrays->find(mem);
     if (it == arrays->end())
       return std::nullopt;
-    MemRefType typeValue = it->second.type;
-    if (static_cast<int64_t>(indices.size()) != typeValue.getRank())
+    MemRefType t = it->second.type;
+    if (static_cast<int64_t>(indices.size()) != t.getRank())
       return std::nullopt;
     int64_t linear = 0;
-    for (auto [i, valueHandle] : llvm::enumerate(indices)) {
-      int64_t extent = typeValue.getShape()[i];
-      if (valueHandle < 0 || valueHandle >= extent)
+    for (auto [i, v] : llvm::enumerate(indices)) {
+      int64_t extent = t.getShape()[i];
+      if (v < 0 || v >= extent)
         return std::nullopt;
-      linear = linear * extent + valueHandle;
+      linear = linear * extent + v;
     }
     return static_cast<size_t>(linear);
   }
   bool loadElement(Value mem, ArrayRef<int64_t> indices, Value result,
                    DenseMap<Value, CVal> &env) {
-    std::optional<size_t> entryValue = elementIndex(mem, indices);
-    if (!entryValue)
+    std::optional<size_t> e = elementIndex(mem, indices);
+    if (!e)
       return false;
-    env[result] = (*arrays)[mem].elems[*entryValue];
+    env[result] = (*arrays)[mem].elems[*e];
     return true;
   }
-  bool storeElement(Value mem, ArrayRef<int64_t> indices, CVal valueHandle) {
-    std::optional<size_t> entryValue = elementIndex(mem, indices);
-    if (!entryValue)
+  bool storeElement(Value mem, ArrayRef<int64_t> indices, CVal v) {
+    std::optional<size_t> e = elementIndex(mem, indices);
+    if (!e)
       return false;
-    (*arrays)[mem].elems[*entryValue] = std::move(valueHandle);
+    (*arrays)[mem].elems[*e] = std::move(v);
     if (writtenArrays)
       writtenArrays->insert(mem);
     return true;
@@ -232,23 +241,23 @@ private:
   bool indexValues(ValueRange vs, DenseMap<Value, CVal> &env,
                    SmallVectorImpl<int64_t> &out) {
     out.clear();
-    for (Value valueHandle : vs) {
-      CVal candidateValue = lookup(env, valueHandle);
-      if (!candidateValue.isInt())
+    for (Value v : vs) {
+      CVal c = lookup(env, v);
+      if (!c.isInt())
         return false;
-      out.push_back(candidateValue.i.getSExtValue());
+      out.push_back(c.i.getSExtValue());
     }
     return true;
   }
 
-  static std::optional<CVal> constantValue(Attribute arrayValue) {
-    if (auto ia = dyn_cast<IntegerAttr>(arrayValue)) {
-      unsigned widthValue = bitsOf(ia.getType());
-      if (!widthValue)
+  static std::optional<CVal> constantValue(Attribute a) {
+    if (auto ia = dyn_cast<IntegerAttr>(a)) {
+      unsigned w = bitsOf(ia.getType());
+      if (!w)
         return std::nullopt;
-      return CVal::ofInt(ia.getValue().sextOrTrunc(widthValue));
+      return CVal::ofInt(ia.getValue().sextOrTrunc(w));
     }
-    if (auto fa = dyn_cast<FloatAttr>(arrayValue))
+    if (auto fa = dyn_cast<FloatAttr>(a))
       return CVal::ofFloat(fa.getValue());
     return std::nullopt;
   }
@@ -257,20 +266,19 @@ private:
   bool applyMap(AffineMap map, ValueRange operands, DenseMap<Value, CVal> &env,
                 SmallVectorImpl<int64_t> &out) {
     SmallVector<Attribute> attrs;
-    MLIRContext *context = map.getContext();
-    for (Value valueHandle : operands) {
-      CVal candidateValue = lookup(env, valueHandle);
-      if (!candidateValue.isInt())
+    MLIRContext *ctx = map.getContext();
+    for (Value v : operands) {
+      CVal c = lookup(env, v);
+      if (!c.isInt())
         return false;
-      attrs.push_back(IntegerAttr::get(IndexType::get(context),
-                                       candidateValue.i.getSExtValue()));
+      attrs.push_back(IntegerAttr::get(IndexType::get(ctx), c.i.getSExtValue()));
     }
-    SmallVector<Attribute> passResult;
-    if (failed(map.constantFold(attrs, passResult)))
+    SmallVector<Attribute> res;
+    if (failed(map.constantFold(attrs, res)))
       return false;
     out.clear();
-    for (Attribute arrayValue : passResult) {
-      auto ia = dyn_cast_or_null<IntegerAttr>(arrayValue);
+    for (Attribute a : res) {
+      auto ia = dyn_cast_or_null<IntegerAttr>(a);
       if (!ia)
         return false;
       out.push_back(ia.getInt());
@@ -290,446 +298,323 @@ private:
   SmallPtrSetImpl<Value> *writtenArrays = nullptr;
 };
 
-static CVal indexVal(int64_t valueHandle) {
-  return CVal::ofInt(llvm::APInt(kIndexBits, valueHandle, true));
+static CVal indexVal(int64_t v) {
+  return CVal::ofInt(llvm::APInt(kIndexBits, v, /*isSigned=*/true));
 }
 
 bool Evaluator::execInt(Operation &op, DenseMap<Value, CVal> &env) {
-  auto operand = [&](unsigned keyValue) {
-    return lookup(env, op.getOperand(keyValue));
-  };
-  auto setResult = [&](CVal valueHandle) {
-    env[op.getResult(0)] = std::move(valueHandle);
+  auto operand = [&](unsigned k) { return lookup(env, op.getOperand(k)); };
+  auto setResult = [&](CVal v) {
+    env[op.getResult(0)] = std::move(v);
     return true;
   };
-
+  // Binary integer operations: poison in, poison out.
   auto binary = [&](auto fn) -> bool {
-    CVal arrayValue = operand(0), buildPoint = operand(1);
-    if (arrayValue.isPoison() || buildPoint.isPoison())
+    CVal a = operand(0), b = operand(1);
+    if (a.isPoison() || b.isPoison())
       return setResult(CVal::poison());
-    if (!arrayValue.isInt() || !buildPoint.isInt())
+    if (!a.isInt() || !b.isInt())
       return false;
-    std::optional<llvm::APInt> resultValue = fn(arrayValue.i, buildPoint.i);
-    if (!resultValue)
-      return false;
-    return setResult(CVal::ofInt(*resultValue));
+    std::optional<llvm::APInt> r = fn(a.i, b.i);
+    if (!r)
+      return false; // a division by zero: Vitis' N13 rules decide, not us
+    return setResult(CVal::ofInt(*r));
   };
   using llvm::APInt;
   using Opt = std::optional<APInt>;
   return llvm::TypeSwitch<Operation *, bool>(&op)
-      .Case([&](arith::AddIOp) {
-        return binary([](APInt arrayValue, APInt buildPoint) -> Opt {
-          return arrayValue + buildPoint;
-        });
-      })
-      .Case([&](arith::SubIOp) {
-        return binary([](APInt arrayValue, APInt buildPoint) -> Opt {
-          return arrayValue - buildPoint;
-        });
-      })
-      .Case([&](arith::MulIOp) {
-        return binary([](APInt arrayValue, APInt buildPoint) -> Opt {
-          return arrayValue * buildPoint;
-        });
-      })
-      .Case([&](arith::AndIOp) {
-        return binary([](APInt arrayValue, APInt buildPoint) -> Opt {
-          return arrayValue & buildPoint;
-        });
-      })
-      .Case([&](arith::OrIOp) {
-        return binary([](APInt arrayValue, APInt buildPoint) -> Opt {
-          return arrayValue | buildPoint;
-        });
-      })
-      .Case([&](arith::XOrIOp) {
-        return binary([](APInt arrayValue, APInt buildPoint) -> Opt {
-          return arrayValue ^ buildPoint;
-        });
-      })
+      .Case([&](arith::AddIOp) { return binary([](APInt a, APInt b) -> Opt { return a + b; }); })
+      .Case([&](arith::SubIOp) { return binary([](APInt a, APInt b) -> Opt { return a - b; }); })
+      .Case([&](arith::MulIOp) { return binary([](APInt a, APInt b) -> Opt { return a * b; }); })
+      .Case([&](arith::AndIOp) { return binary([](APInt a, APInt b) -> Opt { return a & b; }); })
+      .Case([&](arith::OrIOp) { return binary([](APInt a, APInt b) -> Opt { return a | b; }); })
+      .Case([&](arith::XOrIOp) { return binary([](APInt a, APInt b) -> Opt { return a ^ b; }); })
       .Case([&](arith::DivSIOp) {
-        return binary([](APInt arrayValue, APInt buildPoint) -> Opt {
-          if (buildPoint.isZero() ||
-              (arrayValue.isMinSignedValue() && buildPoint.isAllOnes()))
+        return binary([](APInt a, APInt b) -> Opt {
+          if (b.isZero() || (a.isMinSignedValue() && b.isAllOnes()))
             return std::nullopt;
-          return arrayValue.sdiv(buildPoint);
+          return a.sdiv(b);
         });
       })
       .Case([&](arith::DivUIOp) {
-        return binary([](APInt arrayValue, APInt buildPoint) -> Opt {
-          if (buildPoint.isZero())
+        return binary([](APInt a, APInt b) -> Opt {
+          if (b.isZero())
             return std::nullopt;
-          return arrayValue.udiv(buildPoint);
+          return a.udiv(b);
         });
       })
       .Case([&](arith::RemSIOp) {
-        return binary([](APInt arrayValue, APInt buildPoint) -> Opt {
-          if (buildPoint.isZero() ||
-              (arrayValue.isMinSignedValue() && buildPoint.isAllOnes()))
+        return binary([](APInt a, APInt b) -> Opt {
+          if (b.isZero() || (a.isMinSignedValue() && b.isAllOnes()))
             return std::nullopt;
-          return arrayValue.srem(buildPoint);
+          return a.srem(b);
         });
       })
       .Case([&](arith::RemUIOp) {
-        return binary([](APInt arrayValue, APInt buildPoint) -> Opt {
-          if (buildPoint.isZero())
+        return binary([](APInt a, APInt b) -> Opt {
+          if (b.isZero())
             return std::nullopt;
-          return arrayValue.urem(buildPoint);
+          return a.urem(b);
         });
       })
-      .Case([&](arith::MaxSIOp) {
-        return binary([](APInt arrayValue, APInt buildPoint) -> Opt {
-          return arrayValue.sge(buildPoint) ? arrayValue : buildPoint;
-        });
-      })
-      .Case([&](arith::MinSIOp) {
-        return binary([](APInt arrayValue, APInt buildPoint) -> Opt {
-          return arrayValue.sle(buildPoint) ? arrayValue : buildPoint;
-        });
-      })
-      .Case([&](arith::MaxUIOp) {
-        return binary([](APInt arrayValue, APInt buildPoint) -> Opt {
-          return arrayValue.uge(buildPoint) ? arrayValue : buildPoint;
-        });
-      })
-      .Case([&](arith::MinUIOp) {
-        return binary([](APInt arrayValue, APInt buildPoint) -> Opt {
-          return arrayValue.ule(buildPoint) ? arrayValue : buildPoint;
-        });
-      })
+      .Case([&](arith::MaxSIOp) { return binary([](APInt a, APInt b) -> Opt { return a.sge(b) ? a : b; }); })
+      .Case([&](arith::MinSIOp) { return binary([](APInt a, APInt b) -> Opt { return a.sle(b) ? a : b; }); })
+      .Case([&](arith::MaxUIOp) { return binary([](APInt a, APInt b) -> Opt { return a.uge(b) ? a : b; }); })
+      .Case([&](arith::MinUIOp) { return binary([](APInt a, APInt b) -> Opt { return a.ule(b) ? a : b; }); })
       .Case([&](arith::ShLIOp) {
-        CVal arrayValue = operand(0), buildPoint = operand(1);
-        if (arrayValue.isPoison() || buildPoint.isPoison())
+        CVal a = operand(0), b = operand(1);
+        if (a.isPoison() || b.isPoison())
           return setResult(CVal::poison());
-        if (!arrayValue.isInt() || !buildPoint.isInt())
+        if (!a.isInt() || !b.isInt())
           return false;
-
-        if (buildPoint.i.uge(arrayValue.i.getBitWidth()))
-          return setResult(
-              CVal::ofInt(llvm::APInt(arrayValue.i.getBitWidth(), 0)));
-        return setResult(
-            CVal::ofInt(arrayValue.i.shl(buildPoint.i.getZExtValue())));
+        // A shift by the width or more: cgeist narrows C's int shifts to the
+        // operand's width, so the C value (of the wider type) is meant: all
+        // bits shifted out (the sign bits for an arithmetic right shift).
+        if (b.i.uge(a.i.getBitWidth()))
+          return setResult(CVal::ofInt(llvm::APInt(a.i.getBitWidth(), 0)));
+        return setResult(CVal::ofInt(a.i.shl(b.i.getZExtValue())));
       })
       .Case([&](arith::ShRUIOp) {
-        CVal arrayValue = operand(0), buildPoint = operand(1);
-        if (arrayValue.isPoison() || buildPoint.isPoison())
+        CVal a = operand(0), b = operand(1);
+        if (a.isPoison() || b.isPoison())
           return setResult(CVal::poison());
-        if (!arrayValue.isInt() || !buildPoint.isInt())
+        if (!a.isInt() || !b.isInt())
           return false;
-
-        if (buildPoint.i.uge(arrayValue.i.getBitWidth()))
-          return setResult(
-              CVal::ofInt(llvm::APInt(arrayValue.i.getBitWidth(), 0)));
-        return setResult(
-            CVal::ofInt(arrayValue.i.lshr(buildPoint.i.getZExtValue())));
+        // A shift by the width or more: cgeist narrows C's int shifts to the
+        // operand's width, so the C value (of the wider type) is meant: all
+        // bits shifted out (the sign bits for an arithmetic right shift).
+        if (b.i.uge(a.i.getBitWidth()))
+          return setResult(CVal::ofInt(llvm::APInt(a.i.getBitWidth(), 0)));
+        return setResult(CVal::ofInt(a.i.lshr(b.i.getZExtValue())));
       })
       .Case([&](arith::ShRSIOp) {
-        CVal arrayValue = operand(0), buildPoint = operand(1);
-        if (arrayValue.isPoison() || buildPoint.isPoison())
+        CVal a = operand(0), b = operand(1);
+        if (a.isPoison() || b.isPoison())
           return setResult(CVal::poison());
-        if (!arrayValue.isInt() || !buildPoint.isInt())
+        if (!a.isInt() || !b.isInt())
           return false;
-
-        if (buildPoint.i.uge(arrayValue.i.getBitWidth()))
-          return setResult(CVal::ofInt(
-              (arrayValue.i.isNegative()
-                   ? llvm::APInt::getAllOnes(arrayValue.i.getBitWidth())
-                   : llvm::APInt(arrayValue.i.getBitWidth(), 0))));
-        return setResult(
-            CVal::ofInt(arrayValue.i.ashr(buildPoint.i.getZExtValue())));
+        // A shift by the width or more: cgeist narrows C's int shifts to the
+        // operand's width, so the C value (of the wider type) is meant: all
+        // bits shifted out (the sign bits for an arithmetic right shift).
+        if (b.i.uge(a.i.getBitWidth()))
+          return setResult(CVal::ofInt((a.i.isNegative() ? llvm::APInt::getAllOnes(a.i.getBitWidth()) : llvm::APInt(a.i.getBitWidth(), 0))));
+        return setResult(CVal::ofInt(a.i.ashr(b.i.getZExtValue())));
       })
-      .Case([&](arith::ExtSIOp entryValue) {
-        CVal arrayValue = operand(0);
-        if (!arrayValue.isInt())
-          return arrayValue.isPoison() ? setResult(arrayValue) : false;
-        return setResult(
-            CVal::ofInt(arrayValue.i.sext(bitsOf(entryValue.getType()))));
+      .Case([&](arith::ExtSIOp e) {
+        CVal a = operand(0);
+        if (!a.isInt())
+          return a.isPoison() ? setResult(a) : false;
+        return setResult(CVal::ofInt(a.i.sext(bitsOf(e.getType()))));
       })
-      .Case([&](arith::ExtUIOp entryValue) {
-        CVal arrayValue = operand(0);
-        if (!arrayValue.isInt())
-          return arrayValue.isPoison() ? setResult(arrayValue) : false;
-        return setResult(
-            CVal::ofInt(arrayValue.i.zext(bitsOf(entryValue.getType()))));
+      .Case([&](arith::ExtUIOp e) {
+        CVal a = operand(0);
+        if (!a.isInt())
+          return a.isPoison() ? setResult(a) : false;
+        return setResult(CVal::ofInt(a.i.zext(bitsOf(e.getType()))));
       })
-      .Case([&](arith::TruncIOp entryValue) {
-        CVal arrayValue = operand(0);
-        if (!arrayValue.isInt())
-          return arrayValue.isPoison() ? setResult(arrayValue) : false;
-        return setResult(
-            CVal::ofInt(arrayValue.i.trunc(bitsOf(entryValue.getType()))));
+      .Case([&](arith::TruncIOp e) {
+        CVal a = operand(0);
+        if (!a.isInt())
+          return a.isPoison() ? setResult(a) : false;
+        return setResult(CVal::ofInt(a.i.trunc(bitsOf(e.getType()))));
       })
-      .Case([&](arith::IndexCastOp entryValue) {
-        CVal arrayValue = operand(0);
-        if (!arrayValue.isInt())
-          return arrayValue.isPoison() ? setResult(arrayValue) : false;
-        return setResult(CVal::ofInt(
-            arrayValue.i.sextOrTrunc(bitsOf(entryValue.getType()))));
+      .Case([&](arith::IndexCastOp e) {
+        CVal a = operand(0);
+        if (!a.isInt())
+          return a.isPoison() ? setResult(a) : false;
+        return setResult(CVal::ofInt(a.i.sextOrTrunc(bitsOf(e.getType()))));
       })
-      .Case([&](arith::IndexCastUIOp entryValue) {
-        CVal arrayValue = operand(0);
-        if (!arrayValue.isInt())
-          return arrayValue.isPoison() ? setResult(arrayValue) : false;
-        return setResult(CVal::ofInt(
-            arrayValue.i.zextOrTrunc(bitsOf(entryValue.getType()))));
+      .Case([&](arith::IndexCastUIOp e) {
+        CVal a = operand(0);
+        if (!a.isInt())
+          return a.isPoison() ? setResult(a) : false;
+        return setResult(CVal::ofInt(a.i.zextOrTrunc(bitsOf(e.getType()))));
       })
-      .Case([&](arith::CmpIOp candidateValue) {
-        CVal arrayValue = operand(0), buildPoint = operand(1);
-        if (arrayValue.isPoison() || buildPoint.isPoison())
+      .Case([&](arith::CmpIOp c) {
+        CVal a = operand(0), b = operand(1);
+        if (a.isPoison() || b.isPoison())
           return setResult(CVal::poison());
-        if (!arrayValue.isInt() || !buildPoint.isInt())
+        if (!a.isInt() || !b.isInt())
           return false;
-        bool resultValue = false;
-        switch (candidateValue.getPredicate()) {
-        case arith::CmpIPredicate::eq:
-          resultValue = arrayValue.i == buildPoint.i;
-          break;
-        case arith::CmpIPredicate::ne:
-          resultValue = arrayValue.i != buildPoint.i;
-          break;
-        case arith::CmpIPredicate::slt:
-          resultValue = arrayValue.i.slt(buildPoint.i);
-          break;
-        case arith::CmpIPredicate::sle:
-          resultValue = arrayValue.i.sle(buildPoint.i);
-          break;
-        case arith::CmpIPredicate::sgt:
-          resultValue = arrayValue.i.sgt(buildPoint.i);
-          break;
-        case arith::CmpIPredicate::sge:
-          resultValue = arrayValue.i.sge(buildPoint.i);
-          break;
-        case arith::CmpIPredicate::ult:
-          resultValue = arrayValue.i.ult(buildPoint.i);
-          break;
-        case arith::CmpIPredicate::ule:
-          resultValue = arrayValue.i.ule(buildPoint.i);
-          break;
-        case arith::CmpIPredicate::ugt:
-          resultValue = arrayValue.i.ugt(buildPoint.i);
-          break;
-        case arith::CmpIPredicate::uge:
-          resultValue = arrayValue.i.uge(buildPoint.i);
-          break;
+        bool r = false;
+        switch (c.getPredicate()) {
+        case arith::CmpIPredicate::eq: r = a.i == b.i; break;
+        case arith::CmpIPredicate::ne: r = a.i != b.i; break;
+        case arith::CmpIPredicate::slt: r = a.i.slt(b.i); break;
+        case arith::CmpIPredicate::sle: r = a.i.sle(b.i); break;
+        case arith::CmpIPredicate::sgt: r = a.i.sgt(b.i); break;
+        case arith::CmpIPredicate::sge: r = a.i.sge(b.i); break;
+        case arith::CmpIPredicate::ult: r = a.i.ult(b.i); break;
+        case arith::CmpIPredicate::ule: r = a.i.ule(b.i); break;
+        case arith::CmpIPredicate::ugt: r = a.i.ugt(b.i); break;
+        case arith::CmpIPredicate::uge: r = a.i.uge(b.i); break;
         }
-        return setResult(CVal::ofInt(llvm::APInt(1, resultValue ? 1 : 0)));
+        return setResult(CVal::ofInt(llvm::APInt(1, r ? 1 : 0)));
       })
       .Default([](Operation *) { return false; });
 }
 
 bool Evaluator::execFloat(Operation &op, DenseMap<Value, CVal> &env) {
-  auto operand = [&](unsigned keyValue) {
-    return lookup(env, op.getOperand(keyValue));
-  };
-  auto setResult = [&](CVal valueHandle) {
-    env[op.getResult(0)] = std::move(valueHandle);
+  auto operand = [&](unsigned k) { return lookup(env, op.getOperand(k)); };
+  auto setResult = [&](CVal v) {
+    env[op.getResult(0)] = std::move(v);
     return true;
   };
   constexpr auto rm = llvm::APFloat::rmNearestTiesToEven;
   auto binary = [&](auto fn) -> bool {
-    CVal arrayValue = operand(0), buildPoint = operand(1);
-    if (arrayValue.isPoison() || buildPoint.isPoison())
+    CVal a = operand(0), b = operand(1);
+    if (a.isPoison() || b.isPoison())
       return setResult(CVal::poison());
-    if (!arrayValue.isFloat() || !buildPoint.isFloat())
+    if (!a.isFloat() || !b.isFloat())
       return false;
-    llvm::APFloat resultValue = arrayValue.f;
-    fn(resultValue, buildPoint.f);
-    return setResult(CVal::ofFloat(resultValue));
+    llvm::APFloat r = a.f;
+    fn(r, b.f);
+    return setResult(CVal::ofFloat(r));
   };
-
-  auto semantics = [](Type typeValue) -> const llvm::fltSemantics * {
-    if (auto ft = dyn_cast<FloatType>(typeValue))
+  // The float semantics of a float type.
+  auto semantics = [](Type t) -> const llvm::fltSemantics * {
+    if (auto ft = dyn_cast<FloatType>(t))
       return &ft.getFloatSemantics();
     return nullptr;
   };
   using llvm::APFloat;
   return llvm::TypeSwitch<Operation *, bool>(&op)
-      .Case([&](arith::AddFOp) {
-        return binary([&](APFloat &arrayValue, const APFloat &buildPoint) {
-          arrayValue.add(buildPoint, rm);
-        });
-      })
-      .Case([&](arith::SubFOp) {
-        return binary([&](APFloat &arrayValue, const APFloat &buildPoint) {
-          arrayValue.subtract(buildPoint, rm);
-        });
-      })
-      .Case([&](arith::MulFOp) {
-        return binary([&](APFloat &arrayValue, const APFloat &buildPoint) {
-          arrayValue.multiply(buildPoint, rm);
-        });
-      })
-      .Case([&](arith::DivFOp) {
-        return binary([&](APFloat &arrayValue, const APFloat &buildPoint) {
-          arrayValue.divide(buildPoint, rm);
-        });
-      })
+      .Case([&](arith::AddFOp) { return binary([&](APFloat &a, const APFloat &b) { a.add(b, rm); }); })
+      .Case([&](arith::SubFOp) { return binary([&](APFloat &a, const APFloat &b) { a.subtract(b, rm); }); })
+      .Case([&](arith::MulFOp) { return binary([&](APFloat &a, const APFloat &b) { a.multiply(b, rm); }); })
+      .Case([&](arith::DivFOp) { return binary([&](APFloat &a, const APFloat &b) { a.divide(b, rm); }); })
       .Case([&](arith::NegFOp) {
-        CVal arrayValue = operand(0);
-        if (!arrayValue.isFloat())
-          return arrayValue.isPoison() ? setResult(arrayValue) : false;
-        llvm::APFloat resultValue = arrayValue.f;
-        resultValue.changeSign();
-        return setResult(CVal::ofFloat(resultValue));
+        CVal a = operand(0);
+        if (!a.isFloat())
+          return a.isPoison() ? setResult(a) : false;
+        llvm::APFloat r = a.f;
+        r.changeSign();
+        return setResult(CVal::ofFloat(r));
       })
-      .Case([&](arith::CmpFOp candidateValue) {
-        CVal arrayValue = operand(0), buildPoint = operand(1);
-        if (arrayValue.isPoison() || buildPoint.isPoison())
+      .Case([&](arith::CmpFOp c) {
+        CVal a = operand(0), b = operand(1);
+        if (a.isPoison() || b.isPoison())
           return setResult(CVal::poison());
-        if (!arrayValue.isFloat() || !buildPoint.isFloat())
+        if (!a.isFloat() || !b.isFloat())
           return false;
-        auto cmp = arrayValue.f.compare(buildPoint.f);
+        auto cmp = a.f.compare(b.f);
         bool unordered = cmp == llvm::APFloat::cmpUnordered;
         bool lt = cmp == llvm::APFloat::cmpLessThan;
         bool gt = cmp == llvm::APFloat::cmpGreaterThan;
         bool eq = cmp == llvm::APFloat::cmpEqual;
-        bool resultValue = false;
+        bool r = false;
         using P = arith::CmpFPredicate;
-        switch (candidateValue.getPredicate()) {
-        case P::AlwaysFalse:
-          resultValue = false;
-          break;
-        case P::OEQ:
-          resultValue = eq;
-          break;
-        case P::OGT:
-          resultValue = gt;
-          break;
-        case P::OGE:
-          resultValue = gt || eq;
-          break;
-        case P::OLT:
-          resultValue = lt;
-          break;
-        case P::OLE:
-          resultValue = lt || eq;
-          break;
-        case P::ONE:
-          resultValue = lt || gt;
-          break;
-        case P::ORD:
-          resultValue = !unordered;
-          break;
-        case P::UEQ:
-          resultValue = unordered || eq;
-          break;
-        case P::UGT:
-          resultValue = unordered || gt;
-          break;
-        case P::UGE:
-          resultValue = unordered || gt || eq;
-          break;
-        case P::ULT:
-          resultValue = unordered || lt;
-          break;
-        case P::ULE:
-          resultValue = unordered || lt || eq;
-          break;
-        case P::UNE:
-          resultValue = !eq;
-          break;
-        case P::UNO:
-          resultValue = unordered;
-          break;
-        case P::AlwaysTrue:
-          resultValue = true;
-          break;
+        switch (c.getPredicate()) {
+        case P::AlwaysFalse: r = false; break;
+        case P::OEQ: r = eq; break;
+        case P::OGT: r = gt; break;
+        case P::OGE: r = gt || eq; break;
+        case P::OLT: r = lt; break;
+        case P::OLE: r = lt || eq; break;
+        case P::ONE: r = lt || gt; break;
+        case P::ORD: r = !unordered; break;
+        case P::UEQ: r = unordered || eq; break;
+        case P::UGT: r = unordered || gt; break;
+        case P::UGE: r = unordered || gt || eq; break;
+        case P::ULT: r = unordered || lt; break;
+        case P::ULE: r = unordered || lt || eq; break;
+        case P::UNE: r = !eq; break;
+        case P::UNO: r = unordered; break;
+        case P::AlwaysTrue: r = true; break;
         }
-        return setResult(CVal::ofInt(llvm::APInt(1, resultValue ? 1 : 0)));
+        return setResult(CVal::ofInt(llvm::APInt(1, r ? 1 : 0)));
       })
-      .Case([&](arith::SIToFPOp entryValue) {
-        CVal arrayValue = operand(0);
-        const llvm::fltSemantics *stringValue = semantics(entryValue.getType());
-        if (!arrayValue.isInt() || !stringValue)
-          return arrayValue.isPoison() ? setResult(arrayValue) : false;
-        llvm::APFloat resultValue(*stringValue);
-        resultValue.convertFromAPInt(arrayValue.i, true, rm);
-        return setResult(CVal::ofFloat(resultValue));
+      .Case([&](arith::SIToFPOp e) {
+        CVal a = operand(0);
+        const llvm::fltSemantics *s = semantics(e.getType());
+        if (!a.isInt() || !s)
+          return a.isPoison() ? setResult(a) : false;
+        llvm::APFloat r(*s);
+        r.convertFromAPInt(a.i, /*IsSigned=*/true, rm);
+        return setResult(CVal::ofFloat(r));
       })
-      .Case([&](arith::UIToFPOp entryValue) {
-        CVal arrayValue = operand(0);
-        const llvm::fltSemantics *stringValue = semantics(entryValue.getType());
-        if (!arrayValue.isInt() || !stringValue)
-          return arrayValue.isPoison() ? setResult(arrayValue) : false;
-        llvm::APFloat resultValue(*stringValue);
-        resultValue.convertFromAPInt(arrayValue.i, false, rm);
-        return setResult(CVal::ofFloat(resultValue));
+      .Case([&](arith::UIToFPOp e) {
+        CVal a = operand(0);
+        const llvm::fltSemantics *s = semantics(e.getType());
+        if (!a.isInt() || !s)
+          return a.isPoison() ? setResult(a) : false;
+        llvm::APFloat r(*s);
+        r.convertFromAPInt(a.i, /*IsSigned=*/false, rm);
+        return setResult(CVal::ofFloat(r));
       })
-      .Case([&](arith::FPToSIOp entryValue) {
-        CVal arrayValue = operand(0);
-        if (!arrayValue.isFloat())
-          return arrayValue.isPoison() ? setResult(arrayValue) : false;
-        llvm::APSInt resultValue(bitsOf(entryValue.getType()), false);
+      .Case([&](arith::FPToSIOp e) {
+        CVal a = operand(0);
+        if (!a.isFloat())
+          return a.isPoison() ? setResult(a) : false;
+        llvm::APSInt r(bitsOf(e.getType()), /*isUnsigned=*/false);
         bool exact = false;
-        if (arrayValue.f.convertToInteger(resultValue,
-                                          llvm::APFloat::rmTowardZero, &exact) &
+        if (a.f.convertToInteger(r, llvm::APFloat::rmTowardZero, &exact) &
+            llvm::APFloat::opInvalidOp)
+          return setResult(CVal::poison()); // out of range: poison
+        return setResult(CVal::ofInt(r));
+      })
+      .Case([&](arith::FPToUIOp e) {
+        CVal a = operand(0);
+        if (!a.isFloat())
+          return a.isPoison() ? setResult(a) : false;
+        llvm::APSInt r(bitsOf(e.getType()), /*isUnsigned=*/true);
+        bool exact = false;
+        if (a.f.convertToInteger(r, llvm::APFloat::rmTowardZero, &exact) &
             llvm::APFloat::opInvalidOp)
           return setResult(CVal::poison());
-        return setResult(CVal::ofInt(resultValue));
+        return setResult(CVal::ofInt(r));
       })
-      .Case([&](arith::FPToUIOp entryValue) {
-        CVal arrayValue = operand(0);
-        if (!arrayValue.isFloat())
-          return arrayValue.isPoison() ? setResult(arrayValue) : false;
-        llvm::APSInt resultValue(bitsOf(entryValue.getType()), true);
-        bool exact = false;
-        if (arrayValue.f.convertToInteger(resultValue,
-                                          llvm::APFloat::rmTowardZero, &exact) &
-            llvm::APFloat::opInvalidOp)
-          return setResult(CVal::poison());
-        return setResult(CVal::ofInt(resultValue));
-      })
-      .Case([&](arith::ExtFOp entryValue) {
-        CVal arrayValue = operand(0);
-        const llvm::fltSemantics *stringValue = semantics(entryValue.getType());
-        if (!arrayValue.isFloat() || !stringValue)
-          return arrayValue.isPoison() ? setResult(arrayValue) : false;
-        llvm::APFloat resultValue = arrayValue.f;
+      .Case([&](arith::ExtFOp e) {
+        CVal a = operand(0);
+        const llvm::fltSemantics *s = semantics(e.getType());
+        if (!a.isFloat() || !s)
+          return a.isPoison() ? setResult(a) : false;
+        llvm::APFloat r = a.f;
         bool lost = false;
-        resultValue.convert(*stringValue, rm, &lost);
-        return setResult(CVal::ofFloat(resultValue));
+        r.convert(*s, rm, &lost);
+        return setResult(CVal::ofFloat(r));
       })
-      .Case([&](arith::TruncFOp entryValue) {
-        CVal arrayValue = operand(0);
-        const llvm::fltSemantics *stringValue = semantics(entryValue.getType());
-        if (!arrayValue.isFloat() || !stringValue)
-          return arrayValue.isPoison() ? setResult(arrayValue) : false;
-        llvm::APFloat resultValue = arrayValue.f;
+      .Case([&](arith::TruncFOp e) {
+        CVal a = operand(0);
+        const llvm::fltSemantics *s = semantics(e.getType());
+        if (!a.isFloat() || !s)
+          return a.isPoison() ? setResult(a) : false;
+        llvm::APFloat r = a.f;
         bool lost = false;
-        resultValue.convert(*stringValue, rm, &lost);
-        return setResult(CVal::ofFloat(resultValue));
+        r.convert(*s, rm, &lost);
+        return setResult(CVal::ofFloat(r));
       })
-      .Case([&](arith::BitcastOp entryValue) {
-        CVal arrayValue = operand(0);
-        if (arrayValue.isPoison())
-          return setResult(arrayValue);
-        if (const llvm::fltSemantics *stringValue =
-                semantics(entryValue.getType())) {
-          if (!arrayValue.isInt())
+      .Case([&](arith::BitcastOp e) {
+        CVal a = operand(0);
+        if (a.isPoison())
+          return setResult(a);
+        if (const llvm::fltSemantics *s = semantics(e.getType())) {
+          if (!a.isInt())
             return false;
-          return setResult(
-              CVal::ofFloat(llvm::APFloat(*stringValue, arrayValue.i)));
+          return setResult(CVal::ofFloat(llvm::APFloat(*s, a.i)));
         }
-        if (!arrayValue.isFloat() || !bitsOf(entryValue.getType()))
+        if (!a.isFloat() || !bitsOf(e.getType()))
           return false;
-        return setResult(CVal::ofInt(arrayValue.f.bitcastToAPInt()));
+        return setResult(CVal::ofInt(a.f.bitcastToAPInt()));
       })
       .Default([](Operation *) { return false; });
 }
 
 bool Evaluator::exec(Operation &op, DenseMap<Value, CVal> &env) {
-  if (auto candidateValue = dyn_cast<arith::ConstantOp>(op)) {
-    std::optional<CVal> valueHandle = constantValue(candidateValue.getValue());
-    if (!valueHandle)
+  if (auto c = dyn_cast<arith::ConstantOp>(op)) {
+    std::optional<CVal> v = constantValue(c.getValue());
+    if (!v)
       return false;
-    env[candidateValue.getResult()] = *valueHandle;
+    env[c.getResult()] = *v;
     return true;
   }
   if (isa<LLVM::UndefOp, LLVM::PoisonOp>(op)) {
-
-    unsigned widthValue = bitsOf(op.getResult(0).getType());
-    if (widthValue) {
-      env[op.getResult(0)] = CVal::ofInt(llvm::APInt(widthValue, 0));
+    // An uninitialised variable (cgeist's undef for a declared ap_int that
+    // the code then sets bit by bit): its value is a register's reset, 0.
+    // The library code never lets the result depend on it.
+    unsigned w = bitsOf(op.getResult(0).getType());
+    if (w) {
+      env[op.getResult(0)] = CVal::ofInt(llvm::APInt(w, 0));
       return true;
     }
     if (auto ft = dyn_cast<FloatType>(op.getResult(0).getType())) {
@@ -741,31 +626,28 @@ bool Evaluator::exec(Operation &op, DenseMap<Value, CVal> &env) {
     return true;
   }
   if (auto sel = dyn_cast<arith::SelectOp>(op)) {
-    CVal candidateValue = lookup(env, sel.getCondition());
-    if (!candidateValue.isInt())
-      return false;
-    env[sel.getResult()] =
-        lookup(env, candidateValue.i.isZero() ? sel.getFalseValue()
-                                              : sel.getTrueValue());
+    CVal c = lookup(env, sel.getCondition());
+    if (!c.isInt())
+      return false; // an undefined condition decides nothing we can know
+    env[sel.getResult()] = lookup(env, c.i.isZero() ? sel.getFalseValue()
+                                                     : sel.getTrueValue());
     return true;
   }
   if (auto ifOp = dyn_cast<scf::IfOp>(op)) {
-    CVal candidateValue = lookup(env, ifOp.getCondition());
-    if (!candidateValue.isInt())
+    CVal c = lookup(env, ifOp.getCondition());
+    if (!c.isInt())
       return false;
-    Region &resultValue =
-        candidateValue.i.isZero() ? ifOp.getElseRegion() : ifOp.getThenRegion();
+    Region &r = c.i.isZero() ? ifOp.getElseRegion() : ifOp.getThenRegion();
     SmallVector<CVal> out;
-    if (resultValue.empty()) {
+    if (r.empty()) {
       if (ifOp.getNumResults())
         return false;
       return true;
     }
-    if (!runNested(resultValue, {}, env, out) ||
-        out.size() != ifOp.getNumResults())
+    if (!runNested(r, {}, env, out) || out.size() != ifOp.getNumResults())
       return false;
-    for (auto [passResult, valueHandle] : llvm::zip(ifOp.getResults(), out))
-      env[passResult] = valueHandle;
+    for (auto [res, v] : llvm::zip(ifOp.getResults(), out))
+      env[res] = v;
     return true;
   }
   if (auto forOp = dyn_cast<scf::ForOp>(op)) {
@@ -774,10 +656,10 @@ bool Evaluator::exec(Operation &op, DenseMap<Value, CVal> &env) {
          st = lookup(env, forOp.getStep());
     if (!lb.isInt() || !ub.isInt() || !st.isInt() || !st.i.isStrictlyPositive())
       return false;
-    const bool isUnsigned = false;
+    const bool isUnsigned = false; // scf.for compares signed here
     SmallVector<CVal> iter;
-    for (Value valueHandle : forOp.getInitArgs())
-      iter.push_back(lookup(env, valueHandle));
+    for (Value v : forOp.getInitArgs())
+      iter.push_back(lookup(env, v));
     llvm::APInt iv = lb.i;
     while (isUnsigned ? iv.ult(ub.i) : iv.slt(ub.i)) {
       SmallVector<CVal> args{CVal::ofInt(iv)};
@@ -791,28 +673,27 @@ bool Evaluator::exec(Operation &op, DenseMap<Value, CVal> &env) {
       if (overflow)
         break;
     }
-    for (auto [passResult, valueHandle] : llvm::zip(forOp.getResults(), iter))
-      env[passResult] = valueHandle;
+    for (auto [res, v] : llvm::zip(forOp.getResults(), iter))
+      env[res] = v;
     return true;
   }
   if (auto whileOp = dyn_cast<scf::WhileOp>(op)) {
     SmallVector<CVal> args;
-    for (Value valueHandle : whileOp.getInits())
-      args.push_back(lookup(env, valueHandle));
+    for (Value v : whileOp.getInits())
+      args.push_back(lookup(env, v));
     while (true) {
       SmallVector<CVal> out;
       Operation *term = nullptr;
       if (!runNested(whileOp.getBefore(), args, env, out, &term))
         return false;
       auto cond = cast<scf::ConditionOp>(term);
-      CVal candidateValue = lookup(env, cond.getCondition());
-      if (!candidateValue.isInt())
+      CVal c = lookup(env, cond.getCondition());
+      if (!c.isInt())
         return false;
       SmallVector<CVal> fwd(out.begin() + 1, out.end());
-      if (candidateValue.i.isZero()) {
-        for (auto [passResult, valueHandle] :
-             llvm::zip(whileOp.getResults(), fwd))
-          env[passResult] = valueHandle;
+      if (c.i.isZero()) {
+        for (auto [res, v] : llvm::zip(whileOp.getResults(), fwd))
+          env[res] = v;
         return true;
       }
       if (!runNested(whileOp.getAfter(), fwd, env, args))
@@ -830,8 +711,8 @@ bool Evaluator::exec(Operation &op, DenseMap<Value, CVal> &env) {
     int64_t lb = *llvm::max_element(lbs), ub = *llvm::min_element(ubs);
     int64_t step = forOp.getStepAsInt();
     SmallVector<CVal> iter;
-    for (Value valueHandle : forOp.getInits())
-      iter.push_back(lookup(env, valueHandle));
+    for (Value v : forOp.getInits())
+      iter.push_back(lookup(env, v));
     for (int64_t iv = lb; iv < ub; iv += step) {
       SmallVector<CVal> args{indexVal(iv)};
       args.append(iter);
@@ -840,29 +721,28 @@ bool Evaluator::exec(Operation &op, DenseMap<Value, CVal> &env) {
         return false;
       iter = out;
     }
-    for (auto [passResult, valueHandle] : llvm::zip(forOp.getResults(), iter))
-      env[passResult] = valueHandle;
+    for (auto [res, v] : llvm::zip(forOp.getResults(), iter))
+      env[res] = v;
     return true;
   }
   if (auto ifOp = dyn_cast<affine::AffineIfOp>(op)) {
     IntegerSet set = ifOp.getIntegerSet();
     SmallVector<int64_t> vals;
-    AffineMap memoryOp = AffineMap::get(set.getNumDims(), set.getNumSymbols(),
-                                        set.getConstraints(), set.getContext());
-    if (!applyMap(memoryOp, ifOp.getOperands(), env, vals))
+    AffineMap m = AffineMap::get(set.getNumDims(), set.getNumSymbols(),
+                                 set.getConstraints(), set.getContext());
+    if (!applyMap(m, ifOp.getOperands(), env, vals))
       return false;
     bool holds = true;
-    for (unsigned keyValue = 0; keyValue < vals.size(); ++keyValue)
-      holds &= set.isEq(keyValue) ? vals[keyValue] == 0 : vals[keyValue] >= 0;
-    Region &resultValue = holds ? ifOp.getThenRegion() : ifOp.getElseRegion();
-    if (resultValue.empty())
+    for (unsigned k = 0; k < vals.size(); ++k)
+      holds &= set.isEq(k) ? vals[k] == 0 : vals[k] >= 0;
+    Region &r = holds ? ifOp.getThenRegion() : ifOp.getElseRegion();
+    if (r.empty())
       return ifOp.getNumResults() == 0;
     SmallVector<CVal> out;
-    if (!runNested(resultValue, {}, env, out) ||
-        out.size() != ifOp.getNumResults())
+    if (!runNested(r, {}, env, out) || out.size() != ifOp.getNumResults())
       return false;
-    for (auto [passResult, valueHandle] : llvm::zip(ifOp.getResults(), out))
-      env[passResult] = valueHandle;
+    for (auto [res, v] : llvm::zip(ifOp.getResults(), out))
+      env[res] = v;
     return true;
   }
   if (auto apply = dyn_cast<affine::AffineApplyOp>(op)) {
@@ -880,66 +760,63 @@ bool Evaluator::exec(Operation &op, DenseMap<Value, CVal> &env) {
     SmallVector<int64_t> vals;
     if (!applyMap(map, op.getOperands(), env, vals) || vals.empty())
       return false;
-    env[op.getResult(0)] =
-        indexVal(isMin ? *llvm::min_element(vals) : *llvm::max_element(vals));
+    env[op.getResult(0)] = indexVal(isMin ? *llvm::min_element(vals)
+                                          : *llvm::max_element(vals));
     return true;
   }
   if (arrays) {
-    SmallVector<int64_t> indexValue;
+    SmallVector<int64_t> idx;
     if (auto ld = dyn_cast<affine::AffineLoadOp>(op))
-      return applyMap(ld.getAffineMap(), ld.getMapOperands(), env,
-                      indexValue) &&
-             loadElement(ld.getMemRef(), indexValue, ld.getResult(), env);
+      return applyMap(ld.getAffineMap(), ld.getMapOperands(), env, idx) &&
+             loadElement(ld.getMemRef(), idx, ld.getResult(), env);
     if (auto st = dyn_cast<affine::AffineStoreOp>(op))
-      return applyMap(st.getAffineMap(), st.getMapOperands(), env,
-                      indexValue) &&
-             storeElement(st.getMemRef(), indexValue,
+      return applyMap(st.getAffineMap(), st.getMapOperands(), env, idx) &&
+             storeElement(st.getMemRef(), idx,
                           lookup(env, st.getValueToStore()));
     if (auto ld = dyn_cast<memref::LoadOp>(op))
-      return indexValues(ld.getIndices(), env, indexValue) &&
-             loadElement(ld.getMemRef(), indexValue, ld.getResult(), env);
+      return indexValues(ld.getIndices(), env, idx) &&
+             loadElement(ld.getMemRef(), idx, ld.getResult(), env);
     if (auto st = dyn_cast<memref::StoreOp>(op))
-      return indexValues(st.getIndices(), env, indexValue) &&
-             storeElement(st.getMemRef(), indexValue,
+      return indexValues(st.getIndices(), env, idx) &&
+             storeElement(st.getMemRef(), idx,
                           lookup(env, st.getValueToStore()));
   }
   if (auto call = dyn_cast<func::CallOp>(op)) {
     if (arrays)
-      return false;
+      return false; // a call may touch the arrays through its operands
     auto callee = symbols.lookupNearestSymbolFrom<func::FuncOp>(
         call, call.getCalleeAttr());
     if (!callee)
       return false;
     SmallVector<CVal> args, results;
-    for (Value valueHandle : call.getOperands())
-      args.push_back(lookup(env, valueHandle));
+    for (Value v : call.getOperands())
+      args.push_back(lookup(env, v));
     if (!this->call(callee, args, results) ||
         results.size() != call.getNumResults())
       return false;
-    for (auto [passResult, valueHandle] : llvm::zip(call.getResults(), results))
-      env[passResult] = valueHandle;
+    for (auto [res, v] : llvm::zip(call.getResults(), results))
+      env[res] = v;
     return true;
   }
   if (op.getNumResults() != 1 || op.getNumRegions() != 0)
     return false;
-  Type typeValue = op.getResult(0).getType();
-  if (isa<FloatType>(typeValue) ||
-      isa<arith::CmpFOp, arith::FPToSIOp, arith::FPToUIOp, arith::BitcastOp>(
-          op))
+  Type t = op.getResult(0).getType();
+  if (isa<FloatType>(t) || isa<arith::CmpFOp, arith::FPToSIOp, arith::FPToUIOp,
+                               arith::BitcastOp>(op))
     return execFloat(op, env);
-  if (bitsOf(typeValue))
+  if (bitsOf(t))
     return execInt(op, env);
   return false;
 }
 
 /// A result of the evaluation as an attribute of `t`, or null.
-static TypedAttr toAttr(const CVal &valueHandle, Type typeValue) {
-  if (valueHandle.isInt() && bitsOf(typeValue) == valueHandle.i.getBitWidth())
-    return IntegerAttr::get(typeValue, valueHandle.i);
-  if (valueHandle.isFloat())
-    if (auto ft = dyn_cast<FloatType>(typeValue))
-      if (&ft.getFloatSemantics() == &valueHandle.f.getSemantics())
-        return FloatAttr::get(typeValue, valueHandle.f);
+static TypedAttr toAttr(const CVal &v, Type t) {
+  if (v.isInt() && bitsOf(t) == v.i.getBitWidth())
+    return IntegerAttr::get(t, v.i);
+  if (v.isFloat())
+    if (auto ft = dyn_cast<FloatType>(t))
+      if (&ft.getFloatSemantics() == &v.f.getSemantics())
+        return FloatAttr::get(t, v.f);
   return nullptr;
 }
 
@@ -954,13 +831,12 @@ unsigned foldConstantCalls(ModuleOp module, int64_t maxSteps,
   module.walk([&](func::CallOp call) {
     if (call.getNumResults() == 0)
       return;
-    for (Type typeValue : call.getResultTypes())
-      if (!bitsOf(typeValue) && !isa<FloatType>(typeValue))
+    for (Type t : call.getResultTypes())
+      if (!bitsOf(t) && !isa<FloatType>(t))
         return;
-    for (Value valueHandle : call.getOperands()) {
-      auto candidateValue = valueHandle.getDefiningOp<arith::ConstantOp>();
-      if (!candidateValue || (!isa<IntegerAttr>(candidateValue.getValue()) &&
-                              !isa<FloatAttr>(candidateValue.getValue())))
+    for (Value v : call.getOperands()) {
+      auto c = v.getDefiningOp<arith::ConstantOp>();
+      if (!c || (!isa<IntegerAttr>(c.getValue()) && !isa<FloatAttr>(c.getValue())))
         return;
     }
     candidates.push_back(call);
@@ -971,19 +847,18 @@ unsigned foldConstantCalls(ModuleOp module, int64_t maxSteps,
   for (func::CallOp call : candidates) {
     auto callee = symbols.lookupNearestSymbolFrom<func::FuncOp>(
         call, call.getCalleeAttr());
-
+    // A user `inline off` keeps a module whose output Vitis does not
+    // propagate (unmeasured); an external function has no body.
     if (!callee || callee.isExternal() || callee->hasAttr("hls.inline_off"))
       continue;
     Evaluator ev(symbols, maxSteps);
     SmallVector<CVal> args, results;
-    for (Value valueHandle : call.getOperands()) {
-      Attribute arrayValue =
-          valueHandle.getDefiningOp<arith::ConstantOp>().getValue();
-      if (auto ia = dyn_cast<IntegerAttr>(arrayValue))
-        args.push_back(
-            CVal::ofInt(ia.getValue().sextOrTrunc(bitsOf(ia.getType()))));
+    for (Value v : call.getOperands()) {
+      Attribute a = v.getDefiningOp<arith::ConstantOp>().getValue();
+      if (auto ia = dyn_cast<IntegerAttr>(a))
+        args.push_back(CVal::ofInt(ia.getValue().sextOrTrunc(bitsOf(ia.getType()))));
       else
-        args.push_back(CVal::ofFloat(cast<FloatAttr>(arrayValue).getValue()));
+        args.push_back(CVal::ofFloat(cast<FloatAttr>(a).getValue()));
     }
     if (!ev.call(callee, args, results) ||
         results.size() != call.getNumResults()) {
@@ -992,32 +867,30 @@ unsigned foldConstantCalls(ModuleOp module, int64_t maxSteps,
       continue;
     }
     SmallVector<TypedAttr> attrs;
-    for (auto [valueHandle, typeValue] :
-         llvm::zip(results, call.getResultTypes()))
-      if (TypedAttr arrayValue = toAttr(valueHandle, typeValue))
-        attrs.push_back(arrayValue);
+    for (auto [v, t] : llvm::zip(results, call.getResultTypes()))
+      if (TypedAttr a = toAttr(v, t))
+        attrs.push_back(a);
     if (attrs.size() != call.getNumResults()) {
       LLVM_DEBUG(llvm::dbgs() << "constant-call-eval: undefined result of "
                               << callee.getSymName() << "\n");
       continue;
     }
-    OpBuilder buildPoint(call);
+    OpBuilder b(call);
     std::string detail;
     llvm::raw_string_ostream os(detail);
     StringRef name = callee.getSymName();
     if (auto orig = callee->getAttrOfType<StringAttr>("hls.orig_name"))
       name = orig.getValue();
     os << name << " of constant arguments evaluated:";
-    for (auto [passResult, arrayValue] : llvm::zip(call.getResults(), attrs)) {
-      os << " " << arrayValue;
-      passResult.replaceAllUsesWith(
-          buildPoint.create<arith::ConstantOp>(call.getLoc(), arrayValue));
+    for (auto [res, a] : llvm::zip(call.getResults(), attrs)) {
+      os << " " << a;
+      res.replaceAllUsesWith(b.create<arith::ConstantOp>(call.getLoc(), a));
     }
     std::string func;
     if (auto fn = call->getParentOfType<func::FuncOp>())
       func = fn.getName().str();
-    notes.push_back(
-        {"constant-call", call.getLoc(), callee.getLoc(), os.str(), func});
+    notes.push_back({"constant-call", call.getLoc(), callee.getLoc(), os.str(),
+                     func});
     call.erase();
     ++folded;
   }
@@ -1028,17 +901,15 @@ unsigned foldConstantCalls(ModuleOp module, int64_t maxSteps,
 /// of a load or store.
 static bool onlyLoadsAndStores(Value mem) {
   for (OpOperand &use : mem.getUses()) {
-    Operation *useValue = use.getOwner();
-    if (auto ld = dyn_cast<affine::AffineLoadOp>(useValue);
-        ld && ld.getMemRef() == mem)
+    Operation *u = use.getOwner();
+    if (auto ld = dyn_cast<affine::AffineLoadOp>(u); ld && ld.getMemRef() == mem)
       continue;
-    if (auto st = dyn_cast<affine::AffineStoreOp>(useValue);
+    if (auto st = dyn_cast<affine::AffineStoreOp>(u);
         st && st.getMemRef() == mem && st.getValueToStore() != mem)
       continue;
-    if (auto ld = dyn_cast<memref::LoadOp>(useValue);
-        ld && ld.getMemRef() == mem)
+    if (auto ld = dyn_cast<memref::LoadOp>(u); ld && ld.getMemRef() == mem)
       continue;
-    if (auto st = dyn_cast<memref::StoreOp>(useValue);
+    if (auto st = dyn_cast<memref::StoreOp>(u);
         st && st.getMemRef() == mem && st.getValueToStore() != mem)
       continue;
     return false;
@@ -1050,21 +921,20 @@ static bool onlyLoadsAndStores(Value mem) {
 /// partitioned by its pragmas: a register array (VITIS_NOTES N174 is about
 /// such arrays; a plain filled array is a ROM, N26: held-out automl's
 /// `weights` / `biases`, Vitis ROM_AUTO_1R).
-static bool registerArray(memref::AllocaOp arrayValue) {
-  auto spec = arrayValue->getAttrOfType<ArrayAttr>("hls.array_partition");
+static bool registerArray(memref::AllocaOp a) {
+  auto spec = a->getAttrOfType<ArrayAttr>("hls.array_partition");
   if (!spec)
     return false;
-  MemRefType typeValue = arrayValue.getType();
-  for (int64_t dimensionIndex = 0; dimensionIndex < typeValue.getRank();
-       ++dimensionIndex) {
-    if (typeValue.getShape()[dimensionIndex] <= 1)
+  MemRefType t = a.getType();
+  for (int64_t d = 0; d < t.getRank(); ++d) {
+    if (t.getShape()[d] <= 1)
       continue;
-    bool complete = llvm::any_of(spec, [&](Attribute entryValue) {
-      auto dict = dyn_cast<DictionaryAttr>(entryValue);
+    bool complete = llvm::any_of(spec, [&](Attribute e) {
+      auto dict = dyn_cast<DictionaryAttr>(e);
       auto kind = dict ? dict.getAs<StringAttr>("kind") : StringAttr();
       auto dim = dict ? dict.getAs<IntegerAttr>("dim") : IntegerAttr();
       return kind && kind.getValue() == "complete" &&
-             (!dim || dim.getInt() == 0 || dim.getInt() == dimensionIndex + 1);
+             (!dim || dim.getInt() == 0 || dim.getInt() == d + 1);
     });
     if (!complete)
       return false;
@@ -1075,20 +945,20 @@ static bool registerArray(memref::AllocaOp arrayValue) {
 /// The arrays among `cands` that `op` (or a nested op) stores to.
 static void storedArrays(Operation *op, const DenseSet<Value> &cands,
                          SmallPtrSetImpl<Value> &out) {
-  op->walk([&](Operation *exprValue) {
+  op->walk([&](Operation *x) {
     Value mem;
-    if (auto st = dyn_cast<affine::AffineStoreOp>(exprValue))
+    if (auto st = dyn_cast<affine::AffineStoreOp>(x))
       mem = st.getMemRef();
-    else if (auto st = dyn_cast<memref::StoreOp>(exprValue))
+    else if (auto st = dyn_cast<memref::StoreOp>(x))
       mem = st.getMemRef();
     if (mem && cands.contains(mem))
       out.insert(mem);
   });
 }
 
-unsigned
-foldConstantFillPrefixes(ModuleOp module, int64_t maxSteps, int64_t maxElements,
-                         SmallVectorImpl<circt::hlsest::FoldNote> &notes) {
+unsigned foldConstantFillPrefixes(ModuleOp module, int64_t maxSteps,
+                                  int64_t maxElements,
+                                  SmallVectorImpl<circt::hlsest::FoldNote> &notes) {
   SymbolTableCollection symbols;
   unsigned folded = 0;
   unsigned globalCounter = 0;
@@ -1097,30 +967,29 @@ foldConstantFillPrefixes(ModuleOp module, int64_t maxSteps, int64_t maxElements,
     if (fn.isExternal() || !fn.getBody().hasOneBlock())
       continue;
     Block &entry = fn.getBody().front();
-
+    // The local arrays: allocas of the entry block with a static shape of
+    // integer or float elements, used only by loads and stores.
     DenseSet<Value> cands;
     DenseMap<Value, Evaluator::ArrayState> arrays;
     for (Operation &op : entry)
-      if (auto arrayValue = dyn_cast<memref::AllocaOp>(op)) {
-        MemRefType typeValue = arrayValue.getType();
-        if (!typeValue.hasStaticShape() ||
-            !typeValue.getLayout().isIdentity() ||
-            typeValue.getNumElements() > maxElements ||
-            !registerArray(arrayValue) ||
-            !(isa<IntegerType>(typeValue.getElementType()) ||
-              isa<FloatType>(typeValue.getElementType())) ||
-            !onlyLoadsAndStores(arrayValue.getResult()))
+      if (auto a = dyn_cast<memref::AllocaOp>(op)) {
+        MemRefType t = a.getType();
+        if (!t.hasStaticShape() || !t.getLayout().isIdentity() ||
+            t.getNumElements() > maxElements || !registerArray(a) ||
+            !(isa<IntegerType>(t.getElementType()) ||
+              isa<FloatType>(t.getElementType())) ||
+            !onlyLoadsAndStores(a.getResult()))
           continue;
-        cands.insert(arrayValue.getResult());
-        arrays[arrayValue.getResult()] = {
-            typeValue, std::vector<CVal>(typeValue.getNumElements())};
+        cands.insert(a.getResult());
+        arrays[a.getResult()] = {t, std::vector<CVal>(t.getNumElements())};
       }
     if (cands.empty())
       continue;
     Evaluator ev(symbols, maxSteps);
     ev.enableArrays(&arrays);
     DenseMap<Value, CVal> env;
-
+    // Arrays some op that is not evaluated stores to: their contents are not
+    // known from there on.
     DenseSet<Value> tainted;
     SmallVector<Operation *> evaluated;
     DenseMap<Operation *, SmallPtrSet<Value, 4>> writesOf;
@@ -1131,27 +1000,29 @@ foldConstantFillPrefixes(ModuleOp module, int64_t maxSteps, int64_t maxElements,
         (void)ev.runOp(op, env, writesOf[&op]);
         continue;
       }
-
+      // Only ops that touch a candidate array or produce values are worth
+      // evaluating; a loop that reads a tainted array cannot be.
       SmallPtrSet<Value, 4> stores;
       storedArrays(&op, cands, stores);
-
+      // A side-effect-free op outside the loops (a bound, an index): its
+      // value when it has one.
       if (stores.empty()) {
         SmallPtrSet<Value, 4> none;
         if (op.getNumRegions() == 0 && isMemoryEffectFree(&op) &&
             !ev.runOp(op, env, none))
-          for (Value resultValue : op.getResults())
-            env.erase(resultValue);
+          for (Value r : op.getResults())
+            env.erase(r);
         continue;
       }
       bool readsTainted = false;
-      op.walk([&](Operation *exprValue) {
-        for (Value valueHandle : exprValue->getOperands())
-          if (tainted.contains(valueHandle))
+      op.walk([&](Operation *x) {
+        for (Value v : x->getOperands())
+          if (tainted.contains(v))
             readsTainted = true;
       });
       DenseMap<Value, Evaluator::ArrayState> before;
-      for (Value memoryOp : stores)
-        before[memoryOp] = arrays[memoryOp];
+      for (Value m : stores)
+        before[m] = arrays[m];
       SmallPtrSet<Value, 4> written;
       bool ok = !readsTainted && ev.runOp(op, env, written);
       if (ok) {
@@ -1159,21 +1030,22 @@ foldConstantFillPrefixes(ModuleOp module, int64_t maxSteps, int64_t maxElements,
         writesOf[&op] = written;
         continue;
       }
-
-      for (auto &[memoryOp, st] : before)
-        arrays[memoryOp] = st;
-      for (Value memoryOp : stores)
-        tainted.insert(memoryOp);
-      for (Value resultValue : op.getResults())
-        env.erase(resultValue);
+      // Undo partial writes; the arrays it may store to are unknown now.
+      for (auto &[m, st] : before)
+        arrays[m] = st;
+      for (Value m : stores)
+        tainted.insert(m);
+      for (Value r : op.getResults())
+        env.erase(r);
     }
-
+    // Arrays to fold: written by an evaluated op, never by anything else.
     DenseSet<Value> fold;
     for (Operation *op : evaluated)
-      for (Value memoryOp : writesOf[op])
-        if (!tainted.contains(memoryOp))
-          fold.insert(memoryOp);
-
+      for (Value m : writesOf[op])
+        if (!tainted.contains(m))
+          fold.insert(m);
+    // An evaluated op that stores to an array that is not folded stays, so
+    // every array it stores to stays (it would store into a constant).
     bool changed = true;
     DenseSet<Operation *> keep;
     while (changed) {
@@ -1183,117 +1055,114 @@ foldConstantFillPrefixes(ModuleOp module, int64_t maxSteps, int64_t maxElements,
           continue;
         SmallPtrSet<Value, 4> stores;
         storedArrays(op, cands, stores);
-        bool keepOp = llvm::any_of(
-            stores, [&](Value memoryOp) { return !fold.contains(memoryOp); });
-
-        for (Value resultValue : op->getResults()) {
-          auto it = env.find(resultValue);
+        bool keepOp = llvm::any_of(stores, [&](Value m) {
+          return !fold.contains(m);
+        });
+        // A result that is no constant keeps the op.
+        for (Value r : op->getResults()) {
+          auto it = env.find(r);
           if (it == env.end() || !(it->second.isInt() || it->second.isFloat()))
             keepOp = true;
         }
         if (keepOp) {
           keep.insert(op);
-          for (Value memoryOp : stores)
-            changed |= fold.erase(memoryOp);
+          for (Value m : stores)
+            changed |= fold.erase(m);
         }
       }
     }
     if (fold.empty())
       continue;
-    OpBuilder buildPoint(module.getContext());
-
+    OpBuilder b(module.getContext());
+    // The evaluated ops that go: results become constants.
     for (Operation *op : evaluated) {
       if (keep.contains(op))
         continue;
-      buildPoint.setInsertionPoint(op);
-      for (Value resultValue : op->getResults()) {
-        TypedAttr arrayValue = toAttr(env[resultValue], resultValue.getType());
-        if (!arrayValue) {
-          if (auto it = dyn_cast<IndexType>(resultValue.getType());
-              it && env[resultValue].isInt())
-            arrayValue =
-                IntegerAttr::get(it, env[resultValue].i.getSExtValue());
+      b.setInsertionPoint(op);
+      for (Value r : op->getResults()) {
+        TypedAttr a = toAttr(env[r], r.getType());
+        if (!a) {
+          if (auto it = dyn_cast<IndexType>(r.getType()); it && env[r].isInt())
+            a = IntegerAttr::get(it, env[r].i.getSExtValue());
         }
-        if (!arrayValue)
-          continue;
-        resultValue.replaceAllUsesWith(
-            buildPoint.create<arith::ConstantOp>(op->getLoc(), arrayValue));
+        if (!a)
+          continue; // unreachable: keepOp checked the kinds
+        r.replaceAllUsesWith(b.create<arith::ConstantOp>(op->getLoc(), a));
       }
     }
     for (Operation *op : evaluated)
       if (!keep.contains(op))
         op->erase();
-
-    for (Value memoryOp : fold) {
-      auto localAlloca = memoryOp.getDefiningOp<memref::AllocaOp>();
-      Evaluator::ArrayState &st = arrays[memoryOp];
+    // Each folded array becomes a constant global of its contents (an element
+    // never stored reads as 0, the reset value).
+    for (Value m : fold) {
+      auto alloca = m.getDefiningOp<memref::AllocaOp>();
+      Evaluator::ArrayState &st = arrays[m];
       Type elt = st.type.getElementType();
       SmallVector<Attribute> vals;
-      for (const CVal &valueHandle : st.elems) {
-        Attribute arrayValue;
+      for (const CVal &v : st.elems) {
+        Attribute a;
         if (auto it = dyn_cast<IntegerType>(elt))
-          arrayValue = IntegerAttr::get(
-              it, valueHandle.isInt() &&
-                          valueHandle.i.getBitWidth() == it.getWidth()
-                      ? valueHandle.i
+          a = IntegerAttr::get(
+              it, v.isInt() && v.i.getBitWidth() == it.getWidth()
+                      ? v.i
                       : llvm::APInt(it.getWidth(), 0));
         else {
           auto ft = cast<FloatType>(elt);
-          arrayValue = FloatAttr::get(
-              ft, valueHandle.isFloat() && &valueHandle.f.getSemantics() ==
-                                               &ft.getFloatSemantics()
-                      ? valueHandle.f
+          a = FloatAttr::get(
+              ft, v.isFloat() && &v.f.getSemantics() == &ft.getFloatSemantics()
+                      ? v.f
                       : llvm::APFloat::getZero(ft.getFloatSemantics()));
         }
-        vals.push_back(arrayValue);
+        vals.push_back(a);
       }
       auto tensorTy = RankedTensorType::get(st.type.getShape(), elt);
-      auto initialValue = DenseElementsAttr::get(tensorTy, vals);
-      std::string name =
-          (fn.getName() + "__hls_const_fill_" + llvm::Twine(globalCounter++))
-              .str();
-      buildPoint.setInsertionPoint(fn);
-      auto global = buildPoint.create<memref::GlobalOp>(
-          localAlloca.getLoc(), name, buildPoint.getStringAttr("private"),
-          st.type, initialValue, true, IntegerAttr());
-
-      for (NamedAttribute na : localAlloca->getAttrs())
+      auto init = DenseElementsAttr::get(tensorTy, vals);
+      std::string name = (fn.getName() + "__hls_const_fill_" +
+                          llvm::Twine(globalCounter++))
+                             .str();
+      b.setInsertionPoint(fn);
+      auto global = b.create<memref::GlobalOp>(
+          alloca.getLoc(), name, b.getStringAttr("private"), st.type, init,
+          /*constant=*/true, /*alignment=*/IntegerAttr());
+      // Keep what the reports read off the array (its name, pragmas).
+      for (NamedAttribute na : alloca->getAttrs())
         if (na.getName().getValue().starts_with("polygeist.") ||
             na.getName().getValue().starts_with("hls."))
           global->setAttr(na.getName(), na.getValue());
-      global->setAttr("hls.constant_fill_evaluated", buildPoint.getUnitAttr());
-      buildPoint.setInsertionPoint(localAlloca);
-      auto get = buildPoint.create<memref::GetGlobalOp>(
-          localAlloca.getLoc(), st.type, global.getSymName());
-      localAlloca.getResult().replaceAllUsesWith(get.getResult());
+      global->setAttr("hls.constant_fill_evaluated",
+                      b.getUnitAttr());
+      b.setInsertionPoint(alloca);
+      auto get = b.create<memref::GetGlobalOp>(alloca.getLoc(), st.type,
+                                               global.getSymName());
+      alloca.getResult().replaceAllUsesWith(get.getResult());
       std::string detail;
       llvm::raw_string_ostream os(detail);
       StringRef var = "array";
-      if (auto valueHandle =
-              localAlloca->getAttrOfType<StringAttr>("polygeist.varname"))
-        var = valueHandle.getValue();
+      if (auto v = alloca->getAttrOfType<StringAttr>("polygeist.varname"))
+        var = v.getValue();
       os << var << " filled from constants by loops evaluated at compile "
          << "time: a constant table (N174)";
-      notes.push_back({"constant-fill-loops", localAlloca.getLoc(),
-                       localAlloca.getLoc(), os.str(), fn.getName().str()});
-      localAlloca.erase();
+      notes.push_back({"constant-fill-loops", alloca.getLoc(), alloca.getLoc(),
+                       os.str(), fn.getName().str()});
+      alloca.erase();
       ++folded;
     }
-
-    for (memref::GlobalOp globalOp :
+    // A folded table nothing reads any more is deleted.
+    for (memref::GlobalOp g :
          llvm::make_early_inc_range(module.getOps<memref::GlobalOp>()))
-      if (globalOp->hasAttr("hls.constant_fill_evaluated") &&
-          SymbolTable::symbolKnownUseEmpty(globalOp, module))
-        globalOp.erase();
+      if (g->hasAttr("hls.constant_fill_evaluated") &&
+          SymbolTable::symbolKnownUseEmpty(g, module))
+        g.erase();
     for (Operation &op : llvm::make_early_inc_range(entry))
       if (auto get = dyn_cast<memref::GetGlobalOp>(op))
         if (get.getResult().use_empty())
-          if (auto globalOp = symbols.lookupNearestSymbolFrom<memref::GlobalOp>(
+          if (auto g = symbols.lookupNearestSymbolFrom<memref::GlobalOp>(
                   get, get.getNameAttr());
-              globalOp && globalOp->hasAttr("hls.constant_fill_evaluated")) {
+              g && g->hasAttr("hls.constant_fill_evaluated")) {
             get.erase();
-            if (SymbolTable::symbolKnownUseEmpty(globalOp, module))
-              globalOp.erase();
+            if (SymbolTable::symbolKnownUseEmpty(g, module))
+              g.erase();
           }
   }
   return folded;
