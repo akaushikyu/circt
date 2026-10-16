@@ -1,26 +1,6 @@
-//===- Loader.cpp - hls-est configuration: merge, validate, fill, dump ----===//
-//
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
+
+
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
-//
-//===----------------------------------------------------------------------===//
-//
-// The configuration is built as one JSON document (design memo section 5):
-//
-//   1. the compiled-in defaults: data/base.json (run, frontend, plugins), the
-//      device file named by run.device and the profile named by run.tool;
-//   2. each --hls-config file in command-line order;
-//   3. each --config-set assignment.
-//
-// Objects merge key by key, everything else (numbers, strings, arrays) is
-// replaced as a whole. A file or an assignment that sets run.device (run.tool)
-// first replaces the device section (the tool and scheduling sections) with
-// the named file. Keys starting with `_` are documentation and are dropped.
-// The merged document is validated against the schema (Schema.cpp), checked
-// across keys, and copied into the typed Config.
-//
-//===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/Resource/Config/Config.h"
 #include "circt/Dialect/Resource/Config/Schema.h"
@@ -49,10 +29,6 @@ namespace json = llvm::json;
 
 namespace {
 
-//===----------------------------------------------------------------------===//
-// The compiled-in files.
-//===----------------------------------------------------------------------===//
-
 const char kBaseJson[] =
 #include "base.json.inc"
     ;
@@ -70,27 +46,23 @@ struct CompiledIn {
 const CompiledIn kDevices[] = {{"amd-xc7z020clg400-1", kXc7z020Json}};
 const CompiledIn kProfiles[] = {{"vitis-2025.1", kVitis2025Json}};
 
-//===----------------------------------------------------------------------===//
-// JSON helpers.
-//===----------------------------------------------------------------------===//
-
 /// Removes the documentation keys (`_...`) of every object, recursively.
 /// A device file's `_status` (validated | unvalidated) and `_sources` stay:
 /// they are part of what the description claims.
-void stripDocKeys(json::Value &v) {
-  if (json::Object *o = v.getAsObject()) {
+void stripDocKeys(json::Value &valueHandle) {
+  if (json::Object *opHandle = valueHandle.getAsObject()) {
     std::vector<std::string> drop;
-    for (auto &kv : *o)
+    for (auto &kv : *opHandle)
       if (StringRef(kv.first).starts_with("_") && kv.first != "_status" &&
           kv.first != "_sources")
         drop.push_back(kv.first.str());
-    for (const std::string &k : drop)
-      o->erase(k);
-    for (auto &kv : *o)
+    for (const std::string &keyValue : drop)
+      opHandle->erase(keyValue);
+    for (auto &kv : *opHandle)
       stripDocKeys(kv.second);
-  } else if (json::Array *a = v.getAsArray()) {
-    for (json::Value &e : *a)
-      stripDocKeys(e);
+  } else if (json::Array *arrayValue = valueHandle.getAsArray()) {
+    for (json::Value &entryValue : *arrayValue)
+      stripDocKeys(entryValue);
   }
 }
 
@@ -113,26 +85,26 @@ void mergeInto(json::Value &target, const json::Value &overlay) {
 
 std::optional<json::Value> parseJson(StringRef text, StringRef origin,
                                      ConfigDiagnostics &diag) {
-  llvm::Expected<json::Value> v = json::parse(text);
-  if (!v) {
+  llvm::Expected<json::Value> valueHandle = json::parse(text);
+  if (!valueHandle) {
     diag.errors.push_back(origin.str() + ": not valid JSON: " +
-                          llvm::toString(v.takeError()));
+                          llvm::toString(valueHandle.takeError()));
     return std::nullopt;
   }
-  if (!v->getAsObject()) {
+  if (!valueHandle->getAsObject()) {
     diag.errors.push_back(origin.str() + ": the top level is not an object");
     return std::nullopt;
   }
-  stripDocKeys(*v);
-  return std::move(*v);
+  stripDocKeys(*valueHandle);
+  return std::move(*valueHandle);
 }
 
 std::optional<json::Value> readJsonFile(StringRef path,
                                         ConfigDiagnostics &diag) {
   auto buf = llvm::MemoryBuffer::getFile(path);
   if (!buf) {
-    diag.errors.push_back(path.str() + ": cannot read: " +
-                          buf.getError().message());
+    diag.errors.push_back(path.str() +
+                          ": cannot read: " + buf.getError().message());
     return std::nullopt;
   }
   return parseJson((*buf)->getBuffer(), path, diag);
@@ -143,14 +115,14 @@ std::optional<json::Value> readJsonFile(StringRef path,
 std::string resolveRelative(StringRef path, StringRef baseFile) {
   if (path.empty() || llvm::sys::path::is_absolute(path) || baseFile.empty())
     return path.str();
-  llvm::SmallString<256> p(llvm::sys::path::parent_path(baseFile));
-  llvm::sys::path::append(p, path);
-  llvm::sys::path::remove_dots(p, /*remove_dot_dot=*/true);
-  return std::string(p);
+  llvm::SmallString<256> portValue(llvm::sys::path::parent_path(baseFile));
+  llvm::sys::path::append(portValue, path);
+  llvm::sys::path::remove_dots(portValue, true);
+  return std::string(portValue);
 }
 
-bool looksLikePath(StringRef s) {
-  return s.contains('/') || s.ends_with(".json");
+bool looksLikePath(StringRef stringValue) {
+  return stringValue.contains('/') || stringValue.ends_with(".json");
 }
 
 /// The device file `idOrPath` (a compiled-in id, or a path relative to the
@@ -158,82 +130,82 @@ bool looksLikePath(StringRef s) {
 std::optional<json::Value> loadDevice(StringRef idOrPath, StringRef baseFile,
                                       StringRef origin,
                                       ConfigDiagnostics &diag) {
-  for (const CompiledIn &d : kDevices)
-    if (idOrPath == d.id)
-      return parseJson(d.text, std::string("<compiled-in ") + d.id + ">",
+  for (const CompiledIn &dimensionIndex : kDevices)
+    if (idOrPath == dimensionIndex.id)
+      return parseJson(dimensionIndex.text,
+                       std::string("<compiled-in ") + dimensionIndex.id + ">",
                        diag);
   if (!looksLikePath(idOrPath)) {
     std::string known;
-    for (const CompiledIn &d : kDevices)
-      known += (known.empty() ? "" : ", ") + std::string(d.id);
+    for (const CompiledIn &dimensionIndex : kDevices)
+      known += (known.empty() ? "" : ", ") + std::string(dimensionIndex.id);
     diag.errors.push_back(origin.str() + ": run.device: '" + idOrPath.str() +
                           "' is neither a compiled-in device (" + known +
                           ") nor a .json path");
     return std::nullopt;
   }
   std::string path = resolveRelative(idOrPath, baseFile);
-  std::optional<json::Value> v = readJsonFile(path, diag);
-  if (!v)
+  std::optional<json::Value> valueHandle = readJsonFile(path, diag);
+  if (!valueHandle)
     return std::nullopt;
-  if (json::Value *t = v->getAsObject()->get("operator_table"))
-    if (std::optional<StringRef> s = t->getAsString())
-      *t = resolveRelative(*s, path);
-  return v;
+  if (json::Value *typeValue =
+          valueHandle->getAsObject()->get("operator_table"))
+    if (std::optional<StringRef> stringValue = typeValue->getAsString())
+      *typeValue = resolveRelative(*stringValue, path);
+  return valueHandle;
 }
 
 /// The profile file `idOrPath`: an object with `tool` and `scheduling`.
 std::optional<json::Value> loadProfile(StringRef idOrPath, StringRef baseFile,
                                        StringRef origin,
                                        ConfigDiagnostics &diag) {
-  std::optional<json::Value> v;
+  std::optional<json::Value> valueHandle;
   std::string path;
-  for (const CompiledIn &p : kProfiles)
-    if (idOrPath == p.id)
-      v = parseJson(p.text, std::string("<compiled-in ") + p.id + ">", diag);
-  if (!v) {
+  for (const CompiledIn &portValue : kProfiles)
+    if (idOrPath == portValue.id)
+      valueHandle =
+          parseJson(portValue.text,
+                    std::string("<compiled-in ") + portValue.id + ">", diag);
+  if (!valueHandle) {
     if (!looksLikePath(idOrPath)) {
       std::string known;
-      for (const CompiledIn &p : kProfiles)
-        known += (known.empty() ? "" : ", ") + std::string(p.id);
+      for (const CompiledIn &portValue : kProfiles)
+        known += (known.empty() ? "" : ", ") + std::string(portValue.id);
       diag.errors.push_back(origin.str() + ": run.tool: '" + idOrPath.str() +
                             "' is neither a compiled-in profile (" + known +
                             ") nor a .json path");
       return std::nullopt;
     }
     path = resolveRelative(idOrPath, baseFile);
-    v = readJsonFile(path, diag);
-    if (!v)
+    valueHandle = readJsonFile(path, diag);
+    if (!valueHandle)
       return std::nullopt;
   }
-  json::Object *o = v->getAsObject();
-  if (!o->getObject("tool") || !o->getObject("scheduling")) {
+  json::Object *opHandle = valueHandle->getAsObject();
+  if (!opHandle->getObject("tool") || !opHandle->getObject("scheduling")) {
     diag.errors.push_back(origin.str() + ": run.tool: '" + idOrPath.str() +
                           "' has no \"tool\" and \"scheduling\" objects");
     return std::nullopt;
   }
   if (!path.empty())
-    if (json::Object *hls = o->getObject("tool")->getObject("hls"))
+    if (json::Object *hls = opHandle->getObject("tool")->getObject("hls"))
       if (json::Object *ml = hls->getObject("math_library"))
-        if (json::Value *t = ml->get("table"))
-          if (std::optional<StringRef> s = t->getAsString())
-            *t = resolveRelative(*s, path);
-  return v;
+        if (json::Value *typeValue = ml->get("table"))
+          if (std::optional<StringRef> stringValue = typeValue->getAsString())
+            *typeValue = resolveRelative(*stringValue, path);
+  return valueHandle;
 }
-
-//===----------------------------------------------------------------------===//
-// Building the document.
-//===----------------------------------------------------------------------===//
 
 /// Records which origin last set every leaf path of `overlay`.
 void recordSources(const json::Value &overlay, const std::string &prefix,
                    const std::string &origin,
                    std::map<std::string, std::string> &sources) {
-  if (const json::Object *o = overlay.getAsObject()) {
-    if (o->empty() && !prefix.empty()) {
-      sources[prefix] = origin; // an empty section is a leaf of the overlay
+  if (const json::Object *opHandle = overlay.getAsObject()) {
+    if (opHandle->empty() && !prefix.empty()) {
+      sources[prefix] = origin;
       return;
     }
-    for (const auto &kv : *o)
+    for (const auto &kv : *opHandle)
       recordSources(kv.second,
                     prefix.empty() ? kv.first.str()
                                    : prefix + "." + kv.first.str(),
@@ -248,8 +220,8 @@ public:
   DocumentBuilder(ConfigDiagnostics &diag) : diag(diag) {}
 
   bool start() {
-    std::optional<json::Value> base = parseJson(kBaseJson, "<compiled-in base>",
-                                                diag);
+    std::optional<json::Value> base =
+        parseJson(kBaseJson, "<compiled-in base>", diag);
     if (!base)
       return false;
     doc = std::move(*base);
@@ -268,44 +240,46 @@ public:
 
   /// Applies one file (or the document an assignment built).
   void apply(json::Value overlay, StringRef baseFile, StringRef origin) {
-    json::Object *o = overlay.getAsObject();
-    if (json::Value *ver = o->get("version")) {
-      std::optional<int64_t> v = ver->getAsInteger();
-      if (!v || *v != 1)
+    json::Object *opHandle = overlay.getAsObject();
+    if (json::Value *ver = opHandle->get("version")) {
+      std::optional<int64_t> valueHandle = ver->getAsInteger();
+      if (!valueHandle || *valueHandle != 1)
         diag.errors.push_back(origin.str() +
                               ": version: this hls-est reads version 1");
     }
-    if (json::Object *run = o->getObject("run")) {
+    if (json::Object *run = opHandle->getObject("run")) {
       if (std::optional<StringRef> dev = run->getString("device")) {
-        std::optional<json::Value> d = loadDevice(*dev, baseFile, origin, diag);
-        if (d)
-          (*doc.getAsObject())["device"] = std::move(*d);
+        std::optional<json::Value> dimensionIndex =
+            loadDevice(*dev, baseFile, origin, diag);
+        if (dimensionIndex)
+          (*doc.getAsObject())["device"] = std::move(*dimensionIndex);
         recordSources(json::Object{{"device", json::Object{}}}, "",
                       origin.str() + " (run.device)", sources);
         replaced.insert("device");
       }
       if (std::optional<StringRef> tool = run->getString("tool")) {
-        std::optional<json::Value> p = loadProfile(*tool, baseFile, origin,
-                                                   diag);
-        if (p)
-          for (auto &kv : *p->getAsObject())
+        std::optional<json::Value> portValue =
+            loadProfile(*tool, baseFile, origin, diag);
+        if (portValue)
+          for (auto &kv : *portValue->getAsObject())
             (*doc.getAsObject())[kv.first] = kv.second;
         replaced.insert("tool");
         replaced.insert("scheduling");
       }
     }
-    // Paths in a file are relative to that file.
+
     if (!baseFile.empty()) {
-      if (json::Object *tool = o->getObject("tool"))
+      if (json::Object *tool = opHandle->getObject("tool"))
         if (json::Object *hls = tool->getObject("hls"))
           if (json::Object *ml = hls->getObject("math_library"))
-            if (json::Value *t = ml->get("table"))
-              if (std::optional<StringRef> s = t->getAsString())
-                *t = resolveRelative(*s, baseFile);
-      if (json::Object *dev = o->getObject("device"))
-        if (json::Value *t = dev->get("operator_table"))
-          if (std::optional<StringRef> s = t->getAsString())
-            *t = resolveRelative(*s, baseFile);
+            if (json::Value *typeValue = ml->get("table"))
+              if (std::optional<StringRef> stringValue =
+                      typeValue->getAsString())
+                *typeValue = resolveRelative(*stringValue, baseFile);
+      if (json::Object *dev = opHandle->getObject("device"))
+        if (json::Value *typeValue = dev->get("operator_table"))
+          if (std::optional<StringRef> stringValue = typeValue->getAsString())
+            *typeValue = resolveRelative(*stringValue, baseFile);
     }
     recordSources(overlay, "", origin.str(), sources);
     mergeInto(doc, overlay);
@@ -327,63 +301,62 @@ public:
       stripDocKeys(value);
     } else {
       llvm::consumeError(parsed.takeError());
-      value = text.str(); // a bare word is a string
+      value = text.str();
     }
     if (path == "run.device" || path == "run.tool") {
       json::Object run{{path.drop_front(4).str(), value}};
       apply(json::Object{{"run", std::move(run)}}, "", origin);
       return;
     }
-    // Walk to the parent, creating objects on the way.
+
     SmallVector<StringRef> parts;
     path.split(parts, '.');
     json::Value *cur = &doc;
     std::string done;
-    for (size_t i = 0; i < parts.size(); ++i) {
-      StringRef part = parts[i];
+    for (size_t loopIndex = 0; loopIndex < parts.size(); ++loopIndex) {
+      StringRef part = parts[loopIndex];
       std::optional<size_t> index;
       if (part.ends_with("]")) {
         size_t lb = part.find('[');
-        size_t n = 0;
-        if (lb == StringRef::npos ||
-            part.slice(lb + 1, part.size() - 1).getAsInteger(10, n)) {
-          diag.errors.push_back(origin + ": bad array index in '" +
-                                part.str() + "'");
+        size_t elementCount = 0;
+        if (lb == StringRef::npos || part.slice(lb + 1, part.size() - 1)
+                                         .getAsInteger(10, elementCount)) {
+          diag.errors.push_back(origin + ": bad array index in '" + part.str() +
+                                "'");
           return;
         }
-        index = n;
+        index = elementCount;
         part = part.take_front(lb);
       }
       done += (done.empty() ? "" : ".") + part.str();
-      json::Object *o = cur->getAsObject();
-      if (!o) {
+      json::Object *opHandle = cur->getAsObject();
+      if (!opHandle) {
         diag.errors.push_back(origin + ": " + done + " is not an object");
         return;
       }
-      bool last = i + 1 == parts.size();
+      bool last = loopIndex + 1 == parts.size();
       if (last && !index) {
-        (*o)[part.str()] = value;
+        (*opHandle)[part.str()] = value;
         sources[path.str()] = origin;
         return;
       }
-      json::Value *next = o->get(part);
+      json::Value *next = opHandle->get(part);
       if (!next) {
         if (index) {
           diag.errors.push_back(origin + ": " + done + " is not an array");
           return;
         }
-        (*o)[part.str()] = json::Object{};
-        next = o->get(part);
+        (*opHandle)[part.str()] = json::Object{};
+        next = opHandle->get(part);
       }
       if (index) {
-        json::Array *a = next->getAsArray();
-        if (!a || *index >= a->size()) {
+        json::Array *arrayValue = next->getAsArray();
+        if (!arrayValue || *index >= arrayValue->size()) {
           diag.errors.push_back(origin + ": " + done + "[" +
-                                std::to_string(*index) +
-                                "] does not exist");
+                                std::to_string(*index) + "] does not exist");
           return;
         }
-        next = &(*a)[*index];
+        next = &(*arrayValue)[*index];
         done += "[" + std::to_string(*index) + "]";
         if (last) {
           *next = value;
@@ -403,13 +376,9 @@ private:
   ConfigDiagnostics &diag;
 };
 
-//===----------------------------------------------------------------------===//
-// Validation against the schema.
-//===----------------------------------------------------------------------===//
-
 /// Levenshtein distance, for "did you mean".
-unsigned editDistance(StringRef a, StringRef b) {
-  return a.edit_distance(b, /*AllowReplacements=*/true);
+unsigned editDistance(StringRef arrayValue, StringRef b) {
+  return arrayValue.edit_distance(b, true);
 }
 
 class Validator {
@@ -432,29 +401,29 @@ private:
   /// The keys a section at `pattern` may hold.
   static std::vector<const KeySpec *> childrenOf(const std::string &pattern) {
     std::vector<const KeySpec *> out;
-    for (const KeySpec &k : configSchema()) {
-      StringRef p(k.path);
+    for (const KeySpec &keyValue : configSchema()) {
+      StringRef portValue(keyValue.path);
       if (pattern.empty()) {
-        if (!p.contains('.'))
-          out.push_back(&k);
+        if (!portValue.contains('.'))
+          out.push_back(&keyValue);
         continue;
       }
-      if (p.starts_with(pattern + ".") &&
-          !p.drop_front(pattern.size() + 1).contains('.'))
-        out.push_back(&k);
+      if (portValue.starts_with(pattern + ".") &&
+          !portValue.drop_front(pattern.size() + 1).contains('.'))
+        out.push_back(&keyValue);
     }
     return out;
   }
 
-  void object(const json::Value &v, const std::string &pattern,
+  void object(const json::Value &valueHandle, const std::string &pattern,
               const std::string &where) {
-    const json::Object *o = v.getAsObject();
-    if (!o) {
+    const json::Object *opHandle = valueHandle.getAsObject();
+    if (!opHandle) {
       error(where, "expected an object");
       return;
     }
     std::vector<const KeySpec *> kids = childrenOf(pattern);
-    for (const auto &kv : *o) {
+    for (const auto &kv : *opHandle) {
       StringRef key = kv.first;
       if (key.starts_with("_"))
         continue;
@@ -466,13 +435,13 @@ private:
         std::string msg = "unknown key";
         unsigned best = ~0u;
         StringRef bestName;
-        for (const KeySpec *k : kids) {
-          StringRef name = StringRef(k->path).rsplit('.').second;
+        for (const KeySpec *keyValue : kids) {
+          StringRef name = StringRef(keyValue->path).rsplit('.').second;
           if (name.empty())
-            name = k->path;
-          unsigned d = editDistance(key, name);
-          if (d < best) {
-            best = d;
+            name = keyValue->path;
+          unsigned dimensionIndex = editDistance(key, name);
+          if (dimensionIndex < best) {
+            best = dimensionIndex;
             bestName = name;
           }
         }
@@ -483,185 +452,193 @@ private:
       }
       value(kv.second, *spec, childWhere);
     }
-    for (const KeySpec *k : kids) {
-      StringRef name = StringRef(k->path).rsplit('.').second;
+    for (const KeySpec *keyValue : kids) {
+      StringRef name = StringRef(keyValue->path).rsplit('.').second;
       if (name.empty())
-        name = k->path;
-      if (!k->optional && !o->get(name))
+        name = keyValue->path;
+      if (!keyValue->optional && !opHandle->get(name))
         error(pattern.empty() ? name.str() : where + "." + name.str(),
               "missing (required)");
     }
   }
 
-  void number(const json::Value &v, const KeySpec &spec,
+  void number(const json::Value &valueHandle, const KeySpec &spec,
               const std::string &where) {
-    std::optional<double> d = v.getAsNumber();
-    if (!d)
+    std::optional<double> dimensionIndex = valueHandle.getAsNumber();
+    if (!dimensionIndex)
       return;
-    if (!std::isnan(spec.min) && *d < spec.min)
-      error(where, "out of range: " + formatNumber(*d) + " < minimum " +
-                       formatNumber(spec.min));
-    if (!std::isnan(spec.max) && *d > spec.max)
-      error(where, "out of range: " + formatNumber(*d) + " > maximum " +
-                       formatNumber(spec.max));
+    if (!std::isnan(spec.min) && *dimensionIndex < spec.min)
+      error(where, "out of range: " + formatNumber(*dimensionIndex) +
+                       " < minimum " + formatNumber(spec.min));
+    if (!std::isnan(spec.max) && *dimensionIndex > spec.max)
+      error(where, "out of range: " + formatNumber(*dimensionIndex) +
+                       " > maximum " + formatNumber(spec.max));
   }
 
-  static std::string formatNumber(double d) {
-    if (d == std::floor(d) && std::fabs(d) < 1e15)
-      return std::to_string(static_cast<int64_t>(d));
-    return std::to_string(d);
+  static std::string formatNumber(double dimensionIndex) {
+    if (dimensionIndex == std::floor(dimensionIndex) &&
+        std::fabs(dimensionIndex) < 1e15)
+      return std::to_string(static_cast<int64_t>(dimensionIndex));
+    return std::to_string(dimensionIndex);
   }
 
-  bool isInteger(const json::Value &v) { return v.getAsInteger().has_value(); }
+  bool isInteger(const json::Value &valueHandle) {
+    return valueHandle.getAsInteger().has_value();
+  }
 
   /// A whole number beyond the 64-bit signed range (JSON reads it, but not as
   /// an integer): out of range rather than of the wrong type.
-  bool tooLarge(const json::Value &v, const std::string &where) {
-    std::optional<double> d = v.getAsNumber();
-    if (isInteger(v) || !d || *d != std::floor(*d))
+  bool tooLarge(const json::Value &valueHandle, const std::string &where) {
+    std::optional<double> dimensionIndex = valueHandle.getAsNumber();
+    if (isInteger(valueHandle) || !dimensionIndex ||
+        *dimensionIndex != std::floor(*dimensionIndex))
       return false;
     char text[32];
-    std::snprintf(text, sizeof(text), "%.17g", *d);
+    std::snprintf(text, sizeof(text), "%.17g", *dimensionIndex);
     error(where, "out of range: " + std::string(text) +
                      " exceeds the 64-bit integer range");
     return true;
   }
 
-  void enumValue(StringRef s, StringRef values, const std::string &where) {
+  void enumValue(StringRef stringValue, StringRef values,
+                 const std::string &where) {
     SmallVector<StringRef> allowed;
     values.split(allowed, '|');
-    if (!llvm::is_contained(allowed, s))
-      error(where, "'" + s.str() + "' is not one of " +
+    if (!llvm::is_contained(allowed, stringValue))
+      error(where, "'" + stringValue.str() + "' is not one of " +
                        llvm::join(allowed, ", "));
   }
 
-  void value(const json::Value &v, const KeySpec &spec,
+  void value(const json::Value &valueHandle, const KeySpec &spec,
              const std::string &where) {
     auto typeError = [&](StringRef expected) {
       error(where, "wrong type: expected " + expected.str());
     };
     switch (spec.kind) {
     case KeyKind::Section:
-      object(v, spec.path, where);
+      object(valueHandle, spec.path, where);
       return;
     case KeyKind::ObjectList: {
-      const json::Array *a = v.getAsArray();
-      if (!a)
+      const json::Array *arrayValue = valueHandle.getAsArray();
+      if (!arrayValue)
         return typeError("an array of objects");
-      for (size_t i = 0; i < a->size(); ++i)
-        object((*a)[i], std::string(spec.path) + "[]",
-               where + "[" + std::to_string(i) + "]");
+      for (size_t loopIndex = 0; loopIndex < arrayValue->size(); ++loopIndex)
+        object((*arrayValue)[loopIndex], std::string(spec.path) + "[]",
+               where + "[" + std::to_string(loopIndex) + "]");
       return;
     }
     case KeyKind::FreeObject:
-      if (!v.getAsObject())
+      if (!valueHandle.getAsObject())
         typeError("an object");
       return;
     case KeyKind::FreeArray:
-      if (!v.getAsArray())
+      if (!valueHandle.getAsArray())
         typeError("an array");
       return;
     case KeyKind::Bool:
-      if (!v.getAsBoolean())
+      if (!valueHandle.getAsBoolean())
         typeError("true or false");
       return;
     case KeyKind::Int:
-      if (tooLarge(v, where))
+      if (tooLarge(valueHandle, where))
         return;
-      if (!isInteger(v))
+      if (!isInteger(valueHandle))
         return typeError("an integer");
-      number(v, spec, where);
+      number(valueHandle, spec, where);
       return;
     case KeyKind::UInt:
-      if (tooLarge(v, where))
+      if (tooLarge(valueHandle, where))
         return;
-      if (!isInteger(v) || *v.getAsInteger() < 0)
+      if (!isInteger(valueHandle) || *valueHandle.getAsInteger() < 0)
         return typeError("a non-negative integer");
-      number(v, spec, where);
+      number(valueHandle, spec, where);
       return;
     case KeyKind::NullableUInt:
-      if (v.kind() == json::Value::Null || tooLarge(v, where))
+      if (valueHandle.kind() == json::Value::Null ||
+          tooLarge(valueHandle, where))
         return;
-      if (!isInteger(v) || *v.getAsInteger() < 0)
+      if (!isInteger(valueHandle) || *valueHandle.getAsInteger() < 0)
         return typeError("a non-negative integer or null");
-      number(v, spec, where);
+      number(valueHandle, spec, where);
       return;
     case KeyKind::Number:
-      if (!v.getAsNumber())
+      if (!valueHandle.getAsNumber())
         return typeError("a number");
-      number(v, spec, where);
+      number(valueHandle, spec, where);
       return;
     case KeyKind::String:
-      if (!v.getAsString())
+      if (!valueHandle.getAsString())
         typeError("a string");
       return;
     case KeyKind::NullablePath:
-      if (v.kind() != json::Value::Null && !v.getAsString())
+      if (valueHandle.kind() != json::Value::Null && !valueHandle.getAsString())
         typeError("a path string or null");
       return;
     case KeyKind::NullableObject:
-      if (v.kind() != json::Value::Null && !v.getAsObject())
+      if (valueHandle.kind() != json::Value::Null && !valueHandle.getAsObject())
         typeError("an object or null");
       return;
     case KeyKind::Enum:
-      if (std::optional<StringRef> s = v.getAsString())
-        enumValue(*s, spec.values, where);
+      if (std::optional<StringRef> stringValue = valueHandle.getAsString())
+        enumValue(*stringValue, spec.values, where);
       else
         typeError("a string");
       return;
     case KeyKind::PluginName: {
-      std::optional<StringRef> s = v.getAsString();
-      if (!s)
+      std::optional<StringRef> stringValue = valueHandle.getAsString();
+      if (!stringValue)
         return typeError("a plugin name");
       const PluginNameCheck &check = getPluginNameCheck();
       std::string known;
-      if (check && !check(spec.values, *s, known))
+      if (check && !check(spec.values, *stringValue, known))
         error(where, "no " + std::string(spec.values) + " plugin named '" +
-                         s->str() + "' is registered (registered: " + known +
-                         ")");
+                         stringValue->str() +
+                         "' is registered (registered: " + known + ")");
       return;
     }
     case KeyKind::StringList: {
-      const json::Array *a = v.getAsArray();
-      if (!a)
+      const json::Array *arrayValue = valueHandle.getAsArray();
+      if (!arrayValue)
         return typeError("an array of strings");
-      for (size_t i = 0; i < a->size(); ++i) {
-        std::optional<StringRef> s = (*a)[i].getAsString();
-        std::string w = where + "[" + std::to_string(i) + "]";
-        if (!s)
-          error(w, "wrong type: expected a string");
+      for (size_t loopIndex = 0; loopIndex < arrayValue->size(); ++loopIndex) {
+        std::optional<StringRef> stringValue =
+            (*arrayValue)[loopIndex].getAsString();
+        std::string widthValue = where + "[" + std::to_string(loopIndex) + "]";
+        if (!stringValue)
+          error(widthValue, "wrong type: expected a string");
         else if (*spec.values)
-          enumValue(*s, spec.values, w);
+          enumValue(*stringValue, spec.values, widthValue);
       }
       return;
     }
     case KeyKind::PortSetList: {
-      const json::Array *a = v.getAsArray();
-      if (!a)
+      const json::Array *arrayValue = valueHandle.getAsArray();
+      if (!arrayValue)
         return typeError("an array of port sets");
-      for (size_t i = 0; i < a->size(); ++i) {
-        std::string w = where + "[" + std::to_string(i) + "]";
-        const json::Array *set = (*a)[i].getAsArray();
+      for (size_t loopIndex = 0; loopIndex < arrayValue->size(); ++loopIndex) {
+        std::string widthValue = where + "[" + std::to_string(loopIndex) + "]";
+        const json::Array *set = (*arrayValue)[loopIndex].getAsArray();
         if (!set) {
-          error(w, "wrong type: expected an array of r / w / rw");
+          error(widthValue, "wrong type: expected an array of r / w / rw");
           continue;
         }
-        for (size_t j = 0; j < set->size(); ++j) {
-          std::optional<StringRef> s = (*set)[j].getAsString();
-          std::string wj = w + "[" + std::to_string(j) + "]";
-          if (!s)
+        for (size_t innerIndex = 0; innerIndex < set->size(); ++innerIndex) {
+          std::optional<StringRef> stringValue =
+              (*set)[innerIndex].getAsString();
+          std::string wj = widthValue + "[" + std::to_string(innerIndex) + "]";
+          if (!stringValue)
             error(wj, "wrong type: expected r, w or rw");
           else
-            enumValue(*s, "r|w|rw", wj);
+            enumValue(*stringValue, "r|w|rw", wj);
         }
       }
       return;
     }
     case KeyKind::ResourceVector: {
-      const json::Object *o = v.getAsObject();
-      if (!o)
+      const json::Object *opHandle = valueHandle.getAsObject();
+      if (!opHandle)
         return typeError("an object {class: count}");
-      for (const auto &kv : *o)
+      for (const auto &kv : *opHandle)
         if (!StringRef(kv.first).starts_with("_") &&
             !Rational::fromJson(kv.second))
           error(where + "." + kv.first.str(),
@@ -669,19 +646,19 @@ private:
       return;
     }
     case KeyKind::IntMap: {
-      const json::Object *o = v.getAsObject();
-      if (!o)
+      const json::Object *opHandle = valueHandle.getAsObject();
+      if (!opHandle)
         return typeError("an object {name: integer}");
-      for (const auto &kv : *o) {
+      for (const auto &kv : *opHandle) {
         if (StringRef(kv.first).starts_with("_"))
           continue;
-        std::string w = where + "." + kv.first.str();
-        if (tooLarge(kv.second, w))
+        std::string widthValue = where + "." + kv.first.str();
+        if (tooLarge(kv.second, widthValue))
           continue;
         if (!isInteger(kv.second))
-          error(w, "wrong type: expected an integer");
+          error(widthValue, "wrong type: expected an integer");
         else
-          number(kv.second, spec, w);
+          number(kv.second, spec, widthValue);
       }
       return;
     }
@@ -689,73 +666,69 @@ private:
   }
 };
 
-//===----------------------------------------------------------------------===//
-// Typed fill (after validation: present keys have the right type).
-//===----------------------------------------------------------------------===//
-
-const json::Object &obj(const json::Object &o, StringRef key) {
+const json::Object &obj(const json::Object &opHandle, StringRef key) {
   static const json::Object empty;
-  const json::Object *p = o.getObject(key);
-  return p ? *p : empty;
+  const json::Object *portValue = opHandle.getObject(key);
+  return portValue ? *portValue : empty;
 }
-std::string str(const json::Object &o, StringRef key,
+std::string str(const json::Object &opHandle, StringRef key,
                 StringRef dflt = StringRef()) {
-  if (std::optional<StringRef> s = o.getString(key))
-    return s->str();
+  if (std::optional<StringRef> stringValue = opHandle.getString(key))
+    return stringValue->str();
   return dflt.str();
 }
-int64_t integer(const json::Object &o, StringRef key, int64_t dflt = 0) {
-  if (std::optional<int64_t> i = o.getInteger(key))
-    return *i;
+int64_t integer(const json::Object &opHandle, StringRef key, int64_t dflt = 0) {
+  if (std::optional<int64_t> loopIndex = opHandle.getInteger(key))
+    return *loopIndex;
   return dflt;
 }
-std::optional<int64_t> optInteger(const json::Object &o, StringRef key) {
-  return o.getInteger(key);
+std::optional<int64_t> optInteger(const json::Object &opHandle, StringRef key) {
+  return opHandle.getInteger(key);
 }
-double number(const json::Object &o, StringRef key, double dflt = 0) {
-  if (std::optional<double> d = o.getNumber(key))
-    return *d;
+double number(const json::Object &opHandle, StringRef key, double dflt = 0) {
+  if (std::optional<double> dimensionIndex = opHandle.getNumber(key))
+    return *dimensionIndex;
   return dflt;
 }
-std::optional<double> optNumber(const json::Object &o, StringRef key) {
-  return o.getNumber(key);
+std::optional<double> optNumber(const json::Object &opHandle, StringRef key) {
+  return opHandle.getNumber(key);
 }
-bool boolean(const json::Object &o, StringRef key, bool dflt = false) {
-  if (std::optional<bool> b = o.getBoolean(key))
+bool boolean(const json::Object &opHandle, StringRef key, bool dflt = false) {
+  if (std::optional<bool> b = opHandle.getBoolean(key))
     return *b;
   return dflt;
 }
-std::vector<std::string> strings(const json::Object &o, StringRef key) {
+std::vector<std::string> strings(const json::Object &opHandle, StringRef key) {
   std::vector<std::string> out;
-  if (const json::Array *a = o.getArray(key))
-    for (const json::Value &v : *a)
-      if (std::optional<StringRef> s = v.getAsString())
-        out.push_back(s->str());
+  if (const json::Array *arrayValue = opHandle.getArray(key))
+    for (const json::Value &valueHandle : *arrayValue)
+      if (std::optional<StringRef> stringValue = valueHandle.getAsString())
+        out.push_back(stringValue->str());
   return out;
 }
-ResourceVector resources(const json::Object &o, StringRef key) {
-  ResourceVector r;
-  if (const json::Object *rv = o.getObject(key))
+ResourceVector resources(const json::Object &opHandle, StringRef key) {
+  ResourceVector resultValue;
+  if (const json::Object *rv = opHandle.getObject(key))
     for (const auto &kv : *rv)
-      if (std::optional<Rational> n = Rational::fromJson(kv.second))
-        r.add(kv.first, *n);
-  return r;
+      if (std::optional<Rational> elementCount = Rational::fromJson(kv.second))
+        resultValue.add(kv.first, *elementCount);
+  return resultValue;
 }
 template <class F>
-void eachObject(const json::Object &o, StringRef key, F f) {
-  if (const json::Array *a = o.getArray(key))
-    for (const json::Value &v : *a)
-      if (const json::Object *e = v.getAsObject())
-        f(*e);
+void eachObject(const json::Object &opHandle, StringRef key, F fieldValue) {
+  if (const json::Array *arrayValue = opHandle.getArray(key))
+    for (const json::Value &valueHandle : *arrayValue)
+      if (const json::Object *entryValue = valueHandle.getAsObject())
+        fieldValue(*entryValue);
 }
 
-void fillDevice(const json::Object &d, Device &dev) {
-  dev.id = str(d, "id");
-  dev.part = str(d, "part");
-  dev.speedGrade = str(d, "speed_grade");
-  dev.status = str(d, "_status", "unvalidated");
-  dev.toolIds = obj(d, "tool_ids");
-  eachObject(d, "resource_classes", [&](const json::Object &c) {
+void fillDevice(const json::Object &dimensionIndex, Device &dev) {
+  dev.id = str(dimensionIndex, "id");
+  dev.part = str(dimensionIndex, "part");
+  dev.speedGrade = str(dimensionIndex, "speed_grade");
+  dev.status = str(dimensionIndex, "_status", "unvalidated");
+  dev.toolIds = obj(dimensionIndex, "tool_ids");
+  eachObject(dimensionIndex, "resource_classes", [&](const json::Object &c) {
     ResourceClass rc;
     rc.name = str(c, "name");
     rc.capacity = optInteger(c, "capacity");
@@ -763,70 +736,75 @@ void fillDevice(const json::Object &d, Device &dev) {
     rc.equivalent = resources(c, "equivalent");
     dev.resourceClasses.push_back(std::move(rc));
   });
-  eachObject(d, "memories", [&](const json::Object &m) {
+  eachObject(dimensionIndex, "memories", [&](const json::Object &memoryOp) {
     DeviceMemory mem;
-    mem.id = str(m, "id");
-    mem.tier = str(m, "tier");
-    mem.cost = resources(m, "cost");
-    mem.overhead = resources(m, "overhead");
-    mem.bits = integer(m, "bits");
-    eachObject(m, "geometries", [&](const json::Object &g) {
-      mem.geometries.push_back(
-          {integer(g, "width"), integer(g, "depth"), optInteger(g, "byte")});
+    mem.id = str(memoryOp, "id");
+    mem.tier = str(memoryOp, "tier");
+    mem.cost = resources(memoryOp, "cost");
+    mem.overhead = resources(memoryOp, "overhead");
+    mem.bits = integer(memoryOp, "bits");
+    eachObject(memoryOp, "geometries", [&](const json::Object &globalOp) {
+      mem.geometries.push_back({integer(globalOp, "width"),
+                                integer(globalOp, "depth"),
+                                optInteger(globalOp, "byte")});
     });
-    eachObject(m, "port_configs", [&](const json::Object &p) {
+    eachObject(memoryOp, "port_configs", [&](const json::Object &portValue) {
       PortConfig pc;
-      pc.name = str(p, "name");
-      pc.ports = strings(p, "ports");
-      pc.maxWidth = integer(p, "max_width");
-      pc.mixedWidth = boolean(p, "mixed_width");
+      pc.name = str(portValue, "name");
+      pc.ports = strings(portValue, "ports");
+      pc.maxWidth = integer(portValue, "max_width");
+      pc.mixedWidth = boolean(portValue, "mixed_width");
       mem.portConfigs.push_back(std::move(pc));
     });
-    mem.init = str(m, "init");
-    eachObject(m, "read_latency_options", [&](const json::Object &r) {
-      mem.readLatencyOptions.push_back(
-          {integer(r, "cycles"), optNumber(r, "max_freq_mhz")});
-    });
-    mem.fmaxMhz = optNumber(m, "fmax_mhz");
+    mem.init = str(memoryOp, "init");
+    eachObject(memoryOp, "read_latency_options",
+               [&](const json::Object &resultValue) {
+                 mem.readLatencyOptions.push_back(
+                     {integer(resultValue, "cycles"),
+                      optNumber(resultValue, "max_freq_mhz")});
+               });
+    mem.fmaxMhz = optNumber(memoryOp, "fmax_mhz");
     dev.memories.push_back(std::move(mem));
   });
-  eachObject(d, "shift_registers", [&](const json::Object &s) {
-    dev.shiftRegisters.push_back({str(s, "id"), integer(s, "max_depth"),
-                                  integer(s, "width"), resources(s, "cost")});
-  });
-  eachObject(d, "arith", [&](const json::Object &a) {
+  eachObject(
+      dimensionIndex, "shift_registers", [&](const json::Object &stringValue) {
+        dev.shiftRegisters.push_back(
+            {str(stringValue, "id"), integer(stringValue, "max_depth"),
+             integer(stringValue, "width"), resources(stringValue, "cost")});
+      });
+  eachObject(dimensionIndex, "arith", [&](const json::Object &arrayValue) {
     ArithBlock b;
-    b.id = str(a, "id");
-    b.cost = resources(a, "cost");
-    b.overhead = resources(a, "overhead");
-    eachObject(a, "mul", [&](const json::Object &m) {
-      b.mul.push_back({integer(m, "a"), integer(m, "b"), str(m, "signed"),
-                       integer(m, "count", 1)});
+    b.id = str(arrayValue, "id");
+    b.cost = resources(arrayValue, "cost");
+    b.overhead = resources(arrayValue, "overhead");
+    eachObject(arrayValue, "mul", [&](const json::Object &memoryOp) {
+      b.mul.push_back({integer(memoryOp, "a"), integer(memoryOp, "b"),
+                       str(memoryOp, "signed"), integer(memoryOp, "count", 1)});
     });
-    b.preAdd = optInteger(a, "pre_add");
-    b.acc = optInteger(a, "acc");
-    b.hardFp = strings(a, "hard_fp");
-    b.fmaxMhz = optNumber(a, "fmax_mhz");
+    b.preAdd = optInteger(arrayValue, "pre_add");
+    b.acc = optInteger(arrayValue, "acc");
+    b.hardFp = strings(arrayValue, "hard_fp");
+    b.fmaxMhz = optNumber(arrayValue, "fmax_mhz");
     dev.arith.push_back(std::move(b));
   });
-  const json::Object &l = obj(d, "logic");
-  dev.logic.cell = str(l, "cell");
-  dev.logic.lutInputs = integer(l, "lut_inputs");
-  dev.logic.fracturable = l.getBoolean("fracturable");
-  dev.logic.regsPerCell = optInteger(l, "regs_per_cell");
-  dev.logic.cost = resources(l, "cost");
-  if (const json::Value *t = d.get("timing"))
-    if (t->kind() != json::Value::Null)
-      dev.timing = *t;
-  dev.operatorTable = str(d, "operator_table");
+  const json::Object &lowerIndex = obj(dimensionIndex, "logic");
+  dev.logic.cell = str(lowerIndex, "cell");
+  dev.logic.lutInputs = integer(lowerIndex, "lut_inputs");
+  dev.logic.fracturable = lowerIndex.getBoolean("fracturable");
+  dev.logic.regsPerCell = optInteger(lowerIndex, "regs_per_cell");
+  dev.logic.cost = resources(lowerIndex, "cost");
+  if (const json::Value *typeValue = dimensionIndex.get("timing"))
+    if (typeValue->kind() != json::Value::Null)
+      dev.timing = *typeValue;
+  dev.operatorTable = str(dimensionIndex, "operator_table");
 }
 
-void fillTool(const json::Object &t, ToolProfile &tool) {
-  tool.id = str(t, "id");
-  tool.name = str(t, "name");
-  tool.version = str(t, "version");
-  tool.pipeline = str(t, "pipeline");
-  const json::Object &hls = obj(t, "hls");
+void fillTool(const json::Object &typeValue, ToolProfile &tool) {
+  tool.id = str(typeValue, "id");
+  tool.name = str(typeValue, "name");
+  tool.version = str(typeValue, "version");
+  tool.pipeline = str(typeValue, "pipeline");
+  const json::Object &hls = obj(typeValue, "hls");
   HlsToolConfig &h = tool.hls;
   const json::Object &opts = obj(hls, "options");
   h.options.flowTarget = str(opts, "flow_target");
@@ -841,67 +819,69 @@ void fillTool(const json::Object &t, ToolProfile &tool) {
   h.timingMargin.ns = optNumber(tm, "ns");
 
   const json::Object &ma = obj(hls, "memory_architecture");
-  MemoryArchitectureConfig &m = h.memoryArchitecture;
-  m.plugin = str(ma, "plugin");
-  m.untrackedMemoryPorts = integer(ma, "untracked_memory_ports");
-  m.partitionedArgumentBankPorts =
+  MemoryArchitectureConfig &memoryOp = h.memoryArchitecture;
+  memoryOp.plugin = str(ma, "plugin");
+  memoryOp.untrackedMemoryPorts = integer(ma, "untracked_memory_ports");
+  memoryOp.partitionedArgumentBankPorts =
       boolean(ma, "partitioned_argument_bank_ports", true);
-  m.oneLoopReadWriteSdp = boolean(ma, "one_loop_read_write_sdp", true);
-  m.iterationPrivateRegisters =
+  memoryOp.oneLoopReadWriteSdp = boolean(ma, "one_loop_read_write_sdp", true);
+  memoryOp.iterationPrivateRegisters =
       boolean(ma, "iteration_private_registers", true);
-  m.portOccupancyCycles = integer(ma, "port_occupancy_cycles");
+  memoryOp.portOccupancyCycles = integer(ma, "port_occupancy_cycles");
   const json::Object &rep = obj(ma, "replication");
-  m.replication.maxCopies = integer(rep, "max_copies");
-  m.replication.maxStoresPerIteration =
+  memoryOp.replication.maxCopies = integer(rep, "max_copies");
+  memoryOp.replication.maxStoresPerIteration =
       integer(rep, "max_stores_per_iteration");
-  m.replication.sharedWritePortReadsWhenIdle =
+  memoryOp.replication.sharedWritePortReadsWhenIdle =
       boolean(rep, "shared_write_port_reads_when_idle");
-  m.replication.exclusiveArmStoresOnce =
+  memoryOp.replication.exclusiveArmStoresOnce =
       boolean(rep, "exclusive_arm_stores_once");
-  m.replication.calleeStoresPerLoop = boolean(rep, "callee_stores_per_loop");
-  m.replication.callerStoresPerLoop =
+  memoryOp.replication.calleeStoresPerLoop =
+      boolean(rep, "callee_stores_per_loop");
+  memoryOp.replication.callerStoresPerLoop =
       boolean(rep, "caller_stores_per_loop", true);
-  m.replication.portBoundSeveralArrays =
+  memoryOp.replication.portBoundSeveralArrays =
       boolean(rep, "port_bound_several_arrays", true);
-  m.replication.portBoundWritableGlobals =
+  memoryOp.replication.portBoundWritableGlobals =
       boolean(rep, "port_bound_writable_globals", true);
-  m.replication.rotatingReadsFullCopies =
+  memoryOp.replication.rotatingReadsFullCopies =
       boolean(rep, "rotating_reads_full_copies", false);
-  m.replication.userRam1wnrReplicable =
+  memoryOp.replication.userRam1wnrReplicable =
       boolean(rep, "user_ram_1wnr_replicable", false);
-  m.replication.exclusiveSteeredReadsShareSlot =
+  memoryOp.replication.exclusiveSteeredReadsShareSlot =
       boolean(rep, "exclusive_steered_reads_share_slot", false);
-  m.replication.selectOfLoadsReload =
+  memoryOp.replication.selectOfLoadsReload =
       boolean(rep, "select_of_loads_reload", false);
-  m.replication.sequentialStateReads =
+  memoryOp.replication.sequentialStateReads =
       boolean(rep, "sequential_state_reads", false);
-  m.replication.userPlainRamPinsKind =
+  memoryOp.replication.userPlainRamPinsKind =
       boolean(rep, "user_plain_ram_pins_kind", false);
   const json::Object &rom = obj(ma, "rom");
-  m.rom.sdpMaxReads = integer(rom, "sdp_max_reads");
-  m.rom.copies = str(rom, "copies");
-  m.rom.sequentialStateReads = boolean(rom, "sequential_state_reads", true);
-  m.rom.functionPipelineReads =
+  memoryOp.rom.sdpMaxReads = integer(rom, "sdp_max_reads");
+  memoryOp.rom.copies = str(rom, "copies");
+  memoryOp.rom.sequentialStateReads =
+      boolean(rom, "sequential_state_reads", true);
+  memoryOp.rom.functionPipelineReads =
       boolean(rom, "function_pipeline_reads", true);
-  m.rom.moduleCopies = boolean(rom, "module_copies", true);
-  m.rom.moduleCopiesParentReads =
+  memoryOp.rom.moduleCopies = boolean(rom, "module_copies", true);
+  memoryOp.rom.moduleCopiesParentReads =
       boolean(rom, "module_copies_parent_reads", false);
-  m.sequentialScopeModel = str(obj(ma, "sequential_scope"), "model");
-  m.sequentialLoadsBeforeConsumer =
+  memoryOp.sequentialScopeModel = str(obj(ma, "sequential_scope"), "model");
+  memoryOp.sequentialLoadsBeforeConsumer =
       boolean(obj(ma, "sequential_scope"), "loads_before_consumer", true);
-  m.portSetRule = str(ma, "port_set_rule");
+  memoryOp.portSetRule = str(ma, "port_set_rule");
   if (const json::Array *sets = ma.getArray("wide_port_sets"))
-    for (const json::Value &s : *sets) {
+    for (const json::Value &stringValue : *sets) {
       std::vector<std::string> set;
-      if (const json::Array *a = s.getAsArray())
-        for (const json::Value &p : *a)
-          if (std::optional<StringRef> ps = p.getAsString())
+      if (const json::Array *arrayValue = stringValue.getAsArray())
+        for (const json::Value &portValue : *arrayValue)
+          if (std::optional<StringRef> ps = portValue.getAsString())
             set.push_back(ps->str());
-      m.widePortSets.push_back(std::move(set));
+      memoryOp.widePortSets.push_back(std::move(set));
     }
   const json::Object &pc = obj(ma, "priced_configs");
-  m.pricedWide = str(pc, "wide");
-  m.pricedNarrow = str(pc, "narrow");
+  memoryOp.pricedWide = str(pc, "wide");
+  memoryOp.pricedNarrow = str(pc, "narrow");
 
   eachObject(hls, "implicit_buffers", [&](const json::Object &b) {
     ImplicitBufferConfig ib;
@@ -913,11 +893,15 @@ void fillTool(const json::Object &t, ToolProfile &tool) {
     ib.defaultBundle = str(b, "default_bundle");
     ib.minBusBits = integer(b, "min_bus_bits", 32);
     ib.maxBusBits = integer(b, "max_bus_bits", 1024);
-    const json::Object &d = obj(b, "defaults");
-    ib.defaults.maxReadBurstLength = integer(d, "max_read_burst_length", 16);
-    ib.defaults.numReadOutstanding = integer(d, "num_read_outstanding", 16);
-    ib.defaults.maxWriteBurstLength = integer(d, "max_write_burst_length", 16);
-    ib.defaults.numWriteOutstanding = integer(d, "num_write_outstanding", 16);
+    const json::Object &dimensionIndex = obj(b, "defaults");
+    ib.defaults.maxReadBurstLength =
+        integer(dimensionIndex, "max_read_burst_length", 16);
+    ib.defaults.numReadOutstanding =
+        integer(dimensionIndex, "num_read_outstanding", 16);
+    ib.defaults.maxWriteBurstLength =
+        integer(dimensionIndex, "max_write_burst_length", 16);
+    ib.defaults.numWriteOutstanding =
+        integer(dimensionIndex, "num_write_outstanding", 16);
     const json::Object &rf = obj(b, "read_fifo");
     ib.readFifoSrlMaxDepth = integer(rf, "srl_max_depth", 32);
     ib.readFifoMapper = str(rf, "mapper", "vitis-band7");
@@ -953,13 +937,11 @@ void fillTool(const json::Object &t, ToolProfile &tool) {
       boolean(st, "dataflow_argument_fifos", true);
   h.streams.distinctElementInstances =
       boolean(st, "distinct_element_instances", true);
-  h.streams.declaredElementBits =
-      boolean(st, "declared_element_bits", true);
+  h.streams.declaredElementBits = boolean(st, "declared_element_bits", true);
   h.streams.staticStructStorageBits =
       boolean(st, "static_struct_storage_bits", true);
   h.streams.streamPragmaArrays = boolean(st, "stream_pragma_arrays", true);
-  h.streams.elementDepthPragmas =
-      boolean(st, "element_depth_pragmas", false);
+  h.streams.elementDepthPragmas = boolean(st, "element_depth_pragmas", false);
   const json::Object &dc = obj(hls, "dataflow_channels");
   h.dataflowChannels.enabled = boolean(dc, "enabled");
   h.dataflowChannels.defaultBlocks = integer(dc, "default_blocks");
@@ -973,8 +955,7 @@ void fillTool(const json::Object &t, ToolProfile &tool) {
   h.pipelineDecision.floatLoadsPerfect = boolean(pd, "float_loads_perfect");
   h.pipelineDecision.promotePipelined = boolean(pd, "promote_pipelined");
   h.pipelineDecision.flattenAcrossCalls = boolean(pd, "flatten_across_calls");
-  h.pipelineDecision.sinkParentCode =
-      boolean(pd, "sink_parent_code", true);
+  h.pipelineDecision.sinkParentCode = boolean(pd, "sink_parent_code", true);
   h.pipelineDecision.sinkParentTrailingCode =
       boolean(pd, "sink_parent_trailing_code", true);
   h.pipelineDecision.sinkParentTrailingStores =
@@ -1044,8 +1025,7 @@ void fillTool(const json::Object &t, ToolProfile &tool) {
       boolean(pa, "reachable_store_banks", true);
   h.partitioning.completePartitionRegisters =
       boolean(pa, "complete_partition_registers", true);
-  h.partitioning.knownResidueBanks =
-      boolean(pa, "known_residue_banks", true);
+  h.partitioning.knownResidueBanks = boolean(pa, "known_residue_banks", true);
   h.partitioning.banksFromValueRange =
       boolean(pa, "banks_from_value_range", false);
   h.partitioning.reshapedCalleeParameters =
@@ -1064,10 +1044,8 @@ void fillTool(const json::Object &t, ToolProfile &tool) {
   pi.rotatingBanks = boolean(inf, "rotating_banks");
   pi.maxScannedFactor = integer(inf, "max_scanned_factor");
   h.partitioning.steerAffineLoads = boolean(pa, "steer_affine_loads");
-  h.partitioning.steerWindowGroups =
-      boolean(pa, "steer_window_groups", true);
-  h.partitioning.steerThroughGuards =
-      boolean(pa, "steer_through_guards", true);
+  h.partitioning.steerWindowGroups = boolean(pa, "steer_window_groups", true);
+  h.partitioning.steerThroughGuards = boolean(pa, "steer_through_guards", true);
   h.partitioning.dropUnreadBanks = boolean(pa, "drop_unread_banks", true);
   h.partitioning.inductionResidueBanks =
       boolean(pa, "induction_residue_banks", true);
@@ -1112,12 +1090,10 @@ void fillTool(const json::Object &t, ToolProfile &tool) {
   mid.deadMemory.honourPreserve = boolean(dm, "honour_preserve");
   mid.deadMemory.globalSharedByFunctionsEscapes =
       boolean(dm, "global_shared_by_functions_escapes");
-  mid.deadMemory.keepLoadStoreCycles =
-      boolean(dm, "load_store_cycles", true);
+  mid.deadMemory.keepLoadStoreCycles = boolean(dm, "load_store_cycles", true);
   mid.deadMemory.overwrittenCallOutputs =
       boolean(dm, "overwritten_call_outputs", true);
-  mid.deadMemory.overwrittenByLoops =
-      boolean(dm, "overwritten_by_loops", true);
+  mid.deadMemory.overwrittenByLoops = boolean(dm, "overwritten_by_loops", true);
   mid.deadMemory.unreadRegisterElements =
       boolean(dm, "unread_register_elements", true);
 
@@ -1132,8 +1108,7 @@ void fillTool(const json::Object &t, ToolProfile &tool) {
   h.structs.elementCopyLoops = boolean(sc, "element_copy_loops", true);
   h.structs.temporaryRegisters = boolean(sc, "temporary_registers", true);
   h.structs.memberPartitions = boolean(sc, "member_partitions", true);
-  h.structs.specializeSplitCasts =
-      boolean(sc, "specialize_split_casts", true);
+  h.structs.specializeSplitCasts = boolean(sc, "specialize_split_casts", true);
   h.structs.topPointerScalar = boolean(sc, "top_pointer_scalar", true);
   const json::Object &na = obj(hls, "narrowing");
   h.narrowing.storedRanges = boolean(na, "stored_ranges");
@@ -1145,8 +1120,7 @@ void fillTool(const json::Object &t, ToolProfile &tool) {
   h.narrowing.accumulationRanges = boolean(na, "accumulation_ranges", true);
   h.narrowing.calleeParamStoresFullRange =
       boolean(na, "callee_param_stores_full_range", true);
-  h.narrowing.copiesCloseRanges =
-      boolean(na, "copies_close_ranges", false);
+  h.narrowing.copiesCloseRanges = boolean(na, "copies_close_ranges", false);
   h.narrowing.loadDemand = boolean(na, "load_demand");
   h.narrowing.fullAddressInterfaceModes =
       strings(na, "full_address_interface_modes");
@@ -1156,20 +1130,20 @@ void fillTool(const json::Object &t, ToolProfile &tool) {
       boolean(obj(hls, "globals"), "attribute_accesses");
   h.groupingPlugin = str(obj(hls, "grouping"), "plugin");
   h.mathLibraryTable = str(obj(hls, "math_library"), "table");
-  h.localStructTablesAtRunTime =
-      boolean(obj(hls, "math_library"), "local_struct_tables_at_run_time", true);
-  h.fixedExpTablesWhenUnlisted = boolean(
-      obj(hls, "math_library"), "fixed_exp_tables_when_unlisted", true);
-  h.inlinedTablesInPipelines = boolean(
-      obj(hls, "math_library"), "inlined_tables_in_pipelines", true);
-  h.sharedLibraryModules = boolean(obj(hls, "math_library"),
-                                   "shared_library_modules", false);
-  h.sequentialCoreSharing = boolean(obj(hls, "math_library"),
-                                    "sequential_core_sharing", false);
+  h.localStructTablesAtRunTime = boolean(
+      obj(hls, "math_library"), "local_struct_tables_at_run_time", true);
+  h.fixedExpTablesWhenUnlisted =
+      boolean(obj(hls, "math_library"), "fixed_exp_tables_when_unlisted", true);
+  h.inlinedTablesInPipelines =
+      boolean(obj(hls, "math_library"), "inlined_tables_in_pipelines", true);
+  h.sharedLibraryModules =
+      boolean(obj(hls, "math_library"), "shared_library_modules", false);
+  h.sequentialCoreSharing =
+      boolean(obj(hls, "math_library"), "sequential_core_sharing", false);
   h.axiLiteArrayMemories =
       boolean(obj(hls, "interfaces"), "axi_lite_array_memories", false);
 
-  const json::Object &be = obj(t, "backend");
+  const json::Object &be = obj(typeValue, "backend");
   tool.backend.id = str(be, "id");
   const json::Object &ss = obj(be, "storage_selector");
   StorageSelectorConfig &sel = tool.backend.storageSelector;
@@ -1202,20 +1176,20 @@ void fillTool(const json::Object &t, ToolProfile &tool) {
     band.wordsPerBlock = optInteger(b, "words_per_block");
     map.depthBands.push_back(band);
   });
-  const json::Object &rp = obj(t, "report");
+  const json::Object &rp = obj(typeValue, "report");
   tool.report.primaryMemoryClass = str(rp, "primary_memory_class");
   tool.report.stdoutFormat = str(rp, "stdout_format");
   tool.report.referenceStage = str(rp, "reference_stage");
   tool.report.classes = strings(rp, "classes");
 }
 
-void fillScheduling(const json::Object &s, SchedulingConfig &sc) {
-  const json::Object &t = obj(s, "timing");
-  sc.timingModel = str(t, "model");
-  for (const auto &kv : obj(t, "operator_latencies"))
-    if (std::optional<int64_t> i = kv.second.getAsInteger())
-      sc.operatorLatencies[kv.first.str()] = *i;
-  const json::Object &de = obj(s, "dependences");
+void fillScheduling(const json::Object &stringValue, SchedulingConfig &sc) {
+  const json::Object &typeValue = obj(stringValue, "timing");
+  sc.timingModel = str(typeValue, "model");
+  for (const auto &kv : obj(typeValue, "operator_latencies"))
+    if (std::optional<int64_t> loopIndex = kv.second.getAsInteger())
+      sc.operatorLatencies[kv.first.str()] = *loopIndex;
+  const json::Object &de = obj(stringValue, "dependences");
   sc.dependenceModel = str(de, "model");
   sc.memoryRecurrences = boolean(de, "memory_recurrences", true);
   sc.unknownAddressMinII = integer(de, "unknown_address_min_ii", 2);
@@ -1232,25 +1206,24 @@ void fillScheduling(const json::Object &s, SchedulingConfig &sc) {
       integer(de, "promoted_element_search_budget", 1000000);
   sc.dynamicLaneRmw = boolean(de, "dynamic_lane_rmw", true);
   for (const auto &kv : obj(de, "recurrence_latencies"))
-    if (std::optional<int64_t> i = kv.second.getAsInteger())
-      sc.recurrenceLatencies[kv.first.str()] = *i;
-  const json::Object &mo = obj(s, "modulo");
+    if (std::optional<int64_t> loopIndex = kv.second.getAsInteger())
+      sc.recurrenceLatencies[kv.first.str()] = *loopIndex;
+  const json::Object &mo = obj(stringValue, "modulo");
   sc.moduloModel = str(mo, "model");
   sc.fastThreshold = integer(mo, "fast_threshold");
   sc.fastOpsThreshold = integer(mo, "fast_ops_threshold");
   sc.maxPipelineBodyOps = integer(mo, "max_pipeline_body_ops", 250000);
   sc.maxIIBumps = integer(mo, "max_ii_bumps");
   sc.lowerIIOfBoth = boolean(mo, "lower_ii_of_both", true);
-  sc.calleeGlobalRecurrence =
-      boolean(mo, "callee_global_recurrence", true);
+  sc.calleeGlobalRecurrence = boolean(mo, "callee_global_recurrence", true);
   sc.recurrenceRepairRounds = integer(mo, "recurrence_repair_rounds");
   sc.heightPriority = boolean(mo, "height_priority");
   sc.fpUnitLimits = boolean(mo, "fp_unit_limits", false);
   sc.userIITarget = boolean(mo, "user_ii_target");
-  sc.sequentialModel = str(obj(s, "sequential"), "model");
-  sc.bindingModel = str(obj(s, "binding"), "model");
-  sc.emitDetail = boolean(s, "emit_detail");
-  const json::Object &cd = obj(s, "call_depth");
+  sc.sequentialModel = str(obj(stringValue, "sequential"), "model");
+  sc.bindingModel = str(obj(stringValue, "binding"), "model");
+  sc.emitDetail = boolean(stringValue, "emit_detail");
+  const json::Object &cd = obj(stringValue, "call_depth");
   CallDepthConfig &c = sc.callDepth;
   c.loadDataNs = number(cd, "load_data_ns");
   c.logicNs = number(cd, "logic_ns");
@@ -1295,75 +1268,75 @@ void fill(const json::Value &doc, Config &cfg) {
   cfg.plugins = obj(root, "plugins");
 }
 
-//===----------------------------------------------------------------------===//
-// Cross-key checks (on the typed configuration).
-//===----------------------------------------------------------------------===//
-
 void crossCheck(const Config &c, ConfigDiagnostics &diag) {
   auto err = [&](const std::string &where, const std::string &msg) {
     diag.errors.push_back(where + ": " + msg);
   };
-  const Device &d = c.device;
+  const Device &dimensionIndex = c.device;
   llvm::StringSet<> classes;
-  for (const ResourceClass &rc : d.resourceClasses)
+  for (const ResourceClass &rc : dimensionIndex.resourceClasses)
     if (!classes.insert(rc.name).second)
       err("device.resource_classes", "class '" + rc.name + "' declared twice");
-  auto checkVector = [&](const ResourceVector &v, const std::string &where) {
-    for (const auto &[name, n] : v.items())
+  auto checkVector = [&](const ResourceVector &valueHandle,
+                         const std::string &where) {
+    for (const auto &[name, elementCount] : valueHandle.items())
       if (!classes.contains(name))
         err(where, "names the undeclared resource class '" + name + "'");
   };
-  for (const ResourceClass &rc : d.resourceClasses)
-    checkVector(rc.equivalent, "device.resource_classes(" + rc.name +
-                                   ").equivalent");
+  for (const ResourceClass &rc : dimensionIndex.resourceClasses)
+    checkVector(rc.equivalent,
+                "device.resource_classes(" + rc.name + ").equivalent");
   llvm::StringSet<> memIds;
-  for (const DeviceMemory &m : d.memories) {
-    std::string where = "device.memories(" + m.id + ")";
-    if (!memIds.insert(m.id).second)
-      err("device.memories", "memory id '" + m.id + "' declared twice");
-    checkVector(m.cost, where + ".cost");
-    checkVector(m.overhead, where + ".overhead");
+  for (const DeviceMemory &memoryOp : dimensionIndex.memories) {
+    std::string where = "device.memories(" + memoryOp.id + ")";
+    if (!memIds.insert(memoryOp.id).second)
+      err("device.memories", "memory id '" + memoryOp.id + "' declared twice");
+    checkVector(memoryOp.cost, where + ".cost");
+    checkVector(memoryOp.overhead, where + ".overhead");
     std::set<std::pair<int64_t, int64_t>> shapes;
-    for (const Geometry &g : m.geometries) {
-      if (!shapes.insert({g.width, g.depth}).second)
-        err(where + ".geometries", "the shape " + std::to_string(g.depth) +
-                                       "x" + std::to_string(g.width) +
-                                       " is listed twice");
-      if (g.width * g.depth > m.bits)
+    for (const Geometry &globalOp : memoryOp.geometries) {
+      if (!shapes.insert({globalOp.width, globalOp.depth}).second)
         err(where + ".geometries",
-            std::to_string(g.depth) + "x" + std::to_string(g.width) +
-                " holds more than the " + std::to_string(m.bits) +
-                " bits of one instance");
+            "the shape " + std::to_string(globalOp.depth) + "x" +
+                std::to_string(globalOp.width) + " is listed twice");
+      if (globalOp.width * globalOp.depth > memoryOp.bits)
+        err(where + ".geometries",
+            std::to_string(globalOp.depth) + "x" +
+                std::to_string(globalOp.width) + " holds more than the " +
+                std::to_string(memoryOp.bits) + " bits of one instance");
     }
-    for (const PortConfig &p : m.portConfigs)
-      if (llvm::none_of(m.geometries, [&](const Geometry &g) {
-            return g.width == p.maxWidth;
+    for (const PortConfig &portValue : memoryOp.portConfigs)
+      if (llvm::none_of(memoryOp.geometries, [&](const Geometry &globalOp) {
+            return globalOp.width == portValue.maxWidth;
           }))
-        err(where + ".port_configs(" + p.name + ").max_width",
-            std::to_string(p.maxWidth) + " is the width of no geometry");
+        err(where + ".port_configs(" + portValue.name + ").max_width",
+            std::to_string(portValue.maxWidth) +
+                " is the width of no geometry");
   }
-  for (const ShiftRegister &s : d.shiftRegisters)
-    checkVector(s.cost, "device.shift_registers(" + s.id + ").cost");
-  for (const ArithBlock &a : d.arith) {
-    checkVector(a.cost, "device.arith(" + a.id + ").cost");
-    checkVector(a.overhead, "device.arith(" + a.id + ").overhead");
+  for (const ShiftRegister &stringValue : dimensionIndex.shiftRegisters)
+    checkVector(stringValue.cost,
+                "device.shift_registers(" + stringValue.id + ").cost");
+  for (const ArithBlock &arrayValue : dimensionIndex.arith) {
+    checkVector(arrayValue.cost, "device.arith(" + arrayValue.id + ").cost");
+    checkVector(arrayValue.overhead,
+                "device.arith(" + arrayValue.id + ").overhead");
   }
 
-  const ToolProfile &t = c.tool;
-  const TimingMargin &tm = t.hls.timingMargin;
+  const ToolProfile &typeValue = c.tool;
+  const TimingMargin &tm = typeValue.hls.timingMargin;
   if (tm.fraction && tm.ns)
     err("tool.hls.timing_margin", "give fraction or ns, not both");
-  const MemoryMapperConfig &mm = t.backend.memoryMapper;
-  // The depth bands of vitis-band7: increasing, exactly one `beyond`, last.
+  const MemoryMapperConfig &mm = typeValue.backend.memoryMapper;
+
   int64_t prev = 0;
   unsigned beyond = 0;
-  for (size_t i = 0; i < mm.depthBands.size(); ++i) {
-    const DepthBand &b = mm.depthBands[i];
-    std::string where =
-        "tool.backend.memory_mapper.depth_bands[" + std::to_string(i) + "]";
+  for (size_t loopIndex = 0; loopIndex < mm.depthBands.size(); ++loopIndex) {
+    const DepthBand &b = mm.depthBands[loopIndex];
+    std::string where = "tool.backend.memory_mapper.depth_bands[" +
+                        std::to_string(loopIndex) + "]";
     if (b.beyond) {
       ++beyond;
-      if (i + 1 != mm.depthBands.size())
+      if (loopIndex + 1 != mm.depthBands.size())
         err(where, "the beyond band must be the last one");
       if (!b.width || !b.wordsPerBlock)
         err(where, "the beyond band needs width and words_per_block");
@@ -1387,58 +1360,55 @@ void crossCheck(const Config &c, ConfigDiagnostics &diag) {
     err("tool.backend.memory_mapper.depth_bands",
         "needs exactly one beyond band");
 
-  // A port configuration a bank is priced at must exist in some memory of
-  // the device (which memory prices a bank is decided later, per bank).
   auto checkPortConfig = [&](const std::string &where,
                              const std::string &name) {
     llvm::StringSet<> known;
-    for (const DeviceMemory &m : d.memories)
-      for (const PortConfig &p : m.portConfigs) {
-        if (p.name == name)
+    for (const DeviceMemory &memoryOp : dimensionIndex.memories)
+      for (const PortConfig &portValue : memoryOp.portConfigs) {
+        if (portValue.name == name)
           return;
-        known.insert(p.name);
+        known.insert(portValue.name);
       }
     std::vector<std::string> names;
-    for (const auto &k : known)
-      names.push_back(k.getKey().str());
+    for (const auto &keyValue : known)
+      names.push_back(keyValue.getKey().str());
     llvm::sort(names);
-    err(where, "'" + name + "' is the port configuration of no device "
-                            "memory (device: " +
+    err(where, "'" + name +
+                   "' is the port configuration of no device "
+                   "memory (device: " +
                    llvm::join(names, ", ") + ")");
   };
-  const MemoryArchitectureConfig &ma = t.hls.memoryArchitecture;
+  const MemoryArchitectureConfig &ma = typeValue.hls.memoryArchitecture;
   checkPortConfig("tool.hls.memory_architecture.priced_configs.wide",
                   ma.pricedWide);
   checkPortConfig("tool.hls.memory_architecture.priced_configs.narrow",
                   ma.pricedNarrow);
-  if (t.hls.streams.enabled)
+  if (typeValue.hls.streams.enabled)
     checkPortConfig("tool.hls.streams.priced_config",
-                    t.hls.streams.pricedConfig);
-  for (size_t i = 0; i < t.hls.implicitBuffers.size(); ++i)
-    if (t.hls.implicitBuffers[i].enabled)
-      checkPortConfig("tool.hls.implicit_buffers[" + std::to_string(i) +
-                          "].read_fifo.priced_config",
-                      t.hls.implicitBuffers[i].readFifoPricedConfig);
+                    typeValue.hls.streams.pricedConfig);
+  for (size_t loopIndex = 0; loopIndex < typeValue.hls.implicitBuffers.size();
+       ++loopIndex)
+    if (typeValue.hls.implicitBuffers[loopIndex].enabled)
+      checkPortConfig(
+          "tool.hls.implicit_buffers[" + std::to_string(loopIndex) +
+              "].read_fifo.priced_config",
+          typeValue.hls.implicitBuffers[loopIndex].readFifoPricedConfig);
 
-  // Reserved: --auto-pipeline-unroll implements only the documented
-  // assumption (D-11: a loop is never flattened across a call).
-  if (t.hls.pipelineDecision.flattenAcrossCalls)
+  if (typeValue.hls.pipelineDecision.flattenAcrossCalls)
     err("tool.hls.pipeline_decision.flatten_across_calls",
         "true is not implemented (reserved; only false, D-11)");
 
-  // A plugins.<name> section belongs to a plugin some plugin key selects;
-  // any other name (a misspelt plugin) would drop its parameters silently.
   llvm::StringSet<> selected;
-  for (const std::string *n :
-       {&t.backend.storageSelector.plugin, &ma.plugin,
-        &t.backend.memoryMapper.plugin, &t.hls.streams.mapper,
-        &t.hls.groupingPlugin, &t.hls.pipelineDecision.policy,
-        &t.hls.partitioning.policy, &t.hls.folding.ruleSet,
+  for (const std::string *elementCount :
+       {&typeValue.backend.storageSelector.plugin, &ma.plugin,
+        &typeValue.backend.memoryMapper.plugin, &typeValue.hls.streams.mapper,
+        &typeValue.hls.groupingPlugin, &typeValue.hls.pipelineDecision.policy,
+        &typeValue.hls.partitioning.policy, &typeValue.hls.folding.ruleSet,
         &c.scheduling.timingModel, &c.scheduling.dependenceModel,
         &c.scheduling.moduloModel, &c.scheduling.sequentialModel,
         &c.scheduling.bindingModel})
-    selected.insert(*n);
-  for (const ImplicitBufferConfig &b : t.hls.implicitBuffers) {
+    selected.insert(*elementCount);
+  for (const ImplicitBufferConfig &b : typeValue.hls.implicitBuffers) {
     selected.insert(b.plugin);
     selected.insert(b.readFifoMapper);
   }
@@ -1446,16 +1416,16 @@ void crossCheck(const Config &c, ConfigDiagnostics &diag) {
     StringRef name = kv.first;
     if (name.starts_with("_") || selected.contains(name))
       continue;
-    err("plugins." + name.str(),
-        "no plugin key selects a plugin named '" + name.str() +
-            "', so nothing reads this section");
+    err("plugins." + name.str(), "no plugin key selects a plugin named '" +
+                                     name.str() +
+                                     "', so nothing reads this section");
   }
 
-  if (!classes.contains(t.report.primaryMemoryClass))
+  if (!classes.contains(typeValue.report.primaryMemoryClass))
     err("tool.report.primary_memory_class",
-        "'" + t.report.primaryMemoryClass +
+        "'" + typeValue.report.primaryMemoryClass +
             "' is not a resource class of the device");
-  for (const std::string &cls : t.report.classes)
+  for (const std::string &cls : typeValue.report.classes)
     if (!classes.contains(cls))
       err("tool.report.classes",
           "'" + cls + "' is not a resource class of the device");
@@ -1479,16 +1449,16 @@ void checkMathTable(const Config &c, ConfigDiagnostics &diag) {
     return;
   auto buf = llvm::MemoryBuffer::getFile(path);
   if (!buf) {
-    diag.errors.push_back("tool.hls.math_library.table: cannot read '" +
-                          path + "': " + buf.getError().message());
+    diag.errors.push_back("tool.hls.math_library.table: cannot read '" + path +
+                          "': " + buf.getError().message());
     return;
   }
-  llvm::Expected<json::Value> v = json::parse((*buf)->getBuffer());
-  if (!v) {
-    llvm::consumeError(v.takeError());
-    return; // --bram-analysis reports the parse error with its own context
+  llvm::Expected<json::Value> valueHandle = json::parse((*buf)->getBuffer());
+  if (!valueHandle) {
+    llvm::consumeError(valueHandle.takeError());
+    return;
   }
-  const json::Object *root = v->getAsObject();
+  const json::Object *root = valueHandle->getAsObject();
   const json::Object *vitis = root ? root->getObject("vitis") : nullptr;
   if (!vitis)
     return;
@@ -1515,52 +1485,48 @@ void checkMathTable(const Config &c, ConfigDiagnostics &diag) {
            c.tool.hls.options.arrayPartition.throughputDriven);
 }
 
-//===----------------------------------------------------------------------===//
-// Provenance: overrides and hash.
-//===----------------------------------------------------------------------===//
-
 void diff(const json::Value *dflt, const json::Value &now,
-          const std::string &path, const std::map<std::string, std::string> &src,
+          const std::string &path,
+          const std::map<std::string, std::string> &src,
           std::vector<ConfigOverride> &out) {
-  const json::Object *a = dflt ? dflt->getAsObject() : nullptr;
+  const json::Object *arrayValue = dflt ? dflt->getAsObject() : nullptr;
   const json::Object *b = now.getAsObject();
-  if (a && b) {
+  if (arrayValue && b) {
     std::vector<std::string> keys;
     for (const auto &kv : *b)
       keys.push_back(kv.first.str());
-    for (const auto &kv : *a)
+    for (const auto &kv : *arrayValue)
       if (!b->get(kv.first))
         keys.push_back(kv.first.str());
     llvm::sort(keys);
     keys.erase(std::unique(keys.begin(), keys.end()), keys.end());
-    for (const std::string &k : keys) {
-      std::string p = path.empty() ? k : path + "." + k;
-      const json::Value *nv = b->get(k);
+    for (const std::string &keyValue : keys) {
+      std::string portValue = path.empty() ? keyValue : path + "." + keyValue;
+      const json::Value *nv = b->get(keyValue);
       if (!nv) {
-        out.push_back({p, nullptr, "removed by run.device / run.tool"});
+        out.push_back({portValue, nullptr, "removed by run.device / run.tool"});
         continue;
       }
-      diff(a->get(k), *nv, p, src, out);
+      diff(arrayValue->get(keyValue), *nv, portValue, src, out);
     }
     return;
   }
   if (dflt && *dflt == now)
     return;
-  // The origin: the longest recorded prefix of the path.
+
   std::string origin = "--config-set";
-  for (std::string p = path;;) {
-    auto it = src.find(p);
+  for (std::string portValue = path;;) {
+    auto it = src.find(portValue);
     if (it != src.end()) {
       origin = it->second;
       break;
     }
-    size_t dot = p.rfind('.');
+    size_t dot = portValue.rfind('.');
     if (dot == std::string::npos)
       break;
-    p.resize(dot);
+    portValue.resize(dot);
   }
-  // A free-form value (plugins.<name>) set key by key: the assignment of one
-  // of its keys.
+
   if (origin == "--config-set")
     for (const auto &[setPath, setOrigin] : src)
       if (StringRef(setPath).starts_with(path + ".")) {
@@ -1571,153 +1537,159 @@ void diff(const json::Value *dflt, const json::Value &now,
 }
 
 /// Doubles: the shortest decimal that reads back to the same value.
-std::string formatDouble(double d) {
-  if (d == std::floor(d) && std::fabs(d) < 1e15) {
-    std::string s = std::to_string(static_cast<int64_t>(d));
-    return s + ".0";
+std::string formatDouble(double dimensionIndex) {
+  if (dimensionIndex == std::floor(dimensionIndex) &&
+      std::fabs(dimensionIndex) < 1e15) {
+    std::string stringValue =
+        std::to_string(static_cast<int64_t>(dimensionIndex));
+    return stringValue + ".0";
   }
   for (int prec = 1; prec <= 17; ++prec) {
-    std::string s = llvm::formatv("{0}", llvm::format("%.*g", prec, d)).str();
-    if (std::strtod(s.c_str(), nullptr) == d)
-      return s;
+    std::string stringValue =
+        llvm::formatv("{0}", llvm::format("%.*g", prec, dimensionIndex)).str();
+    if (std::strtod(stringValue.c_str(), nullptr) == dimensionIndex)
+      return stringValue;
   }
-  return llvm::formatv("{0}", llvm::format("%.17g", d)).str();
+  return llvm::formatv("{0}", llvm::format("%.17g", dimensionIndex)).str();
 }
 
-void printValue(const json::Value &v, llvm::raw_ostream &os, unsigned indent);
+void printValue(const json::Value &valueHandle, llvm::raw_ostream &os,
+                unsigned indent);
 
-bool isFlat(const json::Value &v) {
-  if (v.getAsObject())
+bool isFlat(const json::Value &valueHandle) {
+  if (valueHandle.getAsObject())
     return false;
-  if (const json::Array *a = v.getAsArray())
-    return llvm::all_of(*a, [](const json::Value &e) {
-      if (const json::Array *inner = e.getAsArray())
-        return llvm::all_of(*inner, [](const json::Value &x) {
-          return !x.getAsObject() && !x.getAsArray();
+  if (const json::Array *arrayValue = valueHandle.getAsArray())
+    return llvm::all_of(*arrayValue, [](const json::Value &entryValue) {
+      if (const json::Array *inner = entryValue.getAsArray())
+        return llvm::all_of(*inner, [](const json::Value &exprValue) {
+          return !exprValue.getAsObject() && !exprValue.getAsArray();
         });
-      return !e.getAsObject();
+      return !entryValue.getAsObject();
     });
   return true;
 }
 
-void printScalar(const json::Value &v, llvm::raw_ostream &os) {
-  switch (v.kind()) {
+void printScalar(const json::Value &valueHandle, llvm::raw_ostream &os) {
+  switch (valueHandle.kind()) {
   case json::Value::Null:
     os << "null";
     return;
   case json::Value::Boolean:
-    os << (*v.getAsBoolean() ? "true" : "false");
+    os << (*valueHandle.getAsBoolean() ? "true" : "false");
     return;
   case json::Value::Number:
-    if (std::optional<int64_t> i = v.getAsInteger())
-      os << *i;
+    if (std::optional<int64_t> loopIndex = valueHandle.getAsInteger())
+      os << *loopIndex;
     else
-      os << formatDouble(*v.getAsNumber());
+      os << formatDouble(*valueHandle.getAsNumber());
     return;
   case json::Value::String: {
-    // Let llvm::json escape the string.
-    json::OStream j(os);
-    j.value(v);
+
+    json::OStream innerIndex(os);
+    innerIndex.value(valueHandle);
     return;
   }
   default:
-    printValue(v, os, 0);
+    printValue(valueHandle, os, 0);
   }
 }
 
-void printValue(const json::Value &v, llvm::raw_ostream &os, unsigned indent) {
+void printValue(const json::Value &valueHandle, llvm::raw_ostream &os,
+                unsigned indent) {
   std::string pad(indent, ' ');
-  if (const json::Object *o = v.getAsObject()) {
-    if (o->empty()) {
+  if (const json::Object *opHandle = valueHandle.getAsObject()) {
+    if (opHandle->empty()) {
       os << "{}";
       return;
     }
     std::vector<StringRef> keys;
-    for (const auto &kv : *o)
+    for (const auto &kv : *opHandle)
       keys.push_back(kv.first);
     llvm::sort(keys);
     os << "{\n";
-    for (size_t i = 0; i < keys.size(); ++i) {
+    for (size_t loopIndex = 0; loopIndex < keys.size(); ++loopIndex) {
       os << pad << "  ";
-      printScalar(json::Value(keys[i].str()), os);
+      printScalar(json::Value(keys[loopIndex].str()), os);
       os << ": ";
-      printValue(*o->get(keys[i]), os, indent + 2);
-      os << (i + 1 < keys.size() ? ",\n" : "\n");
+      printValue(*opHandle->get(keys[loopIndex]), os, indent + 2);
+      os << (loopIndex + 1 < keys.size() ? ",\n" : "\n");
     }
     os << pad << "}";
     return;
   }
-  if (const json::Array *a = v.getAsArray()) {
-    if (a->empty()) {
+  if (const json::Array *arrayValue = valueHandle.getAsArray()) {
+    if (arrayValue->empty()) {
       os << "[]";
       return;
     }
-    if (isFlat(v)) {
+    if (isFlat(valueHandle)) {
       os << "[";
-      for (size_t i = 0; i < a->size(); ++i) {
-        if (i)
+      for (size_t loopIndex = 0; loopIndex < arrayValue->size(); ++loopIndex) {
+        if (loopIndex)
           os << ", ";
-        printValue((*a)[i], os, indent);
+        printValue((*arrayValue)[loopIndex], os, indent);
       }
       os << "]";
       return;
     }
     os << "[\n";
-    for (size_t i = 0; i < a->size(); ++i) {
+    for (size_t loopIndex = 0; loopIndex < arrayValue->size(); ++loopIndex) {
       os << pad << "  ";
-      printValue((*a)[i], os, indent + 2);
-      os << (i + 1 < a->size() ? ",\n" : "\n");
+      printValue((*arrayValue)[loopIndex], os, indent + 2);
+      os << (loopIndex + 1 < arrayValue->size() ? ",\n" : "\n");
     }
     os << pad << "]";
     return;
   }
-  printScalar(v, os);
+  printScalar(valueHandle, os);
 }
 
 std::string sha256Hex(StringRef text) {
   llvm::SHA256 h;
   h.update(text);
   std::array<uint8_t, 32> digest = h.final();
-  return llvm::toHex(digest, /*LowerCase=*/true);
+  return llvm::toHex(digest, true);
 }
 
 /// Inserts `_doc` (section) and `_<key>` (key) descriptions from the schema.
-void annotate(json::Value &v, const std::string &pattern) {
-  json::Object *o = v.getAsObject();
-  if (!o)
+void annotate(json::Value &valueHandle, const std::string &pattern) {
+  json::Object *opHandle = valueHandle.getAsObject();
+  if (!opHandle)
     return;
   if (!pattern.empty())
-    if (const KeySpec *s = findKeySpec(pattern);
-        s && (s->kind == KeyKind::FreeObject))
+    if (const KeySpec *stringValue = findKeySpec(pattern);
+        stringValue && (stringValue->kind == KeyKind::FreeObject))
       return;
   std::vector<std::string> keys;
-  for (const auto &kv : *o)
+  for (const auto &kv : *opHandle)
     keys.push_back(kv.first.str());
-  for (const std::string &k : keys) {
-    if (StringRef(k).starts_with("_"))
+  for (const std::string &keyValue : keys) {
+    if (StringRef(keyValue).starts_with("_"))
       continue;
-    std::string p = pattern.empty() ? k : pattern + "." + k;
-    const KeySpec *s = findKeySpec(p);
-    if (!s)
+    std::string portValue =
+        pattern.empty() ? keyValue : pattern + "." + keyValue;
+    const KeySpec *stringValue = findKeySpec(portValue);
+    if (!stringValue)
       continue;
-    std::string text = keyKindName(s->kind).str();
-    if (*s->unit)
-      text += ", " + std::string(s->unit);
-    if (s->kind == KeyKind::Enum)
-      text += " (" + std::string(s->values) + ")";
-    if (s->kind == KeyKind::PluginName)
-      text += " (a " + std::string(s->values) + ")";
-    text += ": " + std::string(s->doc);
-    if (*s->rows)
-      text += " [" + std::string(s->rows) + "]";
-    (*o)["_" + k] = text;
-    json::Value &child = *o->get(k);
-    if (s->kind == KeyKind::Section)
-      annotate(child, p);
-    else if (s->kind == KeyKind::ObjectList)
-      if (json::Array *a = child.getAsArray())
-        for (json::Value &e : *a)
-          annotate(e, p + "[]");
+    std::string text = keyKindName(stringValue->kind).str();
+    if (*stringValue->unit)
+      text += ", " + std::string(stringValue->unit);
+    if (stringValue->kind == KeyKind::Enum)
+      text += " (" + std::string(stringValue->values) + ")";
+    if (stringValue->kind == KeyKind::PluginName)
+      text += " (a " + std::string(stringValue->values) + ")";
+    text += ": " + std::string(stringValue->doc);
+    if (*stringValue->rows)
+      text += " [" + std::string(stringValue->rows) + "]";
+    (*opHandle)["_" + keyValue] = text;
+    json::Value &child = *opHandle->get(keyValue);
+    if (stringValue->kind == KeyKind::Section)
+      annotate(child, portValue);
+    else if (stringValue->kind == KeyKind::ObjectList)
+      if (json::Array *arrayValue = child.getAsArray())
+        for (json::Value &entryValue : *arrayValue)
+          annotate(entryValue, portValue + "[]");
   }
 }
 
@@ -1729,7 +1701,7 @@ struct DefaultState {
 
 const DefaultState &defaultState() {
   static const DefaultState state = [] {
-    DefaultState s;
+    DefaultState stringValue;
     ConfigDiagnostics diag;
     DocumentBuilder b(diag);
     if (!b.start())
@@ -1738,19 +1710,19 @@ const DefaultState &defaultState() {
                       "load: ") +
           (diag.errors.empty() ? "?" : diag.errors.front()));
     Validator(diag).validate(b.doc);
-    fill(b.doc, s.config);
-    crossCheck(s.config, diag);
+    fill(b.doc, stringValue.config);
+    crossCheck(stringValue.config, diag);
     if (!diag.ok())
       llvm::report_fatal_error(
           llvm::Twine("hls-est: the compiled-in configuration is invalid: ") +
           diag.errors.front());
-    s.doc = b.doc;
-    s.config.merged = b.doc;
+    stringValue.doc = b.doc;
+    stringValue.config.merged = b.doc;
     std::string canonical;
     llvm::raw_string_ostream os(canonical);
     printValue(b.doc, os, 0);
-    s.config.hash = sha256Hex(os.str());
-    return s;
+    stringValue.config.hash = sha256Hex(os.str());
+    return stringValue;
   }();
   return state;
 }
@@ -1766,41 +1738,36 @@ std::optional<Config> &installedConfig() {
 /// the compiled-in files.
 std::string originOf(StringRef path,
                      const std::map<std::string, std::string> &sources) {
-  std::string p;
-  for (size_t i = 0; i < path.size(); ++i) {
-    char ch = path[i];
+  std::string portValue;
+  for (size_t loopIndex = 0; loopIndex < path.size(); ++loopIndex) {
+    char ch = path[loopIndex];
     if (ch == '[' || ch == '(') {
       char close = ch == '[' ? ']' : ')';
-      while (i < path.size() && path[i] != close)
-        ++i;
+      while (loopIndex < path.size() && path[loopIndex] != close)
+        ++loopIndex;
       continue;
     }
-    p += ch;
+    portValue += ch;
   }
-  // Sources are recorded per leaf: a key that is wrong as a whole (an unknown
-  // section) was put there by the leaves below it.
-  if (!sources.count(p)) {
-    std::string below = p + ".";
+
+  if (!sources.count(portValue)) {
+    std::string below = portValue + ".";
     auto it = sources.lower_bound(below);
     if (it != sources.end() && StringRef(it->first).starts_with(below))
       return it->second;
   }
   for (;;) {
-    auto it = sources.find(p);
+    auto it = sources.find(portValue);
     if (it != sources.end())
       return it->second;
-    size_t dot = p.rfind('.');
+    size_t dot = portValue.rfind('.');
     if (dot == std::string::npos)
       return "<defaults>";
-    p.resize(dot);
+    portValue.resize(dot);
   }
 }
 
 } // namespace
-
-//===----------------------------------------------------------------------===//
-// Public API.
-//===----------------------------------------------------------------------===//
 
 const Config &Config::defaults() { return defaultState().config; }
 
@@ -1818,27 +1785,28 @@ Config circt::hlsest::buildConfig(llvm::ArrayRef<std::string> files,
   DocumentBuilder b(diag);
   if (!b.start())
     return c;
-  for (const std::string &f : files)
-    if (std::optional<json::Value> v = readJsonFile(f, diag)) {
-      if (!v->getAsObject()->get("version"))
-        diag.errors.push_back(f + ": version: missing (required; this "
-                                  "hls-est reads version 1)");
-      b.apply(std::move(*v), f, f);
+  for (const std::string &fieldValue : files)
+    if (std::optional<json::Value> valueHandle =
+            readJsonFile(fieldValue, diag)) {
+      if (!valueHandle->getAsObject()->get("version"))
+        diag.errors.push_back(fieldValue + ": version: missing (required; this "
+                                           "hls-est reads version 1)");
+      b.apply(std::move(*valueHandle), fieldValue, fieldValue);
     }
-  for (const std::string &s : sets)
-    b.set(s);
+  for (const std::string &stringValue : sets)
+    b.set(stringValue);
   if (!diag.ok())
     return c;
-  // Validation and cross-key errors name the key; prefix the file or the
-  // --config-set that put it there.
+
   auto attribute = [&](size_t first) {
-    for (size_t i = first; i < diag.errors.size(); ++i) {
-      std::string &e = diag.errors[i];
-      size_t colon = e.find(": ");
+    for (size_t loopIndex = first; loopIndex < diag.errors.size();
+         ++loopIndex) {
+      std::string &entryValue = diag.errors[loopIndex];
+      size_t colon = entryValue.find(": ");
       if (colon == std::string::npos)
         continue;
-      std::string origin = originOf(e.substr(0, colon), b.sources);
-      e = origin + ": " + e;
+      std::string origin = originOf(entryValue.substr(0, colon), b.sources);
+      entryValue = origin + ": " + entryValue;
     }
   };
   Validator(diag).validate(b.doc);
@@ -1848,22 +1816,20 @@ Config circt::hlsest::buildConfig(llvm::ArrayRef<std::string> files,
   fill(b.doc, c);
   crossCheck(c, diag);
   attribute(0);
-  // Every plugin the configuration names reads its parameters and checks the
-  // device (a builtin refuses a device it cannot price), also when a cross-key
-  // check failed, so that a refusal names everything the device lacks.
+
   if (const PluginConfigCheck &check = getPluginConfigCheck()) {
     size_t first = diag.errors.size();
     check(c, diag);
-    // A plugin's error that names a key some file or --config-set set gets
-    // that origin too (a device refusal names no key and stays as it is).
-    for (size_t i = first; i < diag.errors.size(); ++i) {
-      std::string &e = diag.errors[i];
-      size_t colon = e.find(": ");
+
+    for (size_t loopIndex = first; loopIndex < diag.errors.size();
+         ++loopIndex) {
+      std::string &entryValue = diag.errors[loopIndex];
+      size_t colon = entryValue.find(": ");
       if (colon == std::string::npos)
         continue;
-      std::string origin = originOf(e.substr(0, colon), b.sources);
+      std::string origin = originOf(entryValue.substr(0, colon), b.sources);
       if (origin != "<defaults>")
-        e = origin + ": " + e;
+        entryValue = origin + ": " + entryValue;
     }
   }
   if (!diag.ok())
@@ -1880,12 +1846,12 @@ Config circt::hlsest::buildConfig(llvm::ArrayRef<std::string> files,
   return c;
 }
 
-std::string circt::hlsest::printSortedJson(const json::Value &v) {
-  std::string s;
-  llvm::raw_string_ostream os(s);
-  printValue(v, os, 0);
+std::string circt::hlsest::printSortedJson(const json::Value &valueHandle) {
+  std::string stringValue;
+  llvm::raw_string_ostream os(stringValue);
+  printValue(valueHandle, os, 0);
   os << "\n";
-  return s;
+  return stringValue;
 }
 
 std::string circt::hlsest::dumpDefaultConfig() {
@@ -1903,9 +1869,9 @@ std::string circt::hlsest::dumpDefaultConfig() {
 
 std::string circt::hlsest::dumpEffectiveConfig(const Config &config) {
   json::Value doc = config.merged;
-  // `_source` next to every changed key.
-  for (const ConfigOverride &o : config.overrides) {
-    StringRef path(o.path);
+
+  for (const ConfigOverride &opHandle : config.overrides) {
+    StringRef path(opHandle.path);
     auto [parent, key] = path.rsplit('.');
     if (key.empty()) {
       key = parent;
@@ -1915,9 +1881,9 @@ std::string circt::hlsest::dumpEffectiveConfig(const Config &config) {
     if (!parent.empty()) {
       SmallVector<StringRef> parts;
       parent.split(parts, '.');
-      for (StringRef p : parts) {
+      for (StringRef portValue : parts) {
         json::Object *obj = cur->getAsObject();
-        cur = obj ? obj->get(p) : nullptr;
+        cur = obj ? obj->get(portValue) : nullptr;
         if (!cur)
           break;
       }
@@ -1927,7 +1893,7 @@ std::string circt::hlsest::dumpEffectiveConfig(const Config &config) {
     json::Object &obj = *cur->getAsObject();
     if (!obj.getObject("_source"))
       obj["_source"] = json::Object{};
-    (*obj.getObject("_source"))[key.str()] = o.source;
+    (*obj.getObject("_source"))[key.str()] = opHandle.source;
   }
   json::Object &root = *doc.getAsObject();
   root["_generated_by"] = "hls-est --dump-effective-config";
@@ -1938,66 +1904,66 @@ std::string circt::hlsest::dumpEffectiveConfig(const Config &config) {
 std::string circt::hlsest::dumpConfigSchema() {
   json::Array keys;
   const json::Value &dflt = defaultState().doc;
-  for (const KeySpec &k : configSchema()) {
-    json::Object o;
-    o["path"] = k.path;
-    o["type"] = keyKindName(k.kind);
-    o["unit"] = k.unit;
-    o["doc"] = k.doc;
-    o["rows"] = k.rows;
-    o["readers"] = k.readers;
-    if (*k.values)
-      o[k.kind == KeyKind::PluginName ? "interface" : "values"] = k.values;
-    if (!std::isnan(k.min))
-      o["min"] = k.min;
-    if (!std::isnan(k.max))
-      o["max"] = k.max;
-    o["optional"] = k.optional;
-    // The default: the value at the path in the compiled-in document (a key
-    // of an array element has none of its own).
-    if (!StringRef(k.path).contains("[]") && k.kind != KeyKind::Section) {
+  for (const KeySpec &keyValue : configSchema()) {
+    json::Object opHandle;
+    opHandle["path"] = keyValue.path;
+    opHandle["type"] = keyKindName(keyValue.kind);
+    opHandle["unit"] = keyValue.unit;
+    opHandle["doc"] = keyValue.doc;
+    opHandle["rows"] = keyValue.rows;
+    opHandle["readers"] = keyValue.readers;
+    if (*keyValue.values)
+      opHandle[keyValue.kind == KeyKind::PluginName ? "interface" : "values"] =
+          keyValue.values;
+    if (!std::isnan(keyValue.min))
+      opHandle["min"] = keyValue.min;
+    if (!std::isnan(keyValue.max))
+      opHandle["max"] = keyValue.max;
+    opHandle["optional"] = keyValue.optional;
+
+    if (!StringRef(keyValue.path).contains("[]") &&
+        keyValue.kind != KeyKind::Section) {
       SmallVector<StringRef> parts;
-      StringRef(k.path).split(parts, '.');
+      StringRef(keyValue.path).split(parts, '.');
       const json::Value *cur = &dflt;
-      for (StringRef p : parts) {
+      for (StringRef portValue : parts) {
         const json::Object *obj = cur ? cur->getAsObject() : nullptr;
-        cur = obj ? obj->get(p) : nullptr;
+        cur = obj ? obj->get(portValue) : nullptr;
       }
       if (cur)
-        o["default"] = *cur;
+        opHandle["default"] = *cur;
     }
-    keys.push_back(std::move(o));
+    keys.push_back(std::move(opHandle));
   }
-  // One key per line (in the schema's order), so that the output can be
-  // grepped and diffed key by key.
-  std::string s;
-  llvm::raw_string_ostream os(s);
+
+  std::string stringValue;
+  llvm::raw_string_ostream os(stringValue);
   os << "{\n  \"_generated_by\": \"hls-est --dump-config-schema\",\n";
   os << "  \"keys\": [\n";
-  for (size_t i = 0; i < keys.size(); ++i) {
+  for (size_t loopIndex = 0; loopIndex < keys.size(); ++loopIndex) {
     os << "    ";
-    json::OStream j(os);
-    j.value(keys[i]);
-    os << (i + 1 < keys.size() ? ",\n" : "\n");
+    json::OStream innerIndex(os);
+    innerIndex.value(keys[loopIndex]);
+    os << (loopIndex + 1 < keys.size() ? ",\n" : "\n");
   }
   os << "  ],\n  \"plugin_interfaces\": [";
   llvm::interleave(
-      pluginInterfaceKeys(), os, [&](const char *k) { os << "\"" << k << "\""; },
-      ", ");
+      pluginInterfaceKeys(), os,
+      [&](const char *keyValue) { os << "\"" << keyValue << "\""; }, ", ");
   os << "],\n  \"version\": 1\n}\n";
-  return s;
+  return stringValue;
 }
 
 std::vector<std::string> circt::hlsest::compiledInDevices() {
   std::vector<std::string> out;
-  for (const CompiledIn &d : kDevices)
-    out.push_back(d.id);
+  for (const CompiledIn &dimensionIndex : kDevices)
+    out.push_back(dimensionIndex.id);
   return out;
 }
 
 std::vector<std::string> circt::hlsest::compiledInProfiles() {
   std::vector<std::string> out;
-  for (const CompiledIn &p : kProfiles)
-    out.push_back(p.id);
+  for (const CompiledIn &portValue : kProfiles)
+    out.push_back(portValue.id);
   return out;
 }
