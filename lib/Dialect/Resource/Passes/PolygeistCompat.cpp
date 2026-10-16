@@ -20,18 +20,18 @@
 #include "mlir/Dialect/LLVMIR/LLVMTypes.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
+#include "mlir/IR/IRMapping.h"
+#include "mlir/IR/IntegerSet.h"
+#include "mlir/Interfaces/SideEffectInterfaces.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/Diagnostics.h"
-#include "mlir/IR/IRMapping.h"
-#include "mlir/IR/IntegerSet.h"
 #include "mlir/IR/SymbolTable.h"
-#include "mlir/Interfaces/SideEffectInterfaces.h"
 #include "mlir/Transforms/InliningUtils.h"
 #include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/SmallPtrSet.h"
-#include "llvm/ADT/SmallVector.h"
 #include <array>
+#include "llvm/ADT/SmallVector.h"
 
 using namespace mlir;
 using namespace circt::hls_analysis;
@@ -87,8 +87,8 @@ namespace {
 /// is what makes the type a valid memref element type.
 template <typename T>
 struct AggregateMemRefElement
-    : public MemRefElementTypeInterface::ExternalModel<
-          AggregateMemRefElement<T>, T> {};
+    : public MemRefElementTypeInterface::ExternalModel<AggregateMemRefElement<T>,
+                                                       T> {};
 } // namespace
 
 void circt::hls_analysis::registerPolygeistMemRefElementTypes(
@@ -139,7 +139,8 @@ LogicalResult SubIndexOp::verify() {
 bool SubIndexOp::isRowSelect() {
   auto src = dyn_cast<MemRefType>(getSource().getType());
   auto res = dyn_cast<MemRefType>(getResult().getType());
-  if (!src || !res || src.getRank() < 1 || res.getRank() + 1 != src.getRank())
+  if (!src || !res || src.getRank() < 1 ||
+      res.getRank() + 1 != src.getRank())
     return false;
   if (!src.getLayout().isIdentity() || !res.getLayout().isIdentity())
     return false;
@@ -209,8 +210,7 @@ static Operation *cloneAccessOn(OpBuilder &b, Operation *access, Value view) {
 /// index, and a single view `A[c ? i : j]` replaces its result. Returns false
 /// and leaves the IR unchanged when the shape does not match.
 static bool mergeSameArrayViewConditional(Operation *op) {
-  if (op->getNumResults() != 1 ||
-      !isa<BaseMemRefType>(op->getResult(0).getType()))
+  if (op->getNumResults() != 1 || !isa<BaseMemRefType>(op->getResult(0).getType()))
     return false;
   SmallVector<Value, 2> yielded;
   if (auto sel = dyn_cast<arith::SelectOp>(op)) {
@@ -224,11 +224,12 @@ static bool mergeSameArrayViewConditional(Operation *op) {
   }
   if (yielded.size() != 2)
     return false;
-  auto views =
-      std::array<SubIndexOp, 2>{yielded[0].getDefiningOp<SubIndexOp>(),
-                                yielded[1].getDefiningOp<SubIndexOp>()};
-  if (!views[0] || !views[1] || views[0].getSource() != views[1].getSource() ||
-      views[0].getType() != views[1].getType() || !views[0].isElementView())
+  auto views = std::array<SubIndexOp, 2>{yielded[0].getDefiningOp<SubIndexOp>(),
+                                         yielded[1].getDefiningOp<SubIndexOp>()};
+  if (!views[0] || !views[1] ||
+      views[0].getSource() != views[1].getSource() ||
+      views[0].getType() != views[1].getType() ||
+      !views[0].isElementView())
     return false;
   Value source = views[0].getSource();
   // The array must be visible after the conditional.
@@ -309,12 +310,11 @@ static unsigned sinkAccessesIntoViewConditionals(ModuleOp module) {
       SmallVector<Operation *> users(res.getUsers().begin(),
                                      res.getUsers().end());
       // Every use must be the memref of an access (not a stored value).
-      bool onlyAccesses =
-          !users.empty() && llvm::all_of(users, [&](Operation *u) {
-            return accessedMemRef(u) == res &&
-                   (!isa<affine::AffineStoreOp, memref::StoreOp>(u) ||
-                    u->getOperand(0) != res);
-          });
+      bool onlyAccesses = !users.empty() && llvm::all_of(users, [&](Operation *u) {
+        return accessedMemRef(u) == res &&
+               (!isa<affine::AffineStoreOp, memref::StoreOp>(u) ||
+                u->getOperand(0) != res);
+      });
       if (!onlyAccesses)
         continue;
       unsigned idx = res.getResultNumber();
@@ -338,9 +338,10 @@ static unsigned sinkAccessesIntoViewConditionals(ModuleOp module) {
         };
         Operation *nif = nullptr;
         if (auto aif = dyn_cast<affine::AffineIfOp>(op)) {
-          auto n = affine::AffineIfOp::create(
-              b, loc, types, aif.getIntegerSet(), aif.getOperands(),
-              /*withElseRegion=*/true);
+          auto n = affine::AffineIfOp::create(b, loc, types,
+                                              aif.getIntegerSet(),
+                                              aif.getOperands(),
+                                              /*withElseRegion=*/true);
           OpBuilder tb = n.getThenBodyBuilder();
           ValueRange tv = fill(tb, &aif.getThenRegion(), {});
           affine::AffineYieldOp::create(tb, loc, tv);
@@ -349,9 +350,8 @@ static unsigned sinkAccessesIntoViewConditionals(ModuleOp module) {
           affine::AffineYieldOp::create(eb, loc, ev);
           nif = n;
         } else {
-          Value cond = isa<scf::IfOp>(op)
-                           ? cast<scf::IfOp>(op).getCondition()
-                           : cast<arith::SelectOp>(op).getCondition();
+          Value cond = isa<scf::IfOp>(op) ? cast<scf::IfOp>(op).getCondition()
+                                          : cast<arith::SelectOp>(op).getCondition();
           auto n = scf::IfOp::create(b, loc, types, cond,
                                      /*withElseRegion=*/true);
           for (unsigned arm = 0; arm < 2; ++arm) {
@@ -363,9 +363,8 @@ static unsigned sinkAccessesIntoViewConditionals(ModuleOp module) {
             OpBuilder ab = OpBuilder::atBlockEnd(&blk);
             ValueRange v;
             if (auto sif = dyn_cast<scf::IfOp>(op))
-              v = fill(ab,
-                       arm == 0 ? &sif.getThenRegion() : &sif.getElseRegion(),
-                       {});
+              v = fill(ab, arm == 0 ? &sif.getThenRegion()
+                                    : &sif.getElseRegion(), {});
             else
               v = fill(ab, nullptr,
                        arm == 0 ? cast<arith::SelectOp>(op).getTrueValue()
@@ -439,10 +438,10 @@ static void recordCoreTables(func::FuncOp core, SymbolTable &symbols) {
     if (written.contains(g.getOperation()) || !g.getInitialValue() ||
         !ty.hasStaticShape() || !ty.getElementType().isIntOrFloat())
       continue;
-    tables.push_back(
-        b.getArrayAttr({b.getI64IntegerAttr(ty.getNumElements()),
-                        b.getI64IntegerAttr(ty.getElementTypeBitWidth()),
-                        b.getStringAttr(g.getSymName())}));
+    tables.push_back(b.getArrayAttr(
+        {b.getI64IntegerAttr(ty.getNumElements()),
+         b.getI64IntegerAttr(ty.getElementTypeBitWidth()),
+         b.getStringAttr(g.getSymName())}));
   }
   if (!tables.empty())
     core->setAttr("hls.core_tables", b.getArrayAttr(tables));
@@ -520,8 +519,8 @@ static unsigned lowerStreamElementViews(ModuleOp module) {
     StringRef m = t->method;
     bool streamReads = (m.starts_with("4read") && !m.starts_with("4readEv")) ||
                        m.starts_with("7read_nb") || m.starts_with("rs");
-    bool streamWrites = m.starts_with("5write") || m.starts_with("8write_nb") ||
-                        m.starts_with("ls");
+    bool streamWrites = m.starts_with("5write") ||
+                        m.starts_with("8write_nb") || m.starts_with("ls");
     if (!streamReads && !streamWrites)
       continue;
     auto si = call.getOperand(1).getDefiningOp<SubIndexOp>();
@@ -624,9 +623,8 @@ static unsigned lowerStreamElementViews(ModuleOp module) {
 /// turn. The top's own array arguments (block arguments of a public
 /// function: ports) are left as they are. Returns the number of calls
 /// redirected.
-static unsigned
-specializeCastArguments(ModuleOp module,
-                        SmallVectorImpl<func::FuncOp> &origins) {
+static unsigned specializeCastArguments(ModuleOp module,
+                                        SmallVectorImpl<func::FuncOp> &origins) {
   SymbolTable symbols(module);
   struct Key {
     Operation *callee;
@@ -659,7 +657,8 @@ specializeCastArguments(ModuleOp module,
         // Arrays of scalars only: a one-element or struct memref is an
         // object passed by pointer (`this`, a struct by reference), whose
         // members --split-struct-memrefs follows through the calls itself.
-        if (!from.getElementType().isIntOrFloat() || from.getNumElements() <= 1)
+        if (!from.getElementType().isIntOrFloat() ||
+            from.getNumElements() <= 1)
           continue;
         // An array of the design (an alloca, a global, or one passed down
         // from such through a parameter of a private function); the top's
@@ -875,8 +874,8 @@ struct LowerSubIndexPass
       auto old = dyn_cast<MemRefType>(callee.getArgument(p).getType());
       return w && old && w.getRank() == old.getRank() + 1;
     };
-    bool anyOffset =
-        llvm::any_of(rows, [&](auto &r) { return !isRow(r.first, r.second); });
+    bool anyOffset = llvm::any_of(
+        rows, [&](auto &r) { return !isRow(r.first, r.second); });
     std::string name = callee.getName().str() + (anyOffset ? "_off" : "_row");
     for (auto &[p, ty] : rows)
       name += "_" + std::to_string(p);
@@ -895,10 +894,10 @@ struct LowerSubIndexPass
         continue;
       }
       types.push_back(it->second);
-      attrs.push_back(
-          isRow(i, it->second)
-              ? shiftPartitionDims(a, ctx, dyn_cast<MemRefType>(it->second))
-              : (a ? a : DictionaryAttr::get(ctx, {})));
+      attrs.push_back(isRow(i, it->second)
+                          ? shiftPartitionDims(a, ctx,
+                                               dyn_cast<MemRefType>(it->second))
+                          : (a ? a : DictionaryAttr::get(ctx, {})));
       types.push_back(IndexType::get(ctx));
       // The index of the view: what --call-instances reads to tell calls on
       // distinct constant elements apart (VITIS_NOTES N59) once the view is
@@ -997,7 +996,8 @@ struct LowerSubIndexPass
         user->getResult(0).replaceAllUsesWith(nl.getResult());
       } else {
         auto ns2 = memref::StoreOp::create(
-            b, loc, cast<affine::AffineStoreOp>(user).getValue(), src, indices);
+            b, loc, cast<affine::AffineStoreOp>(user).getValue(), src,
+            indices);
         copyAttrs(user, ns2);
       }
       user->erase();
