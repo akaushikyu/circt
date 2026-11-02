@@ -1,8 +1,0 @@
-### chstone_xilinx/sha.mlir  top=sha_stream rule=last
-### truth=7 hist_pred=7 decision_estimate=7 source=hist passes_applied=no mode=base
-### exit=1 elapsed=0.0s status=FAIL
------ stderr -----
-/home/peter/circt/test/hls-est/Estimation/chstone_xilinx/sha.mlir:19:34: error: operation being parsed with an unregistered dialect. If this is intended, please use -allow-unregistered-dialect with the MLIR tool used
-        %6 = "polygeist.subindex"(%arg4, %c1) : (memref<?xi32>, index) -> memref<?xi32>
-                                 ^
------ stdout -----

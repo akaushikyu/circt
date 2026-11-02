@@ -1,5 +1,0 @@
-### forgebench/tiled_attn_p2.mlir  top=_Z3topPA256_fS0_S0_S0_PA64_f rule=name
-### truth=23 hist_pred=10 decision_estimate=10 source=hist passes_applied=yes mode=aggr
-### exit=124 elapsed=1037.8s status=TIMEOUT
------ stderr -----
------ stdout -----

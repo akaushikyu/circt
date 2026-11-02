@@ -1,5 +1,0 @@
-### forgebench/attention_op_p1.mlir  top=_Z3topPA256_fS0_S0_S0_S0_ rule=name
-### truth=69 hist_pred=28 decision_estimate=28 source=hist passes_applied=yes mode=aggr
-### exit=124 elapsed=1036.6s status=TIMEOUT
------ stderr -----
------ stdout -----

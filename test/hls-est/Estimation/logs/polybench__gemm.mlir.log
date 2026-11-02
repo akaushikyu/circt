@@ -1,5 +1,0 @@
-### polybench/gemm.mlir  top=gemm rule=single
-### truth=256 hist_pred=32 decision_estimate=32 source=hist passes_applied=yes mode=aggr
-### exit=124 elapsed=1038.6s status=TIMEOUT
------ stderr -----
------ stdout -----

@@ -1,5 +1,0 @@
-### polybench/syrk.mlir  top=syrk rule=single
-### truth=256 hist_pred=50 decision_estimate=50 source=hist passes_applied=yes mode=aggr
-### exit=124 elapsed=1035.3s status=TIMEOUT
------ stderr -----
------ stdout -----

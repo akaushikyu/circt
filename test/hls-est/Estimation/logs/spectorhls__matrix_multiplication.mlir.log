@@ -1,8 +1,0 @@
-### spectorhls/matrix_multiplication.mlir  top=_ZN5dtypeC1ERKS_ rule=last
-### truth=0 hist_pred=hls-est error: invalid memref element type decision_estimate= source=baseline passes_applied=no mode=base(reused)
-### exit=1 elapsed=0.0s status=FAIL
------ stderr -----
-/home/peter/circt/test/hls-est/Estimation/spectorhls/matrix_multiplication.mlir:2:63: error: `!"llvm"<"struct<(i32, i64)>">` type created with unregistered dialect. If this is intended, please call allowUnregisteredDialects() on the MLIRContext, or use -allow-unregistered-dialect with the MLIR opt tool used
-  func.func @_Z10matrix_mulP5dtypePiS1_(%arg0: memref<?x!llvm.struct<(i32, i64)>>, %arg1: memref<1048576xi32>, %arg2: memref<1048576xi32>)  {
-                                                              ^
------ stdout -----

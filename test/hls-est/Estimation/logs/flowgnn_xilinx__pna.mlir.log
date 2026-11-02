@@ -1,8 +1,0 @@
-### flowgnn_xilinx/pna.mlir  top=PNA_compute_graphs rule=single
-### truth=14584 hist_pred=hls-est error: invalid memref element type decision_estimate= source=baseline passes_applied=no mode=base(reused)
-### exit=1 elapsed=0.0s status=FAIL
------ stderr -----
-/home/peter/circt/test/hls-est/Estimation/flowgnn_xilinx/pna.mlir:2:55: error: `!"llvm"<"struct<(array<4 x f32>)>">` type created with unregistered dialect. If this is intended, please call allowUnregisteredDialects() on the MLIRContext, or use -allow-unregistered-dialect with the MLIR opt tool used
-memref.global @messages_ping : memref<4x5000x80x!llvm.struct<(array<4 x f32>)>>
-                                                      ^
------ stdout -----

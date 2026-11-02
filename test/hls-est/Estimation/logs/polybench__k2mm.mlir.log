@@ -1,5 +1,0 @@
-### polybench/k2mm.mlir  top=k2mm rule=single
-### truth=504 hist_pred=56 decision_estimate=56 source=hist passes_applied=yes mode=aggr
-### exit=124 elapsed=1039.0s status=TIMEOUT
------ stderr -----
------ stdout -----
