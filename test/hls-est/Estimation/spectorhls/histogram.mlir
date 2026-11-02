@@ -1,3 +1,7 @@
+// RUN: hls-est %s --symbol-privatize=exclude=_Z13histogram_hlsPhPjm --symbol-dce --lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --memory-banking-bram --convert-affine-to-loopschedule '--bram-analysis=top=_Z13histogram_hlsPhPjm math-costs=%S/../../../../tools/hls-est-validate/math_costs.json' -o /dev/null | FileCheck %s
+// CHECK: Total BRAM: 8{{$}}
+// Vitis 2025.1 td=off: 8 (results/vitis.json spector_hls/histogram; compared by the harness, not by lit)
+
 module {
   func.func @_Z13histogram_hlsPhPjm(%arg0: memref<8192xi8>, %arg1: memref<256xi32>, %arg2: i64)  {
     %c0_i32 = arith.constant 0 : i32

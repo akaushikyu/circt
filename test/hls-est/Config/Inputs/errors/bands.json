@@ -1,0 +1,1 @@
+{"version": 1, "tool": {"backend": {"memory_mapper": {"depth_bands": [{"max_depth": 1024, "width": 18}, {"max_depth": 512, "width": 9}]}}}}

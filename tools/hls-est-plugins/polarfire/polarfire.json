@@ -1,0 +1,14 @@
+{
+  "_doc": "Run hls-est for the Microchip PolarFire example (hls-doc/new-architecture.md): the device file, the generic-1.0 profile and the usram-first selector (load the plugin with --load-plugin).",
+  "version": 1,
+  "run": {
+    "device": "microchip-polarfire.device.json",
+    "tool": "generic-1.0.profile.json",
+    "clock_ns": 10
+  },
+  "plugins": {
+    "usram-first": {
+      "max_tiles": 1
+    }
+  }
+}

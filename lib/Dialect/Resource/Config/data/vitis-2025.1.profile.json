@@ -1,0 +1,283 @@
+{
+  "tool": {
+    "id": "vitis-2025.1",
+    "name": "vitis_hls",
+    "version": "2025.1",
+    "hls": {
+      "options": {
+        "flow_target": "vivado",
+        "pipeline_loops": 64,
+        "array_partition": { "throughput_driven": "off", "complete_threshold": 4, "include_ports": false }
+      },
+      "timing_margin": { "fraction": 0.27 },
+      "memory_architecture": {
+        "plugin": "vitis-auto",
+        "untracked_memory_ports": 2,
+        "partitioned_argument_bank_ports": true,
+        "one_loop_read_write_sdp": true,
+        "iteration_private_registers": true,
+        "port_occupancy_cycles": 1,
+        "replication": {
+          "max_copies": 16,
+          "max_stores_per_iteration": 1,
+          "shared_write_port_reads_when_idle": true,
+          "exclusive_arm_stores_once": true,
+          "callee_stores_per_loop": true,
+          "caller_stores_per_loop": true,
+          "port_bound_several_arrays": true,
+          "port_bound_writable_globals": true,
+          "rotating_reads_full_copies": true,
+          "user_ram_1wnr_replicable": true,
+          "exclusive_steered_reads_share_slot": true,
+          "select_of_loads_reload": true,
+          "sequential_state_reads": true,
+          "user_plain_ram_pins_kind": true
+        },
+        "rom": { "sdp_max_reads": 2, "copies": "ceil_half", "sequential_state_reads": true, "function_pipeline_reads": true, "module_copies": true, "module_copies_parent_reads": false },
+        "sequential_scope": { "model": "stretch-pair", "loads_before_consumer": true },
+        "port_set_rule": "by_kind",
+        "wide_port_sets": [ ["rw"], ["r", "w"], ["r"], ["r", "r"] ],
+        "priced_configs": { "wide": "sdp", "narrow": "tdp" }
+      },
+      "implicit_buffers": [
+        {
+          "source": "interface",
+          "protocol": "axi4-mm",
+          "mode": "m_axi",
+          "plugin": "vitis-m_axi",
+          "enabled": true,
+          "default_bundle": "gmem",
+          "min_bus_bits": 32,
+          "max_bus_bits": 1024,
+          "defaults": {
+            "max_read_burst_length": 16,
+            "num_read_outstanding": 16,
+            "max_write_burst_length": 16,
+            "num_write_outstanding": 16
+          },
+          "read_fifo": { "srl_max_depth": 32, "mapper": "vitis-band7", "priced_config": "tdp", "confirmed_max_depth": 4096, "per_channel": true, "cast_load_width": true, "power_of_two_width": true, "strobed_part_writes": true, "cache_bram": 29 },
+          "write_buffer": { "free_max_burst": 16, "port_width_bits": 18, "confirmed_min_burst": 32, "min_bram_bits": 1024, "element_width": true },
+          "unresolved_call": "rw",
+          "bus_requests": { "read_per_cycle": 1, "write_per_cycle": 1, "through_calls": true }
+        }
+      ],
+      "streams": {
+        "enabled": true,
+        "default_depth": 2,
+        "srl_max_depth": 2,
+        "srl_max_bits": 1024,
+        "mapper": "vitis-band7",
+        "priced_config": "tdp",
+        "dataflow_argument_fifos": true,
+        "distinct_element_instances": true,
+        "declared_element_bits": true,
+        "static_struct_storage_bits": true,
+        "stream_pragma_arrays": true,
+        "element_depth_pragmas": true
+      },
+      "dataflow_channels": { "enabled": true, "default_blocks": 2, "through_nested_regions": true, "promoted_invariant_accesses": true },
+      "pipeline_decision": {
+        "policy": "vitis-pipeline-loops",
+        "float_loads_perfect": true,
+        "promote_pipelined": true,
+        "flatten_across_calls": false,
+        "sink_parent_code": true,
+        "sink_parent_trailing_code": true,
+        "sink_parent_trailing_stores": false,
+        "fold_unrolled_guards": true,
+        "fold_unrolled_zero_products": true,
+        "fold_nested_constant_guards": true,
+        "fold_domain_true_guards": false,
+        "hoist_common_arm_loads": true,
+        "promote_nest_invariant_only": true,
+        "promoted_store_cleanup": true,
+        "promote_conditional_accesses": true,
+        "flatten_nest_invariant_bounds": true,
+        "pipeline_off_sequential": true,
+        "do_while_flatten_refusal": true,
+        "library_calls_with_loops": [ "sin", "cos", "sinf", "cosf", "fmod", "atan2" ],
+        "pipelined_library_calls": [ "tanh", "tanhf", "expf", "log2", "log2f" ],
+        "do_while_min_subloop_trip": 3,
+        "partial_unroll_runtime_loops": true,
+        "call_occupancy_after_partition": true
+      },
+      "partitioning": {
+        "policy": "vitis-td",
+        "constant_index": { "min_extent": 2, "max_extent": 64, "after_user_partition": true, "non_affine_arrays": true, "pipo_streams": true, "globals": true, "through_calls": true, "fold_division": true, "fold_conditionals": true, "through_views": true, "block_offset": true },
+        "inference": {
+          "target_ii": 1,
+          "ports": { "any": 2, "read": 1, "write": 1 },
+          "max_factor": 0,
+          "max_dims": 1,
+          "rotating_banks": false,
+          "max_scanned_factor": 65536
+        },
+        "steer_affine_loads": true,
+        "compound_assign_two_stores": true,
+        "block_bank_from_loop_range": true,
+        "reachable_store_banks": true,
+        "complete_partition_registers": true,
+        "known_residue_banks": true,
+        "banks_from_value_range": true,
+        "reshaped_callee_parameters": false,
+        "shared_address_bank_reads": true,
+        "steer_window_groups": true,
+        "steer_through_guards": true,
+        "drop_unread_banks": true,
+        "induction_residue_banks": true
+      },
+      "folding": { "rule_set": "vitis-undef", "canonicalize": true, "max_rounds": 16, "storage_address_not_null": true, "drop_asserts": false, "evaluate_constant_calls": true, "constant_call_max_steps": 1000000, "constant_global_loads_after_unroll": true, "evaluate_constant_fills": false, "constant_fill_max_elements": 4096 },
+      "middle_end": {
+        "licm_hoist_invariant_loads": true,
+        "licm_hoist_past_calls": true,
+        "licm_hoist_conditional": true,
+        "licm_hoist_while_conditions": true,
+        "merge_if_else_accesses": true,
+        "gvn_loads": true,
+        "gvn_memref_loads": true,
+        "forward_before_banking": true,
+        "gvn_conditional_loads": true,
+        "globals": true,
+        "dse_guarded_stores": true,
+        "forward_to_guarded_loads": true,
+        "store_forwarding": true,
+        "dead_memory": {
+          "overwritten_stores": true,
+          "dead_calls": true,
+          "honour_preserve": false,
+          "global_shared_by_functions_escapes": true,
+          "load_store_cycles": true,
+          "overwritten_call_outputs": true,
+          "overwritten_by_loops": true,
+          "unread_register_elements": true
+        }
+      },
+      "inlining": { "honour_inline_off": true, "clone_per_argument_type": true },
+      "structs": { "aggregate": true, "globals": true, "scalar_registers": true, "through_calls": true, "element_copy_loops": true, "temporary_registers": true, "member_partitions": true, "specialize_split_casts": true, "top_pointer_scalar": true },
+      "narrowing": { "stored_ranges": true, "load_demand": true, "full_address_interface_modes": ["m_axi"], "complete_read_selector": true, "constant_set_reinterpretation": true, "undef_contributes_nothing": true, "reaching_store_ranges": true, "accumulation_ranges": true, "callee_param_stores_full_range": true, "copies_close_ranges": true },
+      "globals": { "attribute_accesses": true },
+      "interfaces": { "axi_lite_array_memories": true },
+      "grouping": { "plugin": "identity" },
+      "math_library": { "table": "", "local_struct_tables_at_run_time": true, "fixed_exp_tables_when_unlisted": true, "inlined_tables_in_pipelines": true, "shared_library_modules": true, "sequential_core_sharing": true }
+    },
+    "backend": {
+      "id": "vitis-internal",
+      "storage_selector": {
+        "plugin": "vitis-bits-threshold",
+        "min_block_bits": 1024,
+        "inclusive": true,
+        "block": "ramb18",
+        "below": "distributed",
+        "forcing_impl": "bram",
+        "distributed_impl": "lutram"
+      },
+      "memory_mapper": {
+        "plugin": "vitis-band7",
+        "primitive": "ramb18",
+        "depth_rounding": "pow2",
+        "accepted_libraries": [ "zynq" ],
+        "depth_bands": [
+          { "max_depth": 512, "sdp_width": 36, "tdp_width": 18 },
+          { "max_depth": 1024, "width": 18 },
+          { "max_depth": 2048, "width": 9 },
+          { "max_depth": 4096, "width": 4, "alternative": { "width": 9, "stack": 2 } },
+          { "max_depth": 8192, "width": 2 },
+          { "beyond": true, "width": 1, "words_per_block": 16384 }
+        ]
+      }
+    },
+    "report": {
+      "primary_memory_class": "BRAM_18K",
+      "stdout_format": "vitis-bram",
+      "reference_stage": "hls_estimate",
+      "classes": [ "BRAM_18K" ]
+    },
+    "pipeline": "--lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --infer-vitis-split-array=td=off --narrow-ram-widths --memory-banking-bram --convert-affine-to-loopschedule --bram-analysis"
+  },
+  "scheduling": {
+    "timing": {
+      "model": "calyx-fixed",
+      "operator_latencies": {
+        "comb": 0,
+        "seq": 1,
+        "multicycle": 3,
+        "fpmul": 4,
+        "fpaddsub": 5,
+        "fpdiv": 12,
+        "fpsqrt": 16,
+        "fpdiv_f32": 15,
+        "fpdiv_f64": 58,
+        "fpaddsub_f64": 7,
+        "fpmul_f64": 7,
+        "fpsqrt_f32": 15,
+        "fpsqrt_f64": 56,
+        "fptrans": 20,
+        "mem": 1,
+        "call": -1,
+        "kept_call": 1,
+        "stream_read": 2,
+        "stream_write": 1,
+        "libm_call": 20
+      }
+    },
+    "dependences": {
+      "model": "cached-o1",
+      "memory_recurrences": true,
+      "unknown_address_min_ii": 2,
+      "user_inter_independence": true,
+      "enclosing_iv_sample_steps": 7,
+      "bank_store_recurrences": true,
+      "register_recurrence_latencies": false,
+      "promoted_element_register_cycle": true,
+      "f64_register_cycle": true,
+      "promoted_element_search_budget": 1000000,
+      "dynamic_lane_rmw": true,
+      "lane_rmw_one_port": true,
+      "recurrence_latencies": { "comb": 0, "multicycle": 0, "fpaddsub_f32": 4, "fpaddsub_f64": 5, "fpmul_f32": 3, "fpmul_f64": 6 }
+    },
+    "modulo": {
+      "model": "greedy-simplex",
+      "fast_threshold": 150,
+      "fast_ops_threshold": 4096,
+      "max_ii_bumps": 4096,
+      "lower_ii_of_both": true,
+      "callee_global_recurrence": true,
+      "max_pipeline_body_ops": 250000,
+      "recurrence_repair_rounds": 64,
+      "height_priority": true,
+      "fp_unit_limits": true,
+      "user_ii_target": true
+    },
+    "sequential": { "model": "none" },
+    "binding": { "model": "none" },
+    "emit_detail": false,
+    "call_depth": {
+      "load_data_ns": 3.25,
+      "logic_ns": 0.99,
+      "select_ns": 0.69,
+      "variable_shift_ns": 4.42,
+      "constant_multiplier_ns": 5.58,
+      "narrow_multiply_max_bits": 32,
+      "narrow_multiply_cycles": 2,
+      "ports_per_memory": 2,
+      "staggered_calls_share_instance": true,
+      "in_order_call_starts": true,
+      "outlined_loops_own_allocation": true,
+      "outlined_pipeline_array_instances": true,
+      "sequential_loops_share_instance": true,
+      "index_bits": 32,
+      "carry_chain_ns": [
+        { "max_bits": 10, "ns": 1.91 },
+        { "max_bits": 16, "ns": 2.07 },
+        { "max_bits": 32, "ns": 2.55 },
+        { "ns": 3.52 }
+      ],
+      "ternary_adder_ns": [
+        { "max_bits": 10, "ns": 3.72 },
+        { "max_bits": 16, "ns": 3.90 },
+        { "max_bits": 32, "ns": 4.37 },
+        { "ns": 4.42 }
+      ]
+    }
+  }
+}

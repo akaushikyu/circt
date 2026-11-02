@@ -305,7 +305,8 @@ LogicalResult AffineToLoopSchedule::populateOperatorTypes(
   WalkResult result = forOp.getBody()->walk([&](Operation *op) {
     return TypeSwitch<Operation *, WalkResult>(op)
         .Case<AddIOp, IfOp, AffineYieldOp, arith::ConstantOp, CmpIOp,
-              IndexCastOp, memref::AllocaOp, YieldOp>([&](Operation *combOp) {
+              IndexCastOp, IndexCastUIOp, memref::AllocaOp,
+              YieldOp>([&](Operation *combOp) {
           // Some known combinational ops.
           problem.setLinkedOperatorType(combOp, combOpr);
           return WalkResult::advance();

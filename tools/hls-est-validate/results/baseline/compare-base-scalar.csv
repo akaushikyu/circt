@@ -1,0 +1,148 @@
+dataset,benchmark,vitis_bram,hlsest_bram,diff,exact,status,vitis_status,hlsest_status
+accelerators,DGNN_Booster_EvolveGCN,1723,,,False,hls-est missing,ok,"hls-est error: operation being parsed with an unregistered dialect. If this is intended, please use -allow-unregistered-dialect with the MLIR tool used"
+accelerators,DGNN_Booster_convLSTM,1543,,,False,hls-est missing,ok,cgeist error: empty module (no functions emitted)
+accelerators,GP_selection_kernel_fixed_dataset,67,,,False,hls-est missing,ok,cgeist error: empty module (no functions emitted)
+accelerators,GP_selection_kernel_float_dataset,73,,,False,hls-est missing,ok,cgeist error: empty module (no functions emitted)
+accelerators,Mask-Net_dataset,421,,,False,hls-est missing,ok,cgeist error: src/net_hls.cc:313:9: error: member reference base type 'uint512' (aka 'unsigned long long') is not a structure or union
+accelerators,SkyNet_dataset,414,,,False,hls-est missing,ok,cgeist error: src/net_hls.cc:297:9: error: member reference base type 'uint512' (aka 'unsigned long long') is not a structure or union
+accelerators,edgemoe,,,,False,vitis missing,vitis failed,cgeist crash
+basic,arraypartition_block,,4,,False,vitis missing,missing,ok
+basic,arraypartition_complete,,,,False,vitis missing,missing,hls-est timeout 120s
+basic,arraypartition_cyclic,,2,,False,vitis missing,missing,ok
+basic,arraypartition_multidim,,8,,False,vitis missing,missing,ok
+chstone,gsm,2,,,False,hls-est missing,ok,"cgeist error: loc(""lpc.c"":149:16): error: 'arith.shli' op requires the same type for all operands and results"
+chstone,sha,7,,,False,hls-est missing,ok,"hls-est error: operation being parsed with an unregistered dialect. If this is intended, please use -allow-unregistered-dialect with the MLIR tool used"
+flowgnn,dgn,,,,False,vitis missing,vitis failed,cgeist error: src/util.h:22:27: error: type 'float' cannot be used prior to '::' because it has no members
+flowgnn,gat,,,,False,vitis missing,vitis timeout,cgeist crash
+flowgnn,gcn,,,,False,vitis missing,vitis failed,cgeist error: src/util.h:31:27: error: type 'float' cannot be used prior to '::' because it has no members
+flowgnn,gin,1158,,,False,hls-est missing,ok,cgeist crash
+flowgnn,pna,20600,,,False,hls-est missing,ok,cgeist error: src/util.h:45:21: error: type 'float' cannot be used prior to '::' because it has no members
+forgebench,Llama_GPT_module,30,,,False,hls-est missing,ok,"hls-est error: unsupported operation %693 = ""func.call""(%692) <{callee = @tanh}> : (f64) -> f64"
+forgebench,activation_module,258,392,134,False,compared,ok,ok
+forgebench,activation_op1,178,294,116,False,compared,ok,ok
+forgebench,activation_op2,258,392,134,False,compared,ok,ok
+forgebench,activation_op3,258,392,134,False,compared,ok,ok
+forgebench,attention_op_p1,73,406,333,False,compared,ok,ok
+forgebench,attention_op_p2,24,31,7,False,compared,ok,ok
+forgebench,attention_op_p3,24,31,7,False,compared,ok,ok
+forgebench,attn_breakdown_module,17,14,-3,False,compared,ok,ok
+forgebench,attn_breakdown_op1,10,12,2,False,compared,ok,ok
+forgebench,attn_breakdown_op2,17,14,-3,False,compared,ok,ok
+forgebench,conv_A,594,123,-471,False,compared,ok,ok
+forgebench,conv_B,586,315,-271,False,compared,ok,ok
+forgebench,conv_C,610,387,-223,False,compared,ok,ok
+forgebench,conv_block_module,5139,,,False,hls-est missing,ok,hls-est error: crash
+forgebench,conv_block_op1,3897,,,False,hls-est missing,ok,hls-est error: crash
+forgebench,conv_block_op2,4796,,,False,hls-est missing,ok,hls-est error: crash
+forgebench,conv_block_op3,4931,,,False,hls-est missing,ok,hls-est error: crash
+forgebench,conv_module,1042,,,False,hls-est missing,ok,hls-est error: crash
+forgebench,diff_dims_module_large,1922,1920,-2,False,compared,ok,ok
+forgebench,diff_dims_module_small,1154,1920,766,False,compared,ok,ok
+forgebench,diff_dims_p1,210,272,62,False,compared,ok,ok
+forgebench,diff_dims_p2,114,128,14,False,compared,ok,ok
+forgebench,diff_dims_p3,354,304,-50,False,compared,ok,ok
+forgebench,diff_orders_module,1538,192,-1346,False,compared,ok,ok
+forgebench,diff_orders_p1,130,48,-82,False,compared,ok,ok
+forgebench,diff_orders_p2,2,20,18,False,compared,ok,ok
+forgebench,diff_orders_p3,514,80,-434,False,compared,ok,ok
+forgebench,gpt_transformer_p1,28,,,False,hls-est missing,ok,"hls-est error: unsupported operation %192 = ""func.call""(%191) <{callee = @tanh}> : (f64) -> f64"
+forgebench,llama_transformer_p2,30,40,10,False,compared,ok,ok
+forgebench,mlp,,268,,False,vitis missing,missing,ok
+forgebench,mult_op_module_dot,58,16,-42,False,compared,ok,ok
+forgebench,mult_op_module_mm,3,,,False,hls-est missing,ok,cgeist error: empty module (no functions emitted)
+forgebench,mult_op_module_mmv,20,,,False,hls-est missing,ok,cgeist error: empty module (no functions emitted)
+forgebench,mult_op_p1,2,8,6,False,compared,ok,ok
+forgebench,mult_op_p2,2,3,1,False,compared,ok,ok
+forgebench,mult_op_p3,2,2,0,True,compared,ok,ok
+forgebench,testing_impl,2,4,2,False,compared,ok,ok
+forgebench,testing_unroll,2,,,False,hls-est missing,ok,cgeist error: empty module (no functions emitted)
+forgebench,tiled_attn_module,270,600,330,False,compared,ok,ok
+forgebench,tiled_attn_p1,73,406,333,False,compared,ok,ok
+forgebench,tiled_attn_p2,23,106,83,False,compared,ok,ok
+forgebench,vec_mtx_module,2,18,16,False,compared,ok,ok
+forgebench,vec_mtx_p1,2,3,1,False,compared,ok,ok
+forgebench,vec_mtx_p2,2,,,False,hls-est missing,ok,cgeist error: empty module (no functions emitted)
+machsuite,aes_table,8,,,False,hls-est missing,ok,cgeist crash
+machsuite,aes_tableless,0,,,False,hls-est missing,ok,cgeist crash
+machsuite,backprop,40,,,False,hls-est missing,ok,"cgeist error: loc(""backprop.c"":61:5): error: 'func.call' op operand type mismatch: expected operand type 'memref<64xf64>', but provided 'memref<3xf64>' for operand number 0"
+machsuite,bfs_bulk,0,,,False,hls-est missing,ok,cgeist crash
+machsuite,bfs_queue,1,,,False,hls-est missing,ok,cgeist crash
+machsuite,fft_transpose,28,12,-16,False,compared,ok,ok
+machsuite,gemm_blocked,0,0,0,True,compared,ok,ok
+machsuite,gemm_ncubed,0,0,0,True,compared,ok,ok
+machsuite,md_grid,0,,,False,hls-est missing,ok,cgeist crash
+machsuite,md_knn,0,0,0,True,compared,ok,ok
+machsuite,nw,0,0,0,True,compared,ok,ok
+machsuite,sort_merge,4,,,False,hls-est missing,ok,"cgeist error: loc(""sort.c"":38:34): error: operand #0 does not dominate this use"
+machsuite,sort_radix,0,0,0,True,compared,ok,ok
+machsuite,spmv_crs,0,,,False,hls-est missing,ok,hls-est error: unsupported operation
+machsuite,spmv_ellpack,0,0,0,True,compared,ok,ok
+machsuite,stencil2D,0,,,False,hls-est missing,ok,hls-est error: crash
+machsuite,stencil3D,0,0,0,True,compared,ok,ok
+machsuite,viterbi,128,,,False,hls-est missing,ok,cgeist crash
+polybench,atax,13,13,0,True,compared,ok,ok
+polybench,bicg,14,14,0,True,compared,ok,ok
+polybench,gemm,256,32,-224,False,compared,ok,ok
+polybench,gesummv,135,22,-113,False,compared,ok,ok
+polybench,k2mm,504,56,-448,False,compared,ok,ok
+polybench,k3mm,728,56,-672,False,compared,ok,ok
+polybench,mvt,14,14,0,True,compared,ok,ok
+polybench,syr2k,392,56,-336,False,compared,ok,ok
+polybench,syrk,256,32,-224,False,compared,ok,ok
+polybench_pragmas,bicg,8,8,0,True,compared,ok,ok
+polybench_pragmas,gesummv,16,16,0,True,compared,ok,ok
+polybench_pragmas,k2mm,184,56,-128,False,compared,ok,ok
+polybench_pragmas,k3mm,312,56,-256,False,compared,ok,ok
+polybench_pragmas,mvt,8,8,0,True,compared,ok,ok
+polybench_pragmas,syr2k,280,56,-224,False,compared,ok,ok
+polybench_pragmas,syrk,32,32,0,True,compared,ok,ok
+rosetta,3d-rendering__src__sdsoc,,,,False,vitis missing,vitis failed,cgeist error: rendering.cpp:9:10: fatal error: '../host/typedefs.h' file not found
+rosetta,BNN__cpp__accel,,,,False,vitis missing,vitis failed,cgeist error: ./Accel.h:5:10: fatal error: 'hls_video.h' file not found
+rosetta,digit-recognition__src__sdsoc,,,,False,vitis missing,vitis failed,cgeist error: digitrec.cpp:9:10: fatal error: '../host/typedefs.h' file not found
+rosetta,face-detection__src__sdsoc,,,,False,vitis missing,vitis failed,cgeist error: face_detect.cpp:9:10: fatal error: '../host/typedefs.h' file not found
+rosetta,optical-flow__src__sdsoc,,,,False,vitis missing,vitis failed,cgeist error: ./optical_flow.h:12:10: fatal error: '../host/typedefs.h' file not found
+rosetta,spam-filter__src__sdsoc,,,,False,vitis missing,vitis failed,cgeist error: ./sgd.h:9:10: fatal error: '../host/typedefs.h' file not found
+soda,soda__blur,77,,,False,hls-est missing,ok,cgeist crash
+soda,soda__contrast,290,,,False,hls-est missing,ok,cgeist crash
+soda,soda__denoise2d,48,,,False,hls-est missing,ok,cgeist crash
+soda,soda__denoise3d,38,,,False,hls-est missing,ok,cgeist crash
+soda,soda__erosion,92,,,False,hls-est missing,ok,cgeist crash
+soda,soda__heat3d,28,,,False,hls-est missing,ok,cgeist crash
+soda,soda__jacobi2d,12,,,False,hls-est missing,ok,cgeist crash
+soda,soda__jacobi3d,28,,,False,hls-est missing,ok,cgeist crash
+soda,soda__seidel2d,20,,,False,hls-est missing,ok,cgeist crash
+soda,soda__sobel2d,12,,,False,hls-est missing,ok,cgeist crash
+soda,soda__xcorr,92,,,False,hls-est missing,ok,cgeist crash
+spector_hls,dct,0,0,0,True,compared,ok,ok
+spector_hls,fir,4,4,0,True,compared,ok,ok
+spector_hls,histogram,8,8,0,True,compared,ok,ok
+spector_hls,matrix_multiplication,0,,,False,hls-est missing,ok,hls-est error: invalid memref element type
+spector_hls,mergesort,0,0,0,True,compared,ok,ok
+spector_hls,normals,4,,,False,hls-est missing,ok,"hls-est error: unsupported operation %25 = ""func.call""(%21) <{callee = @nanf}> : (!llvm.ptr) -> f32"
+spector_hls,sobel_filter_x,0,,,False,hls-est missing,ok,hls-est error: crash
+spector_hls,sobel_filter_y,0,,,False,hls-est missing,ok,hls-est error: crash
+spector_hls,spmv,0,0,0,True,compared,ok,ok
+spector_hls,template_matching,1,,,False,hls-est missing,ok,cgeist error: empty module (no functions emitted)
+vitis_examples,01_basic_examples_vhls_fixed_point_sqrt,0,,,False,hls-est missing,ok,cgeist error: fxp_sqrt_top.cpp:22:4: error: no matching function for call to 'fxp_sqrt'
+vitis_examples,02_basic_examples_vhls_fir_filter,3,,,False,hls-est missing,ok,hls-est error: invalid memref element type
+vitis_examples,03_basic_examples_vhls_fixed_point_window_conv,0,,,False,hls-est missing,ok,cgeist error: empty module (no functions emitted)
+vitis_examples,04_basic_examples_vhls_floating_point_window_conv,1,,,False,hls-est missing,ok,cgeist error: empty module (no functions emitted)
+vitis_examples,05_basic_examples_vhls_ap_arithmetic,0,0,0,True,compared,ok,ok
+vitis_examples,06_basic_examples_vhls_parallel_loops,0,0,0,True,compared,ok,ok
+vitis_examples,07_basic_examples_vhls_imperfect_loops,0,0,0,True,compared,ok,ok
+vitis_examples,08_basic_examples_vhls_max_bounded_loop,0,,,False,hls-est missing,ok,cgeist error: empty module (no functions emitted)
+vitis_examples,09_basic_examples_vhls_perfect_nested_loops,0,0,0,True,compared,ok,ok
+vitis_examples,10_basic_examples_vhls_pipelined_nested_loops,0,0,0,True,compared,ok,ok
+vitis_examples,11_basic_examples_vhls_accs_sequential,0,0,0,True,compared,ok,ok
+vitis_examples,12_basic_examples_vhls_accs_w_asserts,0,,,False,hls-est missing,ok,"hls-est error: operation being parsed with an unregistered dialect. If this is intended, please use -allow-unregistered-dialect with the MLIR tool used"
+vitis_examples,13_basic_examples_vhls_accs_w_dataflow,0,0,0,True,compared,ok,ok
+vitis_examples,14_basic_examples_vhls_static_memory,1,2,1,False,compared,ok,ok
+vitis_examples,15_basic_examples_vhls_pointer_casting,0,,,False,hls-est missing,ok,"hls-est error: operation being parsed with an unregistered dialect. If this is intended, please use -allow-unregistered-dialect with the MLIR tool used"
+vitis_examples,16_basic_examples_vhls_double_pointer,0,0,0,True,compared,ok,ok
+vitis_examples,17_basic_examples_vhls_axi_master,4,,,False,hls-est missing,ok,"hls-est error: operation being parsed with an unregistered dialect. If this is intended, please use -allow-unregistered-dialect with the MLIR tool used"
+vitis_examples,18_basic_examples_vhls_axi_stream_no_side_channel,0,0,0,True,compared,ok,ok
+vitis_examples,19_basic_examples_vhls_multi_array_access_bottleneck,0,0,0,True,compared,ok,ok
+vitis_examples,20_basic_examples_vhls_resolved_array_access_bottleneck,0,,,False,hls-est missing,ok,hls-est error: 'loopschedule.terminator' op 'iter_args' must be defined by a 'loopschedule.pipeline.stage'
+vitis_examples,21_basic_examples_vhls_uram_ecc,,0,,False,vitis missing,vitis failed,ok
+vitis_examples,22_basic_examples_vhls_fixed_point_hamming_window,1,1,0,True,compared,ok,ok
+vitis_examples,28_vitis_accel_examples_streaming_vadd,58,,,False,hls-est missing,ok,cgeist crash

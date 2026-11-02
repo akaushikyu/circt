@@ -4,7 +4,7 @@
 include "mlir/Pass/PassBase.td"
 include "mlir/Rewrite/PassUtil.td"
 
-def MemoryBanking : Pass<"memory-banking-bram", "::mlir::func::FuncOp"> {
+def MemoryBanking : Pass<"memory-banking-bram", "::mlir::ModuleOp"> {
   let summary = "Partition the memories used in kernel to banks";
   let constructor = "circt::hls_analysis::createMemoryBankingPassModified()";
   let dependentDialects = [

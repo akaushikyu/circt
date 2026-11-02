@@ -1,0 +1,139 @@
+# 8. Threats to validity, limitations and future work
+
+**Draft.** Numbers from the files named in `data/frame-numbers.json`.
+
+## 8.1 Construct validity: what "correct" means here
+
+A prediction is counted as correct when it equals the BRAM_18K total of Vitis' C-synthesis report
+(`csynth.xml`), and per array when it equals the memory table, which can be scored only where the two
+tools' memory names align ({{ev_pa_aligned_pct}} % of the BRAM-carrying array rows, Table 6.3). This is Vitis' own *estimate* after C
+synthesis, not the BRAM of the implemented design after Vivado place and route, which can differ (Vivado
+may merge or trim memories). hls-est therefore reproduces Vitis' decisions, which is the stated goal, and
+inherits any distance between Vitis' report and the final bitstream. For {{ev_over_device_compared}} of the
+{{compared}} compared designs ({{ev_over_device_compared_pct}} %), Vitis allocates more than the
+{{ev_device_capacity}} BRAM_18K of the part. These designs can never be implemented on it, so Vitis's
+numbers for them are never checked by an implementation run. On the {{ev_fits_compared}} designs that fit,
+{{ev_fits_exact}} are exact and {{ev_fits_in_band}} in band (Table 6.1).
+
+The goal band (exact or at most {{band_over_pct}} % over) is asymmetric by design: {{under}} of the {{compared}}
+compared designs under-count and are out of band whatever their size, and {{over_gt_band}} over-count by more
+than {{band_over_pct}} %. Measured in BRAM_18K, the under-counts sum to {{under_sum}} and the over-counts to {{over_sum}}.
+Table 8.1 (`tables/frame-undercounts.md`) lists the largest under-counts with their largest per-array
+differences.
+
+## 8.2 Internal validity: one tool, one part, one configuration
+
+- **One version, one part, one clock, one partitioning mode.** Every ground-truth run uses Vitis
+  {{vitis_versions}} on {{vitis_parts}} at {{vitis_clocks}} with `throughput_driven=off`. Thresholds such
+  as the LUT-RAM limit (N5), the depth bands (N8) and the 17-slot port model of replication (N4) are
+  measured for this device family; the configuration file makes them data, but their values for other
+  parts and other versions are not measured. With `throughput_driven=auto` Vitis partitions by port
+  pressure (N2); a second, informational run set exists, but hls-est's model of it is behind an option and
+  is not evaluated here (O2).
+- **The catalogue was also the development set.** The rules were found by chasing mismatches on the same
+  catalogue that is used to report accuracy. Each rule was proven on separate minimal kernels and the
+  project's rules forbid branching on benchmark names, array names or sizes, but no held-out set of designs
+  was kept back. The kernels themselves were mostly written to explain a catalogue mismatch, so they are
+  not independent of the catalogue either. The reported exact share is therefore an in-sample number;
+  Section 8.6 proposes a held-out evaluation.
+- **Repeatability of the ground truth.** No Vitis run was repeated on purpose. {{ev_rep_groups}} groups of
+  catalogue designs with byte-identical cgeist MLIR ({{ev_rep_designs}} designs) were synthesised as
+  separate Vitis runs, and their totals agree in {{ev_rep_totals_agree}} groups and their memory tables in
+  {{ev_rep_memtables_agree}}. This is indirect evidence only; a deliberate repeat of a sample of runs,
+  including runs on a second host, is open.
+- **No independent baseline from the literature.** The only baseline is a naive declared-size model
+  (Table 6.4: exact on {{ev_b0_exact}} of {{compared}} designs). The learned predictors of Chapter 2 predict
+  other targets (post-implementation resources, aggregates) and were not run on this catalogue.
+- **Ground-truth gaps.** {{vitis_failed}} catalogue designs fail in Vitis and {{vitis_timeout}} time out;
+  among the failures, {{dod_vitis_rejects}} are sources Vitis itself rejects. They have no ground truth and are excluded from
+  every accuracy number ({{ev_all_no_vitis}} of the {{designs}} designs have no Vitis result;
+  {{ev_all_estimated_no_vitis}} of them are estimated by hls-est).
+- **Front-end correctness.** An estimate is only as good as the MLIR it starts from. Differential
+  execution checks {{sem_checked}} designs ({{sem_equal}} bit-exact, {{sem_mismatch}} mismatching);
+  {{sem_na}} designs cannot be checked, most because their native reference build is defective.
+
+## 8.3 External validity: an academic corpus
+
+The HLSFactory catalogue consists of published benchmark suites, course projects and generated designs.
+It contains many small kernels and many near-duplicates (PolyBench in several sizes and number types; the
+`WIP` dataset repeats the `stream_hls` designs), so design counts overstate diversity:
+{{datasets_all_exact}} of the {{datasets}} datasets are exact on every compared design, and four datasets
+carry {{err_top4_share}} % of the summed absolute error ({{err_top4}} BRAM_18K). Industrial designs (deep
+dataflow hierarchies, many `m_axi` bundles, vendor libraries such as the Vitis vision or DSP libraries,
+`hls::task`) are under-represented; a few catalogue designs need library headers the Vitis
+{{vitis_versions}} install no longer ships (`hls_video.h`) and have no ground truth.
+
+## 8.4 Limitations of the model
+
+- **Under-count classes.** The last round of attribution (O113) groups the out-of-band designs by cause
+  per array. The largest open classes are: loops hls-est leaves unscheduled because one operation in them
+  has no timing, most often `hls::stream` reads and writes (O54 (c), O111; N82 implements the Vitis rule
+  but stays opt-in because it needs O1, see O114); the greedy modulo scheduler returning a larger II than
+  Vitis on large flattened bodies (O56); flatten refusals Vitis makes that hls-est does not (N64, N76);
+  and `hls::vector` and struct cases (O54, O64). Rule interactions are tested mainly by catalogue designs:
+  {{ev_inter_two_or_more}} of the {{compared}} compared designs change under two or more of the rule pairs
+  of Table 6.6 (an upper bound; {{ev_inter_ctl_two_or_more}} under two or more controlled pairs).
+- **O1: loop-carried memory dependences.** Recurrences through memory (`a[i] = f(a[i-1])`) never reach
+  hls-est's modulo schedulers, a defect inherited from the upstream pass hls-est's scheduler is built on:
+  only recurrences through SSA loop-carried values are honoured. Activating the dependences broke other
+  schedules in an experiment (infeasible problems, multiple sinks) and was reverted. A loop that Vitis
+  slows down to a higher II therefore looks faster to hls-est, which over-states its port demand and can
+  change the storage kind and replication; the RTL back end has to raise the II after the fact (Chapter 7).
+- **Rule inference may be incomplete.** {{n_notes_unconfirmed}} notes are explicitly unconfirmed and
+  {{n_notes_partly}} only partly confirmed. A rule that holds on every kernel tried can still fail on a
+  combination nobody tried; kernels sweep one parameter at a time and interactions of rules are covered
+  only where a catalogue design exercised them. Several current rules were found by a later counterexample
+  to an earlier, simpler rule (for example N38 corrects the inputs of N4's copy count; N76 qualifies N64),
+  which suggests more such refinements remain.
+- **Only BRAM.** DSP, FF and LUT are not estimated. A first feasibility check (MEMOS #37) found that they
+  depend on Vitis' schedule and operator binding, which hls-est models only for memory ports.
+- **Run time.** The median estimate takes {{ev_time_hlsest_median_s2}} s, but a few large designs need
+  minutes in the dependence analysis and scheduler (O103, O105). In the final run, {{ev_all_hlsest_fail}}
+  compiled designs end without an estimate: {{ev_all_hlsest_timeout}} exceed the harness's 120 s limit and
+  in {{ev_all_top_not_found}} hls-est finds no function with the top's name. Only
+  {{ev_all_hlsest_fail_with_vitis}} of them have a Vitis result.
+
+## 8.5 Legality of the method
+
+The method is behavioural black-box inference plus the use of AMD's open-sourced front end:
+
+- Vitis is run as a user runs it, with documented options and hooks, and only its documented outputs are
+  read: reports, logs, the intermediate `.ll` files it writes into its project directory, the generated
+  RTL, and its own `-help` / `-help-hidden` text.
+- The open-source front end `hls-llvm-project` is read, and code from it is ported only from files whose
+  licence allows it (the Apache-2.0 Xilinx HLS files and the NCSA-licensed LLVM base, with their notices;
+  MEMOS #40). Its `XilinxPlat` files carry no licence grant and are read but never copied; the Vitis
+  headers are compiled, never copied.
+- The installed device database `platform.db` is read read-only for device facts (MEMOS #42); it and dumps
+  of it are never copied into the repositories.
+- No closed Vitis binary or library is disassembled, decompiled or patched.
+
+Whether the Vitis end-user licence agreement restricts the publication of measurements or comparisons
+made with the tool has **not** been checked as part of this work; it should be checked (with the
+supervisor and, if needed, the university's legal office) before publication. This is a question about the
+publication of results, separate from the legality of the inference method itself.
+
+## 8.6 Future work
+
+- **DSP, FF and LUT (Phase 6).** Extend the cost model to the other resource classes. It needs Vitis'
+  schedule and operator binding, so the scheduling plugin interfaces (operator timing, sequential
+  scheduler, binder) that are placeholders today must become models; `hls-doc/design/phase6-plan.md`
+  holds a plan and the first counting rules (N34).
+- **O1 and the stream timing.** Feed loop-carried memory dependences to both schedulers with the
+  forwarded latency Vitis uses, then enable the hls::stream timing (N82, O114).
+- **A second part and the other partitioning mode.** Repeat the ground truth on an UltraScale+ or Versal
+  part and with `throughput_driven=auto`, measure which thresholds move, and express them as a second
+  device and tool profile. This is the first real test of the configuration and plugin architecture beyond
+  the unvalidated PolarFire example.
+- **Repeat the controlled measurements.** Re-run the pass ablation (Table 6.7, measured in round 5 under the
+  exactclass shim) and the historical rule pairs of Table 6.6 as controlled one-key-off runs of the final
+  pipeline, and repeat a sample of Vitis runs to bound the ground truth's repeatability.
+- **Held-out evaluation.** Freeze hls-est and evaluate it on designs that played no part in its
+  development (a later HLSFactory release, industrial examples, or a newer Vitis version on the same
+  designs) to obtain an out-of-sample accuracy.
+- **RTL coverage.** Implement the most frequent blockers of the RTL back end (dynamic shapes, streams and
+  dataflow, kept calls, pointer and struct code, global arrays), pipelined floating-point units for timing
+  closure, and a comparison of the generated RTL's area and timing with Vitis' (Chapter 7).
+- **Automating the inference.** The hypothesis-kernel-sweep loop is manual. Kernel generators that sweep
+  thresholds automatically, and active-learning methods from model learning [@vaandrager2017model], could
+  shorten it and make the coverage of rule interactions measurable.

@@ -2,6 +2,7 @@
 #include "circt/Dialect/LoopSchedule/LoopScheduleDialect.h"
 #include "circt/Dialect/Resource/Interfaces/MemoryInterface.h"
 #include "circt/Dialect/Resource/Passes/AffineToLoopScheduleModified.h"
+#include "circt/Dialect/Resource/Passes/InferVitisSplitArray.h"
 #include "circt/Dialect/Resource/Passes/BRAMAnalysisAffine.h"
 #include "circt/Dialect/Resource/Passes/BRAMAnalysisLoopSchedule.h"
 #include "mlir/IR/DialectRegistry.h"
@@ -18,8 +19,7 @@ int main(int argc, char **argv) {
   hls::registerBRAMAffineAnalysisPass();
   hls::registerBRAMLoopscheduleAnalysisPass();
   hls::registerAffineToLoopScheduleAnalysisPass();
-  
-
+  hls::registerInferVitisSplitArray();
   return mlir::asMainReturnCode(
       mlir::MlirOptMain(argc, argv, "HLS BRAM analysis driver\n", registry));
 }

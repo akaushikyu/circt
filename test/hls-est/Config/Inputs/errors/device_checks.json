@@ -1,0 +1,1 @@
+{"version": 1, "device": {"memories": [{"id": "ramb18", "tier": "block", "cost": {"BRAM_36K": 1}, "bits": 18432, "geometries": [{"width": 36, "depth": 1024}], "port_configs": [{"name": "tdp", "ports": ["rw", "rw"], "max_width": 18}], "init": "any", "read_latency_options": [{"cycles": 1}]}]}}

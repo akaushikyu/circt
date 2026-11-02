@@ -35,10 +35,15 @@ struct CyclicSchedulingAnalysis {
   CyclicSchedulingAnalysis(Operation *funcOp, mlir::AnalysisManager &am);
 
   scheduling::CyclicProblem &getProblem(mlir::affine::AffineForOp forOp);
+  /// The problem of a pipelined runtime-trip scf.for (isScheduledRuntimeFor).
+  scheduling::CyclicProblem &getProblem(Operation *loop);
 
 private:
   void analyzeForOp(mlir::affine::AffineForOp forOp,
-                    analysis::MemoryDependenceAnalysis memoryAnalysis);
+                    analysis::MemoryDependenceAnalysis &memoryAnalysis);
+  void analyzeLoop(Operation *loop, mlir::Block *body,
+                   mlir::ValueRange regionIterArgs,
+                   analysis::MemoryDependenceAnalysis &memoryAnalysis);
 
   DenseMap<Operation *, scheduling::CyclicProblem> problems;
 };

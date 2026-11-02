@@ -1,0 +1,144 @@
+dataset,benchmark,vitis_bram,hlsest_bram,diff,exact,status,vitis_status,hlsest_status
+accelerators,DGNN_Booster_EvolveGCN,1723,,,False,hls-est missing,ok,missing
+accelerators,DGNN_Booster_convLSTM,1543,,,False,hls-est missing,ok,missing
+accelerators,GP_selection_kernel_fixed_dataset,67,,,False,hls-est missing,ok,missing
+accelerators,GP_selection_kernel_float_dataset,73,,,False,hls-est missing,ok,missing
+accelerators,Mask-Net_dataset,421,,,False,hls-est missing,ok,missing
+accelerators,SkyNet_dataset,414,,,False,hls-est missing,ok,missing
+accelerators,edgemoe,,,,False,vitis missing,vitis failed,missing
+chstone,gsm,2,,,False,hls-est missing,ok,missing
+chstone,sha,7,,,False,hls-est missing,ok,missing
+flowgnn,dgn,,,,False,vitis missing,vitis failed,missing
+flowgnn,gat,,,,False,vitis missing,vitis timeout,missing
+flowgnn,gcn,,,,False,vitis missing,vitis failed,missing
+flowgnn,gin,1158,,,False,hls-est missing,ok,missing
+flowgnn,pna,20600,,,False,hls-est missing,ok,missing
+forgebench,Llama_GPT_module,30,27,-3,False,compared,ok,ok
+forgebench,activation_module,258,256,-2,False,compared,ok,ok
+forgebench,activation_op1,178,192,14,False,compared,ok,ok
+forgebench,activation_op2,258,256,-2,False,compared,ok,ok
+forgebench,activation_op3,258,256,-2,False,compared,ok,ok
+forgebench,attention_op_p1,73,203,130,False,compared,ok,ok
+forgebench,attention_op_p2,24,18,-6,False,compared,ok,ok
+forgebench,attention_op_p3,24,18,-6,False,compared,ok,ok
+forgebench,attn_breakdown_module,17,11,-6,False,compared,ok,ok
+forgebench,attn_breakdown_op1,10,9,-1,False,compared,ok,ok
+forgebench,attn_breakdown_op2,17,11,-6,False,compared,ok,ok
+forgebench,conv_A,594,97,-497,False,compared,ok,ok
+forgebench,conv_B,586,273,-313,False,compared,ok,ok
+forgebench,conv_C,610,321,-289,False,compared,ok,ok
+forgebench,conv_block_module,5139,7255,2116,False,compared,ok,ok
+forgebench,conv_block_op1,3897,3633,-264,False,compared,ok,ok
+forgebench,conv_block_op2,4796,6244,1448,False,compared,ok,ok
+forgebench,conv_block_op3,4931,4549,-382,False,compared,ok,ok
+forgebench,conv_module,1042,1661,619,False,compared,ok,ok
+forgebench,diff_dims_module_large,1922,1152,-770,False,compared,ok,ok
+forgebench,diff_dims_module_small,1154,1152,-2,False,compared,ok,ok
+forgebench,diff_dims_p1,210,160,-50,False,compared,ok,ok
+forgebench,diff_dims_p2,114,64,-50,False,compared,ok,ok
+forgebench,diff_dims_p3,354,192,-162,False,compared,ok,ok
+forgebench,diff_orders_module,1538,1104,-434,False,compared,ok,ok
+forgebench,diff_orders_p1,130,24,-106,False,compared,ok,ok
+forgebench,diff_orders_p2,2,10,8,False,compared,ok,ok
+forgebench,diff_orders_p3,514,40,-474,False,compared,ok,ok
+forgebench,gpt_transformer_p1,28,22,-6,False,compared,ok,ok
+forgebench,llama_transformer_p2,30,23,-7,False,compared,ok,ok
+forgebench,mlp,,134,,False,vitis missing,vitis timeout,ok
+forgebench,mult_op_module_dot,58,136,78,False,compared,ok,ok
+forgebench,mult_op_module_mm,3,,,False,hls-est missing,ok,cgeist error: empty module (no functions emitted)
+forgebench,mult_op_module_mmv,20,,,False,hls-est missing,ok,cgeist error: empty module (no functions emitted)
+forgebench,mult_op_p1,2,5,3,False,compared,ok,ok
+forgebench,mult_op_p2,2,2,0,True,compared,ok,ok
+forgebench,mult_op_p3,2,2,0,True,compared,ok,ok
+forgebench,testing_impl,2,4,2,False,compared,ok,ok
+forgebench,testing_unroll,2,,,False,hls-est missing,ok,cgeist error: empty module (no functions emitted)
+forgebench,tiled_attn_module,270,304,34,False,compared,ok,ok
+forgebench,tiled_attn_p1,73,203,130,False,compared,ok,ok
+forgebench,tiled_attn_p2,23,55,32,False,compared,ok,ok
+forgebench,vec_mtx_module,2,10,8,False,compared,ok,ok
+forgebench,vec_mtx_p1,2,2,0,True,compared,ok,ok
+forgebench,vec_mtx_p2,2,,,False,hls-est missing,ok,cgeist error: empty module (no functions emitted)
+machsuite,aes_table,8,,,False,hls-est missing,ok,"cgeist error: loc(""aes_table.c"":142:5): error: 'func.call' op operand type mismatch: expected operand type 'memref<?xi8>', but provided 'memref<16xi8>' for operand number 0"
+machsuite,aes_tableless,0,,,False,hls-est missing,ok,"cgeist error: loc(""aes_tableless.c"":147:5): error: 'func.call' op operand type mismatch: expected operand type 'memref<?xi8>', but provided 'memref<16xi8>' for operand number 0"
+machsuite,backprop,40,,,False,hls-est missing,ok,"cgeist error: loc(""backprop.c"":61:5): error: 'func.call' op operand type mismatch: expected operand type 'memref<64xf64>', but provided 'memref<3xf64>' for operand number 0"
+machsuite,bfs_bulk,0,,,False,hls-est missing,ok,cgeist crash
+machsuite,bfs_queue,1,,,False,hls-est missing,ok,cgeist crash
+machsuite,fft_transpose,28,12,-16,False,compared,ok,ok
+machsuite,gemm_blocked,0,0,0,True,compared,ok,ok
+machsuite,gemm_ncubed,0,0,0,True,compared,ok,ok
+machsuite,md_grid,0,,,False,hls-est missing,ok,cgeist crash
+machsuite,md_knn,0,0,0,True,compared,ok,ok
+machsuite,nw,0,0,0,True,compared,ok,ok
+machsuite,sort_merge,4,,,False,hls-est missing,ok,"cgeist error: loc(""sort.c"":38:34): error: operand #0 does not dominate this use"
+machsuite,sort_radix,0,0,0,True,compared,ok,ok
+machsuite,spmv_crs,0,0,0,True,compared,ok,ok
+machsuite,spmv_ellpack,0,0,0,True,compared,ok,ok
+machsuite,stencil2D,0,0,0,True,compared,ok,ok
+machsuite,stencil3D,0,0,0,True,compared,ok,ok
+machsuite,viterbi,128,128,0,True,compared,ok,ok
+polybench,atax,13,13,0,True,compared,ok,ok
+polybench,bicg,14,14,0,True,compared,ok,ok
+polybench,gemm,256,256,0,True,compared,ok,ok
+polybench,gesummv,135,21,-114,False,compared,ok,ok
+polybench,k2mm,504,504,0,True,compared,ok,ok
+polybench,k3mm,728,728,0,True,compared,ok,ok
+polybench,mvt,14,14,0,True,compared,ok,ok
+polybench,syr2k,392,392,0,True,compared,ok,ok
+polybench,syrk,256,256,0,True,compared,ok,ok
+polybench_pragmas,bicg,8,8,0,True,compared,ok,ok
+polybench_pragmas,gesummv,16,16,0,True,compared,ok,ok
+polybench_pragmas,k2mm,184,184,0,True,compared,ok,ok
+polybench_pragmas,k3mm,312,296,-16,False,compared,ok,ok
+polybench_pragmas,mvt,8,8,0,True,compared,ok,ok
+polybench_pragmas,syr2k,280,280,0,True,compared,ok,ok
+polybench_pragmas,syrk,32,32,0,True,compared,ok,ok
+rosetta,3d-rendering__src__sdsoc,,,,False,vitis missing,vitis failed,missing
+rosetta,BNN__cpp__accel,,,,False,vitis missing,vitis failed,missing
+rosetta,digit-recognition__src__sdsoc,,,,False,vitis missing,vitis failed,missing
+rosetta,face-detection__src__sdsoc,,,,False,vitis missing,vitis failed,missing
+rosetta,optical-flow__src__sdsoc,,,,False,vitis missing,vitis failed,missing
+rosetta,spam-filter__src__sdsoc,,,,False,vitis missing,vitis failed,missing
+soda,soda__blur,77,,,False,hls-est missing,ok,missing
+soda,soda__contrast,290,,,False,hls-est missing,ok,missing
+soda,soda__denoise2d,48,,,False,hls-est missing,ok,missing
+soda,soda__denoise3d,38,,,False,hls-est missing,ok,missing
+soda,soda__erosion,92,,,False,hls-est missing,ok,missing
+soda,soda__heat3d,28,,,False,hls-est missing,ok,missing
+soda,soda__jacobi2d,12,,,False,hls-est missing,ok,missing
+soda,soda__jacobi3d,28,,,False,hls-est missing,ok,missing
+soda,soda__seidel2d,20,,,False,hls-est missing,ok,missing
+soda,soda__sobel2d,12,,,False,hls-est missing,ok,missing
+soda,soda__xcorr,92,,,False,hls-est missing,ok,missing
+spector_hls,dct,0,0,0,True,compared,ok,ok
+spector_hls,fir,4,4,0,True,compared,ok,ok
+spector_hls,histogram,8,8,0,True,compared,ok,ok
+spector_hls,matrix_multiplication,0,,,False,hls-est missing,ok,hls-est error: invalid memref element type
+spector_hls,mergesort,0,0,0,True,compared,ok,ok
+spector_hls,normals,4,4,0,True,compared,ok,ok
+spector_hls,sobel_filter_x,0,0,0,True,compared,ok,ok
+spector_hls,sobel_filter_y,0,0,0,True,compared,ok,ok
+spector_hls,spmv,0,0,0,True,compared,ok,ok
+spector_hls,template_matching,1,,,False,hls-est missing,ok,cgeist error: empty module (no functions emitted)
+vitis_examples,01_basic_examples_vhls_fixed_point_sqrt,0,,,False,hls-est missing,ok,cgeist error: ./fxp_sqrt.h:101:25: error: no viable overloaded '='
+vitis_examples,02_basic_examples_vhls_fir_filter,3,,,False,hls-est missing,ok,hls-est error: invalid memref element type
+vitis_examples,03_basic_examples_vhls_fixed_point_window_conv,0,,,False,hls-est missing,ok,cgeist error: empty module (no functions emitted)
+vitis_examples,04_basic_examples_vhls_floating_point_window_conv,1,,,False,hls-est missing,ok,cgeist error: empty module (no functions emitted)
+vitis_examples,05_basic_examples_vhls_ap_arithmetic,0,0,0,True,compared,ok,ok
+vitis_examples,06_basic_examples_vhls_parallel_loops,0,0,0,True,compared,ok,ok
+vitis_examples,07_basic_examples_vhls_imperfect_loops,0,0,0,True,compared,ok,ok
+vitis_examples,08_basic_examples_vhls_max_bounded_loop,0,0,0,True,compared,ok,ok
+vitis_examples,09_basic_examples_vhls_perfect_nested_loops,0,0,0,True,compared,ok,ok
+vitis_examples,10_basic_examples_vhls_pipelined_nested_loops,0,0,0,True,compared,ok,ok
+vitis_examples,11_basic_examples_vhls_accs_sequential,0,0,0,True,compared,ok,ok
+vitis_examples,12_basic_examples_vhls_accs_w_asserts,0,,,False,hls-est missing,ok,"hls-est error: operation being parsed with an unregistered dialect. If this is intended, please use -allow-unregistered-dialect with the MLIR tool used"
+vitis_examples,13_basic_examples_vhls_accs_w_dataflow,0,0,0,True,compared,ok,ok
+vitis_examples,14_basic_examples_vhls_static_memory,1,2,1,False,compared,ok,ok
+vitis_examples,15_basic_examples_vhls_pointer_casting,0,,,False,hls-est missing,ok,"hls-est error: operation being parsed with an unregistered dialect. If this is intended, please use -allow-unregistered-dialect with the MLIR tool used"
+vitis_examples,16_basic_examples_vhls_double_pointer,0,0,0,True,compared,ok,ok
+vitis_examples,17_basic_examples_vhls_axi_master,4,,,False,hls-est missing,ok,"hls-est error: operation being parsed with an unregistered dialect. If this is intended, please use -allow-unregistered-dialect with the MLIR tool used"
+vitis_examples,18_basic_examples_vhls_axi_stream_no_side_channel,0,0,0,True,compared,ok,ok
+vitis_examples,19_basic_examples_vhls_multi_array_access_bottleneck,0,0,0,True,compared,ok,ok
+vitis_examples,20_basic_examples_vhls_resolved_array_access_bottleneck,0,0,0,True,compared,ok,ok
+vitis_examples,21_basic_examples_vhls_uram_ecc,,0,,False,vitis missing,vitis failed,ok
+vitis_examples,22_basic_examples_vhls_fixed_point_hamming_window,1,1,0,True,compared,ok,ok
+vitis_examples,28_vitis_accel_examples_streaming_vadd,58,,,False,hls-est missing,ok,cgeist crash

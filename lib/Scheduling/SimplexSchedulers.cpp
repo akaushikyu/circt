@@ -33,6 +33,39 @@ using llvm::format;
 
 namespace {
 
+/// MODIFIED (hls-est W9 round 23 review D9): the simplex tableau in one
+/// row-major buffer. The schedulers scan single columns across every row
+/// (the pivot column of a pivot, the ratio tests); with one heap block per
+/// row each such access missed the cache twice (row header and row data).
+/// Rows are built once (buildTableau) and never added afterwards. The
+/// arithmetic is unchanged, so are the schedules.
+class FlatTableau {
+public:
+  MutableArrayRef<int> operator[](unsigned row) {
+    return MutableArrayRef<int>(rowData(row), stride);
+  }
+  ArrayRef<int> operator[](unsigned row) const {
+    return ArrayRef<int>(rowData(row), stride);
+  }
+  int *rowData(unsigned row) { return data.data() + size_t(row) * stride; }
+  const int *rowData(unsigned row) const {
+    return data.data() + size_t(row) * stride;
+  }
+  unsigned size() const { return rows; }
+  /// The rows of `built`, each `columns` wide.
+  void assign(ArrayRef<SmallVector<int>> built, unsigned columns) {
+    stride = columns;
+    rows = built.size();
+    data.assign(size_t(rows) * stride, 0);
+    for (unsigned r = 0; r < rows; ++r)
+      std::copy(built[r].begin(), built[r].end(), rowData(r));
+  }
+
+private:
+  std::vector<int> data;
+  unsigned stride = 0, rows = 0;
+};
+
 /// This class provides a framework to model certain scheduling problems as
 /// lexico-parametric linear programs (LP), which are then solved with an
 /// extended version of the dual simplex algorithm.
@@ -53,6 +86,13 @@ class SimplexSchedulerBase {
 protected:
   /// The objective is to minimize the start time of this operation.
   Operation *lastOp;
+
+  /// MODIFIED (hls-est T7, OPEN_ISSUES O9): set when scheduleAt() could not
+  /// restore a feasible tableau after rolling back a failed fixation (an
+  /// assertion before). Every later result of the tableau is meaningless, so
+  /// the modulo scheduler reports a failure and its caller falls back to
+  /// another scheduler.
+  bool tableauInvalid = false;
 
   /// S is part of a mechanism to assign fixed values to the LP variables.
   int parameterS;
@@ -85,7 +125,7 @@ protected:
   ///  firstNonBasicVariableColumn ^
   ///                              ─────────── ──────────
   ///                       nonBasicVariables   basicVariables
-  SmallVector<SmallVector<int>> tableau;
+  FlatTableau tableau;
 
   /// During the pivot operation, one column in the elided part of the tableau
   /// is modified; this vector temporarily catches the changes.
@@ -121,6 +161,14 @@ protected:
   /// Non-basic variables can be "frozen" to a specific value, which prevents
   /// them from being pivoted into basis again.
   DenseMap<unsigned, unsigned> frozenVariables;
+  /// MODIFIED (hls-est T7): `frozenVariables.count(var)` as a flag per variable
+  /// (start time and slack variables), so that the pivot searches do not hash
+  /// once per column. Kept in sync with `frozenVariables` by freeze() and
+  /// scheduleAt().
+  SmallVector<char> frozenFlags;
+  bool isFrozen(unsigned var) const {
+    return var < frozenFlags.size() && frozenFlags[var];
+  }
 
   /// Number of rows in the tableau = |obj| + |deps|.
   unsigned nRows;
@@ -169,13 +217,57 @@ protected:
   LogicalResult solveTableau();
   LogicalResult restoreDualFeasibility();
   bool isInBasis(unsigned startTimeVariable);
-  unsigned freeze(unsigned startTimeVariable, unsigned timeStep);
+  std::optional<unsigned> freeze(unsigned startTimeVariable,
+                                 unsigned timeStep);
   void translate(unsigned column, int factor1, int factorS, int factorT);
   LogicalResult scheduleAt(unsigned startTimeVariable, unsigned timeStep);
   void moveBy(unsigned startTimeVariable, unsigned amount);
   unsigned getStartTime(unsigned startTimeVariable);
 
   void dumpTableau();
+
+  /// MODIFIED (hls-est W9 round 23 review D9): per variable column (not the
+  /// parameter columns), the rows whose entry may be non-zero, so that the
+  /// column scans (the pivot column of a pivot, the primal ratio test, a
+  /// translation) visit those rows instead of every row: a superset (a row
+  /// whose entry became 0 stays until a scan drops it), each row at most
+  /// once (`columnMember`). The visiting order differs from the row order;
+  /// the scans do not depend on it (the ratio test breaks ties on the
+  /// smallest row, as the ascending scan did).
+  SmallVector<SmallVector<unsigned>> columnRows;
+  std::vector<uint8_t> columnMember; // nRows x nColumns
+  void buildColumnIndex();
+  void noteNonZero(unsigned row, unsigned col) {
+    if (col < firstNonBasicVariableColumn)
+      return;
+    uint8_t &m = columnMember[size_t(row) * nColumns + col];
+    if (!m) {
+      m = 1;
+      columnRows[col].push_back(row);
+    }
+  }
+  /// The rows of `col` whose entry is non-zero (stale rows are dropped).
+  template <typename Fn> void forEachNonZeroRow(unsigned col, Fn fn) {
+    if (col < firstNonBasicVariableColumn) {
+      for (unsigned row = 0; row < nRows; ++row)
+        if (tableau.rowData(row)[col] != 0)
+          fn(row);
+      return;
+    }
+    SmallVector<unsigned> &rows = columnRows[col];
+    unsigned keep = 0;
+    for (unsigned i = 0, e = rows.size(); i < e; ++i) {
+      unsigned row = rows[i];
+      if (tableau.rowData(row)[col] == 0) {
+        columnMember[size_t(row) * nColumns + col] = 0;
+        continue;
+      }
+      rows[keep++] = row;
+    }
+    rows.truncate(keep);
+    for (unsigned row : rows)
+      fn(row);
+  }
 
 public:
   explicit SimplexSchedulerBase(Operation *lastOp) : lastOp(lastOp) {}
@@ -261,8 +353,8 @@ protected:
   LogicalResult checkLastOp() override;
   enum { OBJ_LATENCY = 0, OBJ_AXAP /* i.e. either ASAP or ALAP */ };
   bool fillObjectiveRow(SmallVector<int> &row, unsigned obj) override;
-  void updateMargins();
-  void scheduleOperation(Operation *n);
+  LogicalResult updateMargins();
+  LogicalResult scheduleOperation(Operation *n);
   unsigned computeResMinII();
 
 public:
@@ -376,9 +468,10 @@ void SimplexSchedulerBase::buildTableau() {
   nColumns = nParameters + nonBasicVariables.size();
 
   // Helper to grow both the tableau and the implicit column vector.
+  SmallVector<SmallVector<int>> rows;
   auto addRow = [&]() -> SmallVector<int> & {
     implicitBasicVariableColumnVector.push_back(0);
-    return tableau.emplace_back(nColumns, 0);
+    return rows.emplace_back(nColumns, 0);
   };
 
   // Set up the objective rows.
@@ -407,11 +500,25 @@ void SimplexSchedulerBase::buildTableau() {
   }
 
   // one row per objective + one row per dependence
+  tableau.assign(rows, nColumns);
   nRows = tableau.size();
+  buildColumnIndex();
+  frozenFlags.assign(var, 0);
+}
+
+void SimplexSchedulerBase::buildColumnIndex() {
+  columnRows.assign(nColumns, {});
+  columnMember.assign(size_t(nRows) * nColumns, 0);
+  for (unsigned row = 0; row < nRows; ++row) {
+    const int *rowVec = tableau.rowData(row);
+    for (unsigned col = firstNonBasicVariableColumn; col < nColumns; ++col)
+      if (rowVec[col] != 0)
+        noteNonZero(row, col);
+  }
 }
 
 int SimplexSchedulerBase::getParametricConstant(unsigned row) {
-  auto &rowVec = tableau[row];
+  const int *rowVec = tableau[row].data();
   // Compute the dot-product ~B[row] * u between the constant matrix and the
   // parameter vector.
   return rowVec[parameter1Column] + rowVec[parameterSColumn] * parameterS +
@@ -440,17 +547,23 @@ SimplexSchedulerBase::findDualPivotColumn(unsigned pivotRow,
                                           bool allowPositive) {
   SmallVector<int> maxQuot(nObjectives, std::numeric_limits<int>::min());
   std::optional<unsigned> pivotCol;
+  // MODIFIED (hls-est T7): raw rows and an in-place lexicographic comparison
+  // instead of a quotient vector per candidate (same choice: a candidate wins
+  // iff its quotient vector is lexicographically greater than the best one).
+  SmallVector<const int *, 4> objRows;
+  for (unsigned obj = 0; obj < nObjectives; ++obj)
+    objRows.push_back(tableau[obj].data());
+  const int *pivotRowVec = tableau[pivotRow].data();
 
   // Look for non-zero entries in the constraint matrix (~A part of the
   // tableau). If multiple candidates exist, take the one corresponding to the
   // lexicographical maximum (over the objective rows) of the quotients:
   //   tableau[<objective row>][col] / pivotCand
   for (unsigned col = firstNonBasicVariableColumn; col < nColumns; ++col) {
-    if (frozenVariables.count(
-            nonBasicVariables[col - firstNonBasicVariableColumn]))
+    if (isFrozen(nonBasicVariables[col - firstNonBasicVariableColumn]))
       continue;
 
-    int pivotCand = tableau[pivotRow][col];
+    int pivotCand = pivotRowVec[col];
     // Only negative candidates bring us closer to the optimal solution.
     // However, when freezing variables to a certain value, we accept that the
     // value of the objective function degrades.
@@ -458,13 +571,17 @@ SimplexSchedulerBase::findDualPivotColumn(unsigned pivotRow,
       // The constraint matrix has only {-1, 0, 1} entries by construction.
       assert(pivotCand * pivotCand == 1);
 
-      SmallVector<int> quot;
-      for (unsigned obj = 0; obj < nObjectives; ++obj)
-        quot.push_back(tableau[obj][col] / pivotCand);
-
-      if (std::lexicographical_compare(maxQuot.begin(), maxQuot.end(),
-                                       quot.begin(), quot.end())) {
-        maxQuot = quot;
+      bool greater = false;
+      for (unsigned obj = 0; obj < nObjectives; ++obj) {
+        int quot = objRows[obj][col] / pivotCand;
+        if (quot != maxQuot[obj]) {
+          greater = maxQuot[obj] < quot;
+          break;
+        }
+      }
+      if (greater) {
+        for (unsigned obj = 0; obj < nObjectives; ++obj)
+          maxQuot[obj] = objRows[obj][col] / pivotCand;
         pivotCol = col;
       }
     }
@@ -474,17 +591,23 @@ SimplexSchedulerBase::findDualPivotColumn(unsigned pivotRow,
 }
 
 std::optional<unsigned> SimplexSchedulerBase::findPrimalPivotColumn() {
-  // Find the first lexico-negative column in the cost matrix.
-  SmallVector<int> zeroVec(nObjectives, 0);
+  // Find the first lexico-negative column in the cost matrix. MODIFIED
+  // (hls-est T7): compared in place (a column is lexico-negative iff its first
+  // non-zero cost is negative) instead of through a copied vector.
+  SmallVector<const int *, 4> objRows;
+  for (unsigned obj = 0; obj < nObjectives; ++obj)
+    objRows.push_back(tableau[obj].data());
   for (unsigned col = firstNonBasicVariableColumn; col < nColumns; ++col) {
-    if (frozenVariables.count(
-            nonBasicVariables[col - firstNonBasicVariableColumn]))
+    if (isFrozen(nonBasicVariables[col - firstNonBasicVariableColumn]))
       continue;
 
-    SmallVector<int> objVec = getObjectiveVector(col);
-    if (std::lexicographical_compare(objVec.begin(), objVec.end(),
-                                     zeroVec.begin(), zeroVec.end()))
-      return col;
+    for (unsigned obj = 0; obj < nObjectives; ++obj) {
+      int cost = objRows[obj][col];
+      if (cost < 0)
+        return col;
+      if (cost > 0)
+        break;
+    }
   }
 
   return std::nullopt;
@@ -499,26 +622,29 @@ SimplexSchedulerBase::findPrimalPivotRow(unsigned pivotColumn) {
   // tableau). If multiple candidates exist, take the one corresponding to the
   // minimum of the quotient:
   //   parametricConstant(row) / pivotCand
-  for (unsigned row = firstConstraintRow; row < nRows; ++row) {
-    int pivotCand = tableau[row][pivotColumn];
+  forEachNonZeroRow(pivotColumn, [&](unsigned row) {
+    if (row < firstConstraintRow)
+      return;
+    int pivotCand = tableau.rowData(row)[pivotColumn];
     if (pivotCand > 0) {
       // The constraint matrix has only {-1, 0, 1} entries by construction.
       assert(pivotCand == 1);
       int quot = getParametricConstant(row) / pivotCand;
-      if (quot < minQuot) {
+      if (quot < minQuot || (pivotRow && quot == minQuot && row < *pivotRow)) {
         minQuot = quot;
         pivotRow = row;
       }
     }
-  }
+  });
 
   return pivotRow;
 }
 
 void SimplexSchedulerBase::multiplyRow(unsigned row, int factor) {
   assert(factor != 0);
+  int *rowVec = tableau[row].data();
   for (unsigned col = 0; col < nColumns; ++col)
-    tableau[row][col] *= factor;
+    rowVec[col] *= factor;
   // Also multiply the corresponding entry in the temporary column vector.
   implicitBasicVariableColumnVector[row] *= factor;
 }
@@ -526,8 +652,10 @@ void SimplexSchedulerBase::multiplyRow(unsigned row, int factor) {
 void SimplexSchedulerBase::addMultipleOfRow(unsigned sourceRow, int factor,
                                             unsigned targetRow) {
   assert(factor != 0 && sourceRow != targetRow);
+  const int *src = tableau[sourceRow].data();
+  int *dst = tableau[targetRow].data();
   for (unsigned col = 0; col < nColumns; ++col)
-    tableau[targetRow][col] += tableau[sourceRow][col] * factor;
+    dst[col] += src[col] * factor;
   // Again, perform row operation on the temporary column vector as well.
   implicitBasicVariableColumnVector[targetRow] +=
       implicitBasicVariableColumnVector[sourceRow] * factor;
@@ -548,25 +676,54 @@ void SimplexSchedulerBase::pivot(unsigned pivotRow, unsigned pivotColumn) {
   // Make `tableau[pivotRow][pivotColumn]` := 1
   multiplyRow(pivotRow, 1 / pivotElem);
 
-  for (unsigned row = 0; row < nRows; ++row) {
-    if (row == pivotRow)
-      continue;
+  // MODIFIED (hls-est T7): addMultipleOfRow restricted to the non-zero columns
+  // of the pivot row (every other column would gain 0), on raw rows: the same
+  // arithmetic on every entry that changes. The dense row loop was the hot
+  // spot of --convert-affine-to-loopschedule on user-unrolled bodies.
+  const int *pivotRowVec = tableau[pivotRow].data();
+  SmallVector<unsigned> nonZeroCols;
+  for (unsigned col = 0; col < nColumns; ++col)
+    if (pivotRowVec[col] != 0)
+      nonZeroCols.push_back(col);
+  const unsigned *nzBegin = nonZeroCols.data();
+  const unsigned *nzEnd = nzBegin + nonZeroCols.size();
+  int pivotImplicit = implicitBasicVariableColumnVector[pivotRow];
 
-    int elem = tableau[row][pivotColumn];
-    if (elem == 0)
-      continue; // nothing to do
+  // MODIFIED (hls-est W9 round 23 review D9): one pass over the rows, which
+  // also swaps the pivot column with the implicitly constructed column vector
+  // (the former pivot column is a unit vector, not stored explicitly). Every
+  // implicit entry is 0 at the start of a pivot but the pivot row's, and a
+  // row whose pivot-column entry is 0 is left as it is (its entry stays 0,
+  // its implicit entry too), so only the rows that change are written.
+  // The rows the pivot changes: those with a non-zero pivot-column entry.
+  SmallVector<unsigned> changed;
+  forEachNonZeroRow(pivotColumn, [&](unsigned row) {
+    if (row != pivotRow)
+      changed.push_back(row);
+  });
+  for (unsigned row : changed) {
+    int *rowVec = tableau.rowData(row);
+    int elem = rowVec[pivotColumn];
 
     // Make `tableau[row][pivotColumn]` := 0.
-    addMultipleOfRow(pivotRow, -elem, row);
-  }
-
-  // Swap the pivot column with the implicitly constructed column vector.
-  // We really only need to copy in one direction here, as the former pivot
-  // column is a unit vector, which is not stored explicitly.
-  for (unsigned row = 0; row < nRows; ++row) {
-    tableau[row][pivotColumn] = implicitBasicVariableColumnVector[row];
+    int factor = -elem;
+    for (const unsigned *col = nzBegin; col != nzEnd; ++col) {
+      int &entry = rowVec[*col];
+      bool wasZero = entry == 0;
+      entry += pivotRowVec[*col] * factor;
+      if (wasZero && entry != 0 && *col != pivotColumn)
+        noteNonZero(row, *col);
+    }
+    implicitBasicVariableColumnVector[row] += pivotImplicit * factor;
+    rowVec[pivotColumn] = implicitBasicVariableColumnVector[row];
     implicitBasicVariableColumnVector[row] = 0; // Reset for next pivot step.
   }
+  tableau.rowData(pivotRow)[pivotColumn] =
+      implicitBasicVariableColumnVector[pivotRow];
+  implicitBasicVariableColumnVector[pivotRow] = 0;
+  // The pivot column is now the former implicit column: non-zero exactly in
+  // the changed rows and the pivot row (their implicit entries are +-1 times
+  // a non-zero factor), which are already its rows.
 
   // Look up numeric IDs of variables involved in this pivot operation.
   unsigned &nonBasicVar =
@@ -605,7 +762,13 @@ LogicalResult SimplexSchedulerBase::solveTableau() {
       // oversight, because `entry1Col` certainly is negative (otherwise the row
       // would not have been a valid pivot row), and without the negation, the
       // new II would be negative.
-      assert(entry1Col < 0);
+      // A row whose constant entry is not negative cannot be repaired by a
+      // larger II: report the program as infeasible instead of asserting
+      // (hls-est OPEN_ISSUES O9 / O208: 21 held-out Vitis_Libraries aes
+      // designs reached it; the caller falls back as for any infeasible
+      // problem).
+      if (entry1Col >= 0)
+        return failure();
       int newParameterT = (-entry1Col - 1) / entryTCol + 1;
       if (newParameterT > parameterT) {
         parameterT = newParameterT;
@@ -652,13 +815,14 @@ bool SimplexSchedulerBase::isInBasis(unsigned startTimeVariable) {
   llvm_unreachable("Invalid variable location");
 }
 
-unsigned SimplexSchedulerBase::freeze(unsigned startTimeVariable,
-                                      unsigned timeStep) {
+std::optional<unsigned>
+SimplexSchedulerBase::freeze(unsigned startTimeVariable, unsigned timeStep) {
   assert(startTimeVariable < startTimeLocations.size());
   assert(!frozenVariables.count(startTimeVariable));
 
   // Mark variable.
   frozenVariables[startTimeVariable] = timeStep;
+  frozenFlags[startTimeVariable] = 1;
 
   if (!isInBasis(startTimeVariable))
     // That's all for non-basic variables.
@@ -668,9 +832,15 @@ unsigned SimplexSchedulerBase::freeze(unsigned startTimeVariable,
   unsigned pivotRow = -startTimeLocations[startTimeVariable];
 
   // Here, positive pivot elements can be considered as well, hence finding a
-  // suitable column should not fail.
+  // suitable column should not fail. MODIFIED (hls-est T7, OPEN_ISSUES O9):
+  // if it does (an assertion before), undo the mark and report that the
+  // variable cannot be fixed; the tableau is unchanged.
   auto pivotCol = findDualPivotColumn(pivotRow, /* allowPositive= */ true);
-  assert(pivotCol);
+  if (!pivotCol) {
+    frozenVariables.erase(startTimeVariable);
+    frozenFlags[startTimeVariable] = 0;
+    return std::nullopt;
+  }
 
   // Perform the exchange.
   pivot(pivotRow, *pivotCol);
@@ -681,16 +851,14 @@ unsigned SimplexSchedulerBase::freeze(unsigned startTimeVariable,
 
 void SimplexSchedulerBase::translate(unsigned column, int factor1, int factorS,
                                      int factorT) {
-  for (unsigned row = 0; row < nRows; ++row) {
-    auto &rowVec = tableau[row];
+  forEachNonZeroRow(column, [&](unsigned row) {
+    int *rowVec = tableau.rowData(row);
     int elem = rowVec[column];
-    if (elem == 0)
-      continue;
 
     rowVec[parameter1Column] += -elem * factor1;
     rowVec[parameterSColumn] += -elem * factorS;
     rowVec[parameterTColumn] += -elem * factorT;
-  }
+  });
 }
 
 LogicalResult SimplexSchedulerBase::scheduleAt(unsigned startTimeVariable,
@@ -699,7 +867,10 @@ LogicalResult SimplexSchedulerBase::scheduleAt(unsigned startTimeVariable,
   assert(!frozenVariables.count(startTimeVariable));
 
   // Freeze variable and translate its column by parameter S.
-  unsigned frozenCol = freeze(startTimeVariable, timeStep);
+  std::optional<unsigned> maybeFrozenCol = freeze(startTimeVariable, timeStep);
+  if (!maybeFrozenCol)
+    return failure();
+  unsigned frozenCol = *maybeFrozenCol;
   translate(frozenCol, /* factor1= */ 0, /* factorS= */ 1, /* factorT= */ 0);
 
   // Temporarily set S to the desired value, and attempt to solve.
@@ -712,9 +883,10 @@ LogicalResult SimplexSchedulerBase::scheduleAt(unsigned startTimeVariable,
     // for S, but for now, we just roll back and signal failure to the driver.
     translate(frozenCol, /* factor1= */ 0, /* factorS= */ -1, /* factorT= */ 0);
     frozenVariables.erase(startTimeVariable);
-    auto solvedAfterRollback = solveTableau();
-    assert(succeeded(solvedAfterRollback));
-    (void)solvedAfterRollback;
+    frozenFlags[startTimeVariable] = 0;
+    // MODIFIED (hls-est T7, OPEN_ISSUES O9): was an assertion.
+    if (failed(solveTableau()))
+      tableauInvalid = true;
     return failure();
   }
 
@@ -937,19 +1109,21 @@ LogicalResult SharedOperatorsSimplexScheduler::schedule() {
     auto maybeRsrcs = prob.getLinkedResourceTypes(op);
     assert(maybeRsrcs && "Limited operation must have linked resource types");
 
-    auto &rsrcs = *maybeRsrcs;
-    assert(rsrcs.size() == 1 &&
-           "Multi-resource operations are not yet supported by this scheduler");
-
-    auto rsrc = rsrcs[0];
-    unsigned limit = prob.getLimit(rsrc).value_or(0);
-    assert(limit > 0);
+    // MODIFIED (hls-est W9r11 review D4): an operation may hold one unit of
+    // several resource types; it needs a time step where each has room.
+    SmallVector<std::pair<Problem::ResourceType, unsigned>, 2> limited;
+    for (auto rsrc : *maybeRsrcs)
+      if (unsigned limit = prob.getLimit(rsrc).value_or(0))
+        limited.push_back({rsrc, limit});
+    assert(!limited.empty());
 
     // Find the first time step (beginning at the current start time in the
     // partial schedule) in which an operator instance is available.
     unsigned startTimeVar = startTimeVariables[op];
     unsigned candTime = getStartTime(startTimeVar);
-    while (reservationTable[rsrc].lookup(candTime) == limit)
+    while (llvm::any_of(limited, [&](auto &rl) {
+      return reservationTable[rl.first].lookup(candTime) == rl.second;
+    }))
       ++candTime;
 
     // Fix the start time. As explained above, this cannot make the problem
@@ -959,7 +1133,8 @@ LogicalResult SharedOperatorsSimplexScheduler::schedule() {
     (void)fixed;
 
     // Record the operator use.
-    ++reservationTable[rsrc][candTime];
+    for (auto &rl : limited)
+      ++reservationTable[rl.first][candTime];
 
     LLVM_DEBUG(dbgs() << "After scheduling " << startTimeVar
                       << " to t=" << candTime << ":\n";
@@ -1003,46 +1178,47 @@ LogicalResult ModuloSimplexScheduler::checkLastOp() {
   return success();
 }
 
+// MODIFIED (hls-est W9r11 review D4): an operation may hold one unit of
+// several resource types in its slot (an access of a partitioned argument
+// whose bank is not a constant takes a port of every bank, VITIS_NOTES N88);
+// it enters only when every limited one has room in that slot.
 LogicalResult ModuloSimplexScheduler::MRT::enter(Operation *op,
                                                  unsigned timeStep) {
   auto maybeRsrcs = sched.prob.getLinkedResourceTypes(op);
   assert(maybeRsrcs && "Operation must have linked resource types");
 
-  auto &rsrcs = *maybeRsrcs;
-  assert(rsrcs.size() == 1 &&
-         "Multi-resource operations are not yet supported by MRT");
-
-  auto rsrc = rsrcs[0];
-  auto lim = *sched.prob.getLimit(rsrc);
-  assert(lim > 0);
-
-  auto &revTab = reverseTables[rsrc];
-  assert(!revTab.count(op));
+  SmallVector<Problem::ResourceType, 2> limited;
+  for (auto rsrc : *maybeRsrcs)
+    if (sched.prob.getLimit(rsrc).value_or(0) > 0)
+      limited.push_back(rsrc);
+  assert(!limited.empty());
 
   unsigned slot = timeStep % sched.parameterT;
-  auto &cell = tables[rsrc][slot];
-  if (cell.size() < lim) {
-    cell.insert(op);
-    revTab[op] = slot;
-    return success();
+  for (auto rsrc : limited) {
+    assert(!reverseTables[rsrc].count(op));
+    if (tables[rsrc][slot].size() >= *sched.prob.getLimit(rsrc))
+      return failure();
   }
-  return failure();
+  for (auto rsrc : limited) {
+    tables[rsrc][slot].insert(op);
+    reverseTables[rsrc][op] = slot;
+  }
+  return success();
 }
 
 void ModuloSimplexScheduler::MRT::release(Operation *op) {
   auto maybeRsrcs = sched.prob.getLinkedResourceTypes(op);
   assert(maybeRsrcs && "Operation must have linked resource types");
 
-  auto &rsrcs = *maybeRsrcs;
-  assert(rsrcs.size() == 1 &&
-         "Multi-resource operations are not yet supported by MRT");
-
-  auto rsrc = rsrcs[0];
-  auto &revTab = reverseTables[rsrc];
-  auto it = revTab.find(op);
-  assert(it != revTab.end());
-  tables[rsrc][it->second].erase(op);
-  revTab.erase(it);
+  for (auto rsrc : *maybeRsrcs) {
+    if (sched.prob.getLimit(rsrc).value_or(0) == 0)
+      continue;
+    auto &revTab = reverseTables[rsrc];
+    auto it = revTab.find(op);
+    assert(it != revTab.end());
+    tables[rsrc][it->second].erase(op);
+    revTab.erase(it);
+  }
 }
 
 bool ModuloSimplexScheduler::fillObjectiveRow(SmallVector<int> &row,
@@ -1063,7 +1239,7 @@ bool ModuloSimplexScheduler::fillObjectiveRow(SmallVector<int> &row,
   }
 }
 
-void ModuloSimplexScheduler::updateMargins() {
+LogicalResult ModuloSimplexScheduler::updateMargins() {
   // Assumption: current secondary objective is "ASAP".
   // Negate the objective row once to effectively maximize the sum of start
   // times, which yields the "ALAP" times after solving the tableau. Then,
@@ -1071,18 +1247,21 @@ void ModuloSimplexScheduler::updateMargins() {
   // well.
   for (auto *axapTimes : {&alapTimes, &asapTimes}) {
     multiplyRow(OBJ_AXAP, -1);
-    // This should not fail for a feasible tableau.
+    // This should not fail for a feasible tableau. MODIFIED (hls-est T4,
+    // OPEN_ISSUES O9): report a failure instead of asserting, so that a
+    // caller can fall back to another scheduler.
     auto dualFeasRestored = restoreDualFeasibility();
     auto solved = solveTableau();
-    assert(succeeded(dualFeasRestored) && succeeded(solved));
-    (void)dualFeasRestored, (void)solved;
+    if (failed(dualFeasRestored) || failed(solved))
+      return failure();
 
     for (unsigned stv = 0; stv < startTimeLocations.size(); ++stv)
       (*axapTimes)[stv] = getStartTime(stv);
   }
+  return success();
 }
 
-void ModuloSimplexScheduler::scheduleOperation(Operation *n) {
+LogicalResult ModuloSimplexScheduler::scheduleOperation(Operation *n) {
   auto oprN = *prob.getLinkedOperatorType(n);
   unsigned stvN = startTimeVariables[n];
 
@@ -1102,7 +1281,7 @@ void ModuloSimplexScheduler::scheduleOperation(Operation *n) {
       auto fixedN = scheduleAt(stvN, ct);
       if (succeeded(fixedN)) {
         LLVM_DEBUG(dbgs() << "Success at t=" << ct << " " << *n << '\n');
-        return;
+        return success();
       }
       // Problem became infeasible with `n` at `ct`, roll back the MRT
       // assignment. Also, no later time can be feasible, so stop the search
@@ -1110,6 +1289,10 @@ void ModuloSimplexScheduler::scheduleOperation(Operation *n) {
       mrt.release(n);
       break;
     }
+  // MODIFIED (hls-est T7, OPEN_ISSUES O9): the rollback left no feasible
+  // tableau.
+  if (tableauInvalid)
+    return failure();
 
   // As a last resort, increase II to make room for the op. De Dinechin's
   // Theorem 1 lays out conditions/guidelines to transform the current partial
@@ -1168,27 +1351,31 @@ void ModuloSimplexScheduler::scheduleOperation(Operation *n) {
     moveBy(stvJ, phiJ + deltaJ);
   }
 
-  // Finally, increment the II and solve to apply the moves.
+  // Finally, increment the II and solve to apply the moves. MODIFIED (hls-est
+  // T4, OPEN_ISSUES O9): the II bump can leave an infeasible tableau (seen on
+  // machsuite fft_transpose and on unrolled bodies with data-dependent ifs);
+  // report it instead of asserting.
   ++parameterT;
   auto solved = solveTableau();
-  assert(succeeded(solved));
-  (void)solved;
+  if (failed(solved))
+    return failure();
 
   // Re-enter moved operations into their new slots.
   for (auto *m : moved)
     mrt.release(m);
   for (auto *m : moved) {
     auto enteredM = mrt.enter(m, getStartTime(startTimeVariables[m]));
-    assert(succeeded(enteredM));
-    (void)enteredM;
+    if (failed(enteredM))
+      return failure();
   }
 
   // Finally, schedule the operation. Again, adding `phiN` accounts for the
   // implicit shift caused by incrementing the II.
   auto fixedN = scheduleAt(stvN, stN + phiN + deltaN);
   auto enteredN = mrt.enter(n, tauN + deltaN);
-  assert(succeeded(fixedN) && succeeded(enteredN));
-  (void)fixedN, (void)enteredN;
+  if (failed(fixedN) || failed(enteredN))
+    return failure();
+  return success();
 }
 
 unsigned ModuloSimplexScheduler::computeResMinII() {
@@ -1237,7 +1424,8 @@ LogicalResult ModuloSimplexScheduler::schedule() {
   // Main loop: Iteratively fix limited operations to time steps.
   while (!unscheduled.empty()) {
     // Update ASAP/ALAP times.
-    updateMargins();
+    if (failed(updateMargins()))
+      return failure();
 
     // Heuristically (here: least amount of slack) pick the next operation to
     // schedule.
@@ -1253,7 +1441,8 @@ LogicalResult ModuloSimplexScheduler::schedule() {
     Operation *op = *opIt;
     unscheduled.erase(opIt);
 
-    scheduleOperation(op);
+    if (failed(scheduleOperation(op)))
+      return failure();
     scheduled.push_back(op);
   }
 

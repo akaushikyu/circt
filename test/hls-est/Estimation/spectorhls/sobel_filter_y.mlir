@@ -1,3 +1,7 @@
+// RUN: hls-est %s --symbol-privatize=exclude=_Z7sobel_yPA1920_yS0_ --symbol-dce --lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --memory-banking-bram --convert-affine-to-loopschedule '--bram-analysis=top=_Z7sobel_yPA1920_yS0_ math-costs=%S/../../../../tools/hls-est-validate/math_costs.json' -o /dev/null | FileCheck %s
+// CHECK: Total BRAM: 0{{$}}
+// Vitis 2025.1 td=off: 0 (results/vitis.json spector_hls/sobel_filter_y; compared by the harness, not by lit)
+
 #set = affine_set<(d0) : (-d0 + 30 >= 0)>
 module {
   func.func @_Z7sobel_yPA1920_yS0_(%arg0: memref<1080x1920xi64>, %arg1: memref<1080x1920xi64>)  {

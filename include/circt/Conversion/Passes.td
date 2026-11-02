@@ -35,6 +35,48 @@ def AffineToLoopSchedule : Pass<"convert-affine-to-loopschedule", "mlir::func::F
     "mlir::scf::SCFDialect",
     "mlir::func::FuncDialect"
   ];
+  let options = [
+    Option<"fastThreshold", "fast-threshold", "unsigned", /*default=*/"150",
+           "Loop bodies with more than this many resource-limited (memory) "
+           "operations are scheduled by the greedy resource-bound modulo list "
+           "scheduler instead of the simplex-based one; 0 uses the greedy "
+           "scheduler for every loop.">,
+    Option<"fastOpsThreshold", "fast-ops-threshold", "unsigned",
+           /*default=*/"4096",
+           "Loop bodies whose scheduling problem has more than this many "
+           "operations go to the greedy scheduler as well, whatever their "
+           "number of resource-limited operations: the simplex scheduler's "
+           "tableau is dense (one row per dependence, one column per "
+           "operation) and a solve takes about a minute at 7,000 operations "
+           "(class_ece8893 gabriel lab2, W9r7 review defect 7). 0 disables the "
+           "rule.">,
+    Option<"cseBeforeSchedule", "cse", "bool", /*default=*/"true",
+           "Merge duplicated side-effect-free ops (index arithmetic left by "
+           "per-access affine-map expansion) before the scheduling problem is "
+           "built. Memory ops are never merged.">,
+    Option<"hoistInvariant", "hoist-invariant", "bool", /*default=*/"true",
+           "After perfect nests are flattened, move loop-invariant pure ops "
+           "and loop-invariant affine.load ops (address independent of the "
+           "loop, memref not written in the loop) out of each loop that will "
+           "be pipelined, as Vitis' LICM does; hoisted loads use no port of "
+           "the pipelined loop.">,
+    Option<"cseLoads", "cse-loads", "bool", /*default=*/"true",
+           "Before scheduling, replace a load by an earlier load of the same "
+           "address of the same memref in the same block when no intervening "
+           "write may alias it (Vitis GVN): the duplicate uses no port and "
+           "does not count toward R.">,
+    Option<"forwardStores", "forward-stores", "bool", /*default=*/"true",
+           "Before scheduling, replace a load by the value an earlier store in "
+           "the same block put at the same address (no intervening may-alias "
+           "write) and drop a store overwritten by a later store to the same "
+           "address with no intervening may-alias read (Vitis store-to-load "
+           "forwarding / dead-store elimination): an unrolled accumulator "
+           "becomes one load and one store per iteration. On by default "
+           "since the default pipeline deletes dead arrays first "
+           "(--dead-memory-elimination; MEMOS.md M6, decision #5 of "
+           "2026-10-10; OPEN_ISSUES.md O7); =false keeps every store and "
+           "load of the unrolled body.">
+  ];
 }
 
 //===----------------------------------------------------------------------===//

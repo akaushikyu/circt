@@ -1,0 +1,59 @@
+# Abstract
+
+**Draft.** Every number in this chapter is filled in by the generator from the result files named in
+`data/frame-numbers.json`; nothing is typed by hand.
+
+High-level synthesis (HLS) tools turn C/C++ into hardware, but the decisions that set the cost of the
+result are taken inside closed commercial tools: which loops are pipelined, unrolled or flattened, how
+arrays are partitioned, which memories are replicated, and how each memory is mapped onto the device's
+block RAM. A designer sees them only after synthesis. Existing estimators either model an idealised HLS
+tool or learn aggregate numbers from many synthesis runs without explaining them.
+
+This thesis takes a different route. It infers the decision procedure of one commercial tool, AMD Vitis
+HLS {{vitis_versions}}, by black-box experiments. Minimal kernels that vary one parameter at a time are
+synthesised, and the documented outputs of the tool are read: reports, the transformation log, and the
+LLVM IR it writes between its stages. AMD's open-sourced front end is read alongside them. The result is
+a catalogue of {{n_notes}} numbered observations, each tied to its kernels and run directories.
+{{n_notes_confirmed}} of them are confirmed ({{n_notes_confirmed_kernels}} by standalone kernels,
+{{n_notes_confirmed_corpus}} on catalogue designs only), {{n_notes_partly}} partly confirmed,
+{{n_notes_unconfirmed}} unconfirmed, and {{n_notes_method}} are notes on measurement method. The rules
+are implemented as a {{pipeline_passes}}-pass MLIR/CIRCT pipeline, *hls-est*, fed by a Polygeist (cgeist)
+front end that compiles the real Vitis headers. hls-est predicts the block RAM (BRAM_18K) of every memory
+of a design and explains each number.
+
+hls-est is validated against {{vitis_ok}} Vitis syntheses ({{vitis_parts}}, {{vitis_clocks}}, automatic
+throughput-driven partitioning off) of the {{designs}}-design HLSFactory catalogue. The rules were found
+on the same catalogue, so every accuracy number on it is in-sample. On a held-out split of two other
+corpora (ForgeHLS and the Vitis_Libraries L1 tests), scored once with the frozen tools and then used as
+validation data, the frozen tools matched {{ev_ho0_exact}} of {{ev_ho0_compared}} compared designs exactly
+({{ev_ho0_exact_pct}} %). The round-22 tools estimate {{ev_ho2_ingested}} of {{ev_ho2_designs}} designs
+(the frozen ones {{ev_ho0_ingested}}) but match only {{ev_ho2_exact}} of {{ev_ho2_compared}} ({{ev_ho2_exact_pct}} %):
+the exact rate fell, because the designs the new front end compiles for the first time have not been
+examined yet; on the frozen tools' inputs the round-22 hls-est matches {{ev_ho1_exact}} of {{ev_ho1_compared}}, a number
+that is no longer out of sample, since those designs guided round 22's rules (Section 6.9). The
+locked split of the same corpora, released and scored once on 2026-10-27, is the out-of-sample result:
+the frozen tools matched {{ev_lk0_exact}} of {{ev_lk0_compared}} compared designs ({{ev_lk0_exact_pct}} %) and the
+round-22 tools {{ev_lk1_exact}} of {{ev_lk1_compared}} ({{ev_lk1_exact_pct}} %); after round 23, which used both splits,
+{{ev_ho3_exact}} of {{ev_ho3_compared}} eval and {{ev_lk2_exact}} of {{ev_lk2_compared}} locked designs are exact. Counting each distinct source once and
+leaving out the designs for which Vitis allocates no BRAM, {{ev_distinct_nonzero_exact}} of
+{{ev_distinct_nonzero_compared}} designs ({{ev_distinct_nonzero_exact_pct}} %) match Vitis's BRAM total
+exactly, and {{ev_distinct_nonzero_in_band}} ({{ev_distinct_nonzero_in_band_pct}} %) are exact or
+over-count by at most {{band_over_pct}} %. Over all {{compared}} compared designs, including copies and zero-BRAM
+designs, the figures are {{exact}} ({{exact_pct}} %) and {{in_goal}} ({{in_goal_pct}} %), and the summed
+absolute error is {{abs_err}} BRAM_18K. A naive model that prices every declared array with the same RAMB18
+formula is exact on {{ev_b0_exact}} of these designs. Per array, the comparison can be scored only where
+the two tools' memory names align: {{ev_pa_aligned_pct}} % of the array rows that carry BRAM. Of these,
+{{ev_pa_aligned_equal_pct}} % agree. {{ev_over_device_compared}} of the compared designs need more BRAM
+than the part has.
+
+The estimation step alone takes a median of {{ev_time_hlsest_median_s2}} s per design, without the cgeist
+front end and with eight estimates running in parallel under WSL. A whole Vitis run on the Windows host
+takes {{ev_time_vitis_median_s}} s, so the two times indicate orders of magnitude, not a benchmark. The
+largest remaining error classes, by the summed error of the out-of-band designs, are
+{{ev_oob_class_names}} (Chapter 6). Every architectural assumption is exposed as one of {{config_keys}} configuration
+keys or one of {{plugin_interfaces}} plugin interfaces; the retargeting they allow is not validated.
+
+As an application, a separate branch of hls-est lowers its decisions to Verilog. {{rtl_verilog}} of the
+{{rtl_catalogue}} catalogue designs ({{rtl_verilog_pct}} %) get RTL, and {{rtl_cosim_pass}} pass
+co-simulation against their own C testbenches. Only {{rtl_selfcheck}} of those testbenches notice inverted
+outputs, and this result comes from a different hls-est commit than the evaluation.

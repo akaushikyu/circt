@@ -1,0 +1,118 @@
+# 7. Application: an RTL back end driven by hls-est's decisions
+
+**Draft.** The RTL back end lives on branch `rtl-backend` of `~/circt` (head `{{rtl_branch_head}}`), not
+on `hls-est-vitis-match`; it is opt-in and changes no BRAM estimate. Sources: `hls-doc/rtl-backend.md`,
+`hls-doc/design/rtl-backend-{plan,spike,m1,float}.md` and the generated coverage page
+`hls-doc/rtl-coverage.md` on that branch (run of {{rtl_date}}, hls-est `{{rtl_hlsest}}`). That is a
+different hls-est commit from the one evaluated in Chapter 6 (`{{run_hlsest_git}}`), so the decisions
+lowered here are not exactly the decisions scored there.
+
+## 7.1 Motivation
+
+hls-est decides, per loop and per memory, what Vitis would build: which loops are pipelined and at which
+II, which are unrolled or flattened, how arrays are partitioned and banked, which memories are replicated
+and which storage they use. These are the decisions an HLS compiler needs to generate hardware. The RTL
+back end tests how far they go: it lowers hls-est's static schedule to synthesizable Verilog with Vitis'
+interface conventions, so that the generated module could replace the one Vitis generates. The goal is a
+correct, inspectable RTL path for the catalogue, not Vitis' quality of results (`rtl-backend-plan.md`
+section 1 lists matching Vitis' II, latency and LUT/FF/DSP as out of scope).
+
+## 7.2 Design: direct lowering of the static schedule
+
+A spike compared two routes (`rtl-backend-spike.md`): lowering hls-est's LoopSchedule output through
+CIRCT's existing LoopSchedule-to-Calyx path [@nigam2021calyx], or lowering the static schedule directly to
+CIRCT's `hw` / `seq` / `comb` dialects. The direct route was chosen and implemented as milestone M1
+(`rtl-backend-m1.md`). The driver runs four steps:
+
+1. cgeist exactly as the harness does (real Vitis headers);
+2. hls-est's default pipeline without `--bram-analysis`, with `--hls-rtl-prepare` (innermost loops
+   without a pipeline decision stay sequential; memory accesses are numbered in program order) and
+   `rtl-semantics=true` on the scheduler (exact C semantics: stores hoisted out of an `if` are predicated,
+   loops inside `if` arms are kept, the exit test of a pipeline is signed);
+3. `--lower-hls-est-to-hw`, which emits one module per top function with Vitis' block protocol
+   (`ap_clk`, `ap_rst`, `ap_start`, `ap_done`, `ap_idle`, `ap_ready`, `ap_return`) and `ap_memory` array
+   ports (address, chip enable, write enable, data in and out, a second port only when the schedule needs
+   two accesses per cycle); local arrays become RAM modules carrying Vivado's `ram_style` from hls-est's
+   storage decision;
+4. CIRCT's `--lower-seq-to-sv --export-verilog`.
+
+Where the hardware must deviate from hls-est's schedule to stay correct, the lowering says so instead of
+generating wrong code: a loop-carried memory dependence the schedule does not respect raises the II (this
+is O1, the same gap that limits the estimate; Chapter 8), and accesses that would overtake an earlier store
+to the same address, or exceed a memory's ports in one cycle, are re-timed, making the pipeline deeper at
+the same II. Input outside the supported subset is a diagnostic from the lowering, never Verilog.
+
+**Floating point.** `float` and `double` arithmetic (`+ - * /`, comparisons, conversions, `sqrt`, `fma`,
+`fabs`, `copysign`, negation) is lowered to Berkeley HardFloat units [@hauser2019hardfloat] (Verilog,
+BSD-3-Clause, vendored under `third_party/hardfloat`), with the latency hls-est's operator table gives each
+operation, and with the C semantics of gcc on x86-64 (round to nearest even, subnormals) as the reference.
+
+## 7.3 Co-simulation against each design's own testbench
+
+The coverage harness (`tools/rtl-backend/coverage.py`) works like Vitis' `cosim_design`: the design's own
+C testbench (from the synthesis script's `add_files -tb`, the Makefile, or a file with `main`) runs
+natively with the top function wrapped, so that every call is recorded (scalar arguments, every array
+before and after, the return value). Every recorded call is replayed through the generated Verilog in
+Vivado's xsim, back to back in one simulation; every output is compared bit for bit, any X or Z reaching a
+control or data port fails the run, and the RTL outputs are fed back into the testbench so that its own
+check runs on them. Floating-point outputs compare by their IEEE bits (two NaNs match). The harness also
+measures how much a pass means: it re-runs each passing testbench with every RTL output bit inverted, to see
+whether the testbench's own check notices, and it flags designs whose recorded calls do not change any
+output (where an RTL that writes nothing would pass too).
+
+## 7.4 Coverage of the catalogue
+
+Table 7.1 (`tables/frame-rtl-coverage.md`) and Figure 7.1 (`{{fig_funnel}}`) show the funnel (each step
+{{rtl_timeout}} s, co-simulation capped at {{rtl_cycle_cap}} cycles).
+
+![Figure 7.1: RTL coverage funnel](figures/ch07-rtl-funnel.png)
+
+**Figure 7.1.** How many catalogue designs reach each step of the RTL back end.
+
+- Of the {{rtl_catalogue}} catalogue designs, {{rtl_cgeist}} have cgeist MLIR and {{rtl_hlsest_ok}} pass
+  hls-est's decision pipeline with the RTL options; **{{rtl_verilog}} ({{rtl_verilog_pct}} %) get Verilog**.
+- {{rtl_verilog_tb}} designs have both Verilog and a testbench. Of these, **{{rtl_cosim_pass}} pass
+  co-simulation**, {{rtl_v_no_ap_done}} do not reach `ap_done` within the cycle cap (for example
+  medium-sized PolyBench designs), {{rtl_v_tb_build_failure}} have a testbench that does not build natively,
+  {{rtl_v_mismatch}} mismatch, and {{rtl_v_no_tb}} further designs with Verilog have no testbench.
+- **Wrong-code mismatches: {{rtl_wrong_code}}.** The {{rtl_v_mismatch}} mismatches are designs whose C
+  program has no defined result: rebuilt with pattern-initialised automatic variables, their C outputs
+  change, and every mismatching RTL element is an X from an uninitialised local array.
+- What a pass rests on: every pass is a bit-exact comparison of every recorded output, but in only
+  {{rtl_selfcheck}} of the passes does the testbench's own check notice inverted outputs (most testbenches
+  only print), and in {{rtl_vacuous}} passes no recorded call changes any output, so the comparison cannot
+  distinguish the RTL from one that writes nothing.
+
+{{rtl_no_verilog_ok}} designs pass hls-est but get no Verilog. Their most frequent first blockers are
+{{rtl_first_block_top}}; `rtl-coverage.md` lists every blocker and a greedy ranking of what to implement
+next (dynamic shapes, `hls::stream` and dataflow, kept calls, pointer and struct code, global arrays,
+`while` loops, further math functions).
+
+## 7.5 Limitation: timing closure
+
+Co-simulation checks the function and the cycle-level schedule, not the clock the RTL can reach. The
+schedule uses latencies from a table, not delays, and the HardFloat units are combinational with hls-est's
+latency placed as registers *after* each unit. Out-of-context Vivado synthesis of four floating-point
+kernels on {{vitis_parts}} with a 10 ns clock (Table 7.2, `tables/frame-rtl-timing.md`) misses timing by a wide
+margin (worst negative slack: fvadd {{wns_fvadd}}, fdot {{wns_fdot}}, ddot {{wns_ddot}}, fdivsqrt
+{{wns_fdivsqrt}}); the divider and square-root kernel at II 1 needs more LUTs than the device has, because
+its round robin of iterative units is not shared. Vivado's register retiming does not move the latency
+registers into the units on this family. Closing timing needs pipelined floating-point units within
+hls-est's latency budget and a pipelined divider (planned in `rtl-backend-plan.md`). Integer designs have
+the same limitation in milder form: combinational chaining inside a stage ignores delays
+(`rtl-backend-m1.md`).
+
+## 7.6 What the application shows
+
+The back end shows that hls-est's inferred decisions can drive code generation for part of the catalogue:
+{{rtl_verilog}} of {{rtl_catalogue}} designs ({{rtl_verilog_pct}} %) get Verilog, and {{rtl_cosim_pass}}
+pass co-simulation. This answers RQ3 only in part, for three reasons:
+- most designs are still blocked by unsupported constructs (Section 7.4);
+- a pass is a strong check only where the testbench exercises the outputs, and only {{rtl_selfcheck}} of
+  the passing testbenches notice inverted outputs, while {{rtl_vacuous}} passes change no output at all;
+- the RTL comes from a different hls-est commit than the evaluation.
+
+Where it applies, the co-simulation adds a functional check of the front end and of the decision pipeline
+that the BRAM comparison cannot give: a wrong unroll, a lost store or a mis-banked access shows up as a
+mismatch. It also exposes the same open issue as the estimate (O1): where hls-est's schedule
+ignores a loop-carried memory dependence, the lowering has to raise the II to stay correct.

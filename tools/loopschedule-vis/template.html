@@ -1,0 +1,1011 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>loopschedule-vis</title>
+<style>
+:root {
+  color-scheme: light dark;
+  --bg: #f4f3ee; --panel: #fdfcf9; --panel2: #f8f7f2; --ink: #1c1e22; --ink2: #555b64; --ink3: #8b9098;
+  --rule: #d6d3c8; --rule2: #e8e5dc; --accent: #2554c7; --accent-bg: rgba(37, 84, 199, .09);
+  --hl: rgba(255, 196, 0, .30); --hl2: rgba(255, 150, 0, .45); --band: rgba(37, 84, 199, .10); --band-alt: rgba(0, 0, 0, .025);
+  --c-memory: #2e6bd1; --c-fmul: #b23d9d; --c-fadd: #d4691f; --c-int: #37934f; --c-cmp: #a88a00; --c-const: #a3a8ae; --c-other: #6b7280;
+  --e-comb: #7b818a; --e-reg: #1c1e22; --e-carried: #c7362a; --over: #c7362a;
+  --mono: ui-monospace, "SF Mono", "Cascadia Mono", Consolas, "DejaVu Sans Mono", "Liberation Mono", monospace;
+  --sans: system-ui, -apple-system, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  --srcw: 42%;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #15171a; --panel: #1b1e22; --panel2: #202328; --ink: #e3e5e8; --ink2: #a3a9b1; --ink3: #6d737b;
+    --rule: #33373d; --rule2: #2a2d32; --accent: #7fa6ff; --accent-bg: rgba(127, 166, 255, .12);
+    --hl: rgba(255, 200, 40, .20); --hl2: rgba(255, 160, 40, .36); --band: rgba(127, 166, 255, .13); --band-alt: rgba(255, 255, 255, .025);
+    --c-memory: #5b93f0; --c-fmul: #d66bc2; --c-fadd: #f0924a; --c-int: #5cbf77; --c-cmp: #d6b83a; --c-const: #6d737b; --c-other: #8e959e;
+    --e-comb: #9aa1aa; --e-reg: #e3e5e8; --e-carried: #ff6b5e; --over: #ff6b5e;
+  }
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body { display: grid; grid-template-rows: auto 1fr; background: var(--bg); color: var(--ink); font: 13px/1.45 var(--sans); }
+button { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.mono, code, kbd { font-family: var(--mono); }
+
+/* ---- top bar ---- */
+header.top { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 18px; padding: 7px 14px; border-bottom: 1px solid var(--rule); background: var(--panel); }
+header.top h1 { font-size: 14px; margin: 0; letter-spacing: .02em; }
+header.top h1 small { font-weight: 400; color: var(--ink2); margin-left: 6px; font-family: var(--mono); font-size: 12px; }
+.meta { color: var(--ink2); font-size: 12px; }
+.toggles { display: flex; gap: 12px; align-items: center; }
+.toggles label { display: inline-flex; gap: 5px; align-items: center; cursor: pointer; user-select: none; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 11px; color: var(--ink2); align-items: center; }
+.legend span { display: inline-flex; gap: 4px; align-items: center; }
+.sw { display: inline-block; width: 10px; height: 10px; border-radius: 2px; }
+.ek { display: inline-block; width: 18px; height: 0; border-top: 2px solid; }
+.ek.comb { border-color: var(--e-comb); } .ek.reg { border-color: var(--e-reg); } .ek.carried { border-color: var(--e-carried); border-top-style: dashed; }
+.sw-memory { background: var(--c-memory); } .sw-fmul { background: var(--c-fmul); } .sw-fadd { background: var(--c-fadd); }
+.sw-int { background: var(--c-int); } .sw-cmp { background: var(--c-cmp); } .sw-const { background: var(--c-const); } .sw-other { background: var(--c-other); }
+details.warn { font-size: 12px; color: var(--over); }
+details.warn ul { margin: 4px 0; padding-left: 18px; max-height: 30vh; overflow: auto; color: var(--ink); }
+
+/* ---- layout ---- */
+main { display: grid; grid-template-columns: var(--srcw) 6px 1fr; min-height: 0; }
+#split { cursor: col-resize; background: var(--rule2); border-left: 1px solid var(--rule); border-right: 1px solid var(--rule); }
+#split:hover, #split:focus-visible { background: var(--accent-bg); }
+@media (max-width: 820px) {
+  main { grid-template-columns: 1fr; grid-template-rows: 38vh 0 1fr; }
+  #split { display: none; }
+}
+
+/* ---- source pane ---- */
+#srcpane { display: flex; flex-direction: column; min-height: 0; min-width: 0; background: var(--panel); }
+.panehead { padding: 5px 10px; border-bottom: 1px solid var(--rule); font-size: 11px; color: var(--ink2); text-transform: uppercase; letter-spacing: .06em; display: flex; gap: 8px; align-items: baseline; }
+.panehead .path { text-transform: none; letter-spacing: 0; font-family: var(--mono); color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#src { position: relative; overflow: auto; flex: 1; font: 12px/18px var(--mono); padding: 4px 0 40vh; }
+.ln { display: flex; min-width: max-content; white-space: pre; cursor: pointer; }
+.ln .gut { position: sticky; left: 0; flex: none; width: 4.2em; padding-right: 6px; text-align: right; color: var(--ink3); background: var(--panel); user-select: none; z-index: 1; }
+.ln .fbar { flex: none; width: 4px; margin-right: 10px; }
+.ln.infn .fbar { background: var(--rule); }
+.ln.hasops .gut { color: var(--ink2); font-weight: 600; }
+.ln.fnhover { background: var(--accent-bg); }
+.ln.fnhover .fbar, .ln.fnpin .fbar { background: var(--accent); }
+.ln.sel { background: var(--hl); }
+.ln.hov { background: var(--hl2); }
+.ln.sel .gut, .ln.hov .gut { background: transparent; }
+.fntag { margin-left: 14px; padding: 0 6px; border: 1px solid var(--rule); border-radius: 3px; background: var(--panel2); color: var(--accent); font: 11px/16px var(--sans); cursor: pointer; }
+.fntag:hover { border-color: var(--accent); }
+/* syntax */
+.tk-c { color: var(--ink3); font-style: italic; } .tk-s { color: #8a5a00; } .tk-n { color: #0b7a75; }
+.tk-k { color: #7a2fb0; font-weight: 600; } .tk-t { color: #1f5fa8; } .tk-f { color: #9c3d12; } .tk-p { color: #8a5a00; }
+.tk-v { color: #1f5fa8; } .tk-sym { color: #9c3d12; font-weight: 600; } .tk-op { color: #7a2fb0; } .tk-a { color: #0b7a75; }
+@media (prefers-color-scheme: dark) {
+  .tk-s, .tk-p { color: #e0b567; } .tk-n, .tk-a { color: #5fcfc6; } .tk-k, .tk-op { color: #c99af0; } .tk-t, .tk-v { color: #83b4f5; } .tk-f, .tk-sym { color: #f09a6a; }
+}
+
+/* ---- schedule pane ---- */
+#right { overflow: auto; min-width: 0; padding: 10px 16px 50vh; }
+#lineinfo { font-size: 12px; min-height: 20px; margin-bottom: 6px; color: var(--ink2); }
+#lineinfo button { border: 1px solid var(--rule); background: var(--panel); border-radius: 3px; padding: 0 5px; margin: 0 2px; cursor: pointer; font-family: var(--mono); font-size: 11px; }
+section.fn { border: 1px solid var(--rule); background: var(--panel); margin-bottom: 8px; border-radius: 3px; }
+section.fn.hover, section.fn.pin { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+section.fn h2 { margin: 0; font-size: 13px; }
+.fnhead { display: flex; width: 100%; align-items: baseline; gap: 8px; padding: 7px 10px; background: none; border: 0; text-align: left; cursor: pointer; }
+.fnhead .tw { display: inline-block; width: 10px; color: var(--ink3); transition: transform .12s; }
+.fnhead[aria-expanded="true"] .tw { transform: rotate(90deg); }
+.fnhead .nm { font-family: var(--mono); font-weight: 700; }
+.fnhead .fmeta { color: var(--ink2); font-weight: 400; font-size: 12px; }
+.fnbody { padding: 0 10px 10px; }
+article.pipe { border-top: 1px solid var(--rule2); padding: 8px 0 6px; }
+.phead { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 14px; }
+.pname { font-family: var(--mono); font-weight: 700; }
+dl.kv { display: flex; flex-wrap: wrap; gap: 2px 14px; margin: 0; }
+dl.kv div { display: flex; gap: 4px; align-items: baseline; }
+dl.kv dt { font-size: 10px; text-transform: uppercase; letter-spacing: .06em; color: var(--ink3); }
+dl.kv dd { margin: 0; font-family: var(--mono); font-weight: 600; }
+.srclink { border: 0; background: none; color: var(--accent); cursor: pointer; padding: 0; font-size: 12px; text-decoration: underline dotted; }
+.pmeta { font-size: 12px; color: var(--ink2); margin: 3px 0 6px; }
+.pmeta code { color: var(--ink); font-size: 11.5px; }
+.chips { display: flex; flex-wrap: wrap; gap: 3px; }
+.chip { display: inline-flex; flex-direction: column; align-items: stretch; gap: 2px; min-width: 34px; padding: 2px 4px 3px; border: 1px solid var(--rule); border-radius: 3px; background: var(--panel2); cursor: pointer; font: 11px/1.2 var(--mono); }
+.chip:hover, .chip.preview { border-color: var(--accent); }
+.chip[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--panel); }
+.chip.hit { box-shadow: 0 0 0 2px var(--hl2); }
+.chip .mini { display: flex; height: 3px; border-radius: 1px; overflow: hidden; background: var(--rule2); }
+.chip .mini i { display: block; }
+
+/* ---- detail ---- */
+.detail { margin-top: 8px; border: 1px solid var(--rule); border-radius: 3px; background: var(--panel); }
+.dhead { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 14px; padding: 6px 10px; border-bottom: 1px solid var(--rule); font-size: 12px; }
+.dhead b { font-family: var(--mono); }
+.dhead .state { font-size: 10px; text-transform: uppercase; letter-spacing: .08em; color: var(--ink3); }
+.dhead .unpin { margin-left: auto; border: 1px solid var(--rule); background: var(--panel2); border-radius: 3px; cursor: pointer; font-size: 11px; }
+.gscroll { overflow: auto; max-height: 68vh; position: relative; background: var(--panel); }
+.ggrid { display: grid; }
+.gcorner { position: sticky; top: 0; left: 0; z-index: 4; background: var(--panel); border-bottom: 1px solid var(--rule); border-right: 1px solid var(--rule); font-size: 10px; color: var(--ink3); padding: 4px 8px; text-transform: uppercase; letter-spacing: .06em; display: flex; align-items: flex-end; }
+.gruler { position: sticky; top: 0; z-index: 3; background: var(--panel); border-bottom: 1px solid var(--rule); display: block; }
+.glabels { position: sticky; left: 0; z-index: 2; background: var(--panel); border-right: 1px solid var(--rule); display: block; }
+.gbody { display: block; }
+svg text { font: 10.5px var(--mono); fill: var(--ink); }
+.clk { fill: none; stroke: var(--ink2); stroke-width: 1.1; }
+.cyc { fill: var(--ink3); font-size: 9.5px; }
+.iiline { stroke: var(--e-carried); stroke-width: 1; stroke-dasharray: 3 3; opacity: .7; }
+.iitext { fill: var(--e-carried); font-size: 9.5px; }
+.grid { stroke: var(--rule2); stroke-width: 1; }
+.band { fill: transparent; }
+.band.alt { fill: var(--band-alt); }
+.band.sel { fill: var(--band); }
+.rband { fill: transparent; }
+.rband.sel { fill: var(--band); }
+.hrow { fill: var(--panel2); }
+.hsep { stroke: var(--rule); }
+.stg { transition: opacity .1s; }
+.stg.dim { opacity: .28; }
+.bar { stroke: none; cursor: default; }
+.bar.c-memory { fill: var(--c-memory); } .bar.c-fmul { fill: var(--c-fmul); } .bar.c-fadd { fill: var(--c-fadd); } .bar.c-int { fill: var(--c-int); }
+.bar.c-cmp { fill: var(--c-cmp); } .bar.c-const { fill: var(--c-const); } .bar.c-other { fill: var(--c-other); }
+.bar.hit { stroke: var(--ink); stroke-width: 2; }
+.bar.hov { stroke: var(--accent); stroke-width: 2.5; }
+.lhead { font-weight: 700; }
+.lsub { fill: var(--ink2); font-size: 9.5px; }
+.lop { cursor: default; }
+.lop.hit { font-weight: 700; }
+.lop.hov { fill: var(--accent); }
+.lsw.c-memory { fill: var(--c-memory); } .lsw.c-fmul { fill: var(--c-fmul); } .lsw.c-fadd { fill: var(--c-fadd); } .lsw.c-int { fill: var(--c-int); }
+.lsw.c-cmp { fill: var(--c-cmp); } .lsw.c-const { fill: var(--c-const); } .lsw.c-other { fill: var(--c-other); }
+.edges { pointer-events: none; }
+.e { fill: none; stroke-width: 1.2; }
+.e.off, .ghost.off { display: none; }
+.e.all { opacity: .16; }
+.ghost.all { opacity: .25; }
+.k-comb { stroke: var(--e-comb); }
+.k-reg { stroke: var(--e-reg); }
+.k-reg.strong { stroke-width: 1.7; opacity: .9; }
+.k-reg.faint { opacity: .3; }
+.k-carried { stroke: var(--e-carried); stroke-dasharray: 4 3; }
+.ghost line { stroke: var(--e-carried); stroke-width: 2; }
+.ghost text { fill: var(--e-carried); font-size: 9px; }
+.ah-comb { fill: var(--e-comb); } .ah-reg { fill: var(--e-reg); } .ah-carried { fill: var(--e-carried); }
+.tables { display: flex; flex-wrap: wrap; gap: 14px; padding: 10px; border-top: 1px solid var(--rule); }
+.tables h3 { font-size: 11px; text-transform: uppercase; letter-spacing: .07em; color: var(--ink2); margin: 0 0 4px; font-weight: 600; }
+.tables h3 small { text-transform: none; letter-spacing: 0; font-weight: 400; color: var(--ink3); }
+.tbl { border-collapse: collapse; font: 11.5px var(--mono); }
+.tbl th, .tbl td { border: 1px solid var(--rule2); padding: 2px 6px; text-align: right; }
+.tbl th { font-weight: 600; background: var(--panel2); }
+.tbl th.l, .tbl td.l { text-align: left; }
+.mrtwrap { max-width: 100%; overflow-x: auto; }
+.mrt td, .mrt th { padding: 1px 3px; min-width: 20px; }
+.mrt td { background: color-mix(in srgb, var(--accent) calc(var(--h, 0) * 55%), transparent); }
+.mrt .selc { outline: 1.5px solid var(--ink); outline-offset: -1.5px; }
+.mrt th.selc { background: var(--accent); color: var(--panel); outline: none; }
+.mrt td.over { color: var(--over); font-weight: 700; }
+.mrt td.peak { background: var(--panel2); font-weight: 700; }
+.muted { color: var(--ink3); }
+
+/* ---- tooltip ---- */
+#tip { position: fixed; z-index: 50; max-width: 520px; pointer-events: none; background: var(--panel); color: var(--ink); border: 1px solid var(--ink3); border-radius: 3px; box-shadow: 0 4px 16px rgba(0, 0, 0, .18); padding: 6px 8px; font-size: 12px; }
+#tip[hidden] { display: none; }
+#tip .op { font: 11.5px/1.4 var(--mono); white-space: pre-wrap; word-break: break-all; margin-bottom: 4px; }
+#tip table { border-collapse: collapse; font-size: 11.5px; }
+#tip th { text-align: left; color: var(--ink3); font-weight: 400; padding-right: 10px; vertical-align: top; }
+#tip td { font-family: var(--mono); }
+#tip ul { margin: 3px 0 0; padding-left: 16px; font: 11px var(--mono); }
+.bar.focus { stroke: var(--e-carried); stroke-width: 2.5; }
+.lop.focus { fill: var(--e-carried); font-weight: 700; }
+
+/* ---- ask agent (served mode only) ---- */
+#askBtn { margin-left: auto; border: 1px solid var(--accent); background: var(--accent-bg); color: var(--accent); border-radius: 3px; padding: 2px 10px; cursor: pointer; font-weight: 600; }
+#askBtn[aria-expanded="true"] { background: var(--accent); color: var(--panel); }
+#ask { position: fixed; z-index: 40; right: 16px; bottom: 16px; width: min(560px, calc(100vw - 32px)); max-height: min(72vh, 760px); display: flex; flex-direction: column; background: var(--panel); border: 1px solid var(--ink3); border-radius: 4px; box-shadow: 0 8px 28px rgba(0, 0, 0, .22); }
+#ask[hidden] { display: none; }
+.askhead { display: flex; align-items: baseline; gap: 10px; padding: 6px 10px; border-bottom: 1px solid var(--rule); }
+.askhead button { border: 1px solid var(--rule); background: var(--panel2); border-radius: 3px; cursor: pointer; font-size: 11px; }
+.askhead .grow { flex: 1; font-size: 11px; color: var(--ink3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.askctx { display: flex; flex-wrap: wrap; gap: 4px; padding: 6px 10px; border-bottom: 1px solid var(--rule2); font-size: 11px; color: var(--ink2); }
+.askctx .ctx { display: inline-flex; align-items: center; gap: 4px; border: 1px solid var(--rule); background: var(--panel2); border-radius: 10px; padding: 0 3px 0 7px; font-family: var(--mono); color: var(--ink); max-width: 100%; }
+.askctx .ctx span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.askctx .ctx button { border: 0; background: none; cursor: pointer; color: var(--ink3); padding: 0 3px; }
+.askctx .ctx button:hover { color: var(--over); }
+.asklog { overflow: auto; flex: 1; min-height: 60px; padding: 4px 10px; font-size: 12.5px; }
+.asklog .q { margin: 8px 0 2px; font-weight: 600; white-space: pre-wrap; }
+.asklog .q::before { content: "› "; color: var(--accent); }
+.asklog .a { padding: 2px 0 6px 10px; border-left: 2px solid var(--rule); }
+.asklog .a.err { color: var(--over); border-color: var(--over); white-space: pre-wrap; }
+.asklog .a p { margin: 4px 0; }
+.asklog .a pre { font: 11.5px/1.4 var(--mono); background: var(--panel2); border: 1px solid var(--rule2); padding: 5px 7px; overflow: auto; margin: 4px 0; }
+.asklog .a code { font-size: 11.5px; background: var(--panel2); padding: 0 2px; border-radius: 2px; }
+.asklog .a a { color: var(--accent); }
+.asklog .hint { color: var(--ink3); font-size: 12px; margin: 8px 0; }
+#askForm { display: flex; gap: 6px; padding: 8px 10px; border-top: 1px solid var(--rule); }
+#askQ { flex: 1; resize: vertical; min-height: 38px; font: 12.5px/1.4 var(--sans); color: var(--ink); background: var(--panel2); border: 1px solid var(--rule); border-radius: 3px; padding: 4px 6px; }
+#askForm button { border: 1px solid var(--accent); background: var(--accent); color: var(--panel); border-radius: 3px; padding: 0 12px; cursor: pointer; font-weight: 600; }
+#askForm button:disabled { opacity: .5; cursor: progress; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; scroll-behavior: auto !important; } }
+</style>
+</head>
+<body>
+<header class="top">
+  <h1>loopschedule-vis <small id="ttl"></small></h1>
+  <div class="meta" id="counts"></div>
+  <div class="toggles">
+    <label><input type="checkbox" id="optAll"> show all edges</label>
+    <label><input type="checkbox" id="optConst"> show constants</label>
+  </div>
+  <div class="legend" aria-label="Legend">
+    <span><i class="sw sw-memory"></i>memory</span><span><i class="sw sw-fmul"></i>fmul/div</span><span><i class="sw sw-fadd"></i>fadd/sub</span>
+    <span><i class="sw sw-int"></i>int/index</span><span><i class="sw sw-cmp"></i>cmp/select</span><span><i class="sw sw-const"></i>const</span><span><i class="sw sw-other"></i>other</span>
+    <span><i class="ek comb"></i>comb</span><span><i class="ek reg"></i>reg</span><span><i class="ek carried"></i>carried</span>
+  </div>
+  <details class="warn" id="warns" hidden><summary></summary><ul></ul></details>
+  <button id="askBtn" hidden aria-expanded="false" aria-controls="ask" title="Ask an agent about what you are looking at (a)">Ask agent</button>
+</header>
+<main>
+  <section id="srcpane" aria-label="Source">
+    <div class="panehead"><span>source</span><span class="path" id="srcpath"></span></div>
+    <div id="src" tabindex="0" role="region" aria-label="Source code. Arrow keys move the selected line; Enter opens its function."></div>
+  </section>
+  <div id="split" role="separator" aria-orientation="vertical" aria-label="Resize panes" tabindex="0"></div>
+  <section id="right" aria-label="Schedules">
+    <div id="lineinfo" aria-live="polite"></div>
+    <div id="fns"></div>
+  </section>
+</main>
+<div id="tip" role="tooltip" hidden></div>
+<aside id="ask" hidden aria-label="Ask the agent">
+  <div class="askhead"><b>Ask agent</b><span class="grow" id="askAgent"></span><button id="askNew" title="Start a new conversation">new chat</button><button id="askClose" aria-label="Close (Esc)">✕</button></div>
+  <div class="askctx" id="askCtx" aria-label="Context sent with the question"></div>
+  <div class="asklog" id="askLog" aria-live="polite"></div>
+  <form id="askForm"><textarea id="askQ" rows="2" aria-label="Question" placeholder="Ask about the stage, op or variable in context… (Ctrl+Enter)"></textarea><button type="submit">Ask</button></form>
+</aside>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <marker id="ah-comb" viewBox="0 0 6 6" refX="5.5" refY="3" markerWidth="5" markerHeight="5" orient="auto"><path class="ah-comb" d="M0,0L6,3L0,6z"/></marker>
+    <marker id="ah-reg" viewBox="0 0 6 6" refX="5.5" refY="3" markerWidth="5" markerHeight="5" orient="auto"><path class="ah-reg" d="M0,0L6,3L0,6z"/></marker>
+    <marker id="ah-carried" viewBox="0 0 6 6" refX="5.5" refY="3" markerWidth="5" markerHeight="5" orient="auto"><path class="ah-carried" d="M0,0L6,3L0,6z"/></marker>
+  </defs>
+</svg>
+<script id="ls-data" type="application/json">__LOOPSCHEDULE_DATA__</script>
+<script>
+(function () {
+'use strict';
+const D = JSON.parse(document.getElementById('ls-data').textContent);
+const OPS = D.ops, PIPES = D.pipelines, FNS = D.functions, MEM = D.memrefs;
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const CAT = { memory: 'memory', fmul: 'float mul/div', fadd: 'float add/sub', int: 'int/index arith', cmp: 'cmp/select', const: 'constant', other: 'other' };
+const CATS = Object.keys(CAT);
+const reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+const byId = id => document.getElementById(id);
+
+const st = { pinned: null, preview: null, showAll: false, showConst: false, selLine: null, hoverFn: null, pinFn: null, hitOps: new Set(), hitChips: new Set(), focusOp: null, hoverOp: null, focusValue: null };
+
+// ---------- indexes ----------
+const lineOps = new Map();
+for (const o of OPS) if (o.src != null) { if (!lineOps.has(o.src)) lineOps.set(o.src, []); lineOps.get(o.src).push(o.id); }
+const fnOfLine = new Map();
+for (const f of FNS) if (f.span) for (let l = f.span[0]; l <= f.span[1]; l++) if (!fnOfLine.has(l)) fnOfLine.set(l, f.id);
+const memLabel = k => (k && MEM[k]) ? MEM[k].label : '';
+const memTitle = k => { if (!k || !MEM[k]) return ''; const m = MEM[k]; return m.label === m.ssa ? m.ssa : m.label + ' (' + m.ssa + ')'; };
+const shortName = n => n.replace(/^arith\./, '').replace(/^memref\./, '');
+
+// ---------- header ----------
+byId('ttl').textContent = D.title;
+document.title = D.title + ' · loopschedule-vis';
+{
+  const nst = PIPES.reduce((a, p) => a + p.stages.length, 0);
+  byId('counts').textContent = `${FNS.length} function${FNS.length === 1 ? '' : 's'} · ${PIPES.length} pipelines · ${nst} stages · ${OPS.length} ops`;
+  if (D.warnings.length) {
+    const w = byId('warns'); w.hidden = false;
+    w.querySelector('summary').textContent = `${D.warnings.length} warning${D.warnings.length === 1 ? '' : 's'}`;
+    w.querySelector('ul').innerHTML = D.warnings.map(x => `<li>${esc(x)}</li>`).join('');
+  }
+  const modeText = { arg: '--source', loc: 'from op locations', input: 'hls-est input', ir: 'loopschedule IR (no source locations)' }[D.source.mode] || D.source.mode;
+  const parts = D.source.path.split('/');
+  byId('srcpath').textContent = parts.length > 5 ? '…/' + parts.slice(-4).join('/') : D.source.path;
+  byId('srcpath').title = D.source.path + ' — ' + modeText;
+}
+
+// ---------- syntax highlighting ----------
+const C_RE = /(\/\/.*$|\/\*.*?(?:\*\/|$))|("(?:[^"\\]|\\.)*"?|'(?:[^'\\]|\\.)*'?)|(^\s*#\s*\w+)|\b(0[xX][0-9a-fA-F]+|\d+(?:\.\d*)?(?:[eE][+-]?\d+)?[fFuUlL]*)\b|\b(if|else|for|while|do|return|break|continue|switch|case|default|goto|sizeof|typedef|struct|union|enum|static|const|volatile|extern|inline|restrict|register)\b|\b(void|char|short|int|long|float|double|signed|unsigned|bool|size_t|u?int(?:8|16|32|64)_t|ap_u?int|ap_u?fixed)\b|\b([A-Za-z_]\w*)(?=\s*\()/g;
+const C_CLS = ['tk-c', 'tk-s', 'tk-p', 'tk-n', 'tk-k', 'tk-t', 'tk-f'];
+const M_RE = /(\/\/.*$)|("(?:[^"\\]|\\.)*")|(%[\w.$#-]+)|(@[\w.$-]+)|(\^[\w.$-]+)|(#[\w.$-]+)|\b([a-z_][a-z0-9_]*\.[a-z_][\w.]*)\b|\b(-?\d+(?:\.\d+)?(?:e[+-]?\d+)?)\b|\b(i\d+|f16|f32|f64|bf16|index|memref|tensor|vector|none)\b/g;
+const M_CLS = ['tk-c', 'tk-s', 'tk-v', 'tk-sym', 'tk-a', 'tk-a', 'tk-op', 'tk-n', 'tk-t'];
+function hl(line, re, cls) {
+  let out = '', last = 0, m;
+  re.lastIndex = 0;
+  while ((m = re.exec(line))) {
+    if (!m[0]) { re.lastIndex++; continue; }
+    out += esc(line.slice(last, m.index));
+    let c = '';
+    for (let i = 1; i < m.length; i++) if (m[i] !== undefined) { c = cls[i - 1]; break; }
+    out += c ? `<span class="${c}">${esc(m[0])}</span>` : esc(m[0]);
+    last = m.index + m[0].length;
+  }
+  return out + esc(line.slice(last));
+}
+function highlightC(lines) {
+  let inBlock = false;
+  return lines.map(line => {
+    let pre = '';
+    if (inBlock) {
+      const j = line.indexOf('*/');
+      if (j < 0) return `<span class="tk-c">${esc(line)}</span>`;
+      pre = `<span class="tk-c">${esc(line.slice(0, j + 2))}</span>`; line = line.slice(j + 2); inBlock = false;
+    }
+    const k = line.lastIndexOf('/*');
+    if (k >= 0 && line.indexOf('*/', k) < 0 && line.lastIndexOf('//', k) < 0) inBlock = true;
+    return pre + hl(line, C_RE, C_CLS);
+  });
+}
+
+// ---------- source pane ----------
+const srcEl = byId('src');
+function renderSource() {
+  const lines = D.source.lines;
+  const hlines = D.source.lang === 'c' ? highlightC(lines) : lines.map(l => hl(l, M_RE, M_CLS));
+  const parts = [];
+  for (let i = 0; i < lines.length; i++) {
+    const n = i + 1, fid = fnOfLine.get(n), f = fid != null ? FNS[fid] : null;
+    let cls = 'ln';
+    if (f) cls += ' infn';
+    if (lineOps.has(n)) cls += ' hasops';
+    const tag = f && f.span[0] === n ? `<button class="fntag" data-f="${fid}" title="Function ${esc(f.name)}, lines ${f.span[0]}–${f.span[1]}: show its schedules">ƒ ${esc(f.name)} · ${f.pipelines.length} pipeline${f.pipelines.length === 1 ? '' : 's'}</button>` : '';
+    const title = lineOps.has(n) ? ` title="${lineOps.get(n).length} scheduled op(s)"` : '';
+    parts.push(`<div class="${cls}" data-l="${n}"${fid != null ? ` data-f="${fid}"` : ''}${title}><span class="gut">${n}</span><span class="fbar"></span><span class="code">${hlines[i] || ' '}</span>${tag}</div>`);
+  }
+  srcEl.innerHTML = parts.join('');
+}
+renderSource();
+const srcLines = srcEl.children;
+const lineEl = n => srcLines[n - 1];
+function scrollSrcTo(n, ifNeeded) {
+  const el = lineEl(n); if (!el) return;
+  const top = el.offsetTop, h = el.offsetHeight;
+  if (ifNeeded && top >= srcEl.scrollTop + 20 && top + h <= srcEl.scrollTop + srcEl.clientHeight - 20) return;
+  srcEl.scrollTo({ top: Math.max(0, top - srcEl.clientHeight / 2 + h / 2), behavior: reduceMotion ? 'auto' : 'smooth' });
+}
+function spanClass(f, cls, on) {
+  if (!f || !f.span) return;
+  for (let l = f.span[0]; l <= f.span[1]; l++) { const el = lineEl(l); if (el) el.classList.toggle(cls, on); }
+}
+
+// ---------- functions: hover / pin ----------
+function fnSection(fid) { return document.querySelector(`section.fn[data-f="${fid}"]`); }
+function setHoverFn(fid, fromRight) {
+  if (st.hoverFn === fid) return;
+  if (st.hoverFn != null) { spanClass(FNS[st.hoverFn], 'fnhover', false); const s = fnSection(st.hoverFn); if (s) s.classList.remove('hover'); }
+  st.hoverFn = fid;
+  if (fid == null) return;
+  const f = FNS[fid];
+  spanClass(f, 'fnhover', true);
+  const s = fnSection(fid); if (s) s.classList.add('hover');
+  if (fromRight && f.span) {
+    const a = lineEl(f.span[0]), b = lineEl(f.span[1]);
+    if (a && b && (b.offsetTop + b.offsetHeight < srcEl.scrollTop || a.offsetTop > srcEl.scrollTop + srcEl.clientHeight)) scrollSrcTo(f.span[0], false);
+  }
+}
+function setPinFn(fid, scroll) {
+  if (st.pinFn != null) { spanClass(FNS[st.pinFn], 'fnpin', false); const s = fnSection(st.pinFn); if (s) s.classList.remove('pin'); }
+  st.pinFn = fid;
+  sync();
+  if (fid == null) return;
+  spanClass(FNS[fid], 'fnpin', true);
+  const s = fnSection(fid);
+  if (s) { s.classList.add('pin'); expandFn(fid, true); if (scroll) s.scrollIntoView({ block: 'nearest', behavior: reduceMotion ? 'auto' : 'smooth' }); }
+}
+function expandFn(fid, open) {
+  const s = fnSection(fid); if (!s) return;
+  const btn = s.querySelector('.fnhead'), body = s.querySelector('.fnbody');
+  btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+  body.hidden = !open;
+}
+
+// ---------- line selection ----------
+function selectLine(n, opts) {
+  opts = opts || {};
+  if (st.selLine != null) { const el = lineEl(st.selLine); if (el) el.classList.remove('sel'); }
+  st.selLine = n;
+  sync();
+  st.hitOps = new Set(n != null && lineOps.has(n) ? lineOps.get(n) : []);
+  st.hitChips = new Set();
+  const perStage = new Map();
+  for (const id of st.hitOps) {
+    const o = OPS[id], key = o.p + ':' + o.s;
+    st.hitChips.add(key); perStage.set(key, (perStage.get(key) || 0) + 1);
+  }
+  document.querySelectorAll('.chip').forEach(c => c.classList.toggle('hit', st.hitChips.has(c.dataset.p + ':' + c.dataset.s)));
+  for (const det of detCache.values()) det.markHits();
+  const info = byId('lineinfo');
+  if (n == null) { info.innerHTML = ''; return; }
+  const el = lineEl(n);
+  if (el) { el.classList.add('sel'); if (opts.scroll) scrollSrcTo(n, true); }
+  if (!st.hitOps.size) { info.innerHTML = `Line ${n}: <span class="muted">no scheduled ops map to this line.</span>`; return; }
+  const fset = new Set();
+  const btns = [...perStage.entries()].sort((a, b) => { const [pa, sa] = a[0].split(':').map(Number), [pb, sb] = b[0].split(':').map(Number); return pa - pb || sa - sb; })
+    .map(([k, c]) => { const [p, s] = k.split(':').map(Number); fset.add(PIPES[p].func); return `<button data-p="${p}" data-s="${s}" title="Pin this stage">P${p}·S${s} ×${c}</button>`; });
+  info.innerHTML = `Line ${n}: ${st.hitOps.size} op${st.hitOps.size === 1 ? '' : 's'} in ` + btns.join('');
+  if (opts.expand) for (const f of fset) if (f != null) expandFn(f, true);
+}
+
+srcEl.addEventListener('mouseover', e => {
+  const ln = e.target.closest('.ln'); if (!ln) return;
+  setHoverFn(ln.dataset.f != null ? +ln.dataset.f : null, false);
+});
+srcEl.addEventListener('mouseleave', () => setHoverFn(null));
+srcEl.addEventListener('click', e => {
+  const tag = e.target.closest('.fntag');
+  if (tag) { setPinFn(+tag.dataset.f, true); return; }
+  const ln = e.target.closest('.ln'); if (!ln) return;
+  if (window.getSelection && String(window.getSelection()).length) return;
+  const n = +ln.dataset.l;
+  selectLine(n === st.selLine ? null : n, { expand: true });
+  if (ln.dataset.f != null) setPinFn(+ln.dataset.f, true);
+});
+srcEl.addEventListener('keydown', e => {
+  const max = D.source.lines.length;
+  let n = st.selLine;
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    n = n == null ? (e.key === 'ArrowDown' ? 1 : max) : Math.min(max, Math.max(1, n + (e.key === 'ArrowDown' ? 1 : -1)));
+    selectLine(n, { scroll: true }); e.preventDefault();
+  } else if (e.key === 'Enter' && n != null) {
+    selectLine(n, { expand: true });
+    const f = fnOfLine.get(n); if (f != null) setPinFn(f, true);
+    e.preventDefault();
+  } else if (e.key === 'Escape') { selectLine(null); setPinFn(null); }
+});
+
+// ---------- right pane ----------
+function miniBar(stage) {
+  const cnt = {}; let tot = 0;
+  for (const id of stage.ops) { const c = OPS[id].c; if (c === 'const') continue; cnt[c] = (cnt[c] || 0) + 1; tot++; }
+  if (!tot) return '<span class="mini"></span>';
+  return '<span class="mini">' + CATS.filter(c => cnt[c]).map(c => `<i class="sw-${c}" style="flex:${cnt[c]}"></i>`).join('') + '</span>';
+}
+function stageSummary(stage) {
+  let mem = 0, nc = 0;
+  for (const id of stage.ops) { const c = OPS[id].c; if (c === 'memory') mem++; if (c !== 'const') nc++; }
+  return { mem, nc, all: stage.ops.length };
+}
+function renderRight() {
+  const parts = [];
+  for (const f of FNS) {
+    const span = f.span ? `lines ${f.span[0]}–${f.span[1]}` : 'no source span';
+    const cards = f.pipelines.map(pid => {
+      const P = PIPES[pid];
+      const nest = P.nest.length ? P.nest.map(n => `<code>${esc(n.text)}</code>${n.src ? ` <span class="muted">L${n.src}</span>` : ''}`).join(' › ') : '<span class="muted">none (loop nest fully in the pipeline)</span>';
+      const iters = P.iter_args.length ? P.iter_args.map(it => {
+        const pr = it.producer != null ? OPS[it.producer] : null;
+        return `<code>${esc(it.name)} = ${esc(it.init)}</code> ← <code>${esc(it.next || '?')}</code>` + (pr ? ` <span class="muted">(${esc(shortName(pr.n))} in S${pr.s}${it.hops ? ', ' + it.hops + ' reg' : ''})</span>` : '');
+      }).join('; ') : '<span class="muted">none</span>';
+      const chips = P.stages.map((S, si) => {
+        const sm = stageSummary(S);
+        return `<button class="chip" data-p="${pid}" data-s="${si}" aria-pressed="false" title="S${si}: cycles [${S.start}, ${S.end}), ${sm.nc} ops (${sm.mem} memory, ${sm.all - sm.nc} constants)"><span>S${si}</span>${miniBar(S)}</button>`;
+      }).join('');
+      const memOps = P.stages.reduce((a, S) => a + stageSummary(S).mem, 0);
+      return `<article class="pipe" data-p="${pid}" aria-label="Pipeline P${pid}">
+        <div class="phead"><span class="pname">P${pid}</span>
+          <dl class="kv"><div><dt>II</dt><dd>${P.II}</dd></div><div><dt>trip</dt><dd>${P.trip_count ?? '—'}</dd></div><div><dt>depth</dt><dd>${P.stages.length}</dd></div><div><dt>latency</dt><dd>${P.latency}</dd></div><div><dt>mem ops</dt><dd>${memOps}</dd></div></dl>
+          ${P.src != null ? `<button class="srclink" data-l="${P.src}">source L${P.src}</button>` : ''}<span class="muted">IR L${P.ir_line}</span></div>
+        <div class="pmeta">nest: ${nest}<br>iter_args: ${iters}</div>
+        <div class="chips" role="group" aria-label="Stages of P${pid} (hover to preview, click to pin, arrow keys to move)">${chips}</div>
+        <div class="detail" hidden></div></article>`;
+    }).join('');
+    parts.push(`<section class="fn" data-f="${f.id}">
+      <h2><button class="fnhead" aria-expanded="false" aria-controls="fnb${f.id}"><span class="tw" aria-hidden="true">▸</span><span class="nm">ƒ ${esc(f.name)}</span><span class="fmeta">${span} · ${f.pipelines.length} pipeline${f.pipelines.length === 1 ? '' : 's'}</span></button></h2>
+      <div class="fnbody" id="fnb${f.id}" hidden>${cards || '<p class="muted">No pipelines.</p>'}</div></section>`);
+  }
+  byId('fns').innerHTML = parts.join('') || '<p class="muted">No loopschedule pipelines found.</p>';
+}
+renderRight();
+
+const fnsEl = byId('fns');
+let previewTimer = null;
+function schedulePreview(v) {
+  clearTimeout(previewTimer);
+  previewTimer = setTimeout(() => setPreview(v), v ? 50 : 140);
+}
+function setPreview(v) {
+  if (v && st.preview && v.p === st.preview.p && v.s === st.preview.s) return;
+  if (!v && !st.preview) return;
+  st.preview = v; refresh();
+}
+function setPinned(v) {
+  st.pinned = v; st.preview = null; refresh();
+}
+fnsEl.addEventListener('click', e => {
+  const head = e.target.closest('.fnhead');
+  if (head) { const s = head.closest('section.fn'); expandFn(+s.dataset.f, head.getAttribute('aria-expanded') !== 'true'); return; }
+  const chip = e.target.closest('.chip');
+  if (chip) {
+    const v = { p: +chip.dataset.p, s: +chip.dataset.s };
+    setPinned(st.pinned && st.pinned.p === v.p && st.pinned.s === v.s ? null : v);
+    return;
+  }
+  const link = e.target.closest('.srclink');
+  if (link) { const n = +link.dataset.l; selectLine(n, {}); scrollSrcTo(n, false); return; }
+  if (e.target.closest('.unpin')) { setPinned(null); return; }
+});
+fnsEl.addEventListener('mouseover', e => {
+  const s = e.target.closest('section.fn'); setHoverFn(s ? +s.dataset.f : null, true);
+  const chip = e.target.closest('.chip');
+  if (chip) schedulePreview({ p: +chip.dataset.p, s: +chip.dataset.s });
+});
+fnsEl.addEventListener('mouseout', e => {
+  const chip = e.target.closest('.chip');
+  if (chip && !(e.relatedTarget && chip.contains(e.relatedTarget))) schedulePreview(null);
+});
+fnsEl.addEventListener('mouseleave', () => setHoverFn(null));
+fnsEl.addEventListener('focusin', e => {
+  const chip = e.target.closest('.chip');
+  if (chip) schedulePreview({ p: +chip.dataset.p, s: +chip.dataset.s });
+});
+fnsEl.addEventListener('focusout', e => { if (e.target.closest('.chip')) schedulePreview(null); });
+fnsEl.addEventListener('keydown', e => {
+  const chip = e.target.closest('.chip');
+  if (e.key === 'Escape') { setPinned(null); return; }
+  if (!chip) return;
+  let t = null;
+  if (e.key === 'ArrowRight') t = chip.nextElementSibling;
+  else if (e.key === 'ArrowLeft') t = chip.previousElementSibling;
+  else if (e.key === 'Home') t = chip.parentElement.firstElementChild;
+  else if (e.key === 'End') t = chip.parentElement.lastElementChild;
+  if (t) { t.focus(); if (st.pinned && st.pinned.p === +chip.dataset.p) setPinned({ p: +t.dataset.p, s: +t.dataset.s }); e.preventDefault(); }
+});
+byId('lineinfo').addEventListener('click', e => {
+  const b = e.target.closest('button[data-p]'); if (!b) return;
+  const p = +b.dataset.p, s = +b.dataset.s, f = PIPES[p].func;
+  if (f != null) expandFn(f, true);
+  setPinned({ p, s });
+  const card = document.querySelector(`article.pipe[data-p="${p}"]`);
+  if (card) card.scrollIntoView({ block: 'start', behavior: reduceMotion ? 'auto' : 'smooth' });
+});
+
+// ---------- detail / Gantt ----------
+const detCache = new Map(); // pid -> detail object
+const LABW = 290, RULH = 40, RH = 18, HH = 22;
+function stageOf(pid) { const a = st.preview && st.preview.p === pid ? st.preview.s : null; return a != null ? a : (st.pinned && st.pinned.p === pid ? st.pinned.s : null); }
+
+function refresh() {
+  const show = new Set();
+  if (st.pinned) show.add(st.pinned.p);
+  if (st.preview) show.add(st.preview.p);
+  document.querySelectorAll('article.pipe').forEach(card => {
+    const pid = +card.dataset.p, box = card.querySelector('.detail');
+    if (!show.has(pid)) { if (!box.hidden) box.hidden = true; return; }
+    let det = detCache.get(pid);
+    if (!det || det.showConst !== st.showConst) { det = buildDetail(pid, box); detCache.set(pid, det); }
+    box.hidden = false;
+    det.apply(stageOf(pid));
+  });
+  document.querySelectorAll('.chip').forEach(c => {
+    const p = +c.dataset.p, s = +c.dataset.s;
+    c.setAttribute('aria-pressed', st.pinned && st.pinned.p === p && st.pinned.s === s ? 'true' : 'false');
+    c.classList.toggle('preview', !!(st.preview && st.preview.p === p && st.preview.s === s));
+  });
+  sync();
+}
+
+function buildDetail(pid, box) {
+  const P = PIPES[pid], S = P.stages;
+  const rows = [];
+  S.forEach((stg, si) => {
+    const vis = stg.ops.filter(id => st.showConst || OPS[id].c !== 'const');
+    rows.push({ t: 'h', s: si, hidden: stg.ops.length - vis.length, n: vis.length });
+    for (const id of vis) rows.push({ t: 'o', s: si, o: id });
+  });
+  let y = 0;
+  const rowY = new Map(), stageY = new Map();
+  for (const r of rows) {
+    r.y = y; r.h = r.t === 'h' ? HH : RH;
+    if (r.t === 'o') rowY.set(r.o, y + RH / 2); else stageY.set(r.s, y);
+    y += r.h;
+  }
+  const H = Math.max(y + 6, 40);
+  const lastEnd = S.length ? S[S.length - 1].end : 1;
+  let T = lastEnd;
+  const hasCarried = P.edges.some(e => e.k === 'carried');
+  if (hasCarried) for (const e of P.edges) if (e.k === 'carried') T = Math.max(T, S[OPS[e.t].s].start + P.II + 1);
+  const avail = Math.max(320, byId('right').clientWidth - LABW - 70);
+  const cw = Math.max(12, Math.min(44, Math.floor(avail / Math.max(T, 1))));
+  const PADL = 4, W = PADL + T * cw + 40;
+  const X = c => PADL + c * cw;
+
+  // ruler
+  let r = `<svg class="gruler" width="${W}" height="${RULH}" aria-hidden="true">`;
+  S.forEach((stg, si) => { r += `<rect class="rband" data-s="${si}" x="${X(stg.start)}" y="0" width="${(stg.end - stg.start) * cw}" height="${RULH}"/>`; });
+  let clk = `M${X(0)},20`;
+  for (let c = 0; c < T; c++) clk += `L${X(c)},6L${X(c) + cw / 2},6L${X(c) + cw / 2},20L${X(c + 1)},20`;
+  r += `<path class="clk" d="${clk}"/>`;
+  const every = cw >= 22 ? 1 : cw >= 12 ? 2 : 5;
+  for (let c = 0; c <= T; c += every) r += `<text class="cyc" x="${X(c) + 2}" y="33">${c}</text>`;
+  const iiMarks = P.II >= 2 ? Math.floor(T / P.II) : 0;
+  for (let k = 1; k <= iiMarks; k++) r += `<line class="iiline" x1="${X(k * P.II)}" y1="0" x2="${X(k * P.II)}" y2="${RULH}"/><text class="iitext" x="${X(k * P.II) + 3}" y="16">${k === 1 ? '' : k + '·'}II</text>`;
+  r += '</svg>';
+
+  // body
+  let b = `<svg class="gbody" width="${W}" height="${H}">`;
+  S.forEach((stg, si) => { b += `<rect class="band${si % 2 ? ' alt' : ''}" data-s="${si}" x="${X(stg.start)}" y="0" width="${(stg.end - stg.start) * cw}" height="${H}"/>`; });
+  if (cw >= 12) for (let c = 0; c <= T; c++) b += `<line class="grid" x1="${X(c)}" y1="0" x2="${X(c)}" y2="${H}"/>`;
+  for (let k = 1; k <= iiMarks; k++) b += `<line class="iiline" x1="${X(k * P.II)}" y1="0" x2="${X(k * P.II)}" y2="${H}"/>`;
+  let l = `<svg class="glabels" width="${LABW}" height="${H}">`;
+  let cur = -1;
+  const closeG = () => { if (cur >= 0) { b += '</g>'; l += '</g>'; } };
+  for (const row of rows) {
+    if (row.s !== cur) { closeG(); cur = row.s; b += `<g class="stg" data-s="${cur}">`; l += `<g class="stg" data-s="${cur}">`; }
+    const stg = S[row.s];
+    if (row.t === 'h') {
+      b += `<rect class="hrow" x="0" y="${row.y}" width="${W}" height="${HH}" opacity=".5"/><line class="hsep" x1="0" y1="${row.y}" x2="${W}" y2="${row.y}"/>`;
+      l += `<rect class="hrow" x="0" y="${row.y}" width="${LABW}" height="${HH}"/><line class="hsep" x1="0" y1="${row.y}" x2="${LABW}" y2="${row.y}"/>`;
+      l += `<text class="lhead" x="8" y="${row.y + 15}">S${row.s}</text><text class="lsub" x="42" y="${row.y + 15}">start ${stg.start} · [${stg.start}, ${stg.end}) · ${row.n} op${row.n === 1 ? '' : 's'}${row.hidden ? ` · ${row.hidden} const hidden` : ''}${stg.when ? ' · when ' + esc(stg.when) : ''}</text>`;
+    } else {
+      const o = OPS[row.o];
+      let lab = (o.r ? o.r + ' = ' : '') + shortName(o.n) + (o.m ? ' ' + memLabel(o.m) : '');
+      if (lab.length > 38) lab = lab.slice(0, 37) + '…';
+      l += `<rect class="lsw c-${o.c}" x="8" y="${row.y + 5}" width="8" height="8" rx="1.5"/><text class="lop" data-o="${o.id}" x="22" y="${row.y + 13}">${esc(lab)}</text>`;
+      b += `<rect class="bar c-${o.c}" data-o="${o.id}" x="${X(stg.start) + 1}" y="${row.y + 3}" width="${Math.max(3, (stg.end - stg.start) * cw - 2)}" height="${RH - 6}" rx="2"/>`;
+    }
+  }
+  closeG();
+  l += '</svg>';
+  // edges
+  const edges = [];
+  b += '<g class="edges">';
+  P.edges.forEach(e => {
+    const yP = rowY.get(e.f), yC = rowY.get(e.t);
+    if (yP == null || yC == null) return;
+    const ps = OPS[e.f].s, cs = OPS[e.t].s;
+    let d, ghost = '';
+    if (e.k === 'comb') {
+      const x = X(S[cs].end) - 2, k = Math.min(60, 10 + Math.abs(yC - yP) * 0.15);
+      d = `M${x},${yP}C${x + k},${yP} ${x + k},${yC} ${x + 1},${yC}`;
+    } else if (e.k === 'reg') {
+      const x1 = X(S[ps].end) - 1, x2 = X(S[cs].start) + 1, c = Math.max(18, (x2 - x1) * 0.5);
+      d = `M${x1},${yP}C${x1 + c},${yP} ${x2 - c},${yC} ${x2},${yC}`;
+    } else {
+      const x1 = X(S[ps].end) - 1, xg = X(S[cs].start + P.II), c = Math.max(24, Math.abs(xg - x1) * 0.4);
+      d = `M${x1},${yP}C${x1 + c},${yP} ${xg - c},${yC} ${xg},${yC}`;
+      ghost = `<g class="ghost off" data-i="${edges.length}"><line x1="${xg}" y1="${yC - 7}" x2="${xg}" y2="${yC + 7}"/><text x="${xg + 4}" y="${yC - 3}">next iter</text></g>`;
+    }
+    b += `<path class="e k-${e.k} off" data-i="${edges.length}" d="${d}" marker-end="url(#ah-${e.k})"/>` + ghost;
+    edges.push({ e, ps, cs });
+  });
+  b += '</g></svg>';
+
+  box.innerHTML = `<div class="dhead"></div>
+    <div class="gscroll" tabindex="0" aria-label="Timing diagram for P${pid}"><div class="ggrid" style="grid-template-columns:${LABW}px ${W}px;grid-template-rows:${RULH}px ${H}px">
+      <div class="gcorner">cycle →</div>${r}${l}${b}</div></div>
+    <div class="tables"><div class="memstage"></div><div class="mrtbox"></div></div>`;
+  const q = sel => [...box.querySelectorAll(sel)];
+  const stgEls = q('.stg'), bandEls = q('.band'), rbandEls = q('.rband');
+  const pathEls = q('path.e'), ghostEls = q('.ghost');
+  const barEls = new Map(), labEls = new Map();
+  q('.bar').forEach(el => barEls.set(+el.dataset.o, el));
+  q('.lop').forEach(el => labEls.set(+el.dataset.o, el));
+  const ghostByIdx = new Map(ghostEls.map(g => [+g.dataset.i, g]));
+  const inEdges = new Map();
+  for (const e of P.edges) { if (!inEdges.has(e.t)) inEdges.set(e.t, []); inEdges.get(e.t).push(e); }
+
+  const det = {
+    showConst: st.showConst, pid, inEdges, lastKey: null,
+    apply(s) {
+      const key = [s, st.showAll, !!(st.pinned && st.pinned.p === pid && st.pinned.s === s)].join();
+      if (key === this.lastKey) return;
+      this.lastKey = key;
+      for (const g of stgEls) { const on = +g.dataset.s === s; g.classList.toggle('dim', s != null && !on); }
+      for (const el of bandEls) el.classList.toggle('sel', +el.dataset.s === s);
+      for (const el of rbandEls) el.classList.toggle('sel', +el.dataset.s === s);
+      pathEls.forEach((el, i) => {
+        const { e, ps, cs } = edges[i];
+        let v = '';
+        if (s != null) {
+          if (e.k === 'comb') v = cs === s ? 'on' : '';
+          else if (e.k === 'reg') v = ps === s ? 'strong' : cs === s ? 'faint' : '';
+          else v = (cs === s || ps === s) ? 'on' : '';
+        }
+        if (!v) v = st.showAll ? 'all' : 'off';
+        el.setAttribute('class', `e k-${e.k} ${v}`);
+        const g = ghostByIdx.get(i);
+        if (g) g.setAttribute('class', `ghost ${v === 'strong' || v === 'faint' ? 'on' : v}`);
+      });
+      this.renderHead(s); this.renderTables(s);
+      if (s != null && S[s]) {
+        const sc = box.querySelector('.gscroll'), x = X(S[s].start), y = stageY.get(s);
+        if (x < sc.scrollLeft || x > sc.scrollLeft + sc.clientWidth - LABW - 40) sc.scrollLeft = Math.max(0, x - 80);
+        if (y < sc.scrollTop || y > sc.scrollTop + sc.clientHeight - RULH - 40) sc.scrollTop = Math.max(0, y - 20);
+      }
+    },
+    renderHead(s) {
+      const pinned = st.pinned && st.pinned.p === pid && st.pinned.s === s;
+      const stg = S[s];
+      const sm = stg ? stageSummary(stg) : null;
+      box.querySelector('.dhead').innerHTML = stg
+        ? `<b>P${pid} · S${s}</b><span>cycles [${stg.start}, ${stg.end})</span><span>${sm.nc} ops · ${sm.mem} memory · ${stg.regs} registers out</span><span class="state">${pinned ? 'pinned' : 'preview'}</span>${pinned ? '<button class="unpin" title="Unpin (Esc)">unpin ✕</button>' : ''}`
+        : `<b>P${pid}</b>`;
+    },
+    renderTables(s) {
+      const stg = S[s];
+      // memory accesses in the selected stage
+      const per = new Map();
+      if (stg) for (const id of stg.ops) {
+        const o = OPS[id]; if (o.c !== 'memory') continue;
+        if (!per.has(o.m)) per.set(o.m, { l: 0, s: 0 });
+        per.get(o.m)[o.n.endsWith('store') ? 's' : 'l']++;
+      }
+      box.querySelector('.memstage').innerHTML = `<h3>Memory in S${s ?? '–'}</h3>` + (per.size
+        ? `<table class="tbl"><thead><tr><th class="l">memref</th><th>loads</th><th>stores</th></tr></thead><tbody>${[...per.entries()].map(([m, c]) => `<tr><td class="l" title="${esc(memTitle(m))}">${esc(memLabel(m))}</td><td>${c.l || ''}</td><td>${c.s || ''}</td></tr>`).join('')}</tbody></table>`
+        : '<p class="muted">No memory accesses in this stage.</p>');
+      // modulo reservation table
+      const II = Math.max(P.II, 1), col = stg ? stg.start % II : -1;
+      if (!P.mrt.length) { box.querySelector('.mrtbox').innerHTML = '<h3>Modulo reservation table</h3><p class="muted">No memory accesses.</p>'; return; }
+      let mx = 1;
+      for (const row of P.mrt) for (let c = 0; c < II; c++) mx = Math.max(mx, row.loads[c] + row.stores[c]);
+      let h = `<h3>Modulo reservation table <small>accesses per memref at (start mod II); II = ${P.II}; &gt;2 flagged (dual-port BRAM)</small></h3><div class="mrtwrap"><table class="tbl mrt"><thead><tr><th class="l">memref</th>`;
+      for (let c = 0; c < II; c++) h += `<th${c === col ? ' class="selc"' : ''}>${c}</th>`;
+      h += '<th>peak</th></tr></thead><tbody>';
+      for (const row of P.mrt) {
+        let peak = 0;
+        h += `<tr><th class="l" title="${esc(memTitle(row.m))}">${esc(memLabel(row.m))}</th>`;
+        for (let c = 0; c < II; c++) {
+          const v = row.loads[c] + row.stores[c]; peak = Math.max(peak, v);
+          const cls = [c === col ? 'selc' : '', v > 2 ? 'over' : ''].filter(Boolean).join(' ');
+          h += `<td${cls ? ` class="${cls}"` : ''} style="--h:${(v / mx).toFixed(2)}" title="cycle ${c} (mod II): ${row.loads[c]} load(s), ${row.stores[c]} store(s)">${v || ''}</td>`;
+        }
+        h += `<td class="peak${peak > 2 ? ' over' : ''}">${peak}</td></tr>`;
+      }
+      box.querySelector('.mrtbox').innerHTML = h + '</tbody></table></div>';
+    },
+    markHits() {
+      for (const [id, el] of barEls) el.classList.toggle('hit', st.hitOps.has(id));
+      for (const [id, el] of labEls) el.classList.toggle('hit', st.hitOps.has(id));
+      for (const [id, el] of barEls) el.classList.toggle('focus', id === st.focusOp);
+      for (const [id, el] of labEls) el.classList.toggle('focus', id === st.focusOp);
+    },
+  };
+  det.markHits();
+
+  // tooltips + source linking
+  const sc = box.querySelector('.gscroll');
+  let hovId = null;
+  const unhover = () => {
+    if (hovId == null) return;
+    const o = OPS[hovId];
+    const b1 = barEls.get(hovId), l1 = labEls.get(hovId);
+    if (b1) b1.classList.remove('hov'); if (l1) l1.classList.remove('hov');
+    if (o.src != null) { const el = lineEl(o.src); if (el) el.classList.remove('hov'); }
+    hovId = null; tip.hidden = true;
+    st.hoverOp = null; sync();
+  };
+  sc.addEventListener('mouseover', e => {
+    const t = e.target.closest('[data-o]');
+    if (!t) { unhover(); return; }
+    const id = +t.dataset.o;
+    if (id === hovId) return;
+    unhover(); hovId = id;
+    st.hoverOp = id; sync();
+    const o = OPS[id];
+    const b1 = barEls.get(id), l1 = labEls.get(id);
+    if (b1) b1.classList.add('hov'); if (l1) l1.classList.add('hov');
+    if (o.src != null) { const el = lineEl(o.src); if (el) { el.classList.add('hov'); scrollSrcTo(o.src, true); } }
+    tip.innerHTML = tipHTML(o, det);
+    tip.hidden = false; placeTip(e);
+  });
+  sc.addEventListener('mousemove', e => { if (!tip.hidden) placeTip(e); });
+  sc.addEventListener('mouseleave', unhover);
+  sc.addEventListener('click', e => {
+    const t = e.target.closest('[data-o]'); if (!t) return;
+    const o = OPS[+t.dataset.o];
+    setFocusOp(o.id);
+    if (o.src != null) { selectLine(o.src, {}); scrollSrcTo(o.src, false); }
+  });
+  return det;
+}
+
+const tip = byId('tip');
+function placeTip(e) {
+  const pad = 14, w = tip.offsetWidth, h = tip.offsetHeight;
+  let x = e.clientX + pad, y = e.clientY + pad;
+  if (x + w > window.innerWidth - 4) x = Math.max(4, e.clientX - w - pad);
+  if (y + h > window.innerHeight - 4) y = Math.max(4, e.clientY - h - pad);
+  tip.style.left = x + 'px'; tip.style.top = y + 'px';
+}
+function tipHTML(o, det) {
+  const P = PIPES[o.p], S = P.stages[o.s];
+  let h = `<div class="op">${esc(o.t)}</div><table>`;
+  h += `<tr><th>stage</th><td>S${o.s} (start ${S.start})</td></tr><tr><th>cycles</th><td>[${S.start}, ${S.end})</td></tr>`;
+  h += `<tr><th>source</th><td>${o.src != null ? 'line ' + o.src : '—'}</td></tr><tr><th>IR</th><td>line ${o.ir}</td></tr>`;
+  h += `<tr><th>category</th><td>${CAT[o.c]}</td></tr>`;
+  if (o.m) h += `<tr><th>memref</th><td>${esc(memTitle(o.m))}</td></tr>`;
+  h += '</table>';
+  const ins = det.inEdges.get(o.id) || [];
+  if (ins.length) {
+    h += '<ul>' + ins.map(e => {
+      const p = OPS[e.f];
+      const what = e.k === 'carried' ? `from ${p.r || shortName(p.n)} (S${p.s}) of the previous iteration, +II=${P.II}` : `from ${p.r || shortName(p.n)} (${shortName(p.n)}, S${p.s})`;
+      return `<li>${esc(e.v)} ${esc(what)} · ${e.k}${e.h ? ` · ${e.h} register hop${e.h === 1 ? '' : 's'}` : ''}</li>`;
+    }).join('') + '</ul>';
+  }
+  return h;
+}
+
+// ---------- global toggles ----------
+byId('optAll').addEventListener('change', e => { st.showAll = e.target.checked; refresh(); });
+byId('optConst').addEventListener('change', e => { st.showConst = e.target.checked; refresh(); });
+
+// ---------- splitter ----------
+{
+  const sp = byId('split'), root = document.documentElement;
+  let drag = false;
+  const set = pct => root.style.setProperty('--srcw', Math.max(15, Math.min(80, pct)) + '%');
+  sp.addEventListener('mousedown', e => { drag = true; e.preventDefault(); });
+  window.addEventListener('mousemove', e => { if (drag) set(e.clientX / window.innerWidth * 100); });
+  window.addEventListener('mouseup', () => { if (drag) { drag = false; detCache.clear(); refresh(); } });
+  sp.addEventListener('keydown', e => {
+    const cur = parseFloat(getComputedStyle(root).getPropertyValue('--srcw')) || 42;
+    if (e.key === 'ArrowLeft') { set(cur - 3); e.preventDefault(); }
+    if (e.key === 'ArrowRight') { set(cur + 3); e.preventDefault(); }
+  });
+}
+
+// ---------- agent bridge (only when served by `loopschedule-vis serve`) ----------
+// The page reports what the user is looking at (POST /api/selection) so that
+// both the Ask panel and agents polling GET /api/selection see the same
+// context. Opened from a file, none of this is active.
+let served = false, syncTimer = null;
+function selectionSnapshot() {
+  return { pinned: st.pinned, preview: st.preview, line: st.selLine, op: st.focusOp, hover: st.hoverOp, value: st.focusValue, fn: st.pinFn };
+}
+function sync() {
+  if (!served) return;
+  renderAskCtx();
+  clearTimeout(syncTimer);
+  syncTimer = setTimeout(() => {
+    fetch('/api/selection', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(selectionSnapshot()) }).catch(() => {});
+  }, 250);
+}
+function setFocusOp(id) {
+  st.focusOp = id;
+  for (const det of detCache.values()) det.markHits();
+  sync();
+}
+function goOp(id) {
+  const o = OPS[id]; if (!o) return;
+  const f = PIPES[o.p].func;
+  if (f != null) expandFn(f, true);
+  setPinned({ p: o.p, s: o.s });
+  setFocusOp(id);
+  if (o.src != null) { selectLine(o.src, {}); scrollSrcTo(o.src, false); }
+  const card = document.querySelector(`article.pipe[data-p="${o.p}"]`);
+  if (card) card.scrollIntoView({ block: 'start', behavior: reduceMotion ? 'auto' : 'smooth' });
+}
+function goStage(p, s) {
+  const f = PIPES[p].func;
+  if (f != null) expandFn(f, true);
+  setPinned({ p, s });
+  const card = document.querySelector(`article.pipe[data-p="${p}"]`);
+  if (card) card.scrollIntoView({ block: 'start', behavior: reduceMotion ? 'auto' : 'smooth' });
+}
+
+const askEl = byId('ask'), askBtn = byId('askBtn'), askLog = byId('askLog'), askQ = byId('askQ'), askCtx = byId('askCtx');
+let askSession = null, askBusy = false;
+function renderAskCtx() {
+  if (askEl.hidden) return;
+  const chips = [];
+  const v = st.preview || st.pinned;
+  if (v) chips.push(['stage', `P${v.p}·S${v.s}${st.preview ? ' (preview)' : ''}`]);
+  if (st.focusOp != null) { const o = OPS[st.focusOp]; chips.push(['op', `op #${o.id} ${o.r ? o.r + ' = ' : ''}${shortName(o.n)}`]); }
+  if (st.focusValue) chips.push(['value', `var ${st.focusValue}`]);
+  if (st.selLine != null) chips.push(['line', `L${st.selLine}`]);
+  askCtx.innerHTML = chips.length
+    ? 'context: ' + chips.map(([k, t]) => `<span class="ctx"><span title="${esc(t)}">${esc(t)}</span><button data-clear="${k}" aria-label="Remove ${esc(t)} from context">✕</button></span>`).join('')
+    : '<span>No context: pin a stage, click an op bar, select a variable name in the source or tooltip text, or click a source line.</span>';
+}
+askCtx.addEventListener('click', e => {
+  const b = e.target.closest('[data-clear]'); if (!b) return;
+  const k = b.dataset.clear;
+  if (k === 'stage') { st.preview = null; setPinned(null); }
+  else if (k === 'op') setFocusOp(null);
+  else if (k === 'value') { st.focusValue = null; sync(); }
+  else if (k === 'line') selectLine(null);
+});
+// Selecting a short piece of text (a C variable, an SSA name such as %12#3)
+// in the source or schedule pane makes it the variable in context.
+document.addEventListener('selectionchange', () => {
+  const sel = window.getSelection && window.getSelection();
+  if (!sel || sel.isCollapsed || !sel.anchorNode) return;
+  const host = sel.anchorNode.nodeType === 1 ? sel.anchorNode : sel.anchorNode.parentElement;
+  if (!host || !host.closest('#src, #right')) return;
+  const t = String(sel).trim();
+  if (!t || t.length > 80 || /\n/.test(t)) return;
+  if (t !== st.focusValue) { st.focusValue = t; sync(); }
+});
+
+function linkify(h) {
+  return h
+    .replace(/\bop #(\d+)\b/g, (m, id) => OPS[+id] ? `<a href="#" data-go-op="${id}">${m}</a>` : m)
+    .replace(/\bP(\d+)\s?[·.:]\s?S(\d+)\b/g, (m, p, s) => PIPES[+p] && PIPES[+p].stages[+s] ? `<a href="#" data-go-p="${p}" data-go-s="${s}">${m}</a>` : m)
+    .replace(/\bL(\d+)\b/g, (m, n) => +n >= 1 && +n <= D.source.lines.length ? `<a href="#" data-go-l="${n}">${m}</a>` : m);
+}
+function mdInline(t) {
+  let h = esc(t)
+    .replace(/`([^`\n]+)`/g, '<code>$1</code>')
+    .replace(/\*\*([^*\n]+)\*\*/g, '<b>$1</b>')
+    .replace(/^#{1,6}\s+(.*)$/gm, '<b>$1</b>')
+    .replace(/^(\s*)[-*]\s+/gm, '$1• ');
+  h = linkify(h);
+  return h.split(/\n{2,}/).map(p => p.trim() ? `<p>${p.replace(/\n/g, '<br>')}</p>` : '').join('');
+}
+function md(s) {
+  return String(s).split('```').map((b, i) => i % 2 ? `<pre>${linkify(esc(b.replace(/^[\w+-]*\n/, '')))}</pre>` : mdInline(b)).join('');
+}
+function askAppend(cls, html) {
+  const d = document.createElement('div'); d.className = cls; d.innerHTML = html;
+  askLog.appendChild(d); askLog.scrollTop = askLog.scrollHeight;
+  return d;
+}
+function askHint() {
+  askLog.innerHTML = '<p class="hint">Questions go to the agent together with the context above (the stage in view, the op you last clicked, the selected variable, the selected source line). The agent can query the full schedule through this page\'s API. Links like op #12, P0·S3 and L42 in answers jump to the schedule.</p>';
+}
+function openAsk(open) {
+  askEl.hidden = !open;
+  askBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+  if (open) { renderAskCtx(); askQ.focus(); }
+}
+askBtn.addEventListener('click', () => openAsk(askEl.hidden));
+byId('askClose').addEventListener('click', () => { openAsk(false); askBtn.focus(); });
+byId('askNew').addEventListener('click', () => { askSession = null; askHint(); askQ.focus(); });
+askEl.addEventListener('keydown', e => { if (e.key === 'Escape') { openAsk(false); askBtn.focus(); e.stopPropagation(); } });
+askQ.addEventListener('keydown', e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); byId('askForm').requestSubmit(); } });
+document.addEventListener('keydown', e => {
+  if (!served || e.key !== 'a' || e.ctrlKey || e.metaKey || e.altKey) return;
+  if (e.target.closest && e.target.closest('input, textarea, select, [contenteditable]')) return;
+  openAsk(true); e.preventDefault();
+});
+askLog.addEventListener('click', e => {
+  const a = e.target.closest('a[data-go-op], a[data-go-p], a[data-go-l]'); if (!a) return;
+  e.preventDefault();
+  if (a.dataset.goOp != null) goOp(+a.dataset.goOp);
+  else if (a.dataset.goP != null) goStage(+a.dataset.goP, +a.dataset.goS);
+  else { const n = +a.dataset.goL; selectLine(n, { expand: true }); scrollSrcTo(n, false); }
+});
+byId('askForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const q = askQ.value.trim();
+  if (!q || askBusy) return;
+  askBusy = true;
+  const btn = e.target.querySelector('button'); btn.disabled = true;
+  if (askLog.querySelector('.hint')) askLog.innerHTML = '';
+  askAppend('q', esc(q));
+  const pending = askAppend('a muted', 'thinking…');
+  const t0 = Date.now();
+  const tick = setInterval(() => { pending.textContent = `thinking… ${Math.round((Date.now() - t0) / 1000)}s`; }, 1000);
+  askQ.value = '';
+  try {
+    const r = await fetch('/api/ask', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ question: q, selection: selectionSnapshot(), session: askSession }) });
+    const j = await r.json();
+    if (j.session) askSession = j.session;
+    pending.className = 'a';
+    pending.innerHTML = j.answer ? md(j.answer) : '';
+    if (j.error) askAppend('a err', esc(j.error));
+  } catch (err) {
+    pending.className = 'a err'; pending.textContent = 'request failed: ' + err;
+  } finally {
+    clearInterval(tick); askBusy = false; btn.disabled = false; askQ.focus();
+  }
+});
+
+if (location.protocol === 'http:' || location.protocol === 'https:') {
+  fetch('/api/ping').then(r => r.ok ? r.json() : null).then(j => {
+    if (!j || !j.ok) return;
+    served = true;
+    askBtn.hidden = false;
+    byId('askAgent').textContent = j.agent ? 'via ' + j.agent : 'no agent configured (API only)';
+    askHint();
+    sync();
+  }).catch(() => {});
+}
+
+if (!FNS.some(f => f.pipelines.length)) byId('lineinfo').textContent = 'No pipelines to show.';
+else byId('lineinfo').innerHTML = '<span class="muted">Click a source line or a function to find its ops; hover a stage chip to preview its timing, click to pin.</span>';
+})();
+</script>
+</body>
+</html>

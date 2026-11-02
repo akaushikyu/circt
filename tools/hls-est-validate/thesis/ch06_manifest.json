@@ -1,0 +1,842 @@
+{
+ "_doc": "Inputs of make_thesis_tables.py (chapter 6). Paths only, never numbers: every number in the thesis tables is computed from these files. '$SCRATCH' is ~/hls-est-work/coord/scratch, '$RESULTS' is tools/hls-est-validate/results. 'changelog' names the CHANGELOG.md entry (or round report) that documents the run; 'notes' names the VITIS_NOTES / OPEN_ISSUES entries a rule implements. A run is a run_hlsest.py result file; it is re-scored against the current results/vitis.json, so all rows share one ground truth. 'heldout' lists the held-out eval split's scorings (Section 6.9): per row the run_hlsest.py results and compare.py outputs of the two eval datasets; the locked split never appears. 'heldout_locked' lists the held-out locked split's scorings (Section 6.9, Table 6.11), in the same form; Peter released the split on 2026-10-27.",
+ "newest_run": "$SCRATCH/w9r23fx/E.json",
+ "newest_run_label": "final evaluation run",
+ "outofband_classes": {
+  "per_design": "$SCRATCH/w9r10p/final.json",
+  "class_table": "$SCRATCH/w9r10p/classes.md",
+  "ranking_run": "out-of-band ranking of round 10 (OPEN_ISSUES O113); class causes condensed in 'names' from its classes.md, K1f updated for round 8's N65 implementation",
+  "names": {
+   "K1d": {
+    "name": "stream-call loops left unscheduled",
+    "cause": "loops that contain hls::stream reads or writes are not scheduled, so they are not pipelined (O54 (c)); the largest design also needs the trip-count-1 pipeline unroll (N40, O57, an option that is off) and the automatic complete partition of the unrolled index"
+   },
+   "K1c": {
+    "name": "flatten across a stream access",
+    "cause": "Vitis flattens a nest across a stream read or write; proven (N55), not implemented"
+   },
+   "K14": {
+    "name": "name-alignment artefact",
+    "cause": "per-array rows that do not align by name; the design total error is small"
+   },
+   "K1e": {
+    "name": "RAM_1WNR copy count",
+    "cause": "RAM_1WNR copy count or port demand, other cases (O11, O51; reads in if/else arms, shared ports)"
+   },
+   "K19": {
+    "name": "globals not access-attributed",
+    "cause": "a global array whose accesses were not attributed (O4, O17): priced as a one-port x36 RAM where Vitis builds a two-port x18 RAM; since round 10 the attribution is the default (N85)"
+   },
+   "K3": {
+    "name": "hls::vector arrays",
+    "cause": "hls::vector arrays in static locals (O64 (b), N44, N51)"
+   },
+   "K1b": {
+    "name": "greedy scheduler II",
+    "cause": "the greedy modulo scheduler returns a higher II than Vitis on large or flattened bodies (O56, N39)"
+   },
+   "K8b": {
+    "name": "unroll of a variable-trip pipeline",
+    "cause": "an unroll factor on a pipelined loop with a run-time trip count is not applied by hls-est; in Vitis the reader of a PIPO channel reads one bank twice per cycle"
+   },
+   "K1g": {
+    "name": "do-while flatten refusal",
+    "cause": "Vitis does not flatten a nest whose loops the front end turned into do-while loops ([HLS 200-960], N64; which source shape causes it is unconfirmed); hls-est flattens"
+   },
+   "K11": {
+    "name": "math cores",
+    "cause": "BRAM of hls:: math cores (O45, O46)"
+   },
+   "K8": {
+    "name": "PIPO channels",
+    "cause": "dataflow PIPO channels (O50): one memory or one per block, narrowing or LUT RAM of a channel"
+   },
+   "K15": {
+    "name": "not examined",
+    "cause": "not explained; not examined in the ranking"
+   },
+   "K13": {
+    "name": "arrays Vitis keeps in registers",
+    "cause": "arrays Vitis keeps in registers or removes, and small arrays only Vitis has (O60)"
+   },
+   "K12": {
+    "name": "formula / ROM / binding residuals",
+    "cause": "small residuals of the BRAM formula, ROMs and binding"
+   },
+   "K1f": {
+    "name": "flattened pipeline II",
+    "cause": "the straight-line code before a flattened inner loop is now scheduled inside the pipeline (N65, implemented in round 8), but hls-est's II for that pipeline is 17 against Vitis' 2, because 32 mutually exclusive bank stores count as 32 port uses (O87), so the copy count stays too low"
+   },
+   "K24": {
+    "name": "ap_uint-counted loop",
+    "cause": "a loop counted by an ap_uint stays a while loop in cgeist and is not pipelined (O101)"
+   },
+   "K18": {
+    "name": "partition not applied",
+    "cause": "an array_partition is not applied because the array reaches a view, cast, byte copy or select that the banking cannot rewrite (O84)"
+   },
+   "K4c": {
+    "name": "dropped INTERFACE pragma",
+    "cause": "Vitis drops an INTERFACE pragma with an unknown option (bus_bitwidth), so there is no m_axi adapter; hls-est prices one"
+   },
+   "K22": {
+    "name": "multi-read ROM copies",
+    "cause": "a ROM read several times per cycle, ROM copies (N8)"
+   },
+   "K6": {
+    "name": "callee pragma lost",
+    "cause": "a partition pragma on a parameter of an inlined callee is lost in cgeist (O39, O17)"
+   },
+   "K4": {
+    "name": "m_axi adapters, other",
+    "cause": "m_axi adapters, other cases (N56)"
+   }
+  }
+ },
+ "harness_subset": [
+  "polybench",
+  "polybench_pragmas",
+  "forgebench",
+  "machsuite",
+  "spector_hls",
+  "vitis_examples"
+ ],
+ "history": [
+  {
+   "label": "baseline (first full run)",
+   "date": "2026-10-13",
+   "run": "$RESULTS/baseline/hlsest-2026-10-13-v2-defaults.json",
+   "shim": "exactclass",
+   "changelog": "2026-10-13 harness: full HLSFactory_v2 runs ... saved as baselines (W8c part 3)"
+  },
+  {
+   "label": "stream FIFOs (N31)",
+   "date": "2026-10-13",
+   "run": "$SCRATCH/w9fifo_impl/after_merged.json",
+   "shim": "exactclass",
+   "changelog": "2026-10-13 hls::stream objects priced as the FIFOs Vitis builds (W9-FIFO-impl)"
+  },
+  {
+   "label": "PIPO channels (N33)",
+   "date": "2026-10-13",
+   "run": "$SCRATCH/w9pipo_impl/after6_merged.json",
+   "shim": "exactclass",
+   "changelog": "2026-10-13 dataflow ping-pong channels (W9-PIPO-impl)"
+  },
+  {
+   "label": "calls as barriers (O47)",
+   "date": "2026-10-13",
+   "run": "$SCRATCH/o47fix/after_merged.json",
+   "shim": "exactclass",
+   "changelog": "2026-10-13 a call taking a memref is a barrier ... (O47-fix)"
+  },
+  {
+   "label": "width narrowing (N35)",
+   "date": "2026-10-13",
+   "run": "$SCRATCH/w9r2fix/after.json",
+   "shim": "exactclass",
+   "changelog": "2026-10-13 W9 round 2 review fixes"
+  },
+  {
+   "label": "process merges (N36)",
+   "date": "2026-10-13",
+   "run": "$SCRATCH/n36impl/after.json",
+   "shim": "exactclass",
+   "changelog": "2026-10-13 dataflow process merges (N36-impl)"
+  },
+  {
+   "label": "copy-count inputs (N38)",
+   "date": "2026-10-14",
+   "run": "$SCRATCH/n38impl/t7.json",
+   "shim": "exactclass",
+   "changelog": "2026-10-14 N38-impl 5/5"
+  },
+  {
+   "label": "structs (N37)",
+   "date": "2026-10-14",
+   "run": "$SCRATCH/n37impl/v10.json",
+   "shim": "exactclass",
+   "changelog": "2026-10-14 N37-impl 1/2, 2/2 and follow-up"
+  },
+  {
+   "label": "round 4",
+   "date": "2026-10-14",
+   "run": "$SCRATCH/w9r4fix/f7.json",
+   "shim": "exactclass",
+   "changelog": "2026-10-14 W9 round 4 review fixes"
+  },
+  {
+   "label": "round 5",
+   "date": "2026-10-15",
+   "run": "$SCRATCH/w9r5fix/final.json",
+   "shim": "exactclass",
+   "changelog": "2026-10-15 W9 round 5 review fixes"
+  },
+  {
+   "label": "real Vitis headers",
+   "date": "2026-10-16",
+   "run": "$SCRATCH/w11adopt/C1.json",
+   "shim": "real",
+   "changelog": "2026-10-16 W11-adopt (1)+(2): --shim real is the harness default"
+  },
+  {
+   "label": "round 6",
+   "date": "2026-10-19",
+   "run": "$SCRATCH/w9r6fix/G1.json",
+   "shim": "real",
+   "changelog": "2026-10-19 W9 round 6 review fixes"
+  },
+  {
+   "label": "run-time trips (N52, N53)",
+   "date": "2026-10-19",
+   "run": "$SCRATCH/o72fix/G4.json",
+   "shim": "real",
+   "changelog": "2026-10-19 O72 review fixes"
+  },
+  {
+   "label": "round 7",
+   "date": "2026-10-20",
+   "run": "$SCRATCH/w9r7fix/R4.json",
+   "shim": "real",
+   "changelog": "2026-10-20 W9 round 7 review fixes 5/5"
+  },
+  {
+   "label": "round 8",
+   "date": "2026-10-21",
+   "run": "$SCRATCH/w9r8g/A.json",
+   "shim": "real",
+   "changelog": "2026-10-21 W9 round 8 review fixes"
+  },
+  {
+   "label": "round 9",
+   "date": "2026-10-21",
+   "run": "$SCRATCH/w9r9fix/F.json",
+   "shim": "real",
+   "changelog": "2026-10-21 W9 round 9 review fixes"
+  },
+  {
+   "label": "round 10",
+   "date": "2026-10-21",
+   "run": "$SCRATCH/w9r10i/R10.json",
+   "shim": "real",
+   "changelog": "2026-10-21 W9r10-impl"
+  },
+  {
+   "label": "round 10 review (final)",
+   "date": "2026-10-21",
+   "run": "$SCRATCH/w9r10fx/X2.json",
+   "shim": "real",
+   "changelog": "2026-10-21 W9 round 10 review fixes (N86)"
+  },
+  {
+   "label": "round 11 review",
+   "date": "2026-10-22",
+   "run": "$SCRATCH/w9r12i/HMk.json",
+   "shim": "real",
+   "changelog": "2026-10-22 W9 round 11 review fixes"
+  },
+  {
+   "label": "round 12",
+   "date": "2026-10-22",
+   "run": "$SCRATCH/w9r12i/F.json",
+   "shim": "real",
+   "changelog": "2026-10-22 W9r12-impl"
+  },
+  {
+   "label": "round 12 review",
+   "date": "2026-10-22",
+   "run": "$SCRATCH/w9r12f/A.json",
+   "shim": "real",
+   "changelog": "2026-10-22 W9 round 12 review fixes"
+  },
+  {
+   "label": "round 13",
+   "date": "2026-10-22",
+   "run": "$SCRATCH/w9r13i/F.json",
+   "shim": "real",
+   "changelog": "2026-10-22 W9r13-impl"
+  },
+  {
+   "label": "round 13 review",
+   "date": "2026-10-22",
+   "run": "$SCRATCH/w9r13fix/G2.json",
+   "shim": "real",
+   "changelog": "2026-10-22 W9 round 13 review fixes"
+  },
+  {
+   "label": "round 14",
+   "date": "2026-10-22",
+   "run": "$SCRATCH/w9r14i/F2.json",
+   "shim": "real",
+   "changelog": "2026-10-22 W9r14-impl"
+  },
+  {
+   "label": "round 14 review",
+   "date": "2026-10-22",
+   "run": "$SCRATCH/w9r14fx/G.json",
+   "shim": "real",
+   "changelog": "2026-10-22 W9 round 14 review fixes"
+  },
+  {
+   "label": "round 15",
+   "date": "2026-10-23",
+   "run": "$SCRATCH/w9r15i/F2.json",
+   "shim": "real",
+   "changelog": "2026-10-23 W9r15-impl"
+  },
+  {
+   "label": "round 15 review",
+   "date": "2026-10-23",
+   "run": "$SCRATCH/w9r15fx/H.json",
+   "shim": "real",
+   "changelog": "2026-10-23 W9 round 15 review fixes"
+  },
+  {
+   "label": "round 16",
+   "date": "2026-10-23",
+   "run": "$SCRATCH/w9r16i/F2.json",
+   "shim": "real",
+   "changelog": "2026-10-23 W9r16-impl"
+  },
+  {
+   "label": "round 16 review",
+   "date": "2026-10-23",
+   "run": "$SCRATCH/w9r16fx/R.json",
+   "shim": "real",
+   "changelog": "2026-10-23 W9 round 16 review fixes"
+  },
+  {
+   "label": "round 17",
+   "date": "2026-10-23",
+   "run": "$SCRATCH/w9r17i/F.json",
+   "shim": "real",
+   "changelog": "2026-10-23 W9r17-impl"
+  },
+  {
+   "label": "round 17 review",
+   "date": "2026-10-23",
+   "run": "$SCRATCH/w9r17fx/X2.json",
+   "shim": "real",
+   "changelog": "2026-10-23 W9 round 17 review fixes"
+  },
+  {
+   "label": "round 18",
+   "date": "2026-10-23",
+   "run": "$SCRATCH/w9r18i/F.json",
+   "shim": "real",
+   "changelog": "2026-10-23 W9r18-impl"
+  },
+  {
+   "label": "round 18 review",
+   "date": "2026-10-24",
+   "run": "$SCRATCH/w9r18fx/G.json",
+   "shim": "real",
+   "changelog": "2026-10-24 W9 round 18 review fixes"
+  },
+  {
+   "label": "round 19",
+   "date": "2026-10-24",
+   "run": "$SCRATCH/w9r19i/G.json",
+   "shim": "real",
+   "changelog": "2026-10-24 W9r19-impl"
+  },
+  {
+   "label": "round 19 review",
+   "date": "2026-10-24",
+   "run": "$SCRATCH/w9r19f/A.json",
+   "shim": "real",
+   "changelog": "2026-10-24 W9 round 19 review fixes"
+  },
+  {
+   "label": "round 20 (final)",
+   "date": "2026-10-24",
+   "run": "$SCRATCH/w9r20f/A.json",
+   "shim": "real",
+   "changelog": "2026-10-24 W9 round 20 review fixes"
+  },
+  {
+   "label": "round 21 (final)",
+   "date": "2026-10-25",
+   "run": "$SCRATCH/w9r21v/V.json",
+   "shim": "real",
+   "changelog": "2026-10-25 cgeist install and verification run after W9 round 21"
+  },
+  {
+   "label": "round 22 (final)",
+   "date": "2026-10-26",
+   "run": "$SCRATCH/w9r22i/F4.json",
+   "shim": "real",
+   "changelog": "2026-10-26 W9r22-impl: final run"
+  },
+  {
+   "label": "round 23 (final)",
+   "date": "2026-10-28",
+   "run": "$SCRATCH/w9r23i/F.json",
+   "shim": "real",
+   "changelog": "2026-10-28 W9r23-impl: final run F"
+  },
+  {
+   "label": "round 23 review",
+   "date": "2026-10-28",
+   "run": "$SCRATCH/w9r23fx/E.json",
+   "shim": "real",
+   "changelog": "2026-10-28 W9 round 23 review fixes"
+  }
+ ],
+ "rule_pairs": [
+  {
+   "rule": "hls::stream FIFOs priced as Vitis builds them",
+   "notes": "N31",
+   "round": "FIFO",
+   "off": "$RESULTS/baseline/hlsest-2026-10-13-v2-defaults.json",
+   "on": "$SCRATCH/w9fifo_impl/after_merged.json",
+   "method": "consecutive"
+  },
+  {
+   "rule": "dataflow PIPO channels",
+   "notes": "N33",
+   "round": "PIPO",
+   "off": "$SCRATCH/w9fifo_impl/after_merged.json",
+   "on": "$SCRATCH/w9pipo_impl/after6_merged.json",
+   "method": "consecutive"
+  },
+  {
+   "rule": "RAM element-width narrowing (--narrow-ram-widths)",
+   "notes": "N35",
+   "round": "2",
+   "off": "$SCRATCH/w9r2i/before.json",
+   "on": "$SCRATCH/w9r2i/after8.json",
+   "method": "pass off / on (control binary differs, CHANGELOG correction)"
+  },
+  {
+   "rule": "dataflow process merges",
+   "notes": "N36",
+   "round": "3",
+   "off": "$SCRATCH/w9rfix/after_merged.json",
+   "on": "$SCRATCH/n36impl/after.json",
+   "method": "consecutive"
+  },
+  {
+   "rule": "RAM_1WNR copy-count inputs (if/else, hoists, user II)",
+   "notes": "N38",
+   "round": "4",
+   "off": "$SCRATCH/n36impl/after.json",
+   "on": "$SCRATCH/n38impl/t7.json",
+   "method": "consecutive"
+  },
+  {
+   "rule": "struct variables disaggregated / aggregated; m_axi struct width",
+   "notes": "N37",
+   "round": "4",
+   "off": "$SCRATCH/n38impl/t7.json",
+   "on": "$SCRATCH/n37impl/v10.json",
+   "method": "consecutive"
+  },
+  {
+   "rule": "td=off automatic partitions in the default pipeline",
+   "notes": "N7, N42, N43",
+   "round": "5",
+   "off": "$SCRATCH/w9r5p/cat.json",
+   "on": "$SCRATCH/w9r5p/split.json",
+   "method": "consecutive"
+  },
+  {
+   "rule": "demanded bits through top-level array subscripts",
+   "notes": "N41",
+   "round": "5",
+   "off": "$SCRATCH/w9r5p/split.json",
+   "on": "$SCRATCH/w9r5i/s2.json",
+   "method": "consecutive"
+  },
+  {
+   "rule": "real Vitis headers instead of the exactclass shim",
+   "notes": "N44, N46",
+   "round": "headers",
+   "off": "$SCRATCH/w9r5fix/final.json",
+   "on": "$SCRATCH/w11adopt/C1.json",
+   "method": "consecutive (frontend change: compiled set changes)",
+   "kind": "frontend"
+  },
+  {
+   "rule": "stream FIFO depth from the stream's own type",
+   "notes": "N49",
+   "round": "6",
+   "off": "$SCRATCH/w11adopt/C1.json",
+   "on": "$SCRATCH/w9r6i/R1.json",
+   "method": "consecutive"
+  },
+  {
+   "rule": "element passed by reference to a stream method is an access",
+   "notes": "N47",
+   "round": "6",
+   "off": "$SCRATCH/w9r6i/R1.json",
+   "on": "$SCRATCH/w9r6i/R2.json",
+   "method": "consecutive"
+  },
+  {
+   "rule": "callee specialised per static array argument",
+   "notes": "N47",
+   "round": "6",
+   "off": "$SCRATCH/w9r6i/R2.json",
+   "on": "$SCRATCH/w9r6i/R3.json",
+   "method": "consecutive"
+  },
+  {
+   "rule": "every dataflow call site is its own instance",
+   "notes": "N48",
+   "round": "6",
+   "off": "$SCRATCH/w9r6i/R3.json",
+   "on": "$SCRATCH/w9r6i/R4.json",
+   "method": "consecutive"
+  },
+  {
+   "rule": "runtime-trip loops are pipeline candidates",
+   "notes": "N52, N53",
+   "round": "6 (sha)",
+   "off": "$SCRATCH/w9r6fix/G1.json",
+   "on": "$SCRATCH/o72fix/G4.json",
+   "method": "consecutive (two commits and their review fixes)"
+  },
+  {
+   "rule": "R-cmpd compound-assign stores + recurrence repair",
+   "notes": "N39 (O56)",
+   "round": "7",
+   "off": "$SCRATCH/w9r7i/t0.json",
+   "on": "$SCRATCH/w9r7i/t1.json",
+   "method": "config key chain"
+  },
+  {
+   "rule": "hls::vector arrays",
+   "notes": "N44, N51",
+   "round": "7",
+   "off": "$SCRATCH/w9r7i/t1.json",
+   "on": "$SCRATCH/w9r7i/t2.json",
+   "method": "config key chain"
+  },
+  {
+   "rule": "math-core tables (cos / sin ROMs)",
+   "notes": "N60",
+   "round": "7",
+   "off": "$SCRATCH/w9r7i/t2.json",
+   "on": "$SCRATCH/w9r7i/t3.json",
+   "method": "config key chain"
+  },
+  {
+   "rule": "m_axi read adapters per channel",
+   "notes": "N56",
+   "round": "7",
+   "off": "$SCRATCH/w9r7i/t3.json",
+   "on": "$SCRATCH/w9r7i/t4.json",
+   "method": "config key chain"
+  },
+  {
+   "rule": "complete partition after a user partition",
+   "notes": "N57",
+   "round": "7",
+   "off": "$SCRATCH/w9r7i/t4.json",
+   "on": "$SCRATCH/w9r7i/t5.json",
+   "method": "config key chain"
+  },
+  {
+   "rule": "struct stream width",
+   "notes": "N58",
+   "round": "7",
+   "off": "$SCRATCH/w9r7i/t5.json",
+   "on": "$SCRATCH/w9r7i/t6.json",
+   "method": "config key chain"
+  },
+  {
+   "rule": "<arg>_c FIFOs of a dataflow top",
+   "notes": "N54",
+   "round": "7",
+   "off": "$SCRATCH/w9r7i/t6.json",
+   "on": "$SCRATCH/w9r7i/t7.json",
+   "method": "config key chain"
+  },
+  {
+   "rule": "calls on distinct stream elements are separate instances",
+   "notes": "N59",
+   "round": "7",
+   "off": "$SCRATCH/w9r7i/t7.json",
+   "on": "$SCRATCH/w9r7i/t8.json",
+   "method": "config key chain"
+  },
+  {
+   "rule": "partition pragma on a struct member path",
+   "notes": "O78",
+   "round": "7",
+   "off": "$SCRATCH/w9r7i/t8.json",
+   "on": "$SCRATCH/w9r7i/t9.json",
+   "method": "config key chain"
+  },
+  {
+   "rule": "load -> store cycles keep an array",
+   "notes": "N66",
+   "round": "8",
+   "off": "$SCRATCH/w9r8i/K1.json",
+   "on": "$SCRATCH/w9r8i/F.json",
+   "method": "one key off"
+  },
+  {
+   "rule": "#pragma HLS stream arrays in dataflow are FIFOs",
+   "notes": "N67",
+   "round": "8",
+   "off": "$SCRATCH/w9r8i/K3.json",
+   "on": "$SCRATCH/w9r8i/F.json",
+   "method": "one key off"
+  },
+  {
+   "rule": "m_axi read FIFO width a power of two",
+   "notes": "N63",
+   "round": "8",
+   "off": "$SCRATCH/w9r8i/K4.json",
+   "on": "$SCRATCH/w9r8i/F.json",
+   "method": "one key off"
+  },
+  {
+   "rule": "parent code sunk into a flattened pipeline",
+   "notes": "N65",
+   "round": "8",
+   "off": "$SCRATCH/w9r8i/K5.json",
+   "on": "$SCRATCH/w9r8i/F.json",
+   "method": "one key off"
+  },
+  {
+   "rule": "window reads per residue class",
+   "notes": "N74",
+   "round": "9",
+   "off": "$SCRATCH/w9r9i/OFF74.json",
+   "on": "$SCRATCH/w9r9i/P2.json",
+   "method": "one key off"
+  },
+  {
+   "rule": "parameter bound to several arrays is port-bound",
+   "notes": "N75",
+   "round": "9",
+   "off": "$SCRATCH/w9r9i/OFF75.json",
+   "on": "$SCRATCH/w9r9i/P2.json",
+   "method": "one key off"
+  },
+  {
+   "rule": "constant-index partition of statics / PIPO streams",
+   "notes": "N77",
+   "round": "9",
+   "off": "$SCRATCH/w9r9i/OFF77.json",
+   "on": "$SCRATCH/w9r9i/P2.json",
+   "method": "one key off"
+  },
+  {
+   "rule": "typed FP divide / sqrt latencies",
+   "notes": "N78",
+   "round": "9",
+   "off": "$SCRATCH/w9r9i/OFF78.json",
+   "on": "$SCRATCH/w9r9i/P2.json",
+   "method": "one key off"
+  },
+  {
+   "rule": "written globals never replicated + nested dataflow channels",
+   "notes": "N85, N84",
+   "round": "10",
+   "off": "$SCRATCH/w9r10rv/OFF.json",
+   "on": "$SCRATCH/w9r10i/R10.json",
+   "method": "three keys off"
+  },
+  {
+   "rule": "integer max / min are combinational",
+   "notes": "O111 (b)",
+   "round": "10",
+   "off": "$SCRATCH/w9r10i/S4.json",
+   "on": "$SCRATCH/w9r10i/S5.json",
+   "method": "consecutive"
+  },
+  {
+   "rule": "block bank resolved from the loop range",
+   "notes": "N86",
+   "round": "10 (review)",
+   "off": "$SCRATCH/w9r10i/R10.json",
+   "on": "$SCRATCH/w9r10fx/X2.json",
+   "method": "consecutive"
+  },
+  {
+   "rule": "cgeist trip-1 pipeline unroll in the default shim",
+   "notes": "N40",
+   "round": "12",
+   "off": "$SCRATCH/w9r12i/HMk.json",
+   "on": "$SCRATCH/w9r12i/T1k.json",
+   "method": "consecutive"
+  },
+  {
+   "rule": "bank-selector width of a completely partitioned read",
+   "notes": "N91",
+   "round": "12",
+   "off": "$SCRATCH/w9r12i/T1k.json",
+   "on": "$SCRATCH/w9r12i/R1.json",
+   "method": "consecutive"
+  },
+  {
+   "rule": "signed-remainder bank residue and promotion through a stream-write alias",
+   "notes": "O121",
+   "round": "12",
+   "off": "$SCRATCH/w9r12i/R1.json",
+   "on": "$SCRATCH/w9r12i/R2.json",
+   "method": "consecutive"
+  },
+  {
+   "rule": "iteration-private banks as registers",
+   "notes": "N92",
+   "round": "12",
+   "off": "$SCRATCH/w9r12i/R2.json",
+   "on": "$SCRATCH/w9r12i/R3.json",
+   "method": "consecutive"
+  },
+  {
+   "rule": "independent ROM reads of one sequential state",
+   "notes": "N93",
+   "round": "12",
+   "off": "$SCRATCH/w9r12i/R3.json",
+   "on": "$SCRATCH/w9r12i/R4.json",
+   "method": "consecutive"
+  }
+ ],
+ "ablation": {
+  "_doc": "W9r5-era pass ablation (exactclass shim): each run drops one pass from the default pipeline of the reference run.",
+  "reference": "$SCRATCH/w9r5fix/final.json",
+  "dir": "$SCRATCH/ablation",
+  "passes": [
+   "lower-polygeist-subindex",
+   "inline",
+   "split-struct-memrefs",
+   "mark-constant-fills",
+   "canonicalize",
+   "sccp",
+   "vitis-fold",
+   "dead-memory-elimination",
+   "affine-loop-normalize",
+   "auto-pipeline-unroll",
+   "infer-vitis-split-array",
+   "narrow-ram-widths",
+   "memory-banking-bram",
+   "convert-affine-to-loopschedule"
+  ]
+ },
+ "timing_csv": "hls-doc/hls-est-vs-vitis.csv",
+ "snapshot": {
+  "_doc": "Frozen inputs that would otherwise change between renders: the commit counts and source sizes of chapter 5 are read at these commits (git), and the ad-hoc kernel cache of chapter 3 counts only result files written up to experiments_cutoff (local time). circt_commit is the commit that records the final evaluation run in the CHANGELOG; polygeist_commit is the Polygeist commit of the cgeist binary that produced the run's MLIR (CHANGELOG 2026-10-21 'W9 round 8 review fixes' names cgeist.g = Polygeist 537d6614, md5 a5056b23; round 12's final run adds the harness flag --hls-trip-one-pipeline-unroll, CHANGELOG 2026-10-22 W9r12-impl; the run file itself records polygeist_head 'unknown'; round 13's final run uses the private cgeist of Polygeist w9r13-cgeist 34767431, md5 5b74209f, CHANGELOG 2026-10-22 W9r13-impl; round 14's review-fix final run uses Polygeist w9r14-cgeist 856cbbba, md5 cdf7f768, CHANGELOG 2026-10-22 W9 round 14 review fixes; round 15's final run uses Polygeist w9r15-cgeist 35debb44, md5 aafb46ac, CHANGELOG 2026-10-23 W9r15-impl; round 16's final run uses Polygeist w9r16-cgeist 275303e7, md5 51afba54, CHANGELOG 2026-10-23 W9r16-impl; round 17's final run uses Polygeist w9r17-cgeist d77dc700, md5 ca4fc368, with the harness flags of circt e218c06b3, CHANGELOG 2026-10-23 W9r17-impl; round 17's review-fix run and round 18's final run use the installed cgeist of Polygeist b2b33b09, md5 2b5e2add, CHANGELOG 2026-10-23 W9 round 17 review fixes / W9r18-impl; round 20's final run (W9 round 20 review fixes) uses the installed cgeist of Polygeist 8c23ece4, md5 5523df29, installed in the W9 round 19 review fixes, and the hls-est of circt 55a1e7bfc's tree, md5 8a03d487; round 21's final run (V) uses the installed cgeist of Polygeist 16cb5cb5, md5 65aa635a; round 22's final run (W9r22-impl, run F4, --force-cgeist) uses the private cgeist of Polygeist w9r22-cgeist 449c7033, md5 91128806, and the hls-est of circt 814e87ba2, md5 4c6e5700; experiments_cutoff is the time of that render). Round 23's final run F uses the private cgeist of Polygeist w9r23-cgeist 28cad708, md5 d64b520a, CHANGELOG 2026-10-28 W9r23-impl: final run; circt ac46fb0c1 is the last code commit of round 23 and 5c11050ff its notes commit.",
+  "circt_commit": "5c11050ff",
+  "polygeist_commit": "28cad708",
+  "cgeist_md5": "d64b520a",
+  "experiments_cutoff": "2026-10-28T06:00:00"
+ },
+ "heldout": [
+  {
+   "label": "frozen tools (2026-10-25)",
+   "tools": "hls-est 0a5b0a16, cgeist 65aa635a",
+   "runs": [
+    "~/hls-est-work/heldout/score/hlsest-heldout-forgehls-eval.json",
+    "~/hls-est-work/heldout/score/hlsest-heldout-vitislib-eval.json"
+   ],
+   "cmps": [
+    "~/hls-est-work/heldout/score/compare-heldout-forgehls-eval.json",
+    "~/hls-est-work/heldout/score/compare-heldout-vitislib-eval.json"
+   ]
+  },
+  {
+   "label": "round 22 hls-est, frozen MLIR",
+   "tools": "hls-est of round 22, cgeist 65aa635a",
+   "runs": [
+    "$SCRATCH/w9r22i/A6_heldout_forgehls.json",
+    "$SCRATCH/w9r22i/A6_heldout_vitislib.json"
+   ],
+   "cmps": [
+    "$SCRATCH/w9r22i/A6_heldout_forgehls.cmp.json",
+    "$SCRATCH/w9r22i/A6_heldout_vitislib.cmp.json"
+   ]
+  },
+  {
+   "label": "round 22 (final)",
+   "tools": "hls-est of round 22, cgeist 91128806 (Polygeist w9r22-cgeist 449c7033)",
+   "runs": [
+    "$SCRATCH/w9r22i/F4_heldout_forgehls.json",
+    "$SCRATCH/w9r22i/F4_heldout_vitislib.json"
+   ],
+   "cmps": [
+    "$SCRATCH/w9r22i/F4_heldout_forgehls.cmp.json",
+    "$SCRATCH/w9r22i/F4_heldout_vitislib.cmp.json"
+   ]
+  },
+  {
+   "label": "round 23 (final)",
+   "tools": "hls-est of round 23, cgeist d64b520a (Polygeist w9r23-cgeist 28cad708)",
+   "runs": [
+    "$SCRATCH/w9r23i/F_heldout_ev_forgehls.json",
+    "$SCRATCH/w9r23i/F_heldout_ev_vitislib.json"
+   ],
+   "cmps": [
+    "$SCRATCH/w9r23i/F_heldout_ev_forgehls.cmp.json",
+    "$SCRATCH/w9r23i/F_heldout_ev_vitislib.cmp.json"
+   ]
+  },
+  {
+   "label": "round 23 review",
+   "tools": "hls-est of the round-23 review fixes, cgeist d64b520a (Polygeist w9r23-cgeist 28cad708)",
+   "runs": [
+    "$SCRATCH/w9r23fx/E_heldout_ev_forgehls.json",
+    "$SCRATCH/w9r23fx/E_heldout_ev_vitislib.json"
+   ],
+   "cmps": [
+    "$SCRATCH/w9r23fx/E_heldout_ev_forgehls.cmp.json",
+    "$SCRATCH/w9r23fx/E_heldout_ev_vitislib.cmp.json"
+   ]
+  }
+ ],
+ "heldout_locked": [
+  {
+   "label": "frozen tools (scored 2026-10-27)",
+   "tools": "hls-est 0a5b0a16, cgeist 65aa635a",
+   "runs": [
+    "~/hls-est-work/heldout/score_locked/hlsest-heldout-forgehls-locked-frozen.json",
+    "~/hls-est-work/heldout/score_locked/hlsest-heldout-vitislib-locked-frozen.json"
+   ],
+   "cmps": [
+    "~/hls-est-work/heldout/score_locked/compare-heldout-forgehls-locked-frozen.json",
+    "~/hls-est-work/heldout/score_locked/compare-heldout-vitislib-locked-frozen.json"
+   ]
+  },
+  {
+   "label": "round 22 (scored 2026-10-27)",
+   "tools": "hls-est of round 22 (d449ae6ac), cgeist 91128806 (Polygeist 449c7033)",
+   "runs": [
+    "~/hls-est-work/heldout/score_locked/hlsest-heldout-forgehls-locked-r22.json",
+    "~/hls-est-work/heldout/score_locked/hlsest-heldout-vitislib-locked-r22.json"
+   ],
+   "cmps": [
+    "~/hls-est-work/heldout/score_locked/compare-heldout-forgehls-locked-r22.json",
+    "~/hls-est-work/heldout/score_locked/compare-heldout-vitislib-locked-r22.json"
+   ]
+  },
+  {
+   "label": "round 23 (final)",
+   "tools": "hls-est of round 23, cgeist d64b520a (Polygeist w9r23-cgeist 28cad708)",
+   "runs": [
+    "$SCRATCH/w9r23i/F_heldout_lk_forgehls.json",
+    "$SCRATCH/w9r23i/F_heldout_lk_vitislib.json"
+   ],
+   "cmps": [
+    "$SCRATCH/w9r23i/F_heldout_lk_forgehls.cmp.json",
+    "$SCRATCH/w9r23i/F_heldout_lk_vitislib.cmp.json"
+   ]
+  },
+  {
+   "label": "round 23 review",
+   "tools": "hls-est of the round-23 review fixes, cgeist d64b520a (Polygeist w9r23-cgeist 28cad708)",
+   "runs": [
+    "$SCRATCH/w9r23fx/E_heldout_lk_forgehls.json",
+    "$SCRATCH/w9r23fx/E_heldout_lk_vitislib.json"
+   ],
+   "cmps": [
+    "$SCRATCH/w9r23fx/E_heldout_lk_forgehls.cmp.json",
+    "$SCRATCH/w9r23fx/E_heldout_lk_vitislib.cmp.json"
+   ]
+  }
+ ]
+}

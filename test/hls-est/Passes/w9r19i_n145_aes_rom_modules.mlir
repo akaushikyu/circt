@@ -1,0 +1,388 @@
+// RUN: hls-est %s --symbol-privatize=exclude=_Z18aes256_encrypt_ecbP14aes256_contextPhS1_ --symbol-dce --lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --infer-vitis-split-array=td=off --narrow-ram-widths --memory-banking-bram --convert-affine-to-loopschedule --bram-analysis=top=_Z18aes256_encrypt_ecbP14aes256_contextPhS1_ -o /dev/null --bram-debug-json=%t.json | FileCheck %s
+// RUN: FileCheck %s --check-prefix=JSON < %t.json
+// RUN: hls-est %s --config-set scheduling.call_depth.outlined_pipeline_array_instances=false --symbol-privatize=exclude=_Z18aes256_encrypt_ecbP14aes256_contextPhS1_ --symbol-dce --lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --infer-vitis-split-array=td=off --narrow-ram-widths --memory-banking-bram --convert-affine-to-loopschedule --bram-analysis=top=_Z18aes256_encrypt_ecbP14aes256_contextPhS1_ -o /dev/null | FileCheck %s --check-prefix=OFF
+
+// hlsyn aes (cgeist output with --hls-auto-inline-callee-unroll, VITIS_NOTES
+// N142): `sbox` per module as Vitis builds it (N136, N143 - N145, N147):
+// aes_expandEncKey_1 a function pipeline at II 1 (the context is one i768
+// scalar) with 8 reads per cycle, 4 BRAM; aes_subBytes_1 a function pipeline
+// at II 16 (the 16 loads and stores of `buf`), 1 BRAM, in two instances (an
+// array argument; one call in the outlined loop L5, one in the top): 6 = Vitis.
+// CHECK: one copy per reading module (N136): 1 x 4 ({{.*}}) + 1 x 1 ({{.*}}) + 1 x 1 ({{.*}}) = 6
+// CHECK: Total BRAM: 6
+// JSON: "function_pipelines": [
+// JSON-DAG: "func": "_ZL14aes_subBytes_1Ph",
+// JSON-DAG: "ii": 16,
+// JSON-DAG: "rom_module_copies":
+// OFF: Total BRAM: 5
+
+module {
+  memref.global "private" @_ZL4sbox : memref<256xi8> = dense<"0x637C777BF26B6FC53001672BFED7AB76CA82C97DFA5947F0ADD4A2AF9CA472C0B7FD9326363FF7CC34A5E5F171D8311504C723C31896059A071280E2EB27B27509832C1A1B6E5AA0523BD6B329E32F8453D100ED20FCB15B6ACBBE394A4C58CFD0EFAAFB434D338545F9027F503C9FA851A3408F929D38F5BCB6DA2110FFF3D2CD0C13EC5F974417C4A77E3D645D197360814FDC222A908846EEB814DE5E0BDBE0323A0A4906245CC2D3AC629195E479E7C8376D8DD54EA96C56F4EA657AAE08BA78252E1CA6B4C6E8DD741F4BBD8B8A703EB5664803F60E613557B986C11D9EE1F8981169D98E949B1E87E9CE5528DF8CA1890DBFE6426841992D0FB054BB16">
+  func.func @_Z18aes256_encrypt_ecbP14aes256_contextPhS1_(%arg0: memref<?x!llvm.struct<(array<32 x i8>, array<32 x i8>, array<32 x i8>)>>, %arg1: memref<32xi8>, %arg2: memref<16xi8>) attributes {hls.orig_name = "aes256_encrypt_ecb", llvm.linkage = #llvm.linkage<external>} {
+    %c16_i8 = arith.constant 16 : i8
+    %c16_i32 = arith.constant 16 : i32
+    %c7_i8 = arith.constant 7 : i8
+    %c1_i8 = arith.constant 1 : i8
+    %c-1_i8 = arith.constant -1 : i8
+    %c0_i8 = arith.constant 0 : i8
+    %c1_i32 = arith.constant 1 : i32
+    %c0_i32 = arith.constant 0 : i32
+    %c16 = arith.constant 16 : index
+    %alloca = memref.alloca() {polygeist.varname = "rcon"} : memref<1xi8>
+    affine.store %c1_i8, %alloca[0] : memref<1xi8>
+    %0 = "polygeist.memref2pointer"(%arg0) : (memref<?x!llvm.struct<(array<32 x i8>, array<32 x i8>, array<32 x i8>)>>) -> !llvm.ptr
+    %1 = llvm.getelementptr %0[0, 1] : (!llvm.ptr) -> !llvm.ptr, !llvm.struct<(array<32 x i8>, array<32 x i8>, array<32 x i8>)>
+    %2 = llvm.getelementptr %0[0, 2] : (!llvm.ptr) -> !llvm.ptr, !llvm.struct<(array<32 x i8>, array<32 x i8>, array<32 x i8>)>
+    affine.for %arg3 = 0 to 32 {
+      %21 = arith.index_cast %arg3 : index to i32
+      %22 = affine.load %arg1[%arg3] : memref<32xi8>
+      %23 = llvm.getelementptr %2[%21] : (!llvm.ptr, i32) -> !llvm.ptr, i8
+      llvm.store %22, %23 : i8, !llvm.ptr
+      %24 = llvm.load %23 : !llvm.ptr -> i8
+      %25 = llvm.getelementptr %1[%21] : (!llvm.ptr, i32) -> !llvm.ptr, i8
+      llvm.store %24, %25 : i8, !llvm.ptr
+    }
+    %3 = "polygeist.pointer2memref"(%2) : (!llvm.ptr) -> memref<?xi8>
+    %cast = memref.cast %alloca : memref<1xi8> to memref<?xi8>
+    %4 = scf.while (%arg3 = %c7_i8) : (i8) -> i8 {
+      %21 = arith.cmpi ne, %arg3, %c0_i8 : i8
+      scf.condition(%21) %arg3 : i8
+    } do {
+    ^bb0(%arg3: i8):
+      func.call @_ZL18aes_expandEncKey_1PhS_(%3, %cast) {hls.inline_auto_off = {calls = 3 : i64, size = 184 : i64}} : (memref<?xi8>, memref<?xi8>) -> ()
+      %21 = arith.addi %arg3, %c-1_i8 : i8
+      scf.yield %21 : i8
+    } attributes {hls.pipeline = [{II = 0 : i32, rewind = false, style = "stp"}]}
+    %cast_0 = memref.cast %arg2 : memref<16xi8> to memref<?xi8>
+    %5 = "polygeist.pointer2memref"(%0) : (!llvm.ptr) -> memref<?xi8>
+    %6 = scf.while (%arg3 = %c16_i8) : (i8) -> i8 {
+      %21 = arith.cmpi ne, %arg3, %c0_i8 : i8
+      scf.condition(%21) %arg3 : i8
+    } do {
+    ^bb0(%arg3: i8):
+      %21 = arith.addi %arg3, %c-1_i8 : i8
+      %22 = arith.index_castui %21 : i8 to index
+      %23 = arith.index_cast %22 : index to i32
+      %24 = llvm.getelementptr %1[%23] : (!llvm.ptr, i32) -> !llvm.ptr, i8
+      %25 = llvm.load %24 : !llvm.ptr -> i8
+      %26 = llvm.getelementptr %0[%23] : (!llvm.ptr, i32) -> !llvm.ptr, i8
+      llvm.store %25, %26 : i8, !llvm.ptr
+      %27 = llvm.load %26 : !llvm.ptr -> i8
+      %28 = memref.load %arg2[%22] : memref<16xi8>
+      %29 = arith.xori %28, %27 : i8
+      memref.store %29, %arg2[%22] : memref<16xi8>
+      %30 = arith.extui %21 : i8 to i32
+      %31 = arith.addi %30, %c16_i32 : i32
+      %32 = llvm.getelementptr %1[%31] : (!llvm.ptr, i32) -> !llvm.ptr, i8
+      %33 = llvm.load %32 : !llvm.ptr -> i8
+      %34 = llvm.getelementptr %0[%31] : (!llvm.ptr, i32) -> !llvm.ptr, i8
+      llvm.store %33, %34 : i8, !llvm.ptr
+      scf.yield %21 : i8
+    }
+    affine.store %c1_i8, %alloca[0] : memref<1xi8>
+    %7 = "polygeist.pointer2memref"(%0) : (!llvm.ptr) -> memref<32xi8>
+    %8 = "polygeist.subindex"(%7, %c16) : (memref<32xi8>, index) -> memref<?xi8>
+    affine.for %arg3 = 1 to 14 {
+      %21 = arith.index_cast %arg3 : index to i32
+      func.call @_ZL14aes_subBytes_1Ph(%cast_0) {hls.inline_auto_off = {calls = 2 : i64, size = 80 : i64}} : (memref<?xi8>) -> ()
+      %22 = affine.load %arg2[1] : memref<16xi8>
+      %23 = affine.load %arg2[5] : memref<16xi8>
+      affine.store %23, %arg2[1] : memref<16xi8>
+      %24 = affine.load %arg2[9] : memref<16xi8>
+      affine.store %24, %arg2[5] : memref<16xi8>
+      %25 = affine.load %arg2[13] : memref<16xi8>
+      affine.store %25, %arg2[9] : memref<16xi8>
+      affine.store %22, %arg2[13] : memref<16xi8>
+      %26 = affine.load %arg2[10] : memref<16xi8>
+      %27 = affine.load %arg2[2] : memref<16xi8>
+      affine.store %27, %arg2[10] : memref<16xi8>
+      affine.store %26, %arg2[2] : memref<16xi8>
+      %28 = affine.load %arg2[3] : memref<16xi8>
+      %29 = affine.load %arg2[15] : memref<16xi8>
+      affine.store %29, %arg2[3] : memref<16xi8>
+      %30 = affine.load %arg2[11] : memref<16xi8>
+      affine.store %30, %arg2[15] : memref<16xi8>
+      %31 = affine.load %arg2[7] : memref<16xi8>
+      affine.store %31, %arg2[11] : memref<16xi8>
+      affine.store %28, %arg2[7] : memref<16xi8>
+      %32 = affine.load %arg2[14] : memref<16xi8>
+      %33 = affine.load %arg2[6] : memref<16xi8>
+      affine.store %33, %arg2[14] : memref<16xi8>
+      affine.store %32, %arg2[6] : memref<16xi8>
+      func.call @_ZL16aes_mixColumns_1Ph(%cast_0) {hls.inline_auto_off = {calls = 1 : i64, size = 200 : i64}} : (memref<?xi8>) -> ()
+      %34 = arith.andi %21, %c1_i32 : i32
+      %35 = arith.cmpi ne, %34, %c0_i32 : i32
+      scf.if %35 {
+        func.call @_ZL17aes_addRoundKey_1PhS_(%cast_0, %8) {hls.inline_auto_off = {calls = 3 : i64, size = 95 : i64}} : (memref<?xi8>, memref<?xi8>) -> ()
+      } else {
+        func.call @_ZL18aes_expandEncKey_1PhS_(%5, %cast) {hls.inline_auto_off = {calls = 3 : i64, size = 184 : i64}} : (memref<?xi8>, memref<?xi8>) -> ()
+        func.call @_ZL17aes_addRoundKey_1PhS_(%cast_0, %5) {hls.inline_auto_off = {calls = 3 : i64, size = 95 : i64}} : (memref<?xi8>, memref<?xi8>) -> ()
+      }
+    } {hls.pipeline = [{II = 0 : i32, rewind = false, style = "stp"}]}
+    call @_ZL14aes_subBytes_1Ph(%cast_0) {hls.inline_auto_off = {calls = 2 : i64, size = 80 : i64}} : (memref<?xi8>) -> ()
+    %9 = affine.load %arg2[1] : memref<16xi8>
+    %10 = affine.load %arg2[5] : memref<16xi8>
+    affine.store %10, %arg2[1] : memref<16xi8>
+    %11 = affine.load %arg2[9] : memref<16xi8>
+    affine.store %11, %arg2[5] : memref<16xi8>
+    %12 = affine.load %arg2[13] : memref<16xi8>
+    affine.store %12, %arg2[9] : memref<16xi8>
+    affine.store %9, %arg2[13] : memref<16xi8>
+    %13 = affine.load %arg2[10] : memref<16xi8>
+    %14 = affine.load %arg2[2] : memref<16xi8>
+    affine.store %14, %arg2[10] : memref<16xi8>
+    affine.store %13, %arg2[2] : memref<16xi8>
+    %15 = affine.load %arg2[3] : memref<16xi8>
+    %16 = affine.load %arg2[15] : memref<16xi8>
+    affine.store %16, %arg2[3] : memref<16xi8>
+    %17 = affine.load %arg2[11] : memref<16xi8>
+    affine.store %17, %arg2[15] : memref<16xi8>
+    %18 = affine.load %arg2[7] : memref<16xi8>
+    affine.store %18, %arg2[11] : memref<16xi8>
+    affine.store %15, %arg2[7] : memref<16xi8>
+    %19 = affine.load %arg2[14] : memref<16xi8>
+    %20 = affine.load %arg2[6] : memref<16xi8>
+    affine.store %20, %arg2[14] : memref<16xi8>
+    affine.store %19, %arg2[6] : memref<16xi8>
+    call @_ZL18aes_expandEncKey_1PhS_(%5, %cast) {hls.inline_auto_off = {calls = 3 : i64, size = 184 : i64}} : (memref<?xi8>, memref<?xi8>) -> ()
+    call @_ZL17aes_addRoundKey_1PhS_(%cast_0, %5) {hls.inline_auto_off = {calls = 3 : i64, size = 95 : i64}} : (memref<?xi8>, memref<?xi8>) -> ()
+    return
+  }
+  func.func private @_ZL18aes_expandEncKey_1PhS_(%arg0: memref<?xi8>, %arg1: memref<?xi8>) attributes {hls.inline_auto_off = {size = 184 : i64}, hls.orig_name = "aes_expandEncKey_1", llvm.linkage = #llvm.linkage<internal>} {
+    %c27_i32 = arith.constant 27 : i32
+    %c7_i32 = arith.constant 7 : i32
+    %c1_i32 = arith.constant 1 : i32
+    %0 = memref.get_global @_ZL4sbox : memref<256xi8>
+    %1 = affine.load %arg0[29] : memref<?xi8>
+    %2 = arith.index_castui %1 : i8 to index
+    %3 = affine.load %0[symbol(%2)] : memref<256xi8>
+    %4 = affine.load %arg1[0] : memref<?xi8>
+    %5 = arith.xori %3, %4 : i8
+    %6 = affine.load %arg0[0] : memref<?xi8>
+    %7 = arith.xori %6, %5 : i8
+    affine.store %7, %arg0[0] : memref<?xi8>
+    %8 = affine.load %arg0[30] : memref<?xi8>
+    %9 = arith.index_castui %8 : i8 to index
+    %10 = affine.load %0[symbol(%9)] : memref<256xi8>
+    %11 = affine.load %arg0[1] : memref<?xi8>
+    %12 = arith.xori %11, %10 : i8
+    affine.store %12, %arg0[1] : memref<?xi8>
+    %13 = affine.load %arg0[31] : memref<?xi8>
+    %14 = arith.index_castui %13 : i8 to index
+    %15 = affine.load %0[symbol(%14)] : memref<256xi8>
+    %16 = affine.load %arg0[2] : memref<?xi8>
+    %17 = arith.xori %16, %15 : i8
+    affine.store %17, %arg0[2] : memref<?xi8>
+    %18 = affine.load %arg0[28] : memref<?xi8>
+    %19 = arith.index_castui %18 : i8 to index
+    %20 = affine.load %0[symbol(%19)] : memref<256xi8>
+    %21 = affine.load %arg0[3] : memref<?xi8>
+    %22 = arith.xori %21, %20 : i8
+    affine.store %22, %arg0[3] : memref<?xi8>
+    %23 = affine.load %arg1[0] : memref<?xi8>
+    %24 = arith.extui %23 : i8 to i32
+    %25 = arith.shli %24, %c1_i32 : i32
+    %26 = arith.shrsi %24, %c7_i32 : i32
+    %27 = arith.andi %26, %c1_i32 : i32
+    %28 = arith.muli %27, %c27_i32 : i32
+    %29 = arith.xori %25, %28 : i32
+    %30 = arith.trunci %29 : i32 to i8
+    affine.store %30, %arg1[0] : memref<?xi8>
+    affine.for %arg2 = 4 to 16 step 4 {
+      %51 = affine.load %arg0[%arg2 - 4] : memref<?xi8>
+      %52 = affine.load %arg0[%arg2] : memref<?xi8>
+      %53 = arith.xori %52, %51 : i8
+      affine.store %53, %arg0[%arg2] : memref<?xi8>
+      %54 = affine.load %arg0[%arg2 - 3] : memref<?xi8>
+      %55 = affine.load %arg0[%arg2 + 1] : memref<?xi8>
+      %56 = arith.xori %55, %54 : i8
+      affine.store %56, %arg0[%arg2 + 1] : memref<?xi8>
+      %57 = affine.load %arg0[%arg2 - 2] : memref<?xi8>
+      %58 = affine.load %arg0[%arg2 + 2] : memref<?xi8>
+      %59 = arith.xori %58, %57 : i8
+      affine.store %59, %arg0[%arg2 + 2] : memref<?xi8>
+      %60 = affine.load %arg0[%arg2 - 1] : memref<?xi8>
+      %61 = affine.load %arg0[%arg2 + 3] : memref<?xi8>
+      %62 = arith.xori %61, %60 : i8
+      affine.store %62, %arg0[%arg2 + 3] : memref<?xi8>
+    }
+    %31 = affine.load %arg0[12] : memref<?xi8>
+    %32 = arith.index_castui %31 : i8 to index
+    %33 = affine.load %0[symbol(%32)] : memref<256xi8>
+    %34 = affine.load %arg0[16] : memref<?xi8>
+    %35 = arith.xori %34, %33 : i8
+    affine.store %35, %arg0[16] : memref<?xi8>
+    %36 = affine.load %arg0[13] : memref<?xi8>
+    %37 = arith.index_castui %36 : i8 to index
+    %38 = affine.load %0[symbol(%37)] : memref<256xi8>
+    %39 = affine.load %arg0[17] : memref<?xi8>
+    %40 = arith.xori %39, %38 : i8
+    affine.store %40, %arg0[17] : memref<?xi8>
+    %41 = affine.load %arg0[14] : memref<?xi8>
+    %42 = arith.index_castui %41 : i8 to index
+    %43 = affine.load %0[symbol(%42)] : memref<256xi8>
+    %44 = affine.load %arg0[18] : memref<?xi8>
+    %45 = arith.xori %44, %43 : i8
+    affine.store %45, %arg0[18] : memref<?xi8>
+    %46 = affine.load %arg0[15] : memref<?xi8>
+    %47 = arith.index_castui %46 : i8 to index
+    %48 = affine.load %0[symbol(%47)] : memref<256xi8>
+    %49 = affine.load %arg0[19] : memref<?xi8>
+    %50 = arith.xori %49, %48 : i8
+    affine.store %50, %arg0[19] : memref<?xi8>
+    affine.for %arg2 = 20 to 32 step 4 {
+      %51 = affine.load %arg0[%arg2 - 4] : memref<?xi8>
+      %52 = affine.load %arg0[%arg2] : memref<?xi8>
+      %53 = arith.xori %52, %51 : i8
+      affine.store %53, %arg0[%arg2] : memref<?xi8>
+      %54 = affine.load %arg0[%arg2 - 3] : memref<?xi8>
+      %55 = affine.load %arg0[%arg2 + 1] : memref<?xi8>
+      %56 = arith.xori %55, %54 : i8
+      affine.store %56, %arg0[%arg2 + 1] : memref<?xi8>
+      %57 = affine.load %arg0[%arg2 - 2] : memref<?xi8>
+      %58 = affine.load %arg0[%arg2 + 2] : memref<?xi8>
+      %59 = arith.xori %58, %57 : i8
+      affine.store %59, %arg0[%arg2 + 2] : memref<?xi8>
+      %60 = affine.load %arg0[%arg2 - 1] : memref<?xi8>
+      %61 = affine.load %arg0[%arg2 + 3] : memref<?xi8>
+      %62 = arith.xori %61, %60 : i8
+      affine.store %62, %arg0[%arg2 + 3] : memref<?xi8>
+    }
+    return
+  }
+  func.func private @_ZL14aes_subBytes_1Ph(%arg0: memref<?xi8>) attributes {hls.inline_auto_off = {size = 80 : i64}, hls.orig_name = "aes_subBytes_1", llvm.linkage = #llvm.linkage<internal>} {
+    %c-1_i8 = arith.constant -1 : i8
+    %c0_i8 = arith.constant 0 : i8
+    %c16_i8 = arith.constant 16 : i8
+    %0 = memref.get_global @_ZL4sbox : memref<256xi8>
+    %1 = scf.while (%arg1 = %c16_i8) : (i8) -> i8 {
+      %2 = arith.cmpi ne, %arg1, %c0_i8 : i8
+      scf.condition(%2) %arg1 : i8
+    } do {
+    ^bb0(%arg1: i8):
+      %2 = arith.addi %arg1, %c-1_i8 : i8
+      %3 = arith.index_castui %2 : i8 to index
+      %4 = memref.load %arg0[%3] : memref<?xi8>
+      %5 = arith.index_castui %4 : i8 to index
+      %6 = memref.load %0[%5] : memref<256xi8>
+      memref.store %6, %arg0[%3] : memref<?xi8>
+      scf.yield %2 : i8
+    }
+    return
+  }
+  func.func private @_ZL16aes_mixColumns_1Ph(%arg0: memref<?xi8>) attributes {hls.inline_auto_off = {size = 200 : i64}, hls.orig_name = "aes_mixColumns_1", llvm.linkage = #llvm.linkage<internal>} {
+    %c128_i32 = arith.constant 128 : i32
+    %c0_i32 = arith.constant 0 : i32
+    %c27_i32 = arith.constant 27 : i32
+    %c2_i32 = arith.constant 2 : i32
+    %c1_i32 = arith.constant 1 : i32
+    %c4_i64 = arith.constant 4 : i64
+    %c3_i32 = arith.constant 3 : i32
+    affine.for %arg1 = 0 to 4 {
+      %0 = arith.index_cast %arg1 : index to i32
+      %1 = arith.extsi %0 : i32 to i64
+      %2 = arith.muli %1, %c4_i64 : i64
+      %3 = arith.trunci %2 : i64 to i32
+      %4 = arith.index_cast %3 : i32 to index
+      %5 = memref.load %arg0[%4] : memref<?xi8>
+      %6 = arith.addi %3, %c1_i32 : i32
+      %7 = arith.index_cast %6 : i32 to index
+      %8 = memref.load %arg0[%7] : memref<?xi8>
+      %9 = arith.addi %3, %c2_i32 : i32
+      %10 = arith.index_cast %9 : i32 to index
+      %11 = memref.load %arg0[%10] : memref<?xi8>
+      %12 = arith.addi %3, %c3_i32 : i32
+      %13 = arith.index_cast %12 : i32 to index
+      %14 = memref.load %arg0[%13] : memref<?xi8>
+      %15 = arith.xori %5, %8 : i8
+      %16 = arith.xori %15, %11 : i8
+      %17 = arith.xori %16, %14 : i8
+      %18 = arith.extui %15 : i8 to i32
+      %19 = arith.andi %18, %c128_i32 : i32
+      %20 = arith.cmpi ne, %19, %c0_i32 : i32
+      %21 = scf.if %20 -> (i32) {
+        %52 = arith.shli %18, %c1_i32 : i32
+        %53 = arith.xori %52, %c27_i32 : i32
+        scf.yield %53 : i32
+      } else {
+        %52 = arith.shli %18, %c1_i32 : i32
+        scf.yield %52 : i32
+      }
+      %22 = arith.trunci %21 : i32 to i8
+      %23 = arith.xori %17, %22 : i8
+      %24 = arith.xori %5, %23 : i8
+      memref.store %24, %arg0[%4] : memref<?xi8>
+      %25 = arith.xori %8, %11 : i8
+      %26 = arith.extui %25 : i8 to i32
+      %27 = arith.andi %26, %c128_i32 : i32
+      %28 = arith.cmpi ne, %27, %c0_i32 : i32
+      %29 = scf.if %28 -> (i32) {
+        %52 = arith.shli %26, %c1_i32 : i32
+        %53 = arith.xori %52, %c27_i32 : i32
+        scf.yield %53 : i32
+      } else {
+        %52 = arith.shli %26, %c1_i32 : i32
+        scf.yield %52 : i32
+      }
+      %30 = arith.trunci %29 : i32 to i8
+      %31 = arith.xori %17, %30 : i8
+      %32 = memref.load %arg0[%7] : memref<?xi8>
+      %33 = arith.xori %32, %31 : i8
+      memref.store %33, %arg0[%7] : memref<?xi8>
+      %34 = arith.xori %11, %14 : i8
+      %35 = arith.extui %34 : i8 to i32
+      %36 = arith.andi %35, %c128_i32 : i32
+      %37 = arith.cmpi ne, %36, %c0_i32 : i32
+      %38 = scf.if %37 -> (i32) {
+        %52 = arith.shli %35, %c1_i32 : i32
+        %53 = arith.xori %52, %c27_i32 : i32
+        scf.yield %53 : i32
+      } else {
+        %52 = arith.shli %35, %c1_i32 : i32
+        scf.yield %52 : i32
+      }
+      %39 = arith.trunci %38 : i32 to i8
+      %40 = arith.xori %17, %39 : i8
+      %41 = memref.load %arg0[%10] : memref<?xi8>
+      %42 = arith.xori %41, %40 : i8
+      memref.store %42, %arg0[%10] : memref<?xi8>
+      %43 = arith.xori %14, %5 : i8
+      %44 = arith.extui %43 : i8 to i32
+      %45 = arith.andi %44, %c128_i32 : i32
+      %46 = arith.cmpi ne, %45, %c0_i32 : i32
+      %47 = scf.if %46 -> (i32) {
+        %52 = arith.shli %44, %c1_i32 : i32
+        %53 = arith.xori %52, %c27_i32 : i32
+        scf.yield %53 : i32
+      } else {
+        %52 = arith.shli %44, %c1_i32 : i32
+        scf.yield %52 : i32
+      }
+      %48 = arith.trunci %47 : i32 to i8
+      %49 = arith.xori %17, %48 : i8
+      %50 = memref.load %arg0[%13] : memref<?xi8>
+      %51 = arith.xori %50, %49 : i8
+      memref.store %51, %arg0[%13] : memref<?xi8>
+    }
+    return
+  }
+  func.func private @_ZL17aes_addRoundKey_1PhS_(%arg0: memref<?xi8>, %arg1: memref<?xi8>) attributes {hls.inline_auto_off = {size = 95 : i64}, hls.orig_name = "aes_addRoundKey_1", llvm.linkage = #llvm.linkage<internal>} {
+    %c-1_i8 = arith.constant -1 : i8
+    %c0_i8 = arith.constant 0 : i8
+    %c16_i8 = arith.constant 16 : i8
+    %0 = scf.while (%arg2 = %c16_i8) : (i8) -> i8 {
+      %1 = arith.cmpi ne, %arg2, %c0_i8 : i8
+      scf.condition(%1) %arg2 : i8
+    } do {
+    ^bb0(%arg2: i8):
+      %1 = arith.addi %arg2, %c-1_i8 : i8
+      %2 = arith.index_castui %1 : i8 to index
+      %3 = memref.load %arg1[%2] : memref<?xi8>
+      %4 = memref.load %arg0[%2] : memref<?xi8>
+      %5 = arith.xori %4, %3 : i8
+      memref.store %5, %arg0[%2] : memref<?xi8>
+      scf.yield %1 : i8
+    }
+    return
+  }
+}

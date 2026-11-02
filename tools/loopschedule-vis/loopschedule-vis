@@ -1,0 +1,4 @@
+#!/bin/sh
+# Wrapper for loopschedule_vis.py (Python 3, stdlib only). See README.md.
+dir=$(dirname "$(readlink -f "$0")")
+exec python3 "$dir/loopschedule_vis.py" "$@"

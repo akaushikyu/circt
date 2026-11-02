@@ -1,0 +1,61 @@
+{
+  "id": "amd-xc7z020clg400-1",
+  "part": "xc7z020clg400-1",
+  "speed_grade": "-1",
+  "_status": "validated",
+  "_sources": "RAMB18E1 aspect ratios and port widths: UG953 (RAMB18E1), UG473; 64x1 LUT RAM and SRL32: UG474; DSP48E1: UG953 (DSP48E1), UG479; capacities: csynth.xml AvailableResources of the Vitis 2025.1 ground-truth runs (results/vitis.json).",
+  "tool_ids": { "vitis": { "library": "zynq" } },
+  "resource_classes": [
+    { "name": "BRAM_18K", "capacity": 280 },
+    { "name": "DSP", "capacity": 220 },
+    { "name": "FF", "capacity": 106400 },
+    { "name": "LUT", "capacity": 53200 },
+    { "name": "URAM", "capacity": 0 }
+  ],
+  "memories": [
+    {
+      "id": "ramb18",
+      "tier": "block",
+      "cost": { "BRAM_18K": 1 },
+      "bits": 18432,
+      "geometries": [
+        { "width": 1, "depth": 16384 },
+        { "width": 2, "depth": 8192 },
+        { "width": 4, "depth": 4096 },
+        { "width": 9, "depth": 2048 },
+        { "width": 18, "depth": 1024 },
+        { "width": 36, "depth": 512 }
+      ],
+      "port_configs": [
+        { "name": "sp", "ports": ["rw"], "max_width": 18 },
+        { "name": "sdp", "ports": ["r", "w"], "max_width": 36 },
+        { "name": "tdp", "ports": ["rw", "rw"], "max_width": 18 }
+      ],
+      "init": "any",
+      "read_latency_options": [ { "cycles": 1 } ]
+    },
+    {
+      "id": "lut64x1",
+      "tier": "distributed",
+      "cost": { "LUT": 1 },
+      "bits": 64,
+      "geometries": [ { "width": 1, "depth": 64 } ],
+      "port_configs": [ { "name": "sp", "ports": ["rw"], "max_width": 1 } ],
+      "init": "any",
+      "read_latency_options": [ { "cycles": 0 } ]
+    }
+  ],
+  "shift_registers": [ { "id": "srl32", "max_depth": 32, "width": 1, "cost": { "LUT": 1 } } ],
+  "arith": [
+    {
+      "id": "dsp48e1",
+      "cost": { "DSP": 1 },
+      "mul": [ { "a": 25, "b": 18, "signed": "signed" } ],
+      "pre_add": 25,
+      "acc": 48
+    }
+  ],
+  "logic": { "cell": "LUT6", "lut_inputs": 6 },
+  "timing": null,
+  "operator_table": null
+}

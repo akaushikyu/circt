@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "run": { "device": "amd-xc7z020clg400-1", "tool": "vitis-2025.1", "clock_ns": 10 },
+  "frontend": {
+    "index_bits": 64,
+    "element_types": [ "int", "float", "index" ],
+    "user_storage_pragmas": [ "hls.array_partition", "hls.array_reshape", "hls.bind_storage", "hls.stream" ]
+  },
+  "plugins": {}
+}

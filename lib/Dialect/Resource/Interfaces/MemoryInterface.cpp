@@ -11,6 +11,7 @@
 // use site.
 //===----------------------------------------------------------------------===//
 
+#include "circt/Dialect/Resource/Config/Config.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
@@ -53,7 +54,8 @@ int64_t computeSizeInBits(ArrayRef<int64_t> shape, Type elt) {
   if (elt.isIntOrFloat())
     w = elt.getIntOrFloatBitWidth();
   else if (isa<IndexType>(elt))
-    w = 64; // platform-dependent; this is the convention we assume
+    w = static_cast<unsigned>(circt::hlsest::Config::get()
+                                  .frontend.indexBits); // frontend.index_bits
   return n * static_cast<int64_t>(w);
 }
 
@@ -104,16 +106,15 @@ std::optional<PartitionSpec> parsePartitionSpec(Operation *op) {
   return spec;
 }
 
-/// Whether an array of `sizeInBits` is large enough that a tool would map it
-/// to block RAM rather than leaving it in registers/LUTRAM.
-///
-/// TODO: most tools have a configurable threshold for BRAM promotion. This
-///       number is a placeholder; make it parameterizable, either in a .td
-///       file or from a device/target specification.
+/// Whether an array of `sizeInBits` (Words x exact element Bits) is large
+/// enough that Vitis maps it to block RAM rather than distributed RAM. The
+/// threshold `kBRAMPromotionBits` (MemoryDS.h) is inclusive - exactly 1024
+/// bits is a BRAM (VITIS_NOTES.md N5) - and shared with the --bram-debug
+/// explanation so the number it quotes is the one applied here.
 bool meetsBRAMPromotionThreshold(int64_t sizeInBits) {
-  // Assume 32 entries x 32-bit data as the promotion point for now.
-  constexpr int64_t kBRAMPromotionBits = 32 * 32;
-  return sizeInBits > kBRAMPromotionBits;
+  // tool.backend.storage_selector.min_block_bits (1024), inclusive.
+  return !circt::hlsest::Config::get().tool.backend.storageSelector.belowBlock(
+      sizeInBits);
 }
 
 /// Shared cost opt-out: an allocation explicitly annotated as not BRAM-backed

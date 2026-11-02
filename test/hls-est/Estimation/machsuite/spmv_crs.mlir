@@ -1,3 +1,7 @@
+// RUN: hls-est %s --symbol-privatize=exclude=spmv --symbol-dce --lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --memory-banking-bram --convert-affine-to-loopschedule '--bram-analysis=top=spmv math-costs=%S/../../../../tools/hls-est-validate/math_costs.json' -o /dev/null | FileCheck %s
+// CHECK: Total BRAM: 0{{$}}
+// Vitis 2025.1 td=off: 0 (results/vitis.json machsuite/spmv_crs; compared by the harness, not by lit)
+
 module {
  func.func @spmv(%arg0: memref<1666xf64>, %arg1: memref<1666xi32>, %arg2: memref<495xi32>, %arg3: memref<494xf64>, %arg4: memref<494xf64>)  {
     %c1 = arith.constant 1 : index

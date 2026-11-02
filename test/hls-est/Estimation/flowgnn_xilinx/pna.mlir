@@ -1,3 +1,7 @@
+// RUN: hls-est %s --symbol-privatize=exclude=PNA_compute_graphs --symbol-dce --lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --memory-banking-bram --convert-affine-to-loopschedule '--bram-analysis=top=PNA_compute_graphs math-costs=%S/../../../../tools/hls-est-validate/math_costs.json' -o /dev/null | FileCheck %s
+// CHECK: Total BRAM: 0{{$}}
+// Vitis 2025.1 td=off: 20600 (results/vitis.json flowgnn/pna; compared by the harness, not by lit)
+
 module {
 memref.global @messages_ping : memref<4x5000x80x!llvm.struct<(array<4 x f32>)>>
   memref.global @messages_pong : memref<4x5000x80x!llvm.struct<(array<4 x f32>)>>

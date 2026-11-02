@@ -6,6 +6,7 @@ add_circt_dialect_library(HLSInterfaces
         MemoryInterfaceIncGen
 
         LINK_LIBS PUBLIC
+        HLSConfig
         CIRCTLoopSchedule
         MLIRIR
         MLIRSupport

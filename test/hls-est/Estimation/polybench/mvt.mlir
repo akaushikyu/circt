@@ -1,5 +1,6 @@
-// RUN: hls-est %s --affine-loop-normalize --memory-banking-bram --convert-affine-to-loopschedule --bram-analysis
-
+// RUN: hls-est %s --symbol-privatize=exclude=mvt --symbol-dce --lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --memory-banking-bram --convert-affine-to-loopschedule '--bram-analysis=top=mvt math-costs=%S/../../../../tools/hls-est-validate/math_costs.json' -o /dev/null | FileCheck %s
+// CHECK: Total BRAM: 14{{$}}
+// Vitis 2025.1 td=off: 14 (results/vitis.json polybench/mvt; compared by the harness, not by lit)
 // Total BRAM: 12
 
 module {
