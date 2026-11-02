@@ -1,0 +1,29 @@
+{
+  "_doc": "A block RAM whose geometry differs from an AMD RAMB18 (20 Kbit, x5 / x10 / x20 / x40 shapes, as a Microchip LSRAM): the Vitis profile's mapper refuses it.",
+  "id": "lsram-like",
+  "part": "test-part",
+  "_status": "unvalidated",
+  "tool_ids": { "vitis": { "library": "zynq" } },
+  "resource_classes": [ { "name": "BRAM_18K", "capacity": null }, { "name": "LUT", "capacity": null } ],
+  "memories": [
+    {
+      "id": "ramb18",
+      "tier": "block",
+      "cost": { "BRAM_18K": 1 },
+      "bits": 20480,
+      "geometries": [
+        { "width": 5, "depth": 4096 }, { "width": 10, "depth": 2048 }, { "width": 20, "depth": 1024 },
+        { "width": 40, "depth": 512 }
+      ],
+      "port_configs": [
+        { "name": "tdp", "ports": ["rw", "rw"], "max_width": 20 },
+        { "name": "sdp", "ports": ["r", "w"], "max_width": 40 }
+      ],
+      "init": "any",
+      "read_latency_options": [ { "cycles": 1 } ]
+    }
+  ],
+  "logic": { "cell": "LUT4", "lut_inputs": 4 },
+  "timing": null,
+  "operator_table": null
+}

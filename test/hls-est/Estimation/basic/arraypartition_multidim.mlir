@@ -1,6 +1,6 @@
-// RUN: hls-est %s --affine-loop-normalize --memory-banking-bram --convert-affine-to-loopschedule --bram-analysis | FileCheck %s -check-prefix=CHECK-BRAM
-
-// CHECK-BRAM: Total BRAM: 8
+// RUN: hls-est %s --symbol-privatize=exclude=kernel --symbol-dce --lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --memory-banking-bram --convert-affine-to-loopschedule '--bram-analysis=top=kernel math-costs=%S/../../../../tools/hls-est-validate/math_costs.json' -o /dev/null | FileCheck %s
+// CHECK: Total BRAM: 8{{$}}
+// Vitis 2025.1 td=off: no ground truth (basic/arraypartition_multidim: no Vitis result)
 
 module {
   func.func @kernel(%arg0: memref<64x64xf32>, %arg1: memref<64x64xf32>) {

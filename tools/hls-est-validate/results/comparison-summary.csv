@@ -1,0 +1,40 @@
+dataset,designs,with_vitis_result,compared,exact,exact_pct_of_compared,total_abs_err,mean_abs_err,median_abs_err,hlsest_failed_or_not_run,vitis_failed,in_goal_band,over_le_5pct,over_gt_5pct,under,in_goal_band_pct_of_compared
+WIP,162,162,162,162,100.0,0,0,0.0,0,0,162,0,0,0,100.0
+accelerators,7,6,6,4,66.7,2,0.3,0.0,0,1,6,2,0,0,100.0
+auto_ntt,17,13,13,13,100.0,0,0,0,0,4,13,0,0,0,100.0
+basic,4,0,0,0,,0,,,0,4,0,0,0,0,
+chstone,2,2,2,2,100.0,0,0,0.0,0,0,2,0,0,0,100.0
+class_ece8893_2022_fall,17,7,7,6,85.7,2,0.3,0,0,10,7,1,0,0,100.0
+class_ece8893_2023_spring,32,30,30,30,100.0,0,0,0.0,0,2,30,0,0,0,100.0
+class_ece8893_spring_2025,94,82,82,75,91.5,32,0.4,0.0,0,12,82,7,0,0,100.0
+flowgnn,5,2,2,0,0.0,3,1.5,1.5,0,3,1,1,0,1,50.0
+forgebench,45,44,44,40,90.9,4,0.1,0.0,0,1,44,4,0,0,100.0
+gnnbuilder,4,4,4,0,0.0,1129,282.2,279.5,0,0,4,4,0,0,100.0
+hlsyn-vitis,42,17,17,17,100.0,0,0,0,0,25,17,0,0,0,100.0
+hp_fft_hls,16,16,16,16,100.0,0,0,0.0,0,0,16,0,0,0,100.0
+machsuite,18,18,18,18,100.0,0,0,0.0,0,0,18,0,0,0,100.0
+polybench,9,9,9,9,100.0,0,0,0,0,0,9,0,0,0,100.0
+polybench__reproducible,196,196,196,196,100.0,0,0,0.0,0,0,196,0,0,0,100.0
+polybench_pragmas,7,7,7,7,100.0,0,0,0,0,0,7,0,0,0,100.0
+pp4fpgas,5,5,5,4,80.0,1,0.2,0,0,0,5,1,0,0,100.0
+rosetta,8,5,5,5,100.0,0,0,0,0,3,5,0,0,0,100.0
+soda,11,11,11,11,100.0,0,0,0,0,0,11,0,0,0,100.0
+spector_hls,10,10,10,10,100.0,0,0,0.0,0,0,10,0,0,0,100.0
+stream_hls,77,77,77,77,100.0,0,0,0,0,0,77,0,0,0,100.0
+vitis_examples,23,22,22,22,100.0,0,0,0.0,0,1,22,0,0,0,100.0
+whetstone,1,1,1,1,100.0,0,0,0,0,0,1,0,0,0,100.0
+ALL,812,746,746,725,97.2,1173,1.6,0.0,0,66,745,20,0,1,99.9
+
+run_setting,value
+generated,2026-10-28 11:04
+generator,tools/hls-est-validate/make_compare_csv.py
+hls-est run json,/home/peter/hls-est-work/coord/scratch/w9r23fx/E.json
+hls-est git,unknown (HLS_EST_BIN=/home/peter/hls-est-work/coord/scratch/w9r23fx/bin/hls-est.E)
+hls-est binary,/home/peter/hls-est-work/coord/scratch/w9r23fx/bin/hls-est.E
+pipeline,--lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --infer-vitis-split-array=td=off --narrow-ram-widths --memory-banking-bram --convert-affine-to-loopschedule --bram-analysis
+shim,/home/peter/circt/tools/hls-est-validate/shim/real
+cgeist,/home/peter/hls-est-work/coord/scratch/w9r23i/bin/cgeist.w9r23
+cgeist md5,d64b520a3d0e120432298f93f092f103
+mlir reused from,/home/peter/hls-est-work/coord/scratch/w9r23i/F.json
+vitis,"2025.1 csynth, xc7z020clg400-1, 10ns, syn.array_partition.throughput_driven=off"
+note,"designs absent from the run are listed with comparison_status 'hls-est missing'; designs without a Vitis result are 'vitis missing' (excluded, see hls-est-results.xlsx 'excluded designs')"

@@ -1,0 +1,54 @@
+# 4 The inferred decision model
+
+This chapter states, as a catalogue of rules, what Vitis HLS 2025.1 decides between a C/C++ kernel and
+the BRAM_18K count of its `csynth` report [@amd2025ug1399], for the configuration of the ground truth (xc7z020clg400-1,
+10 ns, `flow_target=vivado`, `syn.array_partition.throughput_driven=off`). Chapter 3 describes how the
+rules were found; this chapter describes what was found. Every rule is an inference from black-box
+experiments: it is the shortest statement we could find that reproduces every kernel run listed with
+it, and it is marked *confirmed* only when standalone kernels reproduce it, *partly confirmed* when part
+of the statement (usually its mechanism or trigger) rests on corpus observations or on reading header
+or open-source code, and *unconfirmed* when it is an observation without a rule.
+
+The catalogue holds {{n_rules}} rules in {{n_stages}} decision stages, drawn from {{n_notes_cited}} of the
+{{n_notes_total}} entries of `hls-doc/notes/VITIS_NOTES.md`, and cites {{n_kernels}} distinct standalone
+kernels whose Vitis runs are read back by the generator of this chapter. Of the rules, {{n_confirmed}}
+are confirmed, {{n_partly}} partly confirmed and {{n_unconfirmed}} unconfirmed. These counts are per
+*rule*: a rule's status is assigned in the rule data from the notes it draws on, and one rule can combine
+several notes. Section 3.3 counts the *notes* themselves with the shared heading parser, so its numbers
+differ. Entries not cited: {{uncited}}
+(N34 records the Phase 6 counting rules for DSP, FF and LUT, which are outside the BRAM model).
+
+## 4.0 How to read a rule
+
+Each rule has the same parts.
+
+- **Statement.** One paragraph in the vocabulary below. Numbers inside a statement are either constants
+  of the rule (the 64-trip threshold, the 1024-bit storage threshold, the 16-copy cap, the depth bands)
+  or references to a kernel's run, which the generator fills in from that run's `result.json`.
+- **Example kernel.** One kernel that shows the rule, with its Vitis total. Appendix A lists, per rule,
+  every kernel together with the evidence, the mechanism, the configuration keys and the catalogue effect.
+- **Kernels (Appendix A).** The minimal kernels that show the rule, each with what it varies, and, read from its Vitis
+  run: the total BRAM_18K, the memory rows (array: banks x words x bits, core, BRAM_18K; cores without the
+  `_AUTO` infix), the pipelined loops (trip count, achieved II), and which transformation messages the
+  compile log contains (`[HLS 214-376]` automatic pipeline, `[HLS 214-291]` unroll implied by a pipeline,
+  `[HLS 214-186]` unroll, `[HLS 214-449]` / `[HLS 214-270]` / `[HLS 214-421]` automatic partitions,
+  `[HLS 214-248]` applied partition, `[HLS 200-2061]` / `[XFORM 203-541]` perfect-nest conversion and
+  flattening, `[HLS 200-2167]` / `[HLS 200-1457]` RAM_1WNR copies, `[HLS 200-885]` port-limited II,
+  `[HLS 214-178]` automatic inlining, `[RTMG 210-278]` / `[RTMG 210-285]` memory and FIFO
+  implementation). A kernel that Vitis rejects shows its error message instead.
+- **Evidence (Appendix A).** Where in Vitis the behaviour is visible: the report tables, a log message, an IR stage
+  (`a.g.ld.5.gdce.ll` after the front end; `a.o.1.ll` .. `a.o.3.ll` after the closed optimisation
+  stages), scheduling or binding reports, RTL, or the open-source front end and resource formula.
+- **Status**, as above.
+- **hls-est.** Whether and how the estimator models the rule (default, opt-in, partly, not), the pass or
+  tool that implements it, and the configuration keys through which a designer can change it. Every key
+  listed is checked against the default configuration (`hls-est --dump-default-config`) by the generator.
+- **Catalogue effect (Appendix A).** Where the change log records the effect of adopting the rule on the full
+  HLSFactory catalogue, a verbatim excerpt of that record, with its date and title.
+
+**Notation.** A memory (array or partition bank) has D words of W bits. In a pipelined loop, R and W
+count its reads and writes per iteration after unrolling, load merging and invariant hoisting, and II is
+the achieved initiation interval. F is a partition factor. A port mode is single port (`ram_1p`), simple
+dual port (one write-only and one read-only port, or two read-only ports), two-port (`ram_2p`, a
+read-write and a read port) or true dual port (`ram_t2p`). x36 and x18 are the widest data widths of a
+RAMB18 in simple-dual-port and in true-dual-port mode.

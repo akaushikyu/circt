@@ -1,3 +1,14 @@
+// RUN: hls-est %s --symbol-privatize=exclude=_Z3topPA256_fS0_S0_S0_S0_ --symbol-dce --lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --memory-banking-bram --convert-affine-to-loopschedule '--bram-analysis=top=_Z3topPA256_fS0_S0_S0_S0_ math-costs=%S/../../../../tools/hls-est-validate/math_costs.json' -o /dev/null | FileCheck %s
+// CHECK: Total BRAM: 259{{$}}
+// (203 before W9r22-impl: VITIS_NOTES N166 (a), tool.hls.pipeline_decision.promoted_store_cleanup:
+// this legacy MLIR's Q / K / V accumulators (an init store, then a store in every k iteration)
+// are promoted before the flatten decision, so their arrays store once per element and become
+// replicable (the reading loop's II here gives 15 copies); the catalogue design under the real
+// headers is unchanged.)
+// (259 before W9r18-impl: the change comes from N129's promote_nest_invariant_only, on by
+// default since then; the catalogue design under the real headers is unchanged.)
+// Vitis 2025.1 td=off: 73 (results/vitis.json forgebench/attention_op_p1; compared by the harness, not by lit)
+
 module {
   memref.global @BRAM_1 : memref<8x256xf16> = uninitialized
   memref.global @BRAM_weights_v : memref<256x256xf16> = uninitialized
@@ -130,35 +141,35 @@ module {
   func.func @_Z3topPA256_fS0_S0_S0_S0_(%arg0: memref<8x256xf16>, %arg1: memref<256x256xf16>, %arg2: memref<256x256xf16>, %arg3: memref<256x256xf16>, %arg4: memref<8x256xf16>) {
     %cst = arith.constant 0.000000e+00 : f16
     %cst_0 = arith.constant 2.500000e-01 : f16
-    %0 = memref.get_global @BRAM_attn_input : memref<8x256xf16>
+    %0 = memref.alloca() : memref<8x256xf16>
     affine.for %arg5 = 0 to 8 {
       affine.for %arg6 = 0 to 256 {
         %5 = affine.load %arg0[%arg5, %arg6] : memref<8x256xf16>
         affine.store %5, %0[%arg5, %arg6] : memref<8x256xf16>
       }
     }
-    %1 = memref.get_global @BRAM_weights_q : memref<256x256xf16>
+    %1 = memref.alloca() : memref<256x256xf16>
     affine.for %arg5 = 0 to 256 {
       affine.for %arg6 = 0 to 256 {
         %5 = affine.load %arg1[%arg5, %arg6] : memref<256x256xf16>
         affine.store %5, %1[%arg5, %arg6] : memref<256x256xf16>
       }
     }
-    %2 = memref.get_global @BRAM_weights_k : memref<256x256xf16>
+    %2 = memref.alloca() : memref<256x256xf16>
     affine.for %arg5 = 0 to 256 {
       affine.for %arg6 = 0 to 256 {
         %5 = affine.load %arg2[%arg5, %arg6] : memref<256x256xf16>
         affine.store %5, %2[%arg5, %arg6] : memref<256x256xf16>
       }
     }
-    %3 = memref.get_global @BRAM_weights_v : memref<256x256xf16>
+    %3 = memref.alloca() : memref<256x256xf16>
     affine.for %arg5 = 0 to 256 {
       affine.for %arg6 = 0 to 256 {
         %5 = affine.load %arg3[%arg5, %arg6] : memref<256x256xf16>
         affine.store %5, %3[%arg5, %arg6] : memref<256x256xf16>
       }
     }
-    %4 = memref.get_global @BRAM_1 : memref<8x256xf16>
+    %4 = memref.alloca() : memref<8x256xf16>
     %alloca = memref.alloca() {hls.preserve} : memref<8x8xf16>
     %alloca_1 = memref.alloca() {hls.preserve} : memref<8x256xf16>
     %alloca_2 = memref.alloca() {hls.preserve} : memref<8x256xf16>

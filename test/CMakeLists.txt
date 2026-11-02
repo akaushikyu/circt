@@ -1,5 +1,6 @@
 add_subdirectory(lib)
 add_subdirectory(CAPI)
+add_subdirectory(hls-est)
 
 configure_lit_site_cfg(
   ${CMAKE_CURRENT_SOURCE_DIR}/lit.site.cfg.py.in
@@ -36,6 +37,9 @@ set(CIRCT_TEST_DEPENDS
   circt-translate
   circt-reduce
   hls-est
+  HlsEstTestPlugin
+  HlsEstExamplePlugin
+  HlsEstPolarFirePlugin
   domaintool
   handshake-runner
   firld

@@ -1,0 +1,42 @@
+{
+  "_doc": "Lattice CrossLink-NX / Certus-NX LIFCL-40 (Nexus), for the refusal test only: its EBR has the geometry of an AMD RAMB18 (Yosys techlibs/lattice brams_nexus.txt: DP16K tdp up to x18, PDP16K sdp up to x36, 9-bit bytes; LRAM: lrams_nexus.txt, 16K x 32), but it has no tool_ids.vitis, so the Vitis profile's mapper refuses it. Capacities not looked up.",
+  "id": "lattice-lifcl-40",
+  "part": "LIFCL-40",
+  "_status": "unvalidated",
+  "resource_classes": [
+    { "name": "EBR", "capacity": null },
+    { "name": "LRAM", "capacity": null },
+    { "name": "LUT4", "capacity": null }
+  ],
+  "memories": [
+    {
+      "id": "ebr",
+      "tier": "block",
+      "cost": { "EBR": 1 },
+      "bits": 18432,
+      "geometries": [
+        { "width": 1, "depth": 16384 }, { "width": 2, "depth": 8192 }, { "width": 4, "depth": 4096 },
+        { "width": 9, "depth": 2048 }, { "width": 18, "depth": 1024 }, { "width": 36, "depth": 512 }
+      ],
+      "port_configs": [
+        { "name": "tdp", "ports": ["rw", "rw"], "max_width": 18 },
+        { "name": "sdp", "ports": ["r", "w"], "max_width": 36 }
+      ],
+      "init": "any",
+      "read_latency_options": [ { "cycles": 1 } ]
+    },
+    {
+      "id": "lram",
+      "tier": "large",
+      "cost": { "LRAM": 1 },
+      "bits": 524288,
+      "geometries": [ { "width": 32, "depth": 16384 } ],
+      "port_configs": [ { "name": "tdp", "ports": ["rw", "rw"], "max_width": 32 } ],
+      "init": "no_undef",
+      "read_latency_options": [ { "cycles": 1 } ]
+    }
+  ],
+  "logic": { "cell": "LUT4", "lut_inputs": 4 },
+  "timing": null,
+  "operator_table": null
+}

@@ -23,6 +23,7 @@
 
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
 #include "mlir/Dialect/Affine/LoopUtils.h"
+#include "circt/Dialect/Resource/Passes/AffineUnroll.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "circt/Dialect/Resource/Passes/DebugUnroll.h"
 #include "mlir/Pass/Pass.h"
@@ -73,7 +74,7 @@ struct DebugUnrollPass
       }
       LLVM_DEBUG(llvm::dbgs()
                  << "debug-unroll: unrolling @ " << forOp.getLoc() << "\n");
-      if (failed(loopUnrollFull(forOp)))
+      if (failed(circt::hls_analysis::hlsLoopUnrollFull(forOp)))
         LLVM_DEBUG(llvm::dbgs()
                    << "debug-unroll: loopUnrollFull failed @ "
                    << forOp.getLoc() << "\n");

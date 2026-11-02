@@ -121,7 +121,8 @@ LogicalResult LoopSchedulePipelineOp::verify() {
       return WalkResult::advance();
 
     if (!isa<arith::AddIOp, arith::AndIOp, arith::BitcastOp, arith::CmpIOp,
-             arith::ConstantOp, arith::IndexCastOp, arith::MulIOp, arith::OrIOp,
+             arith::ConstantOp, arith::IndexCastOp, arith::IndexCastUIOp,
+             arith::MulIOp, arith::OrIOp,
              arith::SelectOp, arith::ShLIOp, arith::ExtSIOp, arith::CeilDivSIOp,
              arith::DivSIOp, arith::FloorDivSIOp, arith::RemSIOp,
              arith::ShRSIOp, arith::SubIOp, arith::TruncIOp, arith::DivUIOp,

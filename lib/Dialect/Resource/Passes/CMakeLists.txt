@@ -7,6 +7,35 @@ add_mlir_library(HLSPasses
         CyclicSchedulingAnalysisModified.cpp
         AutoPipelineUnroll.cpp
         DebugUnroll.cpp
+        AffineUnroll.cpp
+        InferVitisSplitArray.cpp
+        VitisFold.cpp
+        ConstantCallEval.cpp
+        PromoteGlobalsToAllocas.cpp
+        DeadMemoryElimination.cpp
+        CallInstances.cpp
+        HlsInliner.cpp
+        PolygeistCompat.cpp
+        SplitStructMemrefs.cpp
+        PartitionLayout.cpp
+        ConstantFills.cpp
+        MathCores.cpp
+        StreamFifos.cpp
+        DataflowChannels.cpp
+        RamWidthNarrowing.cpp
+        AccessOrder.cpp
+        FoldUnrolledGuards.cpp
+        DoWhileFlatten.cpp
+        MemoryRecurrences.cpp
+        IterationPrivateBanks.cpp
+        PreBankForwarding.cpp
+        FunctionPipelines.cpp
+        ../Plugins/Builtin/MAxiBuffers.cpp
+        ../Plugins/Builtin/Mappers.cpp
+        ../Plugins/Builtin/MemoryArchitecture.cpp
+        ../Plugins/Builtin/MemoryGroupings.cpp
+        ../Plugins/Builtin/RegisterBuiltins.cpp
+        ../Plugins/Builtin/StorageSelectors.cpp
 
         DEPENDS
         CIRCTTransformsPassIncGen
@@ -17,6 +46,8 @@ add_mlir_library(HLSPasses
         MLIRArithDialect
 
         LINK_LIBS PUBLIC
+        HLSConfig
+        HLSPlugins
         HLSInterfaces
         CIRCTHLS
         MLIRIR
@@ -27,6 +58,11 @@ add_mlir_library(HLSPasses
         MLIRAffineDialect
         MLIRAffineAnalysis
         MLIRAffineToStandard
+        MLIRArithDialect
+        MLIRSCFDialect
+        MLIRControlFlowDialect
+        MLIRLLVMDialect
+        MLIRTransformUtils
         MLIRPass
         CIRCTScheduling
         CIRCTSchedulingAnalysis

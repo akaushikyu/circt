@@ -1,3 +1,7 @@
+// RUN: hls-est %s --symbol-privatize=exclude=_Z9mergesortPiS_ --symbol-dce --lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --memory-banking-bram --convert-affine-to-loopschedule '--bram-analysis=top=_Z9mergesortPiS_ math-costs=%S/../../../../tools/hls-est-validate/math_costs.json' -o /dev/null | FileCheck %s
+// CHECK: Total BRAM: 0{{$}}
+// Vitis 2025.1 td=off: 0 (results/vitis.json spector_hls/mergesort; compared by the harness, not by lit)
+
 module {
   func.func @_Z9mergesortPiS_(%arg0: memref<16xi32>, %arg1: memref<16xi32>)  {
     %c0 = arith.constant 0 : index

@@ -1,0 +1,1 @@
+{"version": 1, "run": {"clock_ns": 5}, "tool": {"hls": {"options": {"pipeline_loops": 32}}}}

@@ -1,3 +1,7 @@
+// RUN: hls-est %s --symbol-privatize=exclude=fft1D_512 --symbol-dce --lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --memory-banking-bram --convert-affine-to-loopschedule '--bram-analysis=top=fft1D_512 math-costs=%S/../../../../tools/hls-est-validate/math_costs.json' -o /dev/null | FileCheck %s
+// CHECK: Total BRAM: 28{{$}}
+// Vitis 2025.1 td=off: 28 (results/vitis.json machsuite/fft_transpose; compared by the harness, not by lit)
+
 module {
   func.func @twiddles8(%arg0: memref<8xf64>, %arg1: memref<8xf64>, %arg2: i32, %arg3: i32)  {
     %cst = arith.constant -6.2831853070000001 : f64

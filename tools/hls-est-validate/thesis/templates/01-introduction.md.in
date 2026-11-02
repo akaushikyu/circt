@@ -1,0 +1,195 @@
+# 1. Introduction
+
+**Draft.** Numbers come from the files named in `data/frame-numbers.json` (the final evaluation run,
+hls-est `{{run_hlsest_git}}`, comparison generated {{run_generated}}). VITIS_NOTES are cited as N*n*,
+OPEN_ISSUES as O*n* and recorded decisions as MEMOS #*n*; all are in `hls-doc/notes/` and are the
+appendix references of this thesis.
+
+## 1.1 The problem: the decisions of an HLS tool are closed
+
+High-level synthesis lets a designer write an FPGA accelerator in C or C++ and steer it with pragmas
+(`pipeline`, `unroll`, `array_partition`, `bind_storage`, `dataflow`, `interface`). Surveys find that HLS
+gives up some quality of results against hand-written RTL but saves a large share of development time
+[@lahti2019; @cong2022fpga]. The price is that much of the hardware is decided by the tool, not by the
+designer:
+- whether a loop the designer did not annotate is pipelined, unrolled or flattened;
+- whether an array that is indexed by constants is split into registers;
+- how many copies of a memory are built, so that a pipelined loop can read it several times per cycle;
+- whether a small array goes to LUT RAM or block RAM;
+- and which aspect ratio each block RAM uses.
+
+AMD Vitis HLS [@amd2025ug1399] documents its pragmas and some of its defaults, but not the rules behind
+these automatic decisions. Its front end is open source [@xilinx_hlsllvm]. The optimisation passes after
+it, the scheduler, the binder and the RTL generator are not.
+
+A designer therefore learns the cost of a design only after running synthesis, which takes from seconds to
+hours per design. The median C synthesis of the catalogue used here takes {{ev_time_vitis_median_s}} s,
+and {{vitis_timeout}} designs did not finish within the harness's time limit. Design-space exploration,
+early feasibility checks and teaching all suffer from this. So does every research tool that wants to
+reason about what Vitis *will* do with a source file.
+
+**Research questions.** The thesis asks three questions:
+
+- **RQ1 (inference).** Can the automatic memory decisions of a closed HLS tool be inferred from the
+  outside, without disassembling it, as explicit rules that each rest on reproducible experiments?
+- **RQ2 (fidelity).** How closely does an open implementation of those rules reproduce the tool's BRAM
+  allocation, per design and per memory, on a large catalogue of real designs, and what does it get
+  wrong?
+- **RQ3 (use).** Are the inferred decisions complete enough to serve as more than an estimate, for
+  example to drive code generation?
+
+## 1.2 Why block RAM, and why per memory
+
+This thesis concentrates on one resource, the 18 Kbit block RAM (BRAM_18K) of AMD 7-series devices
+[@amd_ug473], for three reasons.
+
+- **It is often the binding resource.** On the small Zynq-7000 part used here ({{vitis_parts}}, with
+  {{ev_device_capacity}} BRAM_18K), BRAM has the highest utilisation of the four resource classes (BRAM,
+  DSP, FF, LUT) in {{util_bram_highest}} of the {{util_designs}} designs with a Vitis utilisation report.
+  For {{ev_over_device_vitis}} of the {{ev_vitis_results}} designs with a Vitis result, Vitis allocates
+  more BRAM_18K than the part has.
+- **It is decided by many interacting rules.** The BRAM of one array depends on:
+  - the front end: dead-array removal, constant folding, struct splitting;
+  - the loop decisions: pipelining, unrolling, flattening;
+  - partitioning: user pragmas and the tool's automatic partitions;
+  - the schedule: how many accesses fall into one cycle;
+  - the storage choice: LUT RAM below a size threshold (N5);
+  - the replication of read-heavy memories (N4, N38);
+  - and the mapping of a bank onto RAMB18 aspect modes (N6, N8).
+
+  Getting the BRAM of one array right means getting each of these decisions right for that array.
+- **It is countable exactly.** Vitis reports BRAM_18K per memory in its synthesis report, so a prediction
+  is either equal or not. Where the two tools name a memory alike, the claim is falsifiable per array.
+
+Matching only design totals is not enough, because totals can match by cancellation: an over-count in one
+array hides an under-count in another. This happened during the project, for example on PolyBench
+`atax`, `bicg` and `mvt` before sequential dual-port use was modelled (O3). The harness therefore also
+joins hls-est and Vitis per memory, by the C variable name. A change was kept only if every design it
+changed was explained per array (the project's adoption rule, Section 3.5). The per-array join has a
+limit, measured in Chapter 6: only {{ev_pa_aligned_pct}} % of the BRAM-carrying array rows align by name,
+and {{ev_pa_non_array_pct}} % of Vitis's BRAM lies outside every memory table. Accuracy is therefore
+reported per design, and per array only where the join can score it.
+
+## 1.3 Approach
+
+The approach is behavioural black-box inference, in the spirit of measuring closed processors with
+micro-benchmarks [@abel2019uops] and of model learning for black-box systems [@vaandrager2017model]:
+
+1. Run Vitis HLS {{vitis_versions}} on a large catalogue of real designs (the HLSFactory catalogue
+   [@abikaram2024hlsfactory], {{designs}} designs in {{datasets}} datasets). For each design, record the
+   memory and loop tables, the transformation log and the intermediate LLVM IR files Vitis writes.
+2. Where a prediction differs from Vitis, find the first stage where Vitis and hls-est diverge. Prove the
+   behaviour with a minimal kernel, often a sweep over one parameter across a suspected threshold,
+   synthesised with the same configuration.
+3. Write the rule down as a numbered note with its kernels and evidence paths, and mark anything not
+   proven as unconfirmed. Implement it as a general mechanism, never as a branch on a benchmark, an array
+   name or a size.
+4. Re-run the whole catalogue. Keep the change only if no exact design is lost without a per-array
+   explanation.
+
+The method uses only:
+- what Vitis documents or writes as output, and its own `-help` text;
+- the open-source front end;
+- for device facts, a read-only look at the installed device database (MEMOS #42).
+
+Closed binaries are never disassembled or decompiled (Chapter 8 discusses this choice).
+
+Because step 2 starts from catalogue mismatches, the catalogue is both the development set and the
+evaluation set. Every accuracy number in this thesis is an in-sample number (Section 6.8).
+
+## 1.4 Contributions
+
+The contributions answer the three research questions.
+
+**RQ1, inference.**
+
+1. **A catalogue of Vitis HLS decision rules inferred by black-box experiments.** {{n_notes}} numbered
+   notes, N1 to N{{n_last}}. {{n_notes_confirmed}} are confirmed: {{n_notes_confirmed_kernels}} by
+   standalone kernels and {{n_notes_confirmed_corpus}} only on catalogue designs or ground-truth reports.
+   {{n_notes_partly}} are partly confirmed, {{n_notes_unconfirmed}} unconfirmed, and {{n_notes_method}}
+   are notes on measurement method. Each note names its kernels and run directories. Examples:
+   - the automatic pipeline / unroll / flatten decision (N3, {{N3.kernels}} kernels);
+   - RAM_1WNR replication (N4, {{N4.kernels}} kernels; N38);
+   - the BRAM count per bank from RAMB18 aspect modes (N6, {{N6.kernels}} kernels) and its
+     reconciliation with the open-source resource formula (N8);
+   - the partitions that remain with throughput-driven partitioning off (N7, {{N7.kernels}} kernels);
+   - Vitis' automatic inlining rule (N18, {{N18.kernels}} kernels);
+   - the dataflow ping-pong buffers (N33, {{N33.kernels}} kernels).
+
+**RQ2, fidelity.**
+
+2. **hls-est, an open implementation of those rules in MLIR/CIRCT** [@lattner2021mlir; @circt]. It is a
+   {{pipeline_passes}}-pass pipeline, {{pipeline_own_passes}} of whose passes were written or modified for
+   this work. The pipeline mirrors Vitis' stages: front-end deletion and folding, loop decisions,
+   partitioning and width narrowing, modulo scheduling, and storage and BRAM pricing. It explains every
+   number in a machine-readable debug report. That the report never changes an estimate is tested, not
+   proven (Section 3.7).
+3. **A validation infrastructure.** It has four parts:
+   - {{vitis_ok}} successful Vitis syntheses, with {{vitis_memory_rows}} memory-table rows and
+     {{vitis_loop_rows}} loop-table rows;
+   - a harness that joins hls-est and Vitis per design and, where names align, per array;
+   - a regression net of lit tests that pins the output of every catalogue design: {{mirror_tests}}
+     generated Mirror tests and {{lit_passes}} hand-written pass tests;
+   - a C/C++ front end that compiles the real Vitis headers. The Polygeist front end cgeist
+     [@moses2021polygeist] was extended to understand the Xilinx front-end extensions and to copy Vitis'
+     front-end behaviours. Its output is checked by differential execution against native builds:
+     {{sem_equal}} of the {{sem_checked}} designs that could be checked are bit-exact.
+4. **An evaluation on the full catalogue (in-sample).** Counting each distinct source once and leaving out
+   zero-BRAM designs, {{ev_distinct_nonzero_exact}} of {{ev_distinct_nonzero_compared}} designs are exact
+   and {{ev_distinct_nonzero_in_band}} are exact or over by at most {{band_over_pct}} %. Over all {{compared}} compared
+   designs, the figures are {{exact}} ({{exact_pct}} %) and {{in_goal}} ({{in_goal_pct}} %). A naive
+   declared-size baseline is exact on {{ev_b0_exact}}. Every remaining out-of-band design is attributed per
+   array to a cause class (Chapter 6).
+
+**RQ3, use.**
+
+5. **An RTL back end as an application** (Chapter 7, on a separate branch and a different hls-est commit,
+   `{{rtl_hlsest}}`). hls-est's static decisions are lowered to Verilog with Vitis' block-level protocol
+   and checked by co-simulation against each design's own C testbench. {{rtl_verilog}} of the
+   {{rtl_catalogue}} catalogue designs ({{rtl_verilog_pct}} %) get Verilog and {{rtl_cosim_pass}} pass,
+   with {{rtl_wrong_code}} wrong-code mismatches. Only {{rtl_selfcheck}} of the passing testbenches notice
+   inverted outputs.
+
+**Engineering.** {{config_keys}} configuration keys and {{plugin_interfaces}} plugin interfaces separate
+the AMD device and the Vitis policies from the analysis. They cover storage selection, memory
+architecture, memory mapping, pipelining and partition policies, fold rules and the scheduling
+interfaces. The worked retargeting to Microchip PolarFire is not validated against any tool, so this is a
+software-engineering contribution, not a validated result (Chapter 5).
+
+## 1.5 Scope
+
+The ground truth is one tool version, one device and one clock ({{vitis_versions}}, {{vitis_parts}},
+{{vitis_clocks}}), with `syn.array_partition.throughput_driven=off`, the configuration of the original
+project. Only BRAM is modelled. DSP, FF and LUT estimation (Phase 6) depend on Vitis' schedule and binding
+and are future work. The success criterion was fixed at the start of the project: for every design with
+ground truth, hls-est equals Vitis or over-counts by at most 15 %; on 2026-10-24 the band was narrowed to
+{{band_over_pct}} %, the band every number of this thesis uses. An under-count is always out of band,
+because an estimate that promises a design fits when it does not is worse than a pessimistic one.
+
+## 1.6 Authorship and use of AI assistance
+
+**To be written and signed by the author; the facts below are generated from git and must be checked
+against the university's rules.**
+
+- **What existed before.** The estimator this work started from is the `Dialect/Resource` code on `main`
+  of `~/circt` at the branch point `{{circt_branch_point}}` ({{circt_branch_point_date}}):
+  {{files_resource_before}} files, {{loc_resource_before}} lines. At the snapshot `{{circt_head}}`, the
+  same directories hold {{files_resource}} files and {{loc_resource}} lines (Section 5.9).
+- **AI assistance.** All {{circt_commits}} commits of the hls-est branch and all {{polygeist_commits}}
+  commits of the Polygeist branch up to the snapshot carry a co-author trailer naming an AI coding agent
+  (Claude, Anthropic): {{circt_commits_coauthored}} and {{polygeist_commits_coauthored}} of them. The
+  experiments, the implementation, the notes and the reviews of Section 3.6 were carried out by AI agents
+  under the author's direction. The reviews were made by agents of the same model family as the
+  implementation, so they are independent of the implementing session, not of the model. This draft
+  itself was generated by such an agent from the project's result files.
+- **What the author decided.** The project's recorded decisions (MEMOS) name the author's decisions,
+  among them the target configuration, the success criterion, the move to the real Vitis headers and the
+  scope. The author must state here which parts of the design, analysis and text are his own.
+
+## 1.7 Outline
+
+Chapter 2 introduces Vitis HLS and the related work on HLS estimation, memory partitioning, HLS tool
+testing and open HLS compilers. Chapter 3 describes the inference method and Chapter 4 the inferred rules;
+the kernel tables of the rules are in Appendix A. Chapter 5 describes the implementation. Chapter 6
+evaluates hls-est against Vitis. Chapter 7 presents the RTL back end. Chapter 8 discusses threats to
+validity, limitations and future work.

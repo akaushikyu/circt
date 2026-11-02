@@ -1,3 +1,7 @@
+// RUN: hls-est %s --symbol-privatize=exclude=_Z10matrix_mulP5dtypePiS1_ --symbol-dce --lower-polygeist-subindex --inline --split-struct-memrefs --mark-constant-fills --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --memory-banking-bram --convert-affine-to-loopschedule '--bram-analysis=top=_Z10matrix_mulP5dtypePiS1_ math-costs=%S/../../../../tools/hls-est-validate/math_costs.json' -o /dev/null | FileCheck %s
+// CHECK: Total BRAM: 0{{$}}
+// Vitis 2025.1 td=off: 0 (results/vitis.json spector_hls/matrix_multiplication; compared by the harness, not by lit)
+
 module  {
   func.func @_Z10matrix_mulP5dtypePiS1_(%arg0: memref<?x!llvm.struct<(i32, i64)>>, %arg1: memref<1048576xi32>, %arg2: memref<1048576xi32>)  {
     %c1 = arith.constant 1 : index

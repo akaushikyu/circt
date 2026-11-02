@@ -1,0 +1,256 @@
+{
+ "generator": "circt tools/hls-est-validate/heldout2/build_heldout2.py",
+ "from": "/mnt/d/HLS_heldout2/catalog/manifest.json",
+ "suites": {
+  "heldout2-hls4ml": {
+   "suite": "hls4ml-generated projects",
+   "repository": "https://github.com/fastmachinelearning/hls4ml",
+   "licence": "Apache-2.0 (LICENSE; the Vitis backend templates and nnet_utils headers hls4ml writes into each project)",
+   "spdx": "Apache-2.0",
+   "generator": "circt tools/hls-est-validate/heldout2/gen_hls4ml.py (PyTorch front end)",
+   "hls4ml_version": "1.3.0",
+   "torch_version": "2.14.1+cpu",
+   "generator_seed": 20261027
+  },
+  "heldout2-finn": {
+   "suite": "FINN-hlslib unit tests",
+   "repository": "https://github.com/Xilinx/finn-hlslib",
+   "licence": "BSD-3-Clause (LICENSE, Copyright (c) 2019, Xilinx, Inc.)",
+   "spdx": "BSD-3-Clause",
+   "generator": "circt tools/hls-est-validate/heldout2/gen_finn.py (variant configuration / weight headers written by the generator)",
+   "repository_commit": "cc8db47b59555df8b3993666cf2cfb6b9e57ff5a",
+   "generator_seed": 20261027
+  },
+  "heldout2-rodinia": {
+   "suite": "Rodinia-HLS",
+   "repository": "https://github.com/SFU-HiAccel/rodinia-hls",
+   "licence": "BSD-2-Clause (LICENSE, Copyright (c) 2020, SFU-HiAccel)",
+   "spdx": "BSD-2-Clause",
+   "repository_commit": "db78e1e4a5dbf1203655a60da0ac8ba2913fb20c"
+  }
+ },
+ "dedupe": {
+  "training_trees": [
+   "/mnt/d/HLSFactory_v2/HLSFactory/hlsfactory/hls_dataset_sources",
+   "/mnt/d/HLS/Polygeist/tools/cgeist/Test/HLS",
+   "/home/peter/circt/test/hls-est",
+   "/home/peter/hls-est-work/exp-src",
+   "/mnt/d/HLS_heldout/src"
+  ],
+  "training_units": "files and directories",
+  "near_containment": 0.8,
+  "reverse_containment": 0.6,
+  "family_containment": 0.8,
+  "hash": "blake2b-64",
+  "shingle_tokens": 5,
+  "min_shingles": 30,
+  "name_dedupe": false,
+  "validity": "g++ -std=c++14 -fsyntax-only -w -I/mnt/a/Vitis/2025.1/Vitis/include (no -D__SYNTHESIS__)"
+ },
+ "counts": {
+  "heldout2-hls4ml": {
+   "candidates": 555,
+   "kept": 540
+  },
+  "heldout2-finn": {
+   "candidates": 96,
+   "kept": 95
+  },
+  "heldout2-rodinia": {
+   "candidates": 96,
+   "kept": 85
+  }
+ },
+ "excluded": [
+  {
+   "key": "heldout2-hls4ml/dense_layernorm__fx16_6_rf4_par_lat",
+   "origin": "hls4ml_gen/dense_layernorm__fx16_6_rf4_par_lat",
+   "reasons": [
+    "hls4ml conversion failed: Exception('Input shape [None, 32] is not currently supported for LayerNorm; only three-dimensional inputs (including batch dimension) are supported') | Exception: Input shape [None, 32] is not current"
+   ]
+  },
+  {
+   "key": "heldout2-hls4ml/dense_layernorm__fx16_6_rf16_par_lat",
+   "origin": "hls4ml_gen/dense_layernorm__fx16_6_rf16_par_lat",
+   "reasons": [
+    "hls4ml conversion failed: Exception('Input shape [None, 32] is not currently supported for LayerNorm; only three-dimensional inputs (including batch dimension) are supported') | Exception: Input shape [None, 32] is not current"
+   ]
+  },
+  {
+   "key": "heldout2-hls4ml/dense_layernorm__fx16_6_rf64_par_lat",
+   "origin": "hls4ml_gen/dense_layernorm__fx16_6_rf64_par_lat",
+   "reasons": [
+    "hls4ml conversion failed: Exception('Input shape [None, 32] is not currently supported for LayerNorm; only three-dimensional inputs (including batch dimension) are supported') | Exception: Input shape [None, 32] is not current"
+   ]
+  },
+  {
+   "key": "heldout2-hls4ml/dense_layernorm__fx8_3_rf1_par_lat",
+   "origin": "hls4ml_gen/dense_layernorm__fx8_3_rf1_par_lat",
+   "reasons": [
+    "hls4ml conversion failed: Exception('Input shape [None, 32] is not currently supported for LayerNorm; only three-dimensional inputs (including batch dimension) are supported') | Exception: Input shape [None, 32] is not current"
+   ]
+  },
+  {
+   "key": "heldout2-hls4ml/dense_layernorm__fx8_3_rf64_par_lat",
+   "origin": "hls4ml_gen/dense_layernorm__fx8_3_rf64_par_lat",
+   "reasons": [
+    "hls4ml conversion failed: Exception('Input shape [None, 32] is not currently supported for LayerNorm; only three-dimensional inputs (including batch dimension) are supported') | Exception: Input shape [None, 32] is not current"
+   ]
+  },
+  {
+   "key": "heldout2-hls4ml/dense_layernorm__fx8_3_rf4_par_res",
+   "origin": "hls4ml_gen/dense_layernorm__fx8_3_rf4_par_res",
+   "reasons": [
+    "hls4ml conversion failed: Exception('Input shape [None, 32] is not currently supported for LayerNorm; only three-dimensional inputs (including batch dimension) are supported') | Exception: Input shape [None, 32] is not current"
+   ]
+  },
+  {
+   "key": "heldout2-hls4ml/dense_layernorm__fx6_2_rf16_par_res",
+   "origin": "hls4ml_gen/dense_layernorm__fx6_2_rf16_par_res",
+   "reasons": [
+    "hls4ml conversion failed: Exception('Input shape [None, 32] is not currently supported for LayerNorm; only three-dimensional inputs (including batch dimension) are supported') | Exception: Input shape [None, 32] is not current"
+   ]
+  },
+  {
+   "key": "heldout2-hls4ml/dense_layernorm__fx12_4_rf1_str_lat",
+   "origin": "hls4ml_gen/dense_layernorm__fx12_4_rf1_str_lat",
+   "reasons": [
+    "hls4ml conversion failed: Exception('Input shape [None, 32] is not currently supported for LayerNorm; only three-dimensional inputs (including batch dimension) are supported') | Exception: Input shape [None, 32] is not current"
+   ]
+  },
+  {
+   "key": "heldout2-hls4ml/dense_layernorm__fx12_4_rf16_str_lat",
+   "origin": "hls4ml_gen/dense_layernorm__fx12_4_rf16_str_lat",
+   "reasons": [
+    "hls4ml conversion failed: Exception('Input shape [None, 32] is not currently supported for LayerNorm; only three-dimensional inputs (including batch dimension) are supported') | Exception: Input shape [None, 32] is not current"
+   ]
+  },
+  {
+   "key": "heldout2-hls4ml/dense_layernorm__fx24_10_rf4_str_lat",
+   "origin": "hls4ml_gen/dense_layernorm__fx24_10_rf4_str_lat",
+   "reasons": [
+    "hls4ml conversion failed: Exception('Input shape [None, 32] is not currently supported for LayerNorm; only three-dimensional inputs (including batch dimension) are supported') | Exception: Input shape [None, 32] is not current"
+   ]
+  },
+  {
+   "key": "heldout2-hls4ml/dense_layernorm__fx24_10_rf8_str_lat",
+   "origin": "hls4ml_gen/dense_layernorm__fx24_10_rf8_str_lat",
+   "reasons": [
+    "hls4ml conversion failed: Exception('Input shape [None, 32] is not currently supported for LayerNorm; only three-dimensional inputs (including batch dimension) are supported') | Exception: Input shape [None, 32] is not current"
+   ]
+  },
+  {
+   "key": "heldout2-hls4ml/dense_layernorm__fx8_3_rf2_str_res",
+   "origin": "hls4ml_gen/dense_layernorm__fx8_3_rf2_str_res",
+   "reasons": [
+    "hls4ml conversion failed: Exception('Input shape [None, 32] is not currently supported for LayerNorm; only three-dimensional inputs (including batch dimension) are supported') | Exception: Input shape [None, 32] is not current"
+   ]
+  },
+  {
+   "key": "heldout2-hls4ml/dense_layernorm__fx8_3_rf4_str_res",
+   "origin": "hls4ml_gen/dense_layernorm__fx8_3_rf4_str_res",
+   "reasons": [
+    "hls4ml conversion failed: Exception('Input shape [None, 32] is not currently supported for LayerNorm; only three-dimensional inputs (including batch dimension) are supported') | Exception: Input shape [None, 32] is not current"
+   ]
+  },
+  {
+   "key": "heldout2-hls4ml/dense_layernorm__fx24_10_rf2_str_res",
+   "origin": "hls4ml_gen/dense_layernorm__fx24_10_rf2_str_res",
+   "reasons": [
+    "hls4ml conversion failed: Exception('Input shape [None, 32] is not currently supported for LayerNorm; only three-dimensional inputs (including batch dimension) are supported') | Exception: Input shape [None, 32] is not current"
+   ]
+  },
+  {
+   "key": "heldout2-hls4ml/dense_layernorm__fx6_2_rf2_str_res",
+   "origin": "hls4ml_gen/dense_layernorm__fx6_2_rf2_str_res",
+   "reasons": [
+    "hls4ml conversion failed: Exception('Input shape [None, 32] is not currently supported for LayerNorm; only three-dimensional inputs (including batch dimension) are supported') | Exception: Input shape [None, 32] is not current"
+   ]
+  },
+  {
+   "key": "heldout2-finn/finn__swg_kernelstride_mmv__k3_c2_d9_s2_simd2_mmv2",
+   "origin": "finn_gen/finn__swg_kernelstride_mmv__k3_c2_d9_s2_simd2_mmv2 (finn-hlslib tb/test_swg_kernelstride_mmv.tcl)",
+   "reasons": [
+    "same top, -D flags and normalised sources and headers as held-out design finn__swg_kernelstride_mmv"
+   ]
+  },
+  {
+   "key": "heldout2-rodinia/backprop__backprop_6_multiddr__forward",
+   "origin": "Benchmarks/backprop/backprop_6_multiddr/forward",
+   "reasons": [
+    "same top, -D flags and normalised sources and headers as held-out design backprop__backprop_5_coalescing__forward",
+    "note: name collision with training design(s) (not excluded: library code) forward: WIP/stream_hls__Autoencoder__opt1, WIP/stream_hls__Autoencoder__opt2, WIP/stream_hls__Autoencoder__opt3, WIP/stream_hls__Autoencoder__opt4, WIP/stream_hls__Autoencoder__opt5"
+   ]
+  },
+  {
+   "key": "heldout2-rodinia/kmeans__kmeans_3_unroll",
+   "origin": "Benchmarks/kmeans/kmeans_3_unroll",
+   "reasons": [
+    "same top, -D flags and normalised sources and headers as held-out design kmeans__kmeans_2_pipeline"
+   ]
+  },
+  {
+   "key": "heldout2-rodinia/leukocyte__lc_gicov__lc_gicov_4_doublebuffer",
+   "origin": "Benchmarks/leukocyte/lc_gicov/lc_gicov_4_doublebuffer",
+   "reasons": [
+    "not valid C++ (g++ -fsyntax-only -std=c++14 with the Vitis 2025.1 headers): lc_gicov.cpp: /mnt/d/HLS_heldout2/src/rodinia-hls/Benchmarks/leukocyte/lc_gicov/lc_gicov_4_doublebuffer/src/lc_gicov.cpp:4:1: error: expected initializer before numeric constant"
+   ]
+  },
+  {
+   "key": "heldout2-rodinia/nw__nw_0_baseline",
+   "origin": "Benchmarks/nw/nw_0_baseline",
+   "reasons": [
+    "near-duplicate of a training file (87% of its 5-token shingles in one file): /mnt/d/HLSFactory_v2/HLSFactory/hlsfactory/hls_dataset_sources/machsuite/nw/"
+   ]
+  },
+  {
+   "key": "heldout2-rodinia/nw__nw_1_tiling",
+   "origin": "Benchmarks/nw/nw_1_tiling",
+   "reasons": [
+    "near-duplicate of a training unit, reverse (96% of its 5-token shingles in the design source nw.cpp): /mnt/d/HLSFactory_v2/HLSFactory/hlsfactory/hls_dataset_sources/machsuite/nw/nw.c"
+   ]
+  },
+  {
+   "key": "heldout2-rodinia/nw__nw_2_pipeline",
+   "origin": "Benchmarks/nw/nw_2_pipeline",
+   "reasons": [
+    "near-duplicate of a training unit, reverse (78% of its 5-token shingles in the design source nw.cpp): /mnt/d/HLSFactory_v2/HLSFactory/hlsfactory/hls_dataset_sources/machsuite/nw/nw.c"
+   ]
+  },
+  {
+   "key": "heldout2-rodinia/nw__nw_3_unroll",
+   "origin": "Benchmarks/nw/nw_3_unroll",
+   "reasons": [
+    "near-duplicate of a training unit, reverse (80% of its 5-token shingles in the design source nw.cpp): /mnt/d/HLSFactory_v2/HLSFactory/hlsfactory/hls_dataset_sources/machsuite/nw/nw.c"
+   ]
+  },
+  {
+   "key": "heldout2-rodinia/nw__nw_4_doublebuffer",
+   "origin": "Benchmarks/nw/nw_4_doublebuffer",
+   "reasons": [
+    "near-duplicate of a training unit, reverse (78% of its 5-token shingles in the design source nw.cpp): /mnt/d/HLSFactory_v2/HLSFactory/hlsfactory/hls_dataset_sources/machsuite/nw/nw.c"
+   ]
+  },
+  {
+   "key": "heldout2-rodinia/nw__nw_5_coalescing",
+   "origin": "Benchmarks/nw/nw_5_coalescing",
+   "reasons": [
+    "near-duplicate of a training unit, reverse (78% of its 5-token shingles in the design source nw.cpp): /mnt/d/HLSFactory_v2/HLSFactory/hlsfactory/hls_dataset_sources/machsuite/nw/nw.c"
+   ]
+  },
+  {
+   "key": "heldout2-rodinia/srad__srad_1_tiling",
+   "origin": "Benchmarks/srad/srad_1_tiling",
+   "reasons": [
+    "same top, -D flags and normalised sources and headers as held-out design srad__srad_0_baseline"
+   ]
+  },
+  {
+   "key": "heldout2-rodinia/srad__srad_4_double_buffer",
+   "origin": "Benchmarks/srad/srad_4_double_buffer",
+   "reasons": [
+    "not valid C++ (g++ -fsyntax-only -std=c++14 with the Vitis 2025.1 headers): srad.cpp: /mnt/d/HLS_heldout2/src/rodinia-hls/Benchmarks/srad/srad_4_double_buffer/src/srad.cpp:115:58: error: extended character \u2265 is not valid in an identifier"
+   ]
+  }
+ ]
+}

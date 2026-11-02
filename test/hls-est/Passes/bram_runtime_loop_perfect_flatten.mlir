@@ -1,0 +1,54 @@
+// RUN: hls-est %s --symbol-privatize=exclude=top --symbol-dce --canonicalize --sccp --vitis-fold --dead-memory-elimination --affine-loop-normalize --auto-pipeline-unroll --infer-vitis-split-array=td=off --narrow-ram-widths --memory-banking-bram --convert-affine-to-loopschedule --bram-analysis=top=top --bram-debug -o /dev/null 2>&1 | FileCheck %s
+
+// O72 review D2, kernel o72r_pf3: `for (j < 2) { c = n[j]; for (i < c) for
+// (k < 16) res[i & 63][k] = buf[i & 63][k] * (k + 3); }`, res partitioned
+// completely on dim 2. The runtime-trip i loop's body is a perfect nest:
+// Vitis (td=off) flattens i into k (`flatten VITIS_LOOP_10_4`, k pipelined
+// at II 1 and not unrolled): buf 2 + 16 banks of res x 1 = 18.
+// --auto-pipeline-unroll flattens the runtime scf.for into k's pipeline
+// (hls.flattened_parents = 1) instead of pipelining it with k unrolled
+// (which made buf RAM_1WNR with 15 copies).
+
+// CHECK:     in @top: ii=1 trip=16 source=auto flattened_parents=1
+// CHECK:     Total BRAM: 18
+// CHECK:     1024x32b -> RAM_1P (x18/port) = 2 BRAM_18K
+
+module {
+  func.func @top(%arg0: memref<1024xi32>, %arg1: memref<1024xi32>, %arg2: memref<2xi32>) attributes {hls.orig_name = "top", llvm.linkage = #llvm.linkage<external>} {
+    %c0 = arith.constant 0 : index
+    %c1 = arith.constant 1 : index
+    %c3_i32 = arith.constant 3 : i32
+    %c63_i32 = arith.constant 63 : i32
+    %alloca = memref.alloca() {hls.array_partition = [{dim = 2 : i32, kind = "complete", variable = "res"}], hls.preserve, polygeist.varname = "res"} : memref<64x16xi32>
+    %alloca_0 = memref.alloca() {hls.preserve, polygeist.varname = "buf"} : memref<64x16xi32>
+    affine.for %arg3 = 0 to 64 {
+      affine.for %arg4 = 0 to 16 {
+        %0 = affine.load %arg0[%arg4 + %arg3 * 16] : memref<1024xi32>
+        affine.store %0, %alloca_0[%arg3, %arg4] : memref<64x16xi32>
+      }
+    }
+    affine.for %arg3 = 0 to 2 {
+      %0 = affine.load %arg2[%arg3] : memref<2xi32>
+      %1 = arith.index_cast %0 : i32 to index
+      scf.for %arg4 = %c0 to %1 step %c1 {
+        %2 = arith.index_cast %arg4 : index to i32
+        %3 = arith.andi %2, %c63_i32 : i32
+        %4 = arith.index_cast %3 : i32 to index
+        affine.for %arg5 = 0 to 16 {
+          %5 = arith.index_cast %arg5 : index to i32
+          %6 = memref.load %alloca_0[%4, %arg5] : memref<64x16xi32>
+          %7 = arith.addi %5, %c3_i32 : i32
+          %8 = arith.muli %6, %7 : i32
+          memref.store %8, %alloca[%4, %arg5] : memref<64x16xi32>
+        }
+      }
+    }
+    affine.for %arg3 = 0 to 64 {
+      affine.for %arg4 = 0 to 16 {
+        %0 = affine.load %alloca[%arg3, %arg4] : memref<64x16xi32>
+        affine.store %0, %arg1[%arg4 + %arg3 * 16] : memref<1024xi32>
+      }
+    }
+    return
+  }
+}

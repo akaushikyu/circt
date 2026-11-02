@@ -1,0 +1,712 @@
+{
+ "generator": "circt tools/hls-est-validate/heldout/build_heldout.py",
+ "from": "/mnt/d/HLS_heldout/catalog/manifest.json",
+ "suites": {
+  "heldout-forgehls": {
+   "suite": "ForgeHLS",
+   "paper": "arXiv 2507.03255",
+   "repository": "https://github.com/zedong-peng/ForgeHLS",
+   "repository_commit": "9946430759a7f617f1949d3338b94ef82b40163f",
+   "kernels": "https://huggingface.co/datasets/zedongpeng/forgehls (kernels/kernels_data.tar.gz)",
+   "kernels_revision": "b9a8cf34542f94bd414c162a18f43992eada6a8f",
+   "kernels_sha256": "1c75ccb0b6d2367f76ae2c0375d7c807b9fe4a59834c022bbd31ee18fd8e3070",
+   "licence": "MIT (GitHub LICENSE, 'Copyright (c) 2025 PZD-CHINA'; Hugging Face card: license: mit; the card's closing line also names the arXiv non-exclusive distribution licence)",
+   "spdx": "MIT"
+  },
+  "heldout-vitislib": {
+   "suite": "AMD Vitis_Libraries L1",
+   "repository": "https://github.com/Xilinx/Vitis_Libraries",
+   "branch": "2025.1",
+   "repository_commit": "b2c657d254ead080de401ee33133702f1577424a",
+   "licence": "Apache-2.0 (LICENSE.txt and every library's LICENSE.txt) except motor_control (motor_control/LICENSE.txt: X11)",
+   "spdx": "Apache-2.0 AND X11"
+  }
+ },
+ "dedupe": {
+  "training_trees": [
+   "/mnt/d/HLSFactory_v2/HLSFactory/hlsfactory/hls_dataset_sources",
+   "/mnt/d/HLS/Polygeist/tools/cgeist/Test/HLS",
+   "/home/peter/circt/test/hls-est",
+   "/home/peter/hls-est-work/exp-src"
+  ],
+  "training_units": "files and directories",
+  "near_containment": 0.8,
+  "reverse_containment": 0.6,
+  "family_containment": 0.8,
+  "hash": "blake2b-64",
+  "shingle_tokens": 5,
+  "min_shingles": 30,
+  "forgehls_name_dedupe": true,
+  "vitislib_name_dedupe": false
+ },
+ "counts": {
+  "heldout-forgehls": {
+   "candidates": 1087,
+   "kept": 995
+  },
+  "heldout-vitislib": {
+   "candidates": 1203,
+   "kept": 1201
+  }
+ },
+ "excluded": [
+  {
+   "key": "heldout-forgehls/chstone__aes",
+   "origin": "kernels/CHStone/aes",
+   "reasons": [
+    "name 'aes' matches training design(s) hlsyn-vitis/vivado-target__sources__aes"
+   ]
+  },
+  {
+   "key": "heldout-forgehls/chstone__gsm",
+   "origin": "kernels/CHStone/gsm",
+   "reasons": [
+    "near-duplicate of a training file (100% of its 5-token shingles in one file): /mnt/d/HLSFactory_v2/HLSFactory/hlsfactory/hls_dataset_sources/chstone/gsm/"
+   ]
+  },
+  {
+   "key": "heldout-forgehls/chstone__sha",
+   "origin": "kernels/CHStone/sha",
+   "reasons": [
+    "near-duplicate of a training file (98% of its 5-token shingles in one file): /mnt/d/HLSFactory_v2/HLSFactory/hlsfactory/hls_dataset_sources/chstone/sha/"
+   ]
+  },
+  {
+   "key": "heldout-forgehls/machsuite__aes",
+   "origin": "kernels/MachSuite/aes",
+   "reasons": [
+    "near-duplicate of a training file (88% of its 5-token shingles in one file): /mnt/d/HLSFactory_v2/HLSFactory/hlsfactory/hls_dataset_sources/machsuite/aes_table/aes_table.c"
+   ]
+  },
+  {
+   "key": "heldout-forgehls/machsuite__backprop",
+   "origin": "kernels/MachSuite/backprop",
+   "reasons": [
+    "near-duplicate of a training file (100% of its 5-token shingles in one file): /mnt/d/HLSFactory_v2/HLSFactory/hlsfactory/hls_dataset_sources/machsuite/backprop/backprop.c"
+   ]
+  },
+  {
+   "key": "heldout-forgehls/machsuite__bfs_bulk",
+   "origin": "kernels/MachSuite/bfs_bulk",
+   "reasons": [
+    "near-duplicate of a training file (98% of its 5-token shingles in one file): /mnt/d/HLSFactory_v2/HLSFactory/hlsfactory/hls_dataset_sources/machsuite/bfs_bulk/bfs_origin.c"
+   ]
+  },
+  {
+   "key": "heldout-forgehls/machsuite__bfs_queue",
+   "origin": "kernels/MachSuite/bfs_queue",
+   "reasons": [
+    "near-duplicate of a training file (100% of its 5-token shingles in one file): /mnt/d/HLSFactory_v2/HLSFactory/hlsfactory/hls_dataset_sources/machsuite/bfs_queue/bfs_origin.c"
+   ]
+  },
+  {
+   "key": "heldout-forgehls/machsuite__fft_strided",
+   "origin": "kernels/MachSuite/fft_strided",
+   "reasons": [
+    "name 'fft' matches training design(s) hp_fft_hls/n1024__UF1, hp_fft_hls/n1024__UF16, hp_fft_hls/n1024__UF2, hp_fft_hls/n1024__UF32, hp_fft_hls/n1024__UF4"
+   ]
+  },
+  {
+   "key": "heldout-forgehls/machsuite__fft_transpose",
+   "origin": "kernels/MachSuite/fft_transpose",
+   "reasons": [
+    "duplicate of a training file (normalised content): /mnt/d/HLSFactory_v2/HLSFactory/hlsfactory/hls_dataset_sources/machsuite/fft_transpose/fft.c"
+   ]
+  },
+  {
+   "key": "heldout-forgehls/machsuite__gemm_blocked",
+   "origin": "kernels/MachSuite/gemm_blocked",
+   "reasons": [
+    "duplicate of a training file (normalised content): /mnt/d/HLSFactory_v2/HLSFactory/hlsfactory/hls_dataset_sources/machsuite/gemm_blocked/gemm.c"
+   ]
+  },
+  {
+   "key": "heldout-forgehls/machsuite__gemm_ncubed",
+   "origin": "kernels/MachSuite/gemm_ncubed",
+   "reasons": [
+    "duplicate of a training file (normalised content): /mnt/d/HLSFactory_v2/HLSFactory/hlsfactory/hls_dataset_sources/machsuite/gemm_ncubed/gemm.c"
+   ]
+  },
+  {
+   "key": "heldout-forgehls/machsuite__md_grid",
+   "origin": "kernels/MachSuite/md_grid",
+   "reasons": [
+    "near-duplicate of a training file (100% of its 5-token shingles in one file): /mnt/d/HLSFactory_v2/HLSFactory/hlsfactory/hls_dataset_sources/machsuite/md_grid/md.c"
+   ]
+  },
+  {
+   "key": "heldout-forgehls/machsuite__md_knn",
+   "origin": "kernels/MachSuite/md_knn",
+   "reasons": [
+    "duplicate of a training file (normalised content): /mnt/d/HLSFactory_v2/HLSFactory/hlsfactory/hls_dataset_sources/machsuite/md_knn/md.c"
+   ]
+  },
+  {
+   "key": "heldout-forgehls/machsuite__nw",
+   "origin": "kernels/MachSuite/nw",
+   "reasons": [
+    "near-duplicate of a training file (100% of its 5-token shingles in one file): /mnt/d/HLSFactory_v2/HLSFactory/hlsfactory/hls_dataset_sources/machsuite/nw/nw.c"
+   ]
+  },
+  {
+   "key": "heldout-forgehls/machsuite__sort_merge",
+   "origin": "kernels/MachSuite/sort_merge",
+   "reasons": [
+    "duplicate of a training file (normalised content): /mnt/d/HLSFactory_v2/HLSFactory/hlsfactory/hls_dataset_sources/machsuite/sort_merge/sort.c"
+   ]
+  },
+  {
+   "key": "heldout-forgehls/machsuite__sort_radix",
+   "origin": "kernels/MachSuite/sort_radix",
+   "reasons": [
+    "duplicate of a training file (normalised content): /mnt/d/HLSFactory_v2/HLSFactory/hlsfactory/hls_dataset_sources/machsuite/sort_radix/sort.c"
+   ]
+  },
+  {
+   "key": "heldout-forgehls/machsuite__spmv_crs",
+   "origin": "kernels/MachSuite/spmv_crs",
+   "reasons": [
+    "near-duplicate of a training file (100% of its 5-token shingles in one file): /mnt/d/HLSFactory_v2/HLSFactory/hlsfactory/hls_dataset_sources/machsuite/spmv_crs/spmv.c"
+   ]
+  },
+  {
+   "key": "heldout-forgehls/machsuite__spmv_ellpack",
+   "origin": "kernels/MachSuite/spmv_ellpack",
+   "reasons": [
+    "duplicate of a training file (normalised content): /mnt/d/HLSFactory_v2/HLSFactory/hlsfactory/hls_dataset_sources/machsuite/spmv_ellpack/spmv.c"
+   ]
+  },
+  {
+   "key": "heldout-forgehls/machsuite__stencil_stencil2d",
+   "origin": "kernels/MachSuite/stencil_stencil2d",
+   "reasons": [
+    "duplicate of a training file (normalised content): /mnt/d/HLSFactory_v2/HLSFactory/hlsfactory/hls_dataset_sources/machsuite/stencil2D/stencil.c"
+   ]
+  },
+  {
+   "key": "heldout-forgehls/machsuite__stencil_stencil3d",
+   "origin": "kernels/MachSuite/stencil_stencil3d",
+   "reasons": [
+    "duplicate of a training file (normalised content): /mnt/d/HLSFactory_v2/HLSFactory/hlsfactory/hls_dataset_sources/machsuite/stencil3D/stencil.c"
+   ]
+  },
+  {
+   "key": "heldout-forgehls/machsuite__viterbi",
+   "origin": "kernels/MachSuite/viterbi",
+   "reasons": [
+    "duplicate of a training file (normalised content): /mnt/d/HLSFactory_v2/HLSFactory/hlsfactory/hls_dataset_sources/machsuite/viterbi/viterbi.c"
+   ]
+  },
+  {
+   "key": "heldout-forgehls/polybench__2mm",
+   "origin": "kernels/PolyBench/2mm",
+   "reasons": [
+    "name '2mm' matches training design(s) hlsyn-vitis/vivado-target__sources__2mm, polybench__reproducible/polybench__fixed__medium__2mm, polybench__reproducible/polybench__fixed__mini__2mm, polybench__reproducible/polybench__fixed__small__2mm, polybench__reproducible/polybench__float__medium__2mm"
+   ]
+  },
+  {
+   "key": "heldout-forgehls/polybench__3mm",
+   "origin": "kernels/PolyBench/3mm",
+   "reasons": [
+    "name '3mm' matches training design(s) hlsyn-vitis/vivado-target__sources__3mm, polybench__reproducible/polybench__fixed__medium__3mm, polybench__reproducible/polybench__fixed__mini__3mm, polybench__reproducible/polybench__fixed__small__3mm, polybench__reproducible/polybench__float__medium__3mm"
+   ]
+  },
+  {
+   "key": "heldout-forgehls/polybench__adi",
+   "origin": "kernels/PolyBench/adi",
+   "reasons": [
+    "name 'adi' matches training design(s) hlsyn-vitis/vivado-target__sources__adi"
+   ]
+  },
+  {
+   "key": "heldout-forgehls/polybench__atax",
+   "origin": "kernels/PolyBench/atax",
+   "reasons": [
+    "name 'atax' matches training design(s) WIP/stream_hls______processed_dataset__atax__opt1, WIP/stream_hls______processed_dataset__atax__opt2, WIP/stream_hls______processed_dataset__atax__opt3, WIP/stream_hls______processed_dataset__atax__opt4, WIP/stream_hls______processed_dataset__atax__opt5"
+   ]
+  },
+  {
+   "key": "heldout-forgehls/polybench__bicg",
+   "origin": "kernels/PolyBench/bicg",
+   "reasons": [
+    "name 'bicg' matches training design(s) WIP/stream_hls______processed_dataset__bicg__opt1, WIP/stream_hls______processed_dataset__bicg__opt2, WIP/stream_hls______processed_dataset__bicg__opt3, WIP/stream_hls______processed_dataset__bicg__opt4, WIP/stream_hls______processed_dataset__bicg__opt5"
+   ]
+  },
+  {
+   "key": "heldout-forgehls/polybench__cholesky",
+   "origin": "kernels/PolyBench/cholesky",
+   "reasons": [
+    "near-duplicate of a training unit, reverse (80% of its 5-token shingles in the design source cholesky.c): /mnt/d/HLSFactory_v2/HLSFactory/hlsfactory/hls_dataset_sources/polybench__reproducible/polybench__float__medium/cholesky/src/cholesky.cpp"
+   ]
+  },
+  {
+   "key": "heldout-forgehls/polybench__correlation",
+   "origin": "kernels/PolyBench/correlation",
+   "reasons": [
+    "near-duplicate of a training unit, reverse (60% of its 5-token shingles in the design source correlation.c): /mnt/d/HLSFactory_v2/HLSFactory/hlsfactory/hls_dataset_sources/polybench__reproducible/polybench__float__medium/correlation/src/correlation.cpp"
+   ]
+  },
+  {
+   "key": "heldout-forgehls/polybench__covariance",
+   "origin": "kernels/PolyBench/covariance",
+   "reasons": [
+    "near-duplicate of a training unit, reverse (61% of its 5-token shingles in the design source covariance.c): /mnt/d/HLSFactory_v2/HLSFactory/hlsfactory/hls_dataset_sources/polybench__reproducible/polybench__float__medium/covariance/src/covariance.cpp"
+   ]
+  },
+  {
+   "key": "heldout-forgehls/polybench__doitgen",
+   "origin": "kernels/PolyBench/doitgen",
+   "reasons": [
+    "name 'doitgen' matches training design(s) hlsyn-vitis/vivado-target__sources__doitgen, polybench__reproducible/polybench__fixed__medium__doitgen, polybench__reproducible/polybench__fixed__mini__doitgen, polybench__reproducible/polybench__fixed__small__doitgen, polybench__reproducible/polybench__float__medium__doitgen"
+   ]
+  },
+  {
+   "key": "heldout-forgehls/polybench__durbin",
+   "origin": "kernels/PolyBench/durbin",
+   "reasons": [
+    "near-duplicate of a training unit, reverse (71% of its 5-token shingles in the design source durbin.c): /mnt/d/HLSFactory_v2/HLSFactory/hlsfactory/hls_dataset_sources/polybench__reproducible/polybench__float__medium/durbin/src/durbin.cpp"
+   ]
+  },
+  {
+   "key": "heldout-forgehls/polybench__fdtd-2d",
+   "origin": "kernels/PolyBench/fdtd-2d",
+   "reasons": [
+    "near-duplicate of a training unit, reverse (61% of its 5-token shingles in the design source fdtd-2d.c): /mnt/d/HLSFactory_v2/HLSFactory/hlsfactory/hls_dataset_sources/polybench__reproducible/polybench__float__medium/fdtd-2d/src/fdtd-2d.cpp"
+   ]
+  },
+  {
+   "key": "heldout-forgehls/polybench__floyd-warshall",
+   "origin": "kernels/PolyBench/floyd-warshall",
+   "reasons": [
+    "near-duplicate of a training unit, reverse (66% of its 5-token shingles in the design source floyd-warshall.c): /mnt/d/HLSFactory_v2/HLSFactory/hlsfactory/hls_dataset_sources/polybench__reproducible/polybench__fixed__medium/floyd-warshall/src/floyd-warshall.cpp"
+   ]
+  },
+  {
+   "key": "heldout-forgehls/polybench__gemm",
+   "origin": "kernels/PolyBench/gemm",
+   "reasons": [
+    "name 'gemm' matches training design(s) WIP/stream_hls______processed_dataset__gemm__opt1, WIP/stream_hls______processed_dataset__gemm__opt2, WIP/stream_hls______processed_dataset__gemm__opt3, WIP/stream_hls______processed_dataset__gemm__opt4, WIP/stream_hls______processed_dataset__gemm__opt5"
+   ]
+  },
+  {
+   "key": "heldout-forgehls/polybench__gemver",
+   "origin": "kernels/PolyBench/gemver",
+   "reasons": [
+    "name 'gemver' matches training design(s) hlsyn-vitis/vivado-target__sources__gemver, polybench__reproducible/polybench__fixed__medium__gemver, polybench__reproducible/polybench__fixed__mini__gemver, polybench__reproducible/polybench__fixed__small__gemver, polybench__reproducible/polybench__float__medium__gemver"
+   ]
+  },
+  {
+   "key": "heldout-forgehls/polybench__gesummv",
+   "origin": "kernels/PolyBench/gesummv",
+   "reasons": [
+    "name 'gesummv' matches training design(s) WIP/stream_hls______processed_dataset__gesummv__opt1, WIP/stream_hls______processed_dataset__gesummv__opt2, WIP/stream_hls______processed_dataset__gesummv__opt3, WIP/stream_hls______processed_dataset__gesummv__opt4, WIP/stream_hls______processed_dataset__gesummv__opt5"
+   ]
+  },
+  {
+   "key": "heldout-forgehls/polybench__gramschmidt",
+   "origin": "kernels/PolyBench/gramschmidt",
+   "reasons": [
+    "name 'gramschmidt' matches training design(s) polybench__reproducible/polybench__fixed__medium__gramschmidt, polybench__reproducible/polybench__fixed__mini__gramschmidt, polybench__reproducible/polybench__fixed__small__gramschmidt, polybench__reproducible/polybench__float__medium__gramschmidt, polybench__reproducible/polybench__float__mini__gramschmidt"
+   ]
+  },
+  {
+   "key": "heldout-forgehls/polybench__heat-3d",
+   "origin": "kernels/PolyBench/heat-3d",
+   "reasons": [
+    "near-duplicate of a training unit, reverse (64% of its 5-token shingles in the design source heat-3d.c): /mnt/d/HLSFactory_v2/HLSFactory/hlsfactory/hls_dataset_sources/hlsyn/sources/heat-3d_kernel.c"
+   ]
+  },
+  {
+   "key": "heldout-forgehls/polybench__jacobi-1d",
+   "origin": "kernels/PolyBench/jacobi-1d",
+   "reasons": [
+    "near-duplicate of a training unit, reverse (64% of its 5-token shingles in the design source jacobi-1d.c): /mnt/d/HLSFactory_v2/HLSFactory/hlsfactory/hls_dataset_sources/polybench__reproducible/polybench__float__medium/jacobi-1d/src/jacobi-1d.cpp"
+   ]
+  },
+  {
+   "key": "heldout-forgehls/polybench__jacobi-2d",
+   "origin": "kernels/PolyBench/jacobi-2d",
+   "reasons": [
+    "near-duplicate of a training unit, reverse (64% of its 5-token shingles in the design source jacobi-2d.c): /mnt/d/HLSFactory_v2/HLSFactory/hlsfactory/hls_dataset_sources/polybench__reproducible/polybench__float__medium/jacobi-2d/src/jacobi-2d.cpp"
+   ]
+  },
+  {
+   "key": "heldout-forgehls/polybench__lu",
+   "origin": "kernels/PolyBench/lu",
+   "reasons": [
+    "near-duplicate of a training unit, reverse (75% of its 5-token shingles in the design source lu.c): /mnt/d/HLSFactory_v2/HLSFactory/hlsfactory/hls_dataset_sources/polybench__reproducible/polybench__fixed__medium/lu/src/lu.cpp"
+   ]
+  },
+  {
+   "key": "heldout-forgehls/polybench__ludcmp",
+   "origin": "kernels/PolyBench/ludcmp",
+   "reasons": [
+    "near-duplicate of a training unit, reverse (74% of its 5-token shingles in the design source ludcmp.c): /mnt/d/HLSFactory_v2/HLSFactory/hlsfactory/hls_dataset_sources/polybench__reproducible/polybench__fixed__medium/ludcmp/src/ludcmp.cpp"
+   ]
+  },
+  {
+   "key": "heldout-forgehls/polybench__mvt",
+   "origin": "kernels/PolyBench/mvt",
+   "reasons": [
+    "name 'mvt' matches training design(s) WIP/stream_hls______processed_dataset__mvt__opt1, WIP/stream_hls______processed_dataset__mvt__opt2, WIP/stream_hls______processed_dataset__mvt__opt3, WIP/stream_hls______processed_dataset__mvt__opt4, WIP/stream_hls______processed_dataset__mvt__opt5"
+   ]
+  },
+  {
+   "key": "heldout-forgehls/polybench__nussinov",
+   "origin": "kernels/PolyBench/nussinov",
+   "reasons": [
+    "name 'nussinov' matches training design(s) polybench__reproducible/polybench__fixed__medium__nussinov, polybench__reproducible/polybench__fixed__mini__nussinov, polybench__reproducible/polybench__fixed__small__nussinov, polybench__reproducible/polybench__float__medium__nussinov, polybench__reproducible/polybench__float__mini__nussinov"
+   ]
+  },
+  {
+   "key": "heldout-forgehls/polybench__seidel-2d",
+   "origin": "kernels/PolyBench/seidel-2d",
+   "reasons": [
+    "near-duplicate of a training unit, reverse (65% of its 5-token shingles in the design source seidel-2d.c): /mnt/d/HLSFactory_v2/HLSFactory/hlsfactory/hls_dataset_sources/polybench__reproducible/polybench__float__medium/seidel-2d/src/seidel-2d.cpp"
+   ]
+  },
+  {
+   "key": "heldout-forgehls/polybench__symm",
+   "origin": "kernels/PolyBench/symm",
+   "reasons": [
+    "near-duplicate of a training unit, reverse (60% of its 5-token shingles in the design source symm.c): /mnt/d/HLSFactory_v2/HLSFactory/hlsfactory/hls_dataset_sources/polybench__reproducible/polybench__fixed__medium/symm/src/symm.cpp"
+   ]
+  },
+  {
+   "key": "heldout-forgehls/polybench__syr2k",
+   "origin": "kernels/PolyBench/syr2k",
+   "reasons": [
+    "name 'syr2k' matches training design(s) hlsyn-vitis/vivado-target__sources__syr2k, polybench/syr2k, polybench__reproducible/polybench__fixed__medium__syr2k, polybench__reproducible/polybench__fixed__mini__syr2k, polybench__reproducible/polybench__fixed__small__syr2k"
+   ]
+  },
+  {
+   "key": "heldout-forgehls/polybench__syrk",
+   "origin": "kernels/PolyBench/syrk",
+   "reasons": [
+    "name 'syrk' matches training design(s) hlsyn-vitis/vivado-target__sources__syrk, polybench/syrk, polybench__reproducible/polybench__fixed__medium__syrk, polybench__reproducible/polybench__fixed__mini__syrk, polybench__reproducible/polybench__fixed__small__syrk"
+   ]
+  },
+  {
+   "key": "heldout-forgehls/polybench__trisolv",
+   "origin": "kernels/PolyBench/trisolv",
+   "reasons": [
+    "near-duplicate of a training unit, reverse (65% of its 5-token shingles in the design source trisolv.c): /mnt/d/HLSFactory_v2/HLSFactory/hlsfactory/hls_dataset_sources/polybench__reproducible/polybench__fixed__medium/trisolv/src/trisolv.cpp"
+   ]
+  },
+  {
+   "key": "heldout-forgehls/polybench__trmm",
+   "origin": "kernels/PolyBench/trmm",
+   "reasons": [
+    "name 'trmm' matches training design(s) hlsyn-vitis/vivado-target__sources__trmm, polybench__reproducible/polybench__fixed__medium__trmm, polybench__reproducible/polybench__fixed__mini__trmm, polybench__reproducible/polybench__fixed__small__trmm, polybench__reproducible/polybench__float__medium__trmm"
+   ]
+  },
+  {
+   "key": "heldout-forgehls/vitisex__array_partition_complete",
+   "origin": "kernels/Vitis-HLS-Introductory-Examples-flatten/array_partition_complete",
+   "reasons": [
+    "name 'array_partition_complete' matches training design(s) basic/arraypartition_complete"
+   ]
+  },
+  {
+   "key": "heldout-forgehls/vitisex__burst_rw",
+   "origin": "kernels/Vitis-HLS-Introductory-Examples-flatten/burst_rw",
+   "reasons": [
+    "name 'vadd' matches training design(s) vitis_examples/28_vitis_accel_examples_streaming_vadd"
+   ]
+  },
+  {
+   "key": "heldout-forgehls/vitisex__ecc_flags",
+   "origin": "kernels/Vitis-HLS-Introductory-Examples-flatten/ecc_flags",
+   "reasons": [
+    "near-duplicate of a training file (98% of its 5-token shingles in one file): /mnt/d/HLSFactory_v2/HLSFactory/hlsfactory/hls_dataset_sources/vitis_examples/21_basic_examples_vhls_uram_ecc/"
+   ]
+  },
+  {
+   "key": "heldout-forgehls/vitisex__fixed_point_sqrt",
+   "origin": "kernels/Vitis-HLS-Introductory-Examples-flatten/fixed_point_sqrt",
+   "reasons": [
+    "near-duplicate of a training file (97% of its 5-token shingles in one file): /mnt/d/HLSFactory_v2/HLSFactory/hlsfactory/hls_dataset_sources/vitis_examples/01_basic_examples_vhls_fixed_point_sqrt/"
+   ]
+  },
+  {
+   "key": "heldout-forgehls/vitisex__imperfect_loop",
+   "origin": "kernels/Vitis-HLS-Introductory-Examples-flatten/imperfect_loop",
+   "reasons": [
+    "near-duplicate of a training file (97% of its 5-token shingles in one file): /mnt/d/HLSFactory_v2/HLSFactory/hlsfactory/hls_dataset_sources/vitis_examples/07_basic_examples_vhls_imperfect_loops/"
+   ]
+  },
+  {
+   "key": "heldout-forgehls/vitisex__interface_array",
+   "origin": "kernels/Vitis-HLS-Introductory-Examples-flatten/interface_array",
+   "reasons": [
+    "name 'fft_top' matches training design(s) hp_fft_hls/n1024__UF1, hp_fft_hls/n1024__UF16, hp_fft_hls/n1024__UF2, hp_fft_hls/n1024__UF32, hp_fft_hls/n1024__UF4"
+   ]
+  },
+  {
+   "key": "heldout-forgehls/vitisex__lmem_2rw",
+   "origin": "kernels/Vitis-HLS-Introductory-Examples-flatten/lmem_2rw",
+   "reasons": [
+    "name 'vadd' matches training design(s) vitis_examples/28_vitis_accel_examples_streaming_vadd"
+   ]
+  },
+  {
+   "key": "heldout-forgehls/vitisex__malloc_removed",
+   "origin": "kernels/Vitis-HLS-Introductory-Examples-flatten/malloc_removed",
+   "reasons": [
+    "near-duplicate of a training file (98% of its 5-token shingles in one file): /mnt/d/HLSFactory_v2/HLSFactory/hlsfactory/hls_dataset_sources/vitis_examples/14_basic_examples_vhls_static_memory/"
+   ]
+  },
+  {
+   "key": "heldout-forgehls/vitisex__modified",
+   "origin": "kernels/Vitis-HLS-Introductory-Examples-flatten/modified",
+   "reasons": [
+    "near-duplicate of a training file (88% of its 5-token shingles in one file): /mnt/d/HLSFactory_v2/HLSFactory/hlsfactory/hls_dataset_sources/vitis_examples/20_basic_examples_vhls_resolved_array_access_bottleneck/"
+   ]
+  },
+  {
+   "key": "heldout-forgehls/vitisex__native_casts",
+   "origin": "kernels/Vitis-HLS-Introductory-Examples-flatten/native_casts",
+   "reasons": [
+    "near-duplicate of a training file (96% of its 5-token shingles in one file): /mnt/d/HLSFactory_v2/HLSFactory/hlsfactory/hls_dataset_sources/vitis_examples/15_basic_examples_vhls_pointer_casting/"
+   ]
+  },
+  {
+   "key": "heldout-forgehls/vitisex__original",
+   "origin": "kernels/Vitis-HLS-Introductory-Examples-flatten/original",
+   "reasons": [
+    "near-duplicate of a training file (96% of its 5-token shingles in one file): /mnt/d/HLSFactory_v2/HLSFactory/hlsfactory/hls_dataset_sources/vitis_examples/19_basic_examples_vhls_multi_array_access_bottleneck/"
+   ]
+  },
+  {
+   "key": "heldout-forgehls/vitisex__perfect_loop",
+   "origin": "kernels/Vitis-HLS-Introductory-Examples-flatten/perfect_loop",
+   "reasons": [
+    "near-duplicate of a training file (97% of its 5-token shingles in one file): /mnt/d/HLSFactory_v2/HLSFactory/hlsfactory/hls_dataset_sources/vitis_examples/09_basic_examples_vhls_perfect_nested_loops/"
+   ]
+  },
+  {
+   "key": "heldout-forgehls/vitisex__pipelined_loop",
+   "origin": "kernels/Vitis-HLS-Introductory-Examples-flatten/pipelined_loop",
+   "reasons": [
+    "near-duplicate of a training file (96% of its 5-token shingles in one file): /mnt/d/HLSFactory_v2/HLSFactory/hlsfactory/hls_dataset_sources/vitis_examples/10_basic_examples_vhls_pipelined_nested_loops/"
+   ]
+  },
+  {
+   "key": "heldout-forgehls/vitisex__using_arbitrary_precision_arith",
+   "origin": "kernels/Vitis-HLS-Introductory-Examples-flatten/using_arbitrary_precision_arith",
+   "reasons": [
+    "near-duplicate of a training file (97% of its 5-token shingles in one file): /mnt/d/HLSFactory_v2/HLSFactory/hlsfactory/hls_dataset_sources/vitis_examples/05_basic_examples_vhls_ap_arithmetic/"
+   ]
+  },
+  {
+   "key": "heldout-forgehls/vitisex__using_axis_array_stream_no_side_channel_data",
+   "origin": "kernels/Vitis-HLS-Introductory-Examples-flatten/using_axis_array_stream_no_side_channel_data",
+   "reasons": [
+    "near-duplicate of a training file (100% of its 5-token shingles in one file): /mnt/d/HLSFactory_v2/HLSFactory/hlsfactory/hls_dataset_sources/vitis_examples/18_basic_examples_vhls_axi_stream_no_side_channel/example.cpp"
+   ]
+  },
+  {
+   "key": "heldout-forgehls/vitisex__using_double",
+   "origin": "kernels/Vitis-HLS-Introductory-Examples-flatten/using_double",
+   "reasons": [
+    "near-duplicate of a training file (98% of its 5-token shingles in one file): /mnt/d/HLSFactory_v2/HLSFactory/hlsfactory/hls_dataset_sources/vitis_examples/16_basic_examples_vhls_double_pointer/"
+   ]
+  },
+  {
+   "key": "heldout-forgehls/vitisex__variable_bound_loops",
+   "origin": "kernels/Vitis-HLS-Introductory-Examples-flatten/variable_bound_loops",
+   "reasons": [
+    "near-duplicate of a training unit, reverse (76% of its 5-token shingles in the design source combined.cpp): /mnt/d/HLSFactory_v2/HLSFactory/hlsfactory/hls_dataset_sources/vitis_examples/08_basic_examples_vhls_max_bounded_loop/loop_max_bounds.h"
+   ]
+  },
+  {
+   "key": "heldout-forgehls/aifpga__GRUCell",
+   "origin": "kernels/ai_fpga_hls_algorithms/GRUCell",
+   "reasons": [
+    "no run_hls.tcl in the release"
+   ]
+  },
+  {
+   "key": "heldout-forgehls/aifpga__calculate_information_gain",
+   "origin": "kernels/ai_fpga_hls_algorithms/calculate_information_gain",
+   "reasons": [
+    "no run_hls.tcl in the release"
+   ]
+  },
+  {
+   "key": "heldout-forgehls/aifpga__conv_layer",
+   "origin": "kernels/ai_fpga_hls_algorithms/conv_layer",
+   "reasons": [
+    "name 'conv_layer' matches training design(s) flowgnn/dgn, flowgnn/gat, flowgnn/gcn, flowgnn/gin, flowgnn/pna"
+   ]
+  },
+  {
+   "key": "heldout-forgehls/aifpga__fft",
+   "origin": "kernels/ai_fpga_hls_algorithms/fft",
+   "reasons": [
+    "name 'fft' matches training design(s) hp_fft_hls/n1024__UF1, hp_fft_hls/n1024__UF16, hp_fft_hls/n1024__UF2, hp_fft_hls/n1024__UF32, hp_fft_hls/n1024__UF4"
+   ]
+  },
+  {
+   "key": "heldout-forgehls/aifpga__mlp",
+   "origin": "kernels/ai_fpga_hls_algorithms/mlp",
+   "reasons": [
+    "name 'mlp' matches training design(s) forgebench/mlp"
+   ]
+  },
+  {
+   "key": "heldout-forgehls/aifpga__residual_block",
+   "origin": "kernels/ai_fpga_hls_algorithms/residual_block",
+   "reasons": [
+    "name 'residual_block' matches training design(s) WIP/stream_hls__ResidualBlock__opt1, WIP/stream_hls__ResidualBlock__opt2, WIP/stream_hls__ResidualBlock__opt3, WIP/stream_hls__ResidualBlock__opt4, WIP/stream_hls__ResidualBlock__opt5"
+   ]
+  },
+  {
+   "key": "heldout-forgehls/aifpga__sgd",
+   "origin": "kernels/ai_fpga_hls_algorithms/sgd",
+   "reasons": [
+    "name 'sgd' matches training design(s) rosetta/spam-filter__src__sdsoc"
+   ]
+  },
+  {
+   "key": "heldout-forgehls/hlsalgo__bfs",
+   "origin": "kernels/hls_algorithms/bfs",
+   "reasons": [
+    "name 'bfs' matches training design(s) machsuite/bfs_bulk, machsuite/bfs_queue"
+   ]
+  },
+  {
+   "key": "heldout-forgehls/hlsalgo__dct",
+   "origin": "kernels/hls_algorithms/dct",
+   "reasons": [
+    "name 'dct' matches training design(s) spector_hls/dct"
+   ]
+  },
+  {
+   "key": "heldout-forgehls/hlsalgo__fft",
+   "origin": "kernels/hls_algorithms/fft",
+   "reasons": [
+    "name 'fft' matches training design(s) hp_fft_hls/n1024__UF1, hp_fft_hls/n1024__UF16, hp_fft_hls/n1024__UF2, hp_fft_hls/n1024__UF32, hp_fft_hls/n1024__UF4"
+   ]
+  },
+  {
+   "key": "heldout-forgehls/hlsalgo__floyd_warshall",
+   "origin": "kernels/hls_algorithms/floyd_warshall",
+   "reasons": [
+    "name 'floyd_warshall' matches training design(s) polybench__reproducible/polybench__fixed__medium__floyd-warshall, polybench__reproducible/polybench__fixed__mini__floyd-warshall, polybench__reproducible/polybench__fixed__small__floyd-warshall, polybench__reproducible/polybench__float__medium__floyd-warshall, polybench__reproducible/polybench__float__mini__floyd-warshall"
+   ]
+  },
+  {
+   "key": "heldout-forgehls/hlsalgo__huffman_encoding",
+   "origin": "kernels/hls_algorithms/huffman_encoding",
+   "reasons": [
+    "name 'huffman_encoding' matches training design(s) pp4fpgas/25_pp4fpgas_huffman_encoding"
+   ]
+  },
+  {
+   "key": "heldout-forgehls/hlsalgo__merge_sort",
+   "origin": "kernels/hls_algorithms/merge_sort",
+   "reasons": [
+    "name 'merge_sort' matches training design(s) spector_hls/mergesort"
+   ]
+  },
+  {
+   "key": "heldout-forgehls/hlsalgo__mersenne_twister",
+   "origin": "kernels/hls_algorithms/mersenne_twister",
+   "reasons": [
+    "name 'mersenne_twister' matches training design(s) class_ece8893_2023_spring/Monte-Carlo__MersenneTwister"
+   ]
+  },
+  {
+   "key": "heldout-forgehls/leetcode__bfs",
+   "origin": "kernels/leetcode_hls_algorithms/bfs",
+   "reasons": [
+    "name 'bfs' matches training design(s) machsuite/bfs_bulk, machsuite/bfs_queue"
+   ]
+  },
+  {
+   "key": "heldout-forgehls/leetcode__dfs",
+   "origin": "kernels/leetcode_hls_algorithms/dfs",
+   "reasons": [
+    "same normalised main source as held-out design hlsalgo__dfs"
+   ]
+  },
+  {
+   "key": "heldout-forgehls/operators__AES256",
+   "origin": "kernels/operators/AES256",
+   "reasons": [
+    "no run_hls.tcl in the release"
+   ]
+  },
+  {
+   "key": "heldout-forgehls/operators__two_stage_pipeline",
+   "origin": "kernels/operators/two_stage_pipeline",
+   "reasons": [
+    "no run_hls.tcl in the release"
+   ]
+  },
+  {
+   "key": "heldout-forgehls/rosetta__3d-rendering",
+   "origin": "kernels/rosetta/3d-rendering",
+   "reasons": [
+    "near-duplicate of a training file (100% of its 5-token shingles in one file): /mnt/d/HLSFactory_v2/HLSFactory/hlsfactory/hls_dataset_sources/rosetta/3d-rendering/src/sdsoc/rendering.cpp"
+   ]
+  },
+  {
+   "key": "heldout-forgehls/rosetta__BNN",
+   "origin": "kernels/rosetta/BNN",
+   "reasons": [
+    "near-duplicate of a training file (100% of its 5-token shingles in one file): /mnt/d/HLSFactory_v2/HLSFactory/hlsfactory/hls_dataset_sources/rosetta/BNN/cpp/accel/Accel.cpp"
+   ]
+  },
+  {
+   "key": "heldout-forgehls/rosetta__digit-recognition",
+   "origin": "kernels/rosetta/digit-recognition",
+   "reasons": [
+    "near-duplicate of a training file (98% of its 5-token shingles in one file): /mnt/d/HLSFactory_v2/HLSFactory/hlsfactory/hls_dataset_sources/rosetta/digit-recognition/src/sdsoc/digitrec.cpp"
+   ]
+  },
+  {
+   "key": "heldout-forgehls/rosetta__face-detection",
+   "origin": "kernels/rosetta/face-detection",
+   "reasons": [
+    "near-duplicate of a training file (100% of its 5-token shingles in one file): /mnt/d/HLSFactory_v2/HLSFactory/hlsfactory/hls_dataset_sources/rosetta/face-detection/src/sdsoc/face_detect.cpp"
+   ]
+  },
+  {
+   "key": "heldout-forgehls/rosetta__optical-flow",
+   "origin": "kernels/rosetta/optical-flow",
+   "reasons": [
+    "near-duplicate of a training file (99% of its 5-token shingles in one file): /mnt/d/HLSFactory_v2/HLSFactory/hlsfactory/hls_dataset_sources/rosetta/optical-flow/src/sdsoc/optical_flow.cpp"
+   ]
+  },
+  {
+   "key": "heldout-forgehls/rosetta__spam-filter",
+   "origin": "kernels/rosetta/spam-filter",
+   "reasons": [
+    "near-duplicate of a training unit, reverse (100% of its 5-token shingles in the design source sgd.cpp): /mnt/d/HLSFactory_v2/HLSFactory/hlsfactory/hls_dataset_sources/rosetta/spam-filter/src/host/typedefs.h"
+   ]
+  },
+  {
+   "key": "heldout-forgehls/rtlip__dma",
+   "origin": "kernels/rtl_ip/dma",
+   "reasons": [
+    "same normalised main source as held-out design hlsalgo__dma"
+   ]
+  },
+  {
+   "key": "heldout-vitislib/vision__rgbirbayer__rgbirbayer_NPPC1_16UC1_16UC1",
+   "origin": "vision/L1/tests/rgbirbayer/rgbirbayer_NPPC1_16UC1_16UC1",
+   "reasons": [
+    "no design source file (add_files /mnt/d/HLS_heldout/src/vitis_libraries/vision/L1/tests/rgbirbayer/rgbirbayer_NPPC1_16UC1_16UC1/../../../../L1/examples/accumulate/xf_rgbir_accel.cpp: not found)"
+   ]
+  },
+  {
+   "key": "heldout-vitislib/vision__rgbirbayer__rgbirbayer_NPPC1_8UC1_8UC1",
+   "origin": "vision/L1/tests/rgbirbayer/rgbirbayer_NPPC1_8UC1_8UC1",
+   "reasons": [
+    "no design source file (add_files /mnt/d/HLS_heldout/src/vitis_libraries/vision/L1/tests/rgbirbayer/rgbirbayer_NPPC1_8UC1_8UC1/../../../../L1/examples/accumulate/xf_rgbir_accel.cpp: not found)"
+   ]
+  }
+ ]
+}
